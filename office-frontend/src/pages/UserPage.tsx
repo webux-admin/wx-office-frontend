@@ -58,7 +58,6 @@ function NewUserMask() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
-  const [language, setLanguage] = useState('de')
   const [password, setPassword] = useState('')
 
   const create = useMutation({
@@ -67,7 +66,6 @@ function NewUserMask() {
         username: username.trim(),
         email: email.trim(),
         displayName: displayName.trim(),
-        language: language.trim() || undefined,
         password,
       }),
     onSuccess: (created) => {
@@ -124,12 +122,6 @@ function NewUserMask() {
               maxLength={255}
             />
             <TextField
-              label="Sprache"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              hint="de, fr, it oder en"
-            />
-            <TextField
               label="Erstes Passwort"
               type="password"
               value={password}
@@ -153,7 +145,6 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
 
   const [email, setEmail] = useState(user.email)
   const [displayName, setDisplayName] = useState(user.displayName)
-  const [language, setLanguage] = useState(user.language ?? '')
   const [resetting, setResetting] = useState(false)
   const [newPassword, setNewPassword] = useState('')
 
@@ -167,7 +158,6 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
       api.put<User>(`/api/users/${user.id}`, {
         email: email.trim(),
         displayName: displayName.trim(),
-        language: language.trim() || undefined,
       }),
     onSuccess: refresh,
   })
@@ -250,13 +240,6 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
                 onChange={(event) => setEmail(event.target.value)}
                 disabled={!mayWrite}
                 maxLength={255}
-              />
-              <TextField
-                label="Sprache"
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-                disabled={!mayWrite}
-                hint="de, fr, it oder en"
               />
             </div>
           </Panel>
