@@ -28,6 +28,29 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - Motion (`motion/react`) für Animationen, `lucide-react` für Icons
 - ESLint 10 mit `typescript-eslint`, Vitest für Tests
 
+## Das Backend gehört dazu
+
+Zu dieser Oberfläche gehört das Spring-Backend **`../webux-office`** (eigene `CLAUDE.md`,
+eigene `docs/adr/`, eigenes Git-Repository). Beide Seiten werden zusammen entwickelt.
+
+**Eine Anforderung wird als Ganzes umgesetzt.** Eine Maske, die etwas anzeigen soll, das
+kein Endpunkt liefert, ist nicht umsetzbar — dann wird der Endpunkt dort gebaut, im selben
+Schritt, und nicht hier im Browser nachgerechnet. Umgekehrt zieht eine geänderte
+Antwortform die aufrufende Maske sofort nach: eine grüne Backend-Testsuite neben einem
+Frontend, das die alte Form erwartet, ist keine fertige Arbeit.
+
+Wer eine Sitzung hier startet, macht das Backend-Verzeichnis einmalig verfügbar:
+
+```
+/add-dir <Pfad zu webux-office>
+```
+
+Umgekehrt ist dieses Verzeichnis dort schon dauerhaft freigegeben, über
+`.claude/settings.json` (`permissions.additionalDirectories`).
+
+Beide Projekte werden **gemeinsam grün** gehalten: hier `npm run check`, dort
+`./gradlew test`. Berührt eine Änderung beide Seiten, laufen vor dem Commit beide.
+
 ---
 
 ## 1. Sprache
