@@ -1,0 +1,234 @@
+@import 'tailwindcss';
+
+/*
+ * The two typefaces, served from this application rather than from a font CDN.
+ *
+ * <p>Self hosted for three reasons: the first paint waits on no third party, an installation
+ * behind a company firewall still gets its letters, and no visitor is announced to another
+ * host on every page view. Both faces are under the SIL Open Font License 1.1; the licence
+ * texts sit next to the files in public/fonts.
+ *
+ * <p>Each face is one variable file per subset. Weight is an axis rather than a set of cuts,
+ * so 100 to 900 costs nothing extra, and `opsz` lets Google Sans Flex adjust itself between
+ * caption and headline size, which is why `font-optical-sizing` is left on its automatic
+ * setting instead of being pinned.
+ *
+ * <p>`swap` on purpose: text in the fallback face beats no text at all, and the layout barely
+ * moves because the fallbacks are chosen close in width.
+ */
+@font-face {
+  font-family: 'Google Sans Flex';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GoogleSansFlex-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Google Sans Flex';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GoogleSansFlex-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+/*
+ * Design tokens taken from the Figma file (02 · Design System).
+ * Names stay close to Figma so one value is called the same in both places.
+ *
+ * What stands here is the light appearance and therefore the default. The dark one only
+ * redefines the same variables further down, and no utility class knows which is active.
+ */
+@theme {
+  --color-canvas: #f4f3f0;
+  --color-surface: #ffffff;
+  --color-sunken: #eae8e3;
+
+  --color-ink: #1b1a17;
+  --color-ink-hover: #2a2825;
+  --color-ink-border: #33312c;
+
+  --color-text-primary: #1a1917;
+  --color-text-secondary: #6c675e;
+  --color-text-tertiary: #97918a;
+  /* Text on the dark sidebar. Stays light in both appearances, the sidebar is dark either way. */
+  --color-text-inverse: #f2f0eb;
+  --color-text-inverse-muted: #a5a099;
+
+  --color-line-subtle: #e7e4de;
+  --color-line: #d8d4cb;
+
+  /* `accent` carries white text, `accent-text` is the same green used as foreground. */
+  --color-accent: #1e4d3f;
+  --color-accent-hover: #245c4b;
+  --color-accent-text: #1e4d3f;
+  --color-success: #2f6b4f;
+  --color-danger: #8c3023;
+
+  --color-module-kunden: #1e4d3f;
+  --color-module-offerten: #33507e;
+  --color-module-lieferscheine: #1f5b63;
+  --color-module-rechnungen: #3d4247;
+  --color-module-produkte: #8a5a18;
+  --color-module-buchhaltung: #6a3b57;
+  --color-module-zahlungen: #4a5d2a;
+  --color-module-system: #4a3f6b;
+
+  --shadow-card: 0 2px 16px rgba(26, 25, 23, 0.06);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --font-sans:
+    'Google Sans Flex', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Code', monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  /*
+   * Dark appearance.
+   *
+   * Only the token values change; every utility keeps referring to the same variable.
+   * The attribute is set before the first paint by the script in index.html, so the page
+   * never flashes light on its way to dark.
+   *
+   * Elevation runs sidebar → page → card, from dark to light. That keeps the sidebar the
+   * anchor it is in the light appearance instead of turning it into the brightest surface.
+   */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-canvas: #1a1815;
+    --color-surface: #221f1b;
+    --color-sunken: #2b2823;
+
+    --color-ink: #0f0e0c;
+    --color-ink-hover: #201d1a;
+    --color-ink-border: #322e29;
+
+    --color-text-primary: #f2f0eb;
+    --color-text-secondary: #a8a29a;
+    --color-text-tertiary: #8b867c;
+
+    --color-line-subtle: #2f2b26;
+    --color-line: #3d3831;
+
+    /* Lighter than in daylight: the Figma green on a dark card would fall below 4.5:1. */
+    --color-accent: #35785f;
+    --color-accent-hover: #3f8a6e;
+    --color-accent-text: #7cc9aa;
+    --color-success: #4fa07c;
+    --color-danger: #e08c7e;
+
+    /* The module colours are lifted with it, so a white icon keeps its footing. */
+    --color-module-kunden: #2f7a63;
+    --color-module-offerten: #4a6ea8;
+    --color-module-lieferscheine: #2b7d87;
+    --color-module-rechnungen: #5b6167;
+    --color-module-produkte: #a8722a;
+    --color-module-buchhaltung: #8b5074;
+    --color-module-zahlungen: #64803c;
+    --color-module-system: #66599b;
+
+    --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Amounts and document numbers must not shift width when they update. */
+    font-variant-numeric: tabular-nums;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-text);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+
+  /*
+   * The open list of a dropdown is drawn by the browser, not by this stylesheet, and it takes
+   * its colours from the option elements. Without these two declarations the dark appearance
+   * gets light text on a light list, which reads as an empty menu.
+   *
+   * Windows and Linux honour this; macOS draws the list itself and follows `color-scheme`,
+   * which is set on the root element for exactly that reason.
+   */
+  option,
+  optgroup {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer utilities {
+  .text-overline {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+}
+
+/* Anyone who asks for less motion gets none, decorative movement included. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

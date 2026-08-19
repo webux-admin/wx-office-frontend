@@ -1,0 +1,122 @@
+/**
+ * Thin client for the webux-office REST API.
+ *
+ * <p>Authentication hangs on a session cookie, so every request goes out with
+ * `credentials: 'include'`, and a write carries the CSRF token from the `XSRF-TOKEN` cookie
+ * in the `X-XSRF-TOKEN` header. Keeping that in one place is the reason no component ever
+ * calls `fetch` itself.
+ */
+
+/** Thrown when the backend answers 401, meaning the session is gone or was never there. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('Nicht angemeldet')
+    this.name = 'UnauthorizedError'
+  }
+}
+
+/** Thrown for any other error status, carrying a message meant for the user. */
+export class ApiError extends Error {
+  readonly status: number
+  readonly details?: unknown
+
+  constructor(status: number, message: string, details?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.details = details
+  }
+}
+
+function readCookie(name: string): string | undefined {
+  return document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.slice(name.length + 1)
+}
+
+type RequestOptions = {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  body?: unknown
+  signal?: AbortSignal
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? 'GET'
+  const headers: Record<string, string> = {}
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+
+  const csrfToken = readCookie('XSRF-TOKEN')
+  if (csrfToken && method !== 'GET') headers['X-XSRF-TOKEN'] = decodeURIComponent(csrfToken)
+
+  const response = await fetch(path, {
+    method,
+    headers,
+    credentials: 'include',
+    signal: options.signal,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  })
+
+  if (response.status === 401) throw new UnauthorizedError()
+  if (response.status === 204) return undefined as T
+
+  const payload = await readPayload(response)
+  if (!response.ok) {
+    throw new ApiError(response.status, messageFor(response.status, payload), payload)
+  }
+  return payload as T
+}
+
+async function readPayload(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+/**
+ * Digs the backend explanation out of an error body.
+ *
+ * <p>Domain rules answer as RFC 9457 `ProblemDetail`, where the sentence sits in `detail`.
+ * That is the one worth showing, because it names the rule that was broken. `message` is
+ * checked as well for the plain Spring error body.
+ */
+function detailOf(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const body = payload as { detail?: unknown; message?: unknown }
+  return String(body.detail ?? body.message ?? '')
+}
+
+/**
+ * Turns an error status into a sentence the user can act on.
+ *
+ * <p>The backend explanation wins when there is one; the fallbacks only cover the cases
+ * where it answers with a bare status.
+ */
+function messageFor(status: number, payload: unknown): string {
+  const detail = detailOf(payload)
+  if (detail) return detail
+  switch (status) {
+    case 400:
+      return 'Die Eingabe wurde nicht akzeptiert.'
+    case 403:
+      return 'Dafür fehlt die Berechtigung.'
+    case 404:
+      return 'Nicht gefunden.'
+    case 409:
+      return 'Der Datensatz wurde zwischenzeitlich geändert.'
+    default:
+      return status >= 500 ? 'Das Backend meldet einen Fehler.' : `Fehler ${status}`
+  }
+}
+
+/** The only way into the backend. */
+export const api = {
+  get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+  post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+  put: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
+  delete: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
+}

@@ -1,0 +1,8 @@
+# Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+
+# Auszug eines Formatierungsdurchgangs, kein Anwendungscode.
+office-frontend/emdash.txt
