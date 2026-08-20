@@ -12,6 +12,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { showFile } from '../lib/files'
 import { formatAmount, formatDate, formatDateTime } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
 import type { DocumentParty, DocumentStatusEntry, SalesDocument } from '../lib/types'
@@ -100,6 +101,13 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     },
   })
 
+  // A draft renders on the spot and comes back with a watermark; an issued Auftrag hands out
+  // the PDF that was archived when it was issued, so a reprint is the same document.
+  const print = useMutation({
+    mutationFn: () => api.file(`${base}/pdf`),
+    onSuccess: showFile,
+  })
+
   const remove = useMutation({
     mutationFn: () => api.delete<void>(base),
     // The record is gone, so the mask has nothing left to show and closes to where it was
@@ -142,6 +150,9 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
             Entwurf löschen
           </Button>
         )}
+        <Button variant="secondary" onClick={() => print.mutate()} busy={print.isPending}>
+          {order.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
+        </Button>
         {order.status === 'FINALISED' && can('ORDER_CANCEL') && (
           <Button variant="secondary" onClick={() => setCancelling(true)}>
             Stornieren
@@ -160,6 +171,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
 
       <div className="grid gap-6 px-8 pb-12">
         {finalise.error !== null && <ErrorNotice error={finalise.error} />}
+        {print.error !== null && <ErrorNotice error={print.error} />}
 
         <OrderLines
           tenantId={tenantId}

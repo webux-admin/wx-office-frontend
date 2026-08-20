@@ -112,6 +112,65 @@ describe('api.post', () => {
   })
 })
 
+describe('api.file', () => {
+  function pdf(status: number, disposition?: string): Response {
+    const headers: Record<string, string> = { 'Content-Type': 'application/pdf' }
+    if (disposition) headers['Content-Disposition'] = disposition
+    return new Response(status === 200 ? '%PDF-1.7' : null, { status, headers })
+  }
+
+  it('fileTest', async () => {
+    const calls = stubFetch(pdf(200, 'inline; filename="AU-2026-0001.pdf"'))
+
+    const file = await api.file('/api/tenants/1/orders/7/pdf')
+
+    expect(file.fileName).toBe('AU-2026-0001.pdf')
+    expect(await file.blob.text()).toBe('%PDF-1.7')
+    expect(calls[0].init.credentials).toBe('include')
+  })
+
+  it('fileWithUnquotedNameTest', async () => {
+    stubFetch(pdf(200, 'inline; filename=AU-2026-0001.pdf'))
+
+    await expect(api.file('/api/tenants/1/orders/7/pdf')).resolves.toMatchObject({
+      fileName: 'AU-2026-0001.pdf',
+    })
+  })
+
+  it('fileWithoutADispositionFallsBackToThePathTest', async () => {
+    stubFetch(pdf(200))
+
+    await expect(api.file('/api/tenants/1/orders/7/pdf')).resolves.toMatchObject({
+      fileName: 'pdf',
+    })
+  })
+
+  it('fileWithoutSessionTest', async () => {
+    stubFetch(pdf(401))
+
+    await expect(api.file('/api/tenants/1/orders/7/pdf')).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    )
+  })
+
+  it('fileWithoutPermissionTest', async () => {
+    stubFetch(json(403, undefined))
+
+    await expect(api.file('/api/tenants/1/orders/7/pdf')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 403,
+    })
+  })
+
+  it('fileReportsTheBackendMessageTest', async () => {
+    stubFetch(json(409, { detail: 'document 7 is still a draft; issue it first' }))
+
+    await expect(api.file('/api/tenants/1/invoices/7/qr-bill')).rejects.toThrow(
+      'document 7 is still a draft; issue it first',
+    )
+  })
+})
+
 describe('ApiError', () => {
   it('apiErrorKeepsTheStatusTest', () => {
     const error = new ApiError(409, 'Der Datensatz wurde zwischenzeitlich geändert.')

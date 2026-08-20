@@ -113,9 +113,52 @@ function messageFor(status: number, payload: unknown): string {
   }
 }
 
+/** A file the backend handed out, together with the name it gave it. */
+export type ApiFile = {
+  blob: Blob
+  fileName: string
+}
+
+/**
+ * Fetches a file, for example the PDF of a document.
+ *
+ * <p>Goes through the same client as everything else rather than pointing a link at the URL:
+ * that keeps the handling of an expired session in one place. A link would open a new tab
+ * showing a bare 401 instead of sending the user to the login screen.
+ *
+ * @param path the endpoint that answers with the file
+ * @returns the bytes and the file name the backend proposed
+ */
+async function requestFile(path: string): Promise<ApiFile> {
+  const response = await fetch(path, { method: 'GET', credentials: 'include' })
+  if (response.status === 401) throw new UnauthorizedError()
+  if (!response.ok) {
+    const payload = await readPayload(response)
+    throw new ApiError(response.status, messageFor(response.status, payload), payload)
+  }
+  return {
+    blob: await response.blob(),
+    fileName: fileNameOf(response.headers.get('Content-Disposition'), path),
+  }
+}
+
+/**
+ * Reads the file name out of the `Content-Disposition` header.
+ *
+ * @param disposition the header, `null` when the backend sent none
+ * @param path the request path, whose last segment is the fallback name
+ * @returns the file name, never empty
+ */
+function fileNameOf(disposition: string | null, path: string): string {
+  const quoted = disposition?.match(/filename="([^"]+)"/)?.[1]
+  const bare = disposition?.match(/filename=([^;]+)/)?.[1]?.trim()
+  return quoted ?? bare ?? (path.split('/').pop() || 'download')
+}
+
 /** The only way into the backend. */
 export const api = {
   get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+  file: (path: string) => requestFile(path),
   post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   put: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
