@@ -11,8 +11,12 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatDate, formatPercent, toIsoDate } from '../lib/format'
+import { originState } from '../lib/origin'
 import type { Tenant, VatRates } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+
+/** The tenant mask is opened from here to change the settings, and comes back here. */
+const ORIGIN = originState('/mehrwertsteuer', 'Mehrwertsteuer')
 
 /**
  * The VAT rates a document line is charged with, and the settings of this tenant behind them.
@@ -173,7 +177,11 @@ function VatSettings({ tenantId }: { tenantId: number }) {
 
           <p className="mt-4 text-[12px] text-text-tertiary">
             Geändert werden diese Angaben in der{' '}
-            <Link to={`/mandanten/${tenantId}`} className="text-accent-text hover:underline">
+            <Link
+              to={`/mandanten/${tenantId}`}
+              state={ORIGIN}
+              className="text-accent-text hover:underline"
+            >
               Mandantenmaske
             </Link>
             , nicht hier.

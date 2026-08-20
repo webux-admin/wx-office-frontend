@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
@@ -8,10 +8,14 @@ import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
+import { originOf, type Origin } from '../../lib/origin'
 import { listQuery, PICKER_SIZE } from '../../lib/paging'
 import { toIsoDate } from '../../lib/format'
 import type { DocumentType, Page, Partner, SalesDocument } from '../../lib/types'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
+
+/** Where this mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
 
 /**
  * Starts an order.
@@ -25,6 +29,7 @@ import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
  */
 export function NewOrderMask({ tenantId }: { tenantId: number }) {
   const navigate = useNavigate()
+  const origin = originOf(useLocation().state, LIST)
   const [documentTypeId, setDocumentTypeId] = useState('')
   const [partnerId, setPartnerId] = useState('')
   const [documentDate, setDocumentDate] = useState(toIsoDate())
@@ -53,7 +58,11 @@ export function NewOrderMask({ tenantId }: { tenantId: number }) {
         currency: currency || undefined,
         exchangeRate: exchangeRate.trim() === '' ? undefined : Number(exchangeRate),
       }),
-    onSuccess: (order) => void navigate(`/auftraege/${order.id}`, { replace: true }),
+    // A draft without a single line is no document, so this one step continues into the new
+    // record rather than closing. The origin travels with it, so the way back out of the
+    // order leads to where it was started from.
+    onSuccess: (order) =>
+      void navigate(`/auftraege/${order.id}`, { replace: true, state: { origin } }),
   })
 
   const orderTypes = (documentTypes.data ?? []).filter(
@@ -67,7 +76,7 @@ export function NewOrderMask({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Neuer Auftrag"
-        back={{ to: '/auftraege', label: 'Aufträge' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle="Der Beleg entsteht als Entwurf. Die Nummer wird erst beim Ausstellen gezogen."
       >
         <Button onClick={() => create.mutate()} busy={create.isPending} disabled={incomplete}>

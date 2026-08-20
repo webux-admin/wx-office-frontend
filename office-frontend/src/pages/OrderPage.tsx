@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
@@ -13,10 +13,14 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatAmount, formatDate, formatDateTime } from '../lib/format'
+import { originOf, type Origin } from '../lib/origin'
 import type { DocumentParty, DocumentStatusEntry, SalesDocument } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { NewOrderMask } from './order/NewOrderMask'
 import { OrderLines, type FreeLine, type ProductLine } from './order/OrderLines'
+
+/** Where an order mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
 
 /** One order: its positions, its texts and the way from draft to issued. */
 export function OrderPage() {
@@ -53,6 +57,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
 
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -97,9 +102,11 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
 
   const remove = useMutation({
     mutationFn: () => api.delete<void>(base),
+    // The record is gone, so the mask has nothing left to show and closes to where it was
+    // opened from.
     onSuccess: () => {
       refresh()
-      void navigate('/auftraege', { replace: true })
+      void navigate(origin.from, { replace: true })
     },
   })
 
@@ -110,7 +117,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     <>
       <PageHeader
         title={order.documentNumber ?? `Entwurf ${order.id}`}
-        back={{ to: '/auftraege', label: 'Aufträge' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <Badge

@@ -10,9 +10,18 @@ import { NoTenantNotice } from '../layout/RequireTenant'
 import { useTenantId } from '../layout/useTenantId'
 import { api } from '../lib/api'
 import { formatAmount, formatCount, formatDate, formatLongDate } from '../lib/format'
+import { originState } from '../lib/origin'
 import { emptyPage, listQuery } from '../lib/paging'
 import type { DocumentSummary, Page, Partner, PriceGroup } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+
+/**
+ * What a mask opened from here returns to.
+ *
+ * <p>Without it, saving a record reached from the overview would drop the user into its list,
+ * which is not where they were.
+ */
+const ORIGIN = originState('/', 'Übersicht')
 
 /**
  * Asks a paged list for one row, to read the total off it.
@@ -223,6 +232,7 @@ function RecentPartners({ partners, loading }: { partners: Partner[]; loading: b
             <li key={partner.id}>
               <Link
                 to={`${partner.isCustomer ? '/kunden' : '/lieferanten'}/${partner.id}`}
+                state={ORIGIN}
                 className="flex items-center gap-4 py-2.5 transition-colors hover:text-accent-text"
               >
                 <span className="w-[72px] shrink-0 font-mono text-[12px] text-text-tertiary">
@@ -263,6 +273,7 @@ function RecentOrders({
             <li key={order.id}>
               <Link
                 to={`/auftraege/${order.id}`}
+                state={ORIGIN}
                 className="flex items-center gap-4 py-2.5 transition-colors hover:text-accent-text"
               >
                 <span className="w-[104px] shrink-0 font-mono text-[12px] text-text-tertiary">

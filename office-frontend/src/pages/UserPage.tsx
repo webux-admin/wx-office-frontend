@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
@@ -12,11 +12,15 @@ import { useAuth } from '../auth/useAuth'
 import { RequirePermission } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
+import { originOf, type Origin } from '../lib/origin'
 import type { TenantAccess, User } from '../lib/types'
 import { UserAccessPanel } from './user/UserAccessPanel'
 
 /** The shortest password the backend accepts. Stated so the field can say so before sending. */
 const MIN_PASSWORD = 12
+
+/** Where a user mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/benutzer', label: 'Benutzer' }
 
 /** One account: who it is, whether it may sign in, and what it may do in which tenant. */
 export function UserPage() {
@@ -55,6 +59,7 @@ function UserLoader() {
 function NewUserMask() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -68,9 +73,12 @@ function NewUserMask() {
         displayName: displayName.trim(),
         password,
       }),
+    // An account without access to a tenant can do nothing, so this one step continues into
+    // the new record rather than closing. The origin travels with it, so saving there comes
+    // back to where the account was started from.
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
-      void navigate(`/benutzer/${created.id}`, { replace: true })
+      void navigate(`/benutzer/${created.id}`, { replace: true, state: { origin } })
     },
   })
 
@@ -84,7 +92,7 @@ function NewUserMask() {
     <>
       <PageHeader
         title="Neuer Benutzer"
-        back={{ to: '/benutzer', label: 'Benutzer' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle="Das Konto entsteht ohne Zugriff auf einen Mandanten. Der wird danach erteilt."
       >
         <Button onClick={() => create.mutate()} busy={create.isPending} disabled={incomplete}>
@@ -140,7 +148,9 @@ function NewUserMask() {
 
 function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
   const { can, user: signedIn } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
   const mayWrite = can('USER_WRITE')
 
   const [email, setEmail] = useState(user.email)
@@ -159,7 +169,13 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
         email: email.trim(),
         displayName: displayName.trim(),
       }),
-    onSuccess: refresh,
+    // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
+    // Access to a tenant is granted below and takes effect on its own; it does not wait for
+    // this button and is not lost by leaving.
+    onSuccess: () => {
+      refresh()
+      void navigate(origin.from, { replace: true })
+    },
   })
 
   const setActive = useMutation({
@@ -188,7 +204,7 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
     <>
       <PageHeader
         title={user.displayName}
-        back={{ to: '/benutzer', label: 'Benutzer' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[12px]">{user.username}</span>

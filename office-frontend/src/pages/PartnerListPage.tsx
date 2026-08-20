@@ -14,6 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
+import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import type { Page, Partner } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
@@ -41,6 +42,9 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
   const [activeOnly, setActiveOnly] = useState(true)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('name,asc')
+  // Which of the two lists the mask returns to, so a supplier saved here does not land
+  // among the customers.
+  const origin = originState(wording.path, wording.listTitle)
 
   // Deferred rather than debounced: React keeps the old list on screen while the new one
   // loads instead of blanking the table on every keystroke.
@@ -76,6 +80,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
       render: (partner) => (
         <Link
           to={`${wording.path}/${partner.id}`}
+          state={origin}
           className="font-medium transition-colors hover:text-accent-text"
         >
           {partner.name}
@@ -130,7 +135,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
         subtitle={`${formatCount(result.totalElements)} ${wording.countedNoun}`}
       >
         {can('PARTNER_WRITE') && (
-          <LinkButton to={`${wording.path}/neu`}>
+          <LinkButton to={`${wording.path}/neu`} state={origin}>
             <Plus size={15} aria-hidden />
             {wording.createAction}
           </LinkButton>
@@ -167,6 +172,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
             rows={rows}
             keyOf={(partner) => partner.id}
             rowTo={(partner) => `${wording.path}/${partner.id}`}
+            rowState={origin}
             page={result}
             onPageChange={setPage}
             sort={sort}
@@ -186,7 +192,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
                 }
               >
                 {!term && can('PARTNER_WRITE') && (
-                  <LinkButton to={`${wording.path}/neu`}>
+                  <LinkButton to={`${wording.path}/neu`} state={origin}>
                     <Plus size={15} aria-hidden />
                     {wording.firstAction}
                   </LinkButton>

@@ -11,7 +11,11 @@ import { useAuth } from '../auth/useAuth'
 import { RequirePermission } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
+import { originState } from '../lib/origin'
 import type { Tenant } from '../lib/types'
+
+/** What a tenant mask returns to when it is saved here. */
+const ORIGIN = originState('/mandanten', 'Mandanten')
 
 /**
  * The tenants of the installation.
@@ -48,6 +52,7 @@ function TenantList() {
       render: (tenant) => (
         <Link
           to={`/mandanten/${tenant.id}`}
+          state={ORIGIN}
           className="font-medium transition-colors hover:text-accent-text"
         >
           {tenant.name}
@@ -99,7 +104,7 @@ function TenantList() {
         subtitle={`${formatCount(tenants.data?.length ?? 0)} Mandanten`}
       >
         {can('TENANT_WRITE') && (
-          <LinkButton to="/mandanten/neu">
+          <LinkButton to="/mandanten/neu" state={ORIGIN}>
             <Plus size={15} aria-hidden />
             Mandant erfassen
           </LinkButton>
@@ -113,6 +118,7 @@ function TenantList() {
             rows={tenants.data ?? []}
             keyOf={(tenant) => tenant.id}
             rowTo={(tenant) => `/mandanten/${tenant.id}`}
+            rowState={ORIGIN}
             loading={tenants.isPending}
             error={tenants.error}
             empty={

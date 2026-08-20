@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Trash2 } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
@@ -16,9 +16,13 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatAmount, formatPercent, parseDecimal } from '../lib/format'
+import { originOf, type Origin } from '../lib/origin'
 import type { GroupPrice, PriceGroup, Product, ProductType, VatCategory, VatRates } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
+
+/** Where a product mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/produkte', label: 'Produkte' }
 
 /** One article of the catalogue, with the prices of every price group. */
 export function ProductPage() {
@@ -66,6 +70,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
   const mayWrite = can('PRODUCT_WRITE')
 
   const [form, setForm] = useState<ProductForm>({
@@ -114,9 +119,13 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
       product
         ? api.put<Product>(`/api/tenants/${tenantId}/products/${product.id}`, payload())
         : api.post<Product>(`/api/tenants/${tenantId}/products`, payload()),
-    onSuccess: (saved) => {
+    // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
+    // The entry is replaced instead of pushed: a mask that has been saved is not a place to
+    // return to with the back button. Prices per price group are agreed on the stored record,
+    // which is reached again from the list.
+    onSuccess: () => {
       refresh()
-      if (!product) void navigate(`/produkte/${saved.id}`, { replace: true })
+      void navigate(origin.from, { replace: true })
     },
   })
 
@@ -145,7 +154,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
     <>
       <PageHeader
         title={product ? product.name : 'Neues Produkt'}
-        back={{ to: '/produkte', label: 'Produkte' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           product ? (
             <span className="flex items-center gap-2">

@@ -12,9 +12,13 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatAmount, formatCount, formatDate } from '../lib/format'
+import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import type { DocumentStatus, DocumentSummary, Page } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+
+/** What an order mask returns to when it closes here. */
+const ORIGIN = originState('/auftraege', 'Aufträge')
 
 /** Status of the badge next to a document. */
 const TONES: Record<DocumentStatus, 'muted' | 'accent' | 'danger'> = {
@@ -76,6 +80,7 @@ function OrderList({ tenantId }: { tenantId: number }) {
       render: (order) => (
         <Link
           to={`/auftraege/${order.id}`}
+          state={ORIGIN}
           className="font-mono text-[12px] transition-colors hover:text-accent-text"
         >
           {order.documentNumber ?? `Entwurf ${order.id}`}
@@ -129,7 +134,7 @@ function OrderList({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader title="Aufträge" subtitle={`${formatCount(result.totalElements)} Belege`}>
         {can('ORDER_WRITE') && (
-          <LinkButton to="/auftraege/neu">
+          <LinkButton to="/auftraege/neu" state={ORIGIN}>
             <Plus size={15} aria-hidden />
             Auftrag erfassen
           </LinkButton>
@@ -164,6 +169,7 @@ function OrderList({ tenantId }: { tenantId: number }) {
             rows={rows}
             keyOf={(order) => order.id}
             rowTo={(order) => `/auftraege/${order.id}`}
+            rowState={ORIGIN}
             page={result}
             onPageChange={setPage}
             sort={sort}
@@ -183,7 +189,7 @@ function OrderList({ tenantId }: { tenantId: number }) {
                 }
               >
                 {filter === 'alle' && can('ORDER_WRITE') && (
-                  <LinkButton to="/auftraege/neu">
+                  <LinkButton to="/auftraege/neu" state={ORIGIN}>
                     <Plus size={15} aria-hidden />
                     Ersten Auftrag erfassen
                   </LinkButton>

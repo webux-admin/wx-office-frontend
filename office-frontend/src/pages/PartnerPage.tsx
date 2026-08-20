@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
@@ -13,6 +13,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { originOf } from '../lib/origin'
 import type { Partner, PartnerType } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
@@ -86,6 +87,10 @@ function PartnerMask({
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, {
+    from: wording.path,
+    label: wording.backLabel,
+  })
 
   const [form, setForm] = useState<PartnerForm>(
     partner ? toForm(partner) : emptyPartner(wording.role),
@@ -118,12 +123,12 @@ function PartnerMask({
         addresses: isUntouched(address) ? undefined : [toAddressPayload(address)],
       })
     },
-    // Saving finishes the mask, so it gives way to the list rather than staying open. The
-    // entry is replaced instead of pushed: a mask that has been saved is not a place to
-    // return to with the back button.
+    // Saving finishes the mask, so it closes and gives way to the screen it was opened from
+    // rather than staying open. The entry is replaced instead of pushed: a mask that has been
+    // saved is not a place to return to with the back button.
     onSuccess: () => {
       refresh()
-      void navigate(wording.path, { replace: true })
+      void navigate(origin.from, { replace: true })
     },
   })
 
@@ -155,7 +160,7 @@ function PartnerMask({
     <>
       <PageHeader
         title={partner ? partner.name : wording.newTitle}
-        back={{ to: wording.path, label: wording.backLabel }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           partner ? (
             <span className="flex items-center gap-2">

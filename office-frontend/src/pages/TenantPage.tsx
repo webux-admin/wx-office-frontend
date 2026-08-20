@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
@@ -13,6 +13,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequirePermission } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { parseDecimal } from '../lib/format'
+import { originOf, type Origin } from '../lib/origin'
 import type { ReferenceType, Tenant, VatMethod } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
@@ -121,10 +122,14 @@ function initial(tenant: Tenant | null): TenantForm {
 const AFTER_CREATION =
   'Wählbar, sobald der Mandant angelegt ist: seine Auswahllisten entstehen mit ihm.'
 
+/** Where a tenant mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/mandanten', label: 'Mandanten' }
+
 function TenantMask({ tenant }: { tenant: Tenant | null }) {
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
   const mayWrite = can('TENANT_WRITE')
   const creating = tenant === null
   // A tenant that does not exist yet has no lists to read; see the hint on those fields.
@@ -187,10 +192,21 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
       tenant
         ? api.put<Tenant>(`/api/tenants/${tenant.id}`, payload())
         : api.post<Tenant>('/api/tenants', payload()),
+    // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
+    // The entry is replaced instead of pushed: a mask that has been saved is not a place to
+    // return to with the back button.
+    // Creating is the exception this mask makes for itself. VAT, bank and the document
+    // defaults are out of reach until the tenant exists, and the panel above promises them
+    // for afterwards; without a payment account there is no QR bill. So the new record opens
+    // instead of closing, and the origin travels with it.
     onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ['tenant'] })
       void queryClient.invalidateQueries({ queryKey: ['tenants'] })
-      if (!tenant) void navigate(`/mandanten/${saved.id}`, { replace: true })
+      if (tenant) {
+        void navigate(origin.from, { replace: true })
+        return
+      }
+      void navigate(`/mandanten/${saved.id}`, { replace: true, state: { origin } })
     },
   })
 
@@ -209,7 +225,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     <>
       <PageHeader
         title={tenant ? tenant.name : 'Neuer Mandant'}
-        back={{ to: '/mandanten', label: 'Mandanten' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           tenant ? (
             <span className="flex items-center gap-2">

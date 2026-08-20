@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MouseEvent, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatCount } from '../lib/format'
+import type { OriginState } from '../lib/origin'
 import { pageRange, sortDirection, toggleSort } from '../lib/paging'
 import type { Page } from '../lib/types'
 import { ErrorNotice, LoadingBlock } from './Notice'
@@ -46,6 +47,13 @@ type DataTableProps<T> = {
    * for a table whose records have no screen of their own.
    */
   rowTo?: (row: T) => string
+  /**
+   * Names this list as the screen the opened mask returns to.
+   *
+   * <p>Set it wherever `rowTo` leads into a mask, so that saving there comes back here and not
+   * to whichever list the mask holds as its fallback.
+   */
+  rowState?: OriginState
   /** Called instead of navigating, for a table whose records open in a dialog. */
   onRowOpen?: (row: T) => void
   /**
@@ -80,6 +88,7 @@ export function DataTable<T>({
   empty,
   footer,
   rowTo,
+  rowState,
   onRowOpen,
   page,
   onPageChange,
@@ -107,7 +116,7 @@ export function DataTable<T>({
         window.open(to, '_blank', 'noopener')
         return
       }
-      void navigate(to)
+      void navigate(to, { state: rowState })
       return
     }
     onRowOpen?.(row)

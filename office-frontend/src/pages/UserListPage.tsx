@@ -14,7 +14,11 @@ import { RequirePermission } from '../layout/RequireTenant'
 import { useTenantId } from '../layout/useTenantId'
 import { api } from '../lib/api'
 import { formatCount, formatDateTime, formatRelativeTime } from '../lib/format'
+import { originState } from '../lib/origin'
 import type { User } from '../lib/types'
+
+/** What a user mask returns to when it is saved here. */
+const ORIGIN = originState('/benutzer', 'Benutzer')
 
 /** Everyone who can sign in. */
 export function UserListPage() {
@@ -45,6 +49,7 @@ function UserList() {
       render: (user) => (
         <Link
           to={`/benutzer/${user.id}`}
+          state={ORIGIN}
           className="font-mono text-[12px] font-medium transition-colors hover:text-accent-text"
         >
           {user.username}
@@ -94,7 +99,7 @@ function UserList() {
         subtitle={`${formatCount(users.data?.length ?? 0)} Konten`}
       >
         {can('USER_WRITE') && (
-          <LinkButton to="/benutzer/neu">
+          <LinkButton to="/benutzer/neu" state={ORIGIN}>
             <Plus size={15} aria-hidden />
             Benutzer anlegen
           </LinkButton>
@@ -118,6 +123,7 @@ function UserList() {
             rows={users.data ?? []}
             keyOf={(user) => user.id}
             rowTo={(user) => `/benutzer/${user.id}`}
+            rowState={ORIGIN}
             loading={users.isPending}
             error={users.error}
             empty={

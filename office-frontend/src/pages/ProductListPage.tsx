@@ -15,9 +15,13 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatAmount, formatCount } from '../lib/format'
 import { shortLabelForCode } from '../lib/masterData'
+import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import type { Page, Product } from '../lib/types'
 import { useCatalogueLabel, useMasterDataEntries } from '../masterdata/useMasterData'
+
+/** What a product mask returns to when it is saved here. */
+const ORIGIN = originState('/produkte', 'Produkte')
 
 /** The catalogue of goods and services the tenant sells. */
 export function ProductListPage() {
@@ -68,6 +72,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
       render: (product) => (
         <Link
           to={`/produkte/${product.id}`}
+          state={ORIGIN}
           className="font-medium transition-colors hover:text-accent-text"
         >
           {product.name}
@@ -119,7 +124,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader title="Produkte" subtitle={`${formatCount(result.totalElements)} Artikel`}>
         {can('PRODUCT_WRITE') && (
-          <LinkButton to="/produkte/neu">
+          <LinkButton to="/produkte/neu" state={ORIGIN}>
             <Plus size={15} aria-hidden />
             Produkt erfassen
           </LinkButton>
@@ -156,6 +161,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
             rows={rows}
             keyOf={(product) => product.id}
             rowTo={(product) => `/produkte/${product.id}`}
+            rowState={ORIGIN}
             page={result}
             onPageChange={setPage}
             sort={sort}
@@ -175,7 +181,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
                 }
               >
                 {!term && can('PRODUCT_WRITE') && (
-                  <LinkButton to="/produkte/neu">
+                  <LinkButton to="/produkte/neu" state={ORIGIN}>
                     <Plus size={15} aria-hidden />
                     Erstes Produkt erfassen
                   </LinkButton>

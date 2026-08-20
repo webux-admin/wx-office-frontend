@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import type { OriginState } from '../lib/origin'
 
 type Variant = 'primary' | 'secondary'
 
@@ -17,11 +18,14 @@ const VARIANTS: Record<Variant, string> = {
  */
 export function LinkButton({
   to,
+  state,
   variant = 'primary',
   className = '',
   children,
 }: {
   to: string
+  /** Names the current screen as the one a mask behind this link returns to. */
+  state?: OriginState
   variant?: Variant
   className?: string
   children: ReactNode
@@ -29,6 +33,7 @@ export function LinkButton({
   return (
     <Link
       to={to}
+      state={state}
       className={`inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-[13px] font-medium transition-colors duration-150 ${VARIANTS[variant]} ${className}`}
     >
       {children}
