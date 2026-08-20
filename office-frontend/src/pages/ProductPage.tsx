@@ -15,9 +15,16 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatPercent } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
-import type { Product, ProductType, VatCategory, VatRates } from '../lib/types'
+import type {
+  Product,
+  ProductFreeFieldDefinition,
+  ProductType,
+  VatCategory,
+  VatRates,
+} from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
+import { ProductFreeFields } from './product/ProductFreeFields'
 import { ProductGroupPrices } from './product/ProductGroupPrices'
 import {
   activeChanged,
@@ -31,7 +38,7 @@ import {
 /** Where a product mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/produkte', label: 'Produkte' }
 
-type Register = 'hauptdaten' | 'preise' | 'buchhaltung'
+type Register = 'hauptdaten' | 'preise' | 'buchhaltung' | 'freifelder'
 
 const REGISTERS: { id: Register; label: string }[] = [
   { id: 'hauptdaten', label: 'Hauptdaten' },
@@ -91,6 +98,22 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
     queryFn: () => api.get<VatRates>(`/api/tenants/${tenantId}/vat-rates`),
   })
 
+  // What the free fields of this tenant mean. Read here rather than taken from the product,
+  // because a new article carries none yet and its mask has to show them all the same.
+  const freeFieldDefinitions = useQuery({
+    queryKey: ['product-free-fields', tenantId],
+    queryFn: () =>
+      api.get<ProductFreeFieldDefinition[]>(`/api/tenants/${tenantId}/product-free-fields`),
+  })
+
+  // Only the ones the tenant shows. A field switched off keeps its value but leaves the mask.
+  const freeFields = (freeFieldDefinitions.data ?? []).filter((field) => field.active !== false)
+
+  // The register appears only where there is something in it: a tenant that defined no free
+  // field should not be offered an empty tab.
+  const registers =
+    freeFields.length === 0 ? REGISTERS : [...REGISTERS, { id: 'freifelder' as const, label: 'Freifelder' }]
+
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['product', tenantId] })
     void queryClient.invalidateQueries({ queryKey: ['products', tenantId] })
@@ -100,7 +123,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = toPayload(form)
+      const payload = toPayload(form, freeFields)
       const saved = product
         ? await api.put<Product>(`${base}/${product.id}`, payload)
         : await api.post<Product>(base, payload)
@@ -153,7 +176,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
       </PageHeader>
 
       <div className="px-8 pb-12">
-        <Tabs tabs={REGISTERS} active={tab} onChange={setTab} label="Register" />
+        <Tabs tabs={registers} active={tab} onChange={setTab} label="Register" />
 
         {(complaint !== null || save.error !== null) && (
           <div className="mb-6">
@@ -288,6 +311,20 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
               </Panel>
             )}
           </div>
+        )}
+
+        {tab === 'freifelder' && (
+          <ProductFreeFields
+            fields={freeFields}
+            values={form.freeFields}
+            onChange={(code, value) =>
+              setForm((current) => ({
+                ...current,
+                freeFields: { ...current.freeFields, [code]: value },
+              }))
+            }
+            disabled={!mayWrite}
+          />
         )}
 
         {tab === 'buchhaltung' && (

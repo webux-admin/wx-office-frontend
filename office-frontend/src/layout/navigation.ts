@@ -20,6 +20,7 @@ import {
   Ruler,
   Scale,
   ShieldCheck,
+  SlidersHorizontal,
   Tags,
   Truck,
   UserCog,
@@ -183,6 +184,14 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Hash,
         href: '/nummernkreise',
         permission: 'NUMBER_RANGE_READ',
+      },
+      // What the fifteen free places on a product mean. Set up once, then left alone --
+      // which is why it sits here and not next to the articles themselves.
+      {
+        label: 'Produkt-Freifelder',
+        icon: SlidersHorizontal,
+        href: '/produkt-freifelder',
+        permission: 'PRODUCT_READ',
       },
       // The structural values: renamable and hideable, but never added to or deleted.
       { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: MASTER_DATA },

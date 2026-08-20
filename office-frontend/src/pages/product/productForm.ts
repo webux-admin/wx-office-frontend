@@ -1,5 +1,19 @@
 import { parseDecimal } from '../../lib/format'
-import type { Product, ProductType, VatCategory } from '../../lib/types'
+import type {
+  FreeFieldType,
+  Product,
+  ProductFreeFieldValue,
+  ProductType,
+  VatCategory,
+} from '../../lib/types'
+
+/**
+ * The little a payload needs to know about a free field: which place, and of what kind.
+ *
+ * <p>Both a stored value and a definition answer that, so the same function serves the mask
+ * of a new article and of one that is already stored.
+ */
+export type FreeFieldSlot = { code: string; type?: FreeFieldType }
 
 /**
  * The product mask while it is being filled in.
@@ -22,6 +36,11 @@ export type ProductForm = {
   revenueAccount: string
   vatCategory: VatCategory
   basePrice: string
+  /**
+   * The free fields as the mask holds them: by place, and as text, because that is what an
+   * input carries. What each place means is not kept here — it comes with the product.
+   */
+  freeFields: Record<string, string>
 }
 
 const EMPTY: ProductForm = {
@@ -39,6 +58,7 @@ const EMPTY: ProductForm = {
   revenueAccount: '',
   vatCategory: 'STANDARD',
   basePrice: '',
+  freeFields: {},
 }
 
 /**
@@ -47,7 +67,7 @@ const EMPTY: ProductForm = {
  * @returns the empty mask, active and discountable
  */
 export function emptyProduct(): ProductForm {
-  return { ...EMPTY }
+  return { ...EMPTY, freeFields: {} }
 }
 
 /**
@@ -71,7 +91,58 @@ export function toForm(product: Product): ProductForm {
     revenueAccount: product.revenueAccount ?? '',
     vatCategory: product.vatCategory ?? 'STANDARD',
     basePrice: product.basePrice?.toString() ?? '',
+    freeFields: toFreeFieldForm(product.freeFields),
   }
+}
+
+/**
+ * Turns the free fields of a product into what the inputs hold.
+ *
+ * <p>A tick becomes `'true'` or `''`, a number its digits, an empty field an empty string —
+ * one shape for all three, so the mask can keep them in one record.
+ *
+ * @param values the free fields as the API returned them
+ * @returns the values by place, empty when the tenant defined none
+ */
+export function toFreeFieldForm(values: ProductFreeFieldValue[] | undefined): Record<string, string> {
+  const form: Record<string, string> = {}
+  for (const value of values ?? []) {
+    form[value.code] =
+      value.type === 'FLAG'
+        ? value.flag === true
+          ? 'true'
+          : ''
+        : value.type === 'NUMBER'
+          ? (value.number?.toString() ?? '')
+          : (value.text ?? '')
+  }
+  return form
+}
+
+/**
+ * Turns what the inputs hold back into the payload of the free fields.
+ *
+ * <p>Only places the product already knows are sent: the definitions travel with the product,
+ * and a place the tenant has not defined is refused by the backend anyway.
+ *
+ * <p>An emptied field is sent as an empty value rather than left out, because leaving it out
+ * would keep the stored one — clearing a field has to reach the record.
+ *
+ * @param form the filled in mask
+ * @param defined the free fields this tenant defined, by place and kind
+ * @returns the values as the API wants them, or undefined when there are no free fields
+ */
+export function toFreeFieldPayload(
+  form: ProductForm,
+  defined: FreeFieldSlot[] | undefined,
+): ProductFreeFieldValue[] | undefined {
+  if (defined === undefined || defined.length === 0) return undefined
+  return defined.map((field) => {
+    const held = form.freeFields[field.code] ?? ''
+    if (field.type === 'FLAG') return { code: field.code, flag: held === 'true' }
+    if (field.type === 'NUMBER') return { code: field.code, number: parseDecimal(held) }
+    return { code: field.code, text: held.trim() === '' ? null : held.trim() }
+  })
 }
 
 /**
@@ -91,7 +162,7 @@ export function toForm(product: Product): ProductForm {
  * @param form the filled in mask
  * @returns the product as the API wants it
  */
-export function toPayload(form: ProductForm): Partial<Product> {
+export function toPayload(form: ProductForm, defined?: FreeFieldSlot[]): Partial<Product> {
   return {
     productNumber: blankToUndefined(form.productNumber),
     productType: form.productType,
@@ -105,6 +176,7 @@ export function toPayload(form: ProductForm): Partial<Product> {
     revenueAccount: blankToUndefined(form.revenueAccount),
     vatCategory: form.vatCategory,
     basePrice: parseDecimal(form.basePrice) ?? undefined,
+    freeFields: toFreeFieldPayload(form, defined),
   }
 }
 

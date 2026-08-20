@@ -393,6 +393,58 @@ export type Product = {
   vatCategory?: VatCategory
   basePrice?: number
   groupPrices?: GroupPrice[]
+  /**
+   * The free fields this tenant defined, one entry each, filled in or not.
+   *
+   * <p>Absent when the tenant defined none. On write only `code` and the value are read.
+   */
+  freeFields?: ProductFreeFieldValue[]
+}
+
+/** What kind of value a free field of a product holds. */
+export type FreeFieldType = 'TEXT' | 'NUMBER' | 'FLAG'
+
+/**
+ * The value a product carries in one of its free fields.
+ *
+ * <p>Exactly one of `text`, `number` and `flag` is filled; which one follows from `type`.
+ * Caption and type are read-only and come from the definition.
+ */
+export type ProductFreeFieldValue = {
+  /** The place, for example `NUMBER_2`. */
+  code: string
+  type?: FreeFieldType
+  /** The caption this tenant gave the field. */
+  label?: string
+  text?: string | null
+  number?: number | null
+  flag?: boolean | null
+}
+
+/**
+ * What one free field means for this tenant.
+ *
+ * <p>The application keeps fifteen places on every product; this says what they are for. A
+ * place without a definition is not offered anywhere.
+ */
+export type ProductFreeFieldDefinition = {
+  id?: number
+  /** The place, fixed after creation. */
+  code: string
+  /** The key a designed form binds a column to, for example `freeNumber2`. */
+  columnCode?: string
+  type?: FreeFieldType
+  /** Caption in the default language. */
+  name?: string
+  /** Hint shown under the field in the product mask. */
+  description?: string
+  /** Translations by ISO 639-1 code. */
+  labels?: Record<string, string>
+  sortOrder?: number
+  /** Whether the field is shown in the product mask at all. */
+  active?: boolean
+  /** Whether the value may go onto a document. */
+  printable?: boolean
 }
 
 export type GroupPrice = { priceGroupId: number; price: number }

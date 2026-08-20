@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { activeChanged, emptyProduct, firstComplaint, toForm, toPayload } from './productForm'
-import type { Product } from '../../lib/types'
+import {
+  activeChanged,
+  emptyProduct,
+  firstComplaint,
+  toForm,
+  toFreeFieldForm,
+  toFreeFieldPayload,
+  toPayload,
+} from './productForm'
+import type { FreeFieldSlot } from './productForm'
+import type { Product, ProductFreeFieldValue } from '../../lib/types'
 
 const EMPTY = emptyProduct()
 // The mask starts without a unit and the dropdown fills in the default of the tenant, so a
@@ -168,5 +177,120 @@ describe('activeChanged', () => {
     // A new product is created active, so only unticking the box needs a second request.
     expect(activeChanged({ ...COMPLETE, active: true }, null)).toBe(false)
     expect(activeChanged({ ...COMPLETE, active: false }, null)).toBe(true)
+  })
+})
+
+
+/** One place of each kind, the way a product carries them. */
+const FREE_FIELDS: ProductFreeFieldValue[] = [
+  { code: 'TEXT_1', type: 'TEXT', label: 'Herkunft', text: 'Schweiz' },
+  { code: 'NUMBER_2', type: 'NUMBER', label: 'Garantie', number: 24 },
+  { code: 'FLAG_1', type: 'FLAG', label: 'Zollpflichtig', flag: true },
+]
+
+const SLOTS: FreeFieldSlot[] = [
+  { code: 'TEXT_1', type: 'TEXT' },
+  { code: 'NUMBER_2', type: 'NUMBER' },
+  { code: 'FLAG_1', type: 'FLAG' },
+]
+
+describe('toFreeFieldForm', () => {
+  it('toFreeFieldFormTest', () => {
+    const form = toFreeFieldForm(FREE_FIELDS)
+
+    expect(form).toEqual({ TEXT_1: 'Schweiz', NUMBER_2: '24', FLAG_1: 'true' })
+  })
+
+  it('toFreeFieldFormWithEmptyValuesTest', () => {
+    const form = toFreeFieldForm([
+      { code: 'TEXT_1', type: 'TEXT', text: null },
+      { code: 'NUMBER_2', type: 'NUMBER', number: null },
+      { code: 'FLAG_1', type: 'FLAG', flag: false },
+    ])
+
+    expect(form).toEqual({ TEXT_1: '', NUMBER_2: '', FLAG_1: '' })
+  })
+
+  it('toFreeFieldFormKeepsAZeroTest', () => {
+    const form = toFreeFieldForm([{ code: 'NUMBER_1', type: 'NUMBER', number: 0 }])
+
+    expect(form.NUMBER_1).toBe('0')
+  })
+
+  it('toFreeFieldFormWithoutFieldsTest', () => {
+    expect(toFreeFieldForm(undefined)).toEqual({})
+    expect(toFreeFieldForm([])).toEqual({})
+  })
+})
+
+describe('toFreeFieldPayload', () => {
+  it('toFreeFieldPayloadTest', () => {
+    const form = { ...COMPLETE, freeFields: { TEXT_1: 'Schweiz', NUMBER_2: '24', FLAG_1: 'true' } }
+
+    expect(toFreeFieldPayload(form, SLOTS)).toEqual([
+      { code: 'TEXT_1', text: 'Schweiz' },
+      { code: 'NUMBER_2', number: 24 },
+      { code: 'FLAG_1', flag: true },
+    ])
+  })
+
+  it('toFreeFieldPayloadSendsAClearedFieldTest', () => {
+    // Left out, the update would keep the stored value -- clearing has to reach the record.
+    const form = { ...COMPLETE, freeFields: { TEXT_1: '  ', NUMBER_2: '', FLAG_1: '' } }
+
+    expect(toFreeFieldPayload(form, SLOTS)).toEqual([
+      { code: 'TEXT_1', text: null },
+      { code: 'NUMBER_2', number: null },
+      { code: 'FLAG_1', flag: false },
+    ])
+  })
+
+  it('toFreeFieldPayloadTrimsTextTest', () => {
+    const form = { ...COMPLETE, freeFields: { TEXT_1: '  Bio  ' } }
+
+    expect(toFreeFieldPayload(form, [{ code: 'TEXT_1', type: 'TEXT' }])).toEqual([
+      { code: 'TEXT_1', text: 'Bio' },
+    ])
+  })
+
+  it('toFreeFieldPayloadWithoutSlotsTest', () => {
+    const form = { ...COMPLETE, freeFields: { TEXT_1: 'Schweiz' } }
+
+    expect(toFreeFieldPayload(form, undefined)).toBeUndefined()
+    expect(toFreeFieldPayload(form, [])).toBeUndefined()
+  })
+
+  it('toFreeFieldPayloadOfAnUntouchedFieldTest', () => {
+    // A place the mask never showed a value for is sent as empty, not skipped.
+    expect(toFreeFieldPayload(COMPLETE, [{ code: 'TEXT_1', type: 'TEXT' }])).toEqual([
+      { code: 'TEXT_1', text: null },
+    ])
+  })
+})
+
+describe('toPayload with free fields', () => {
+  it('toPayloadCarriesFreeFieldsTest', () => {
+    const form = { ...COMPLETE, freeFields: { TEXT_1: 'Schweiz' } }
+
+    expect(toPayload(form, [{ code: 'TEXT_1', type: 'TEXT' }]).freeFields).toEqual([
+      { code: 'TEXT_1', text: 'Schweiz' },
+    ])
+  })
+
+  it('toPayloadWithoutFreeFieldsTest', () => {
+    // A tenant that defined none: the key stays out of the payload altogether.
+    expect(toPayload(COMPLETE).freeFields).toBeUndefined()
+  })
+})
+
+describe('toForm with free fields', () => {
+  it('toFormReadsFreeFieldsTest', () => {
+    const form = toForm({ ...STORED, freeFields: FREE_FIELDS })
+
+    expect(form.freeFields).toEqual({ TEXT_1: 'Schweiz', NUMBER_2: '24', FLAG_1: 'true' })
+  })
+
+  it('toFormWithoutFreeFieldsTest', () => {
+    expect(toForm(STORED).freeFields).toEqual({})
   })
 })

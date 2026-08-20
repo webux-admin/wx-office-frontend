@@ -34,6 +34,7 @@ const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((modul
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const ProductListPage = lazy(() => import('./pages/ProductListPage').then((module) => ({ default: module.ProductListPage })))
 const ProductPage = lazy(() => import('./pages/ProductPage').then((module) => ({ default: module.ProductPage })))
+const ProductFreeFieldPage = lazy(() => import('./pages/ProductFreeFieldPage').then((module) => ({ default: module.ProductFreeFieldPage })))
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
@@ -88,6 +89,8 @@ export default function App() {
                 <Route path="/produkte/:id" element={<ProductPage />} />
 
                 <Route path="/preisgruppen" element={<PriceGroupPage />} />
+
+                <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 
                 <Route path="/auftraege" element={<OrderListPage />} />
                 <Route path="/auftraege/:id" element={<OrderPage />} />
