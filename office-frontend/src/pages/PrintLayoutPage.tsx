@@ -229,6 +229,14 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
                 }),
               )
             }
+            onResize={(band, index, size) =>
+              setDefinition(
+                withBlock(definition, band, index, {
+                  ...definition[band][index],
+                  ...size,
+                }),
+              )
+            }
           />
 
           <div className="w-[280px] shrink-0">

@@ -437,7 +437,10 @@ function StatusTrail({ tenantId, orderId }: { tenantId: number; orderId: number 
       {trail.error !== null && <ErrorNotice error={trail.error} />}
       {trail.data && (
         <ol className="grid gap-3">
-          {trail.data.map((entry, index) => (
+          {/* Newest first: what happened last is what someone opening the mask wants to see.
+              The API answers in the order it happened, which is the order an audit trail is
+              stored in. */}
+          {[...trail.data].reverse().map((entry, index) => (
             <li key={`${entry.status}-${entry.changedAt}-${index}`} className="flex gap-3">
               <span
                 aria-hidden

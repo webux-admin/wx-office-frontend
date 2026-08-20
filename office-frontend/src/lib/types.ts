@@ -476,12 +476,24 @@ export type LayoutBlock = {
   field?: string
   text?: string
   image?: string
-  columns: string[]
+  columns: LayoutColumn[]
   x: number
   y: number
   width?: number
   height?: number
   style: LayoutStyle
+}
+
+/**
+ * One column of the positions table, as the form asks for it.
+ *
+ * <p>Width and heading are optional: left out, the proposal from the server is used. A width
+ * of zero means the column takes whatever is left over.
+ */
+export type LayoutColumn = {
+  code: string
+  widthMm?: number
+  label?: string
 }
 
 /** Margins and the height of the two fixed bands, in millimetres. */

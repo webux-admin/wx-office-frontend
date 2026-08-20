@@ -37,6 +37,7 @@ afterEach(() => {
 function draw(props: Partial<Parameters<typeof DesignCanvas>[0]> = {}) {
   const onSelect = vi.fn()
   const onMove = vi.fn()
+  const onResize = vi.fn()
   act(() =>
     root.render(
       <DesignCanvas
@@ -44,11 +45,12 @@ function draw(props: Partial<Parameters<typeof DesignCanvas>[0]> = {}) {
         selection={null}
         onSelect={onSelect}
         onMove={onMove}
+        onResize={onResize}
         {...props}
       />,
     ),
   )
-  return { onSelect, onMove }
+  return { onSelect, onMove, onResize }
 }
 
 /** @returns the element whose text is exactly this, the way a person would point at it */
@@ -131,6 +133,19 @@ describe('DesignCanvas', () => {
 
     // Already at the top edge, so it stays there instead of walking off the band.
     expect(onMove).toHaveBeenCalledWith('header', 0, { x: 0, y: 0 })
+  })
+
+  it('designCanvasShowsAResizeHandleOnTheSelectedBlockTest', () => {
+    draw({ selection: { band: 'header', index: 0 } })
+
+    // Only the selected block carries one, so the page is not covered in handles.
+    expect(container.querySelectorAll('[aria-label$="in der Grösse ändern"]')).toHaveLength(1)
+  })
+
+  it('designCanvasWithoutASelectionShowsNoHandleTest', () => {
+    draw()
+
+    expect(container.querySelectorAll('[aria-label$="in der Grösse ändern"]')).toHaveLength(0)
   })
 
   it('designCanvasWithAnEmptyBodyTest', () => {

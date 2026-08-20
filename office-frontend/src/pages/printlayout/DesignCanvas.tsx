@@ -22,11 +22,13 @@ export function DesignCanvas({
   selection,
   onSelect,
   onMove,
+  onResize,
 }: {
   definition: PrintLayoutDefinition
   selection: Selection
   onSelect: (selection: Selection) => void
   onMove: (band: Band, index: number, position: { x: number; y: number }) => void
+  onResize: (band: Band, index: number, size: { width: number; height: number }) => void
 }) {
   const page = definition.page
   const bodyHeight = Math.max(bodyHeightOf(page), 0)
@@ -61,6 +63,7 @@ export function DesignCanvas({
             selected={selection?.band === 'header' && selection.index === index}
             onSelect={() => onSelect({ band: 'header', index })}
             onMove={(position) => onMove('header', index, position)}
+            onResize={(size) => onResize('header', index, size)}
             band={{ height: page.headerHeight, width: A4_WIDTH - page.marginLeft - page.marginRight }}
           />
         ))}
@@ -110,6 +113,7 @@ export function DesignCanvas({
             selected={selection?.band === 'footer' && selection.index === index}
             onSelect={() => onSelect({ band: 'footer', index })}
             onMove={(position) => onMove('footer', index, position)}
+            onResize={(size) => onResize('footer', index, size)}
             band={{ height: page.footerHeight, width: A4_WIDTH - page.marginLeft - page.marginRight }}
           />
         ))}
@@ -158,15 +162,18 @@ function PlacedBlock({
   selected,
   onSelect,
   onMove,
+  onResize,
   band,
 }: {
   block: LayoutBlock
   selected: boolean
   onSelect: () => void
   onMove: (position: { x: number; y: number }) => void
+  onResize: (size: { width: number; height: number }) => void
   band: { width: number; height: number }
 }) {
   const start = useRef<{ x: number; y: number; blockX: number; blockY: number } | null>(null)
+  const resize = useRef<{ x: number; y: number; width: number; height: number } | null>(null)
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
@@ -221,6 +228,49 @@ function PlacedBlock({
       }}
     >
       {captionOf(block)}
+
+      {/* The corner is the width and the height: typing millimetres works too, but nobody
+          lays out a page by typing. */}
+      {selected && (
+        <span
+          role="button"
+          tabIndex={-1}
+          aria-label={`${BLOCK_LABELS[block.type]} in der Grösse ändern`}
+          onPointerDown={(event) => {
+            event.stopPropagation()
+            resize.current = {
+              x: event.clientX,
+              y: event.clientY,
+              width: block.width ?? 40,
+              height: block.height ?? 5,
+            }
+            event.currentTarget.setPointerCapture?.(event.pointerId)
+          }}
+          onPointerMove={(event) => {
+            if (resize.current === null) return
+            const from = resize.current
+            onResize({
+              width: clamp(
+                Math.round(from.width + (event.clientX - from.x) / SCALE),
+                5,
+                band.width - block.x,
+              ),
+              height: clamp(
+                Math.round(from.height + (event.clientY - from.y) / SCALE),
+                3,
+                Math.max(band.height - block.y, 3),
+              ),
+            })
+          }}
+          onPointerUp={() => {
+            resize.current = null
+          }}
+          onPointerCancel={() => {
+            resize.current = null
+          }}
+          className="absolute -bottom-[3px] -right-[3px] h-[7px] w-[7px] cursor-nwse-resize touch-none border border-accent bg-surface"
+        />
+      )}
     </div>
   )
 }
