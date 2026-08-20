@@ -86,12 +86,6 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
     label: 'Ertragskonten',
     description: 'Konten, auf die eine Belegzeile gebucht wird. Der Code ist die Kontonummer.',
   },
-  {
-    slug: 'druckvorlagen',
-    list: 'layout-templates',
-    label: 'Druckvorlagen',
-    description: 'Vorlagen, nach denen eine Belegart gedruckt wird.',
-  },
 ]
 
 /**

@@ -8,6 +8,8 @@ import { firstBasicDataPath } from './lib/basicData'
 import { CataloguePage } from './pages/CataloguePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DocumentTypePage } from './pages/DocumentTypePage'
+import { PrintLayoutListPage } from './pages/PrintLayoutListPage'
+import { PrintLayoutPage } from './pages/PrintLayoutPage'
 import { LoginPage } from './pages/LoginPage'
 import { MasterDataPage } from './pages/MasterDataPage'
 import { NumberRangePage } from './pages/NumberRangePage'
@@ -88,6 +90,8 @@ export default function App() {
               <Route path="/zahlungskonditionen" element={<PaymentTermPage />} />
               <Route path="/mehrwertsteuer" element={<VatPage />} />
               <Route path="/belegarten" element={<DocumentTypePage />} />
+              <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
+              <Route path="/druckvorlagen/:id" element={<PrintLayoutPage />} />
               <Route path="/nummernkreise" element={<NumberRangePage />} />
 
               <Route path="/mandanten" element={<TenantListPage />} />

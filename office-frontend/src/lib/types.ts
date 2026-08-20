@@ -434,10 +434,109 @@ export type DocumentType = {
   name: string
   numberPrefix?: string
   addressUsage?: AddressUsage
-  layoutTemplateId?: number
-  layoutTemplate?: string
+  documentLayoutId?: number
+  documentLayout?: string
   copies?: DocumentTypeCopy[]
   active: boolean
+}
+
+// --- print layouts -----------------------------------------------------------
+
+/** What a block on a designed form draws. Mirrors `ch.webux.office.printing.LayoutBlockType`. */
+export type LayoutBlockType =
+  | 'TEXT'
+  | 'FIELD'
+  | 'IMAGE'
+  | 'LINE'
+  | 'ADDRESS'
+  | 'POSITIONS'
+  | 'TOTALS'
+  | 'VAT_SUMMARY'
+  | 'DISCOUNT_STAGES'
+  | 'PAYMENT_TERMS'
+  | 'DOCUMENT_TEXT'
+
+/** How a block looks. Every value is checked again on the server before it becomes CSS. */
+export type LayoutStyle = {
+  fontSize?: number
+  bold: boolean
+  align?: 'left' | 'right' | 'center'
+  colour?: string
+}
+
+/**
+ * One element of a form.
+ *
+ * <p>Blocks of the head and the foot carry millimetres from the top left of the printable
+ * area. Blocks of the body carry none: they follow each other, because their height depends
+ * on how much the document says.
+ */
+export type LayoutBlock = {
+  type: LayoutBlockType
+  field?: string
+  text?: string
+  image?: string
+  columns: string[]
+  x: number
+  y: number
+  width?: number
+  height?: number
+  style: LayoutStyle
+}
+
+/** Margins and the height of the two fixed bands, in millimetres. */
+export type PageSetup = {
+  marginTop: number
+  marginRight: number
+  marginBottom: number
+  marginLeft: number
+  headerHeight: number
+  footerHeight: number
+}
+
+/** A form as the designer edits it and the renderer reads it. */
+export type PrintLayoutDefinition = {
+  page: PageSetup
+  header: LayoutBlock[]
+  body: LayoutBlock[]
+  footer: LayoutBlock[]
+}
+
+/**
+ * A form documents are printed on.
+ *
+ * <p>`system` means it is delivered with the application: it may be renamed and chosen, but
+ * not drawn over — whoever wants to change it copies it first.
+ */
+export type PrintLayout = {
+  id: number
+  code: string
+  name: string
+  system: boolean
+  active: boolean
+  designed: boolean
+  definition?: PrintLayoutDefinition
+}
+
+/** One value a form may place on the page. */
+export type PrintoutField = {
+  path: string
+  label: string
+  group: string
+}
+
+/** One column the positions table may show. */
+export type PrintoutColumn = {
+  code: string
+  label: string
+  widthMm: number
+  numeric: boolean
+}
+
+/** What a form may show, as the server offers it. */
+export type PrintLayoutFields = {
+  fields: PrintoutField[]
+  columns: PrintoutColumn[]
 }
 
 /**

@@ -35,7 +35,7 @@ describe('basicDataFor', () => {
   })
 
   it('basicDataForLastEntryTest', () => {
-    expect(basicDataFor('druckvorlagen')?.list).toBe('layout-templates')
+    expect(basicDataFor('ertragskonten')?.list).toBe('revenue-accounts')
   })
 
   /** An address someone typed or a link from an older version of the menu. */

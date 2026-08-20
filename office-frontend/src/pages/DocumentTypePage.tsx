@@ -14,7 +14,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import type { DocumentCategory, DocumentType, DocumentTypeCopy } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
-import { MasterDataSelect } from '../masterdata/MasterDataSelect'
+import { PrintLayoutSelect } from '../printlayout/PrintLayoutSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 
 /**
@@ -38,7 +38,8 @@ type TypeForm = {
   code: string
   name: string
   numberPrefix: string
-  layoutTemplate: string
+  /** The form it is printed on, as its stable code. */
+  documentLayout: string
   /** One label per printed copy, in printing order. Empty means one copy without a label. */
   copies: string[]
 }
@@ -48,7 +49,7 @@ const EMPTY: TypeForm = {
   code: '',
   name: '',
   numberPrefix: '',
-  layoutTemplate: '',
+  documentLayout: '',
   copies: [],
 }
 
@@ -80,7 +81,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
         code: form.code.trim() || undefined,
         name: form.name.trim(),
         numberPrefix: form.numberPrefix.trim() || undefined,
-        layoutTemplate: form.layoutTemplate || undefined,
+        documentLayout: form.documentLayout || undefined,
         copies: form.copies
           .map((label, index) => ({ position: index + 1, label: label.trim() }))
           .filter((copy) => copy.label !== ''),
@@ -114,7 +115,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       code: type.code,
       name: type.name,
       numberPrefix: type.numberPrefix ?? '',
-      layoutTemplate: type.layoutTemplate ?? '',
+      documentLayout: type.documentLayout ?? '',
       copies: (type.copies ?? []).map((copy) => copy.label),
     })
     setEditing(type)
@@ -315,13 +316,10 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
             hint="Steht vor der laufenden Nummer, zum Beispiel AU."
           />
 
-          <MasterDataSelect
-            label="Druckvorlage"
+          <PrintLayoutSelect
             tenantId={tenantId}
-            list="layout-templates"
-            value={form.layoutTemplate}
-            onChange={(code) => setForm((current) => ({ ...current, layoutTemplate: code }))}
-            emptyLabel="Ohne Vorlage"
+            value={form.documentLayout}
+            onChange={(code) => setForm((current) => ({ ...current, documentLayout: code }))}
           />
 
           <CopyEditor

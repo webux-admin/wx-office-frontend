@@ -126,11 +126,27 @@ export type ApiFile = {
  * that keeps the handling of an expired session in one place. A link would open a new tab
  * showing a bare 401 instead of sending the user to the login screen.
  *
+ * <p>With a body it becomes a POST, which is what a preview needs: the form being drawn is
+ * not stored anywhere yet, so it travels in the request.
+ *
  * @param path the endpoint that answers with the file
+ * @param body what to send, omitted for a plain download
  * @returns the bytes and the file name the backend proposed
  */
-async function requestFile(path: string): Promise<ApiFile> {
-  const response = await fetch(path, { method: 'GET', credentials: 'include' })
+async function requestFile(path: string, body?: unknown): Promise<ApiFile> {
+  const headers: Record<string, string> = {}
+  const csrfToken = readCookie('XSRF-TOKEN')
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    if (csrfToken) headers['X-XSRF-TOKEN'] = decodeURIComponent(csrfToken)
+  }
+
+  const response = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers,
+    credentials: 'include',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
   if (response.status === 401) throw new UnauthorizedError()
   if (!response.ok) {
     const payload = await readPayload(response)
@@ -158,7 +174,7 @@ function fileNameOf(disposition: string | null, path: string): string {
 /** The only way into the backend. */
 export const api = {
   get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
-  file: (path: string) => requestFile(path),
+  file: (path: string, body?: unknown) => requestFile(path, body),
   post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   put: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),

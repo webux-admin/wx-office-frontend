@@ -158,7 +158,6 @@ export const NAV_GROUPS: NavGroup[] = [
           listEntry('rechtsformen', Scale),
           listEntry('anreden', UserRound),
           listEntry('ertragskonten', BookOpen),
-          listEntry('druckvorlagen', Printer),
         ],
       },
     ],
@@ -171,6 +170,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: FileType2,
         href: '/belegarten',
         permission: 'DOCUMENT_TYPE_READ',
+      },
+      // Not a selection list any more: a form has a drawing and an editor of its own.
+      {
+        label: 'Druckvorlagen',
+        icon: Printer,
+        href: '/druckvorlagen',
+        permission: 'PRINT_LAYOUT_READ',
       },
       {
         label: 'Nummernkreise',
