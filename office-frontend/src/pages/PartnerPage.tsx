@@ -9,6 +9,7 @@ import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextAreaField } from '../components/TextAreaField'
+import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -191,24 +192,7 @@ function PartnerMask({
 
       <div className="px-8 pb-12">
         {partner && (
-          <div className="mb-6 flex gap-1 border-b border-line-subtle" role="tablist">
-            {tabs.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === entry.id}
-                onClick={() => setTab(entry.id)}
-                className={`-mb-px border-b-2 px-3.5 py-2 text-[13px] transition-colors ${
-                  tab === entry.id
-                    ? 'border-accent text-text-primary'
-                    : 'border-transparent text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
+          <Tabs tabs={tabs} active={tab} onChange={setTab} label="Register" />
         )}
 
         {tab === 'stammdaten' && (complaint !== null || save.error !== null) && (

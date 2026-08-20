@@ -375,7 +375,15 @@ export type Product = {
   active?: boolean
   productType: ProductType
   name: string
+  /** Second line under the name, printed on the document line as well. */
+  subtitle?: string
   description?: string
+  /** Note for the tenant's own staff. Never printed on a document. */
+  internalComment?: string
+  /** Bar code number as digits: GTIN-8, -12, -13 or -14. */
+  eanCode?: string
+  /** False when a document line with this product must not carry a discount. */
+  discountable?: boolean
   unitId?: number
   unit: string
   unitLabel?: string

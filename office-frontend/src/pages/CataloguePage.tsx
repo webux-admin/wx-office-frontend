@@ -8,6 +8,7 @@ import { EmptyState, ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { RowOrderButtons } from '../components/RowOrderButtons'
+import { Tabs } from '../components/Tabs'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -239,27 +240,15 @@ function Catalogue({ tenantId }: { tenantId: number }) {
       />
 
       <div className="px-8 pb-12">
-        <div className="mb-6 flex flex-wrap gap-1 border-b border-line-subtle" role="tablist">
-          {CATALOGUES.map((catalogue) => (
-            <button
-              key={catalogue.name}
-              type="button"
-              role="tab"
-              aria-selected={name === catalogue.name}
-              onClick={() => {
-                close()
-                setName(catalogue.name)
-              }}
-              className={`-mb-px border-b-2 px-3.5 py-2 text-[13px] transition-colors ${
-                name === catalogue.name
-                  ? 'border-accent text-text-primary'
-                  : 'border-transparent text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {catalogue.title}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          tabs={CATALOGUES.map((catalogue) => ({ id: catalogue.name, label: catalogue.title }))}
+          active={name}
+          onChange={(next) => {
+            close()
+            setName(next)
+          }}
+          label="Feste Werte"
+        />
 
         {failure !== null && (
           <div className="mb-6">

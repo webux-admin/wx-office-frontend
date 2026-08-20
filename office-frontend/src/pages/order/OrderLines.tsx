@@ -286,6 +286,10 @@ function ProductLineDialog({
   const [to, setTo] = useState('')
 
   const amount = parseDecimal(quantity)
+  // The catalogue decides whether a line may be discounted at all. The backend refuses the
+  // line either way; hiding the field here only spares the user a rejected dialog.
+  const chosen = products.find((product) => product.id === Number(productId))
+  const discountable = chosen === undefined || chosen.discountable !== false
 
   return (
     <Dialog
@@ -306,7 +310,7 @@ function ProductLineDialog({
               onSubmit({
                 productId: Number(productId),
                 quantity: amount ?? 1,
-                discountPercent: parseDecimal(discount) ?? undefined,
+                discountPercent: discountable ? (parseDecimal(discount) ?? undefined) : undefined,
                 serviceDateFrom: from || undefined,
                 serviceDateTo: to || undefined,
               })
@@ -342,10 +346,12 @@ function ProductLineDialog({
         />
         <TextField
           label="Rabatt in Prozent"
-          value={discount}
+          value={discountable ? discount : ''}
           onChange={(event) => setDiscount(event.target.value)}
           inputMode="decimal"
           numeric
+          disabled={!discountable}
+          hint={discountable ? undefined : 'Dieses Produkt ist nicht rabattfähig.'}
         />
         <TextField
           label="Leistung von"
