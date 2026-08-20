@@ -1,6 +1,8 @@
 # ADR-0002 — Stammdatenpflege: vier Masken statt einer
 
-- **Status:** Angenommen
+- **Status:** Angenommen. Die Route `/auswahllisten` ist abgelöst durch
+  [ADR-0004](ADR-0004-navigation-mit-submenues.md) — jede gepflegte Liste ist dort ein eigener
+  Bildschirm. Alles Übrige gilt unverändert.
 - **Datum:** 2026-08-19
 
 ## Kontext

@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './layout/AppShell'
 import { UnauthorizedError } from './lib/api'
+import { firstBasicDataPath } from './lib/basicData'
 import { CataloguePage } from './pages/CataloguePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DocumentTypePage } from './pages/DocumentTypePage'
@@ -75,7 +76,14 @@ export default function App() {
               <Route path="/auftraege" element={<OrderListPage />} />
               <Route path="/auftraege/:id" element={<OrderPage />} />
 
-              <Route path="/auswahllisten" element={<MasterDataPage />} />
+              {/* Every maintained list is a screen of its own, so it can be linked and
+                  bookmarked. The old collective address stays and points at the first one. */}
+              <Route path="/basisdaten/:liste" element={<MasterDataPage />} />
+              <Route
+                path="/auswahllisten"
+                element={<Navigate to={firstBasicDataPath()} replace />}
+              />
+
               <Route path="/feste-werte" element={<CataloguePage />} />
               <Route path="/zahlungskonditionen" element={<PaymentTermPage />} />
               <Route path="/mehrwertsteuer" element={<VatPage />} />

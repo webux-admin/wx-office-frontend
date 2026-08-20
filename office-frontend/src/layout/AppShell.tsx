@@ -1,110 +1,34 @@
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, Link } from 'react-router-dom'
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import {
   Building2,
   Check,
+  ChevronDown,
   ChevronsUpDown,
-  ClipboardList,
-  FileType2,
-  HandCoins,
-  Hash,
-  LayoutGrid,
-  ListChecks,
-  Lock,
   LogOut,
   Moon,
-  Package,
   PanelLeftClose,
-  Percent,
   PanelLeftOpen,
-  ShieldCheck,
   Sun,
-  Tags,
-  Truck,
-  UserCog,
-  Users,
 } from 'lucide-react'
 import { BrandMark } from '../components/BrandMark'
 import { useAuth } from '../auth/useAuth'
 import { initialsOf } from '../lib/format'
+import {
+  flattenNav,
+  isFolder,
+  NAV_GROUPS,
+  type NavEntry,
+  type NavFolder,
+  type NavNode,
+} from './navigation'
 import { useSidebarCollapsed } from './useSidebarCollapsed'
 import { useTheme } from './useTheme'
 
 /** Width of the sidebar with labels, and as a rail. */
 const WIDE = 256
 const RAIL = 64
-
-/** One navigation entry. `permission` decides whether it is shown at all. */
-type NavEntry = {
-  label: string
-  icon: typeof Users
-  href: string
-  /** Left out for entries everyone may open, such as the overview. */
-  permission?: string
-}
-
-/**
- * The navigation, and with it the map of the application.
- *
- * <p>Only what the backend answers is listed. A module without a controller would be an entry
- * leading to an empty screen, which reads as a defect rather than as a promise.
- */
-const NAV_GROUPS: { title: string; entries: NavEntry[] }[] = [
-  {
-    title: 'Übersicht',
-    entries: [{ label: 'Dashboard', icon: LayoutGrid, href: '/' }],
-  },
-  {
-    title: 'Verkauf',
-    entries: [
-      { label: 'Aufträge', icon: ClipboardList, href: '/auftraege', permission: 'ORDER_READ' },
-    ],
-  },
-  {
-    title: 'Stammdaten',
-    entries: [
-      { label: 'Kunden', icon: Users, href: '/kunden', permission: 'PARTNER_READ' },
-      { label: 'Lieferanten', icon: Truck, href: '/lieferanten', permission: 'PARTNER_READ' },
-      { label: 'Produkte', icon: Package, href: '/produkte', permission: 'PRODUCT_READ' },
-      { label: 'Preisgruppen', icon: Tags, href: '/preisgruppen', permission: 'PRODUCT_READ' },
-    ],
-  },
-  {
-    title: 'Einstellungen',
-    entries: [
-      {
-        label: 'Belegarten',
-        icon: FileType2,
-        href: '/belegarten',
-        permission: 'DOCUMENT_TYPE_READ',
-      },
-      {
-        label: 'Auswahllisten',
-        icon: ListChecks,
-        href: '/auswahllisten',
-        permission: 'MASTERDATA_READ',
-      },
-      { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: 'MASTERDATA_READ' },
-      {
-        label: 'Zahlungskonditionen',
-        icon: HandCoins,
-        href: '/zahlungskonditionen',
-        permission: 'MASTERDATA_READ',
-      },
-      { label: 'Mehrwertsteuer', icon: Percent, href: '/mehrwertsteuer', permission: 'PRODUCT_READ' },
-      {
-        label: 'Nummernkreise',
-        icon: Hash,
-        href: '/nummernkreise',
-        permission: 'NUMBER_RANGE_READ',
-      },
-      { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
-      { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
-      { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
-    ],
-  },
-]
 
 /** Timing shared by everything that folds, so the sidebar moves as one piece. */
 const FOLD = { duration: 0.26, ease: [0.16, 1, 0.3, 1] } as const
@@ -139,11 +63,18 @@ function Sidebar({
 }) {
   const { user, signOut, can } = useAuth()
 
+  /** A node the signed in user may open at all; a folder survives if anything inside does. */
+  const allowed = (node: NavNode): NavNode | null => {
+    if (!isFolder(node)) return !node.permission || can(node.permission) ? node : null
+    const children = node.children.filter((child) => !child.permission || can(child.permission))
+    return children.length === 0 ? null : { ...node, children }
+  }
+
   // Groups the user may see at all. Computed up front so the rail knows which one is first
   // and can leave the separator off there.
   const visibleGroups = NAV_GROUPS.map((group) => ({
     ...group,
-    entries: group.entries.filter((entry) => !entry.permission || can(entry.permission)),
+    entries: group.entries.map(allowed).filter((entry) => entry !== null),
   })).filter((group) => group.entries.length > 0)
 
   // The aside deliberately does not clip its overflow: folded, the tenant menu has to
@@ -172,9 +103,19 @@ function Sidebar({
               </p>
             )}
             <ul>
-              {group.entries.map((entry) => (
-                <NavItem key={entry.href} entry={entry} collapsed={collapsed} />
-              ))}
+              {/* A 64 pixel rail has no room to fold anything open, so it shows the screens
+                  themselves rather than the folders they sit in. */}
+              {collapsed
+                ? flattenNav(group.entries).map((entry) => (
+                    <NavItem key={entry.href} entry={entry} collapsed />
+                  ))
+                : group.entries.map((entry) =>
+                    isFolder(entry) ? (
+                      <NavFolderItem key={entry.label} folder={entry} />
+                    ) : (
+                      <NavItem key={entry.href} entry={entry} collapsed={false} />
+                    ),
+                  )}
             </ul>
           </div>
         ))}
@@ -339,6 +280,71 @@ function SidebarButton({
       {icon}
       {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
     </button>
+  )
+}
+
+/**
+ * A group of entries that folds open under its own name.
+ *
+ * <p>Open whenever the screen on display is one of its own, so nobody has to fold the menu out
+ * again to see where they are — including after jumping in by address, which is why this
+ * follows the location rather than being decided once at mount. A click overrules that for as
+ * long as the session lasts; beyond that the fold remembers nothing, because it is a way to
+ * look and not a setting.
+ */
+function NavFolderItem({ folder }: { folder: NavFolder }) {
+  const { pathname } = useLocation()
+  // The global rule in index.css reaches CSS transitions only; an animation built in
+  // JavaScript has to ask for itself. Asked once here for both the fold and the chevron.
+  const reduceMotion = useReducedMotion()
+  const holdsCurrent = folder.children.some(
+    (child) => pathname === child.href || pathname.startsWith(`${child.href}/`),
+  )
+  const [toggled, setToggled] = useState<boolean | null>(null)
+  const open = toggled ?? holdsCurrent
+  const fold = reduceMotion ? { duration: 0 } : FOLD
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setToggled(!open)}
+        aria-expanded={open}
+        className={`flex h-[34px] w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 text-[13px] transition-colors ${
+          holdsCurrent && !open
+            ? 'text-text-inverse'
+            : 'text-text-inverse-muted hover:bg-ink-hover/60 hover:text-text-inverse'
+        }`}
+      >
+        <folder.icon size={16} aria-hidden className="shrink-0" />
+        <span className="flex-1 truncate text-left">{folder.label}</span>
+        <motion.span
+          animate={{ rotate: open ? 0 : -90 }}
+          initial={false}
+          transition={fold}
+          className="grid shrink-0 place-items-center"
+        >
+          <ChevronDown size={14} aria-hidden />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.ul
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={fold}
+            // The rule marks the entries as belonging to the row above them.
+            className="ml-[18px] overflow-hidden border-l border-ink-border pl-2"
+          >
+            {folder.children.map((child) => (
+              <NavItem key={child.href} entry={child} collapsed={false} />
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </li>
   )
 }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Navigate, useParams } from 'react-router-dom'
 import { Plus, Star, Trash2 } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
@@ -12,79 +13,46 @@ import { RowOrderButtons } from '../components/RowOrderButtons'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { basicDataFor, firstBasicDataPath, type BasicDataList } from '../lib/basicData'
 import { defaultCodeOf, labelPayload } from '../lib/masterData'
-import type { MasterDataEntry, MasterDataList } from '../lib/types'
+import type { MasterDataEntry } from '../lib/types'
 import { useMasterDataEntries, useMasterDataList } from '../masterdata/useMasterData'
 import { EntryDialog } from './masterdata/EntryDialog'
 import { EMPTY_ENTRY, entryComplaint, toEntryForm, type EntryForm } from './masterdata/entryForm'
 
-/** The lists a tenant maintains, in the order they are offered. */
-const LISTS: { list: MasterDataList; label: string; description: string }[] = [
-  {
-    list: 'legal-forms',
-    label: 'Rechtsformen',
-    description: 'Die Rechtsform einer Firma, bei Kunden, Lieferanten und beim Mandanten.',
-  },
-  {
-    list: 'salutations',
-    label: 'Anreden',
-    description: 'Wie eine Person angeschrieben wird.',
-  },
-  {
-    list: 'units',
-    label: 'Einheiten',
-    description: 'Worin ein Produkt verkauft wird. Die Kurzform steht auf der Belegzeile.',
-  },
-  {
-    list: 'languages',
-    label: 'Sprachen',
-    description: 'Korrespondenzsprachen. Der Code ist das Sprachkürzel, zum Beispiel de.',
-  },
-  {
-    list: 'countries',
-    label: 'Länder',
-    description: 'Länder einer Adresse. Der Code ist das Kürzel nach ISO, zum Beispiel CH.',
-  },
-  {
-    list: 'currencies',
-    label: 'Währungen',
-    description: 'Währungen, in denen Belege ausgestellt werden können.',
-  },
-  {
-    list: 'layout-templates',
-    label: 'Druckvorlagen',
-    description: 'Vorlagen, nach denen eine Belegart gedruckt wird.',
-  },
-  {
-    list: 'revenue-accounts',
-    label: 'Ertragskonten',
-    description: 'Konten, auf die eine Belegzeile gebucht wird. Der Code ist die Kontonummer.',
-  },
-]
-
 /**
- * The selection values of the tenant.
+ * One maintained selection list of the tenant.
  *
  * <p>What used to be an enum in the code is master data: the values are added, renamed,
  * sorted and deactivated here. Deleting works only for a value nothing points at and that was
  * not delivered with the application; anything else is refused by the backend, and its answer
  * is what the dialog shows.
+ *
+ * <p>Which list is shown comes from the address, not from a tab: every list is its own menu
+ * entry, so it must be linkable on its own.
  */
 export function MasterDataPage() {
+  const { liste } = useParams()
+  const chosen = basicDataFor(liste)
+
+  // A segment no list is served under — a typed address, or a link from an older menu.
+  if (!chosen) return <Navigate to={firstBasicDataPath()} replace />
+
   return (
     <RequireTenant permission="MASTERDATA_READ">
-      {(tenantId) => <MasterData tenantId={tenantId} />}
+      {/* Keyed by the list, so switching starts with an empty form instead of the last one. */}
+      {(tenantId) => <MasterData key={chosen.slug} tenantId={tenantId} chosen={chosen} />}
     </RequireTenant>
   )
 }
 
-function MasterData({ tenantId }: { tenantId: number }) {
+function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataList }) {
   const { can } = useAuth()
   const queryClient = useQueryClient()
   const mayWrite = can('MASTERDATA_WRITE')
   const mayDeactivate = can('MASTERDATA_DEACTIVATE')
 
-  const [list, setList] = useState<MasterDataList>('legal-forms')
+  const list = chosen.list
   const [editing, setEditing] = useState<MasterDataEntry | null>(null)
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<EntryForm>(EMPTY_ENTRY)
@@ -94,7 +62,6 @@ function MasterData({ tenantId }: { tenantId: number }) {
   // The name of a value is its text in the tenant's default language, and the API keeps that
   // text twice: as `name` and as the translation for that language. Both are written together.
   const defaultLanguage = defaultCodeOf(useMasterDataEntries(tenantId, 'languages'))
-  const chosen = LISTS.find((entry) => entry.list === list) ?? LISTS[0]
   const base = `/api/tenants/${tenantId}/${list}`
 
   // Deactivated values belong on this screen: they have to be visible to be switched on again.
@@ -294,10 +261,7 @@ function MasterData({ tenantId }: { tenantId: number }) {
 
   return (
     <>
-      <PageHeader
-        title="Auswahllisten"
-        subtitle="Die Auswahlwerte dieses Mandanten. Was hier steht, steht in den Masken zur Wahl."
-      >
+      <PageHeader title={chosen.label} subtitle={chosen.description}>
         {mayWrite && (
           <Button onClick={openNew}>
             <Plus size={15} aria-hidden />
@@ -307,35 +271,13 @@ function MasterData({ tenantId }: { tenantId: number }) {
       </PageHeader>
 
       <div className="px-8 pb-12">
-        <div className="mb-6 flex flex-wrap gap-1 border-b border-line-subtle" role="tablist">
-          {LISTS.map((entry) => (
-            <button
-              key={entry.list}
-              type="button"
-              role="tab"
-              aria-selected={list === entry.list}
-              onClick={() => {
-                close()
-                setList(entry.list)
-              }}
-              className={`-mb-px border-b-2 px-3.5 py-2 text-[13px] transition-colors ${
-                list === entry.list
-                  ? 'border-accent text-text-primary'
-                  : 'border-transparent text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-
         {failure !== null && failure !== undefined && (
           <div className="mb-6">
             <ErrorNotice error={failure} />
           </div>
         )}
 
-        <Panel title={chosen.label} description={chosen.description} padded={false}>
+        <Panel padded={false}>
           <DataTable
             columns={columns}
             rows={rows}

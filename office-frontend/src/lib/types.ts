@@ -23,6 +23,9 @@ export type MasterDataList =
   | 'currencies'
   | 'layout-templates'
   | 'revenue-accounts'
+  | 'payment-methods'
+  | 'dunning-types'
+  | 'billing-types'
 
 /** One value of a selection list, as `/api/tenants/{id}/{list}` returns it. */
 export type MasterDataEntry = {
