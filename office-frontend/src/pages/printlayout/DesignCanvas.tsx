@@ -172,7 +172,9 @@ function PlacedBlock({
     event.stopPropagation()
     onSelect()
     start.current = { x: event.clientX, y: event.clientY, blockX: block.x, blockY: block.y }
-    event.currentTarget.setPointerCapture(event.pointerId)
+    // Guarded: keeps the pointer on this block while it is dragged over another one, and
+    // lets the component be rendered where there is no pointer capture at all.
+    event.currentTarget.setPointerCapture?.(event.pointerId)
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
