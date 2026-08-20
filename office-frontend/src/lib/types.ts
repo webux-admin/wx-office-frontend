@@ -497,7 +497,38 @@ export type DocumentType = {
   documentLayoutId?: number
   documentLayout?: string
   copies?: DocumentTypeCopy[]
+  /**
+   * The kinds of document one of these may be taken over from, in the order they are
+   * offered. Empty when a document of this kind is always written from scratch.
+   */
+  predecessorTypeIds?: number[]
+  /** What a copy of such a document does with the amounts. */
+  copyPriceMode?: CopyPriceMode
   active: boolean
+}
+
+/**
+ * What happens to the amounts when a document is copied.
+ *
+ * <p>Only for a copy. Taking a document over from a predecessor always keeps the amounts.
+ */
+export type CopyPriceMode = 'COPY' | 'RECALCULATE'
+
+/**
+ * A document offered for takeover.
+ *
+ * <p>`alreadyTakenOver` is a hint, not a refusal: a partial delivery out of one offer is the
+ * normal case.
+ */
+export type PredecessorCandidate = {
+  id: number
+  documentNumber: string
+  documentDate: string
+  partnerId: number
+  partnerName: string
+  totalGross: number
+  currency: string
+  alreadyTakenOver: boolean
 }
 
 // --- print layouts -----------------------------------------------------------
@@ -667,6 +698,10 @@ export type SalesDocument = {
   documentDate: string
   finalisedAt?: string
   cancelledAt?: string
+  /** The document this one was taken over from; absent when it was written from scratch. */
+  predecessorDocumentId?: number
+  /** Its number as it was frozen at takeover. */
+  predecessorDocumentNumber?: string
   partnerId: number
   partnerNumber?: string
   recipient?: DocumentParty

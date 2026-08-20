@@ -3,16 +3,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
 import { Dialog } from '../components/Dialog'
 import { EmptyState, ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { SelectField } from '../components/SelectField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
-import type { DocumentCategory, DocumentType, DocumentTypeCopy } from '../lib/types'
+import type {
+  CopyPriceMode,
+  DocumentCategory,
+  DocumentType,
+  DocumentTypeCopy,
+} from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { PrintLayoutSelect } from '../printlayout/PrintLayoutSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
@@ -42,6 +49,10 @@ type TypeForm = {
   documentLayout: string
   /** One label per printed copy, in printing order. Empty means one copy without a label. */
   copies: string[]
+  /** The kinds a document of this kind may be taken over from, by id. */
+  predecessorTypeIds: number[]
+  /** What a copy does with the amounts. */
+  copyPriceMode: CopyPriceMode
 }
 
 const EMPTY: TypeForm = {
@@ -51,6 +62,8 @@ const EMPTY: TypeForm = {
   numberPrefix: '',
   documentLayout: '',
   copies: [],
+  predecessorTypeIds: [],
+  copyPriceMode: 'RECALCULATE',
 }
 
 /** What a first copy is usually called, offered when the tenant adds one. */
@@ -85,6 +98,8 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
         copies: form.copies
           .map((label, index) => ({ position: index + 1, label: label.trim() }))
           .filter((copy) => copy.label !== ''),
+        predecessorTypeIds: form.predecessorTypeIds,
+        copyPriceMode: form.copyPriceMode,
       }
       return editing
         ? api.put<DocumentType>(`/api/tenants/${tenantId}/document-types/${editing.id}`, payload)
@@ -117,6 +132,8 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       numberPrefix: type.numberPrefix ?? '',
       documentLayout: type.documentLayout ?? '',
       copies: (type.copies ?? []).map((copy) => copy.label),
+      predecessorTypeIds: type.predecessorTypeIds ?? [],
+      copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
     })
     setEditing(type)
     setCreating(false)
@@ -327,6 +344,30 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
             onChange={(copies) => setForm((current) => ({ ...current, copies }))}
           />
 
+          <PredecessorEditor
+            all={types.data ?? []}
+            editingId={editing?.id}
+            chosen={form.predecessorTypeIds}
+            onChange={(predecessorTypeIds) =>
+              setForm((current) => ({ ...current, predecessorTypeIds }))
+            }
+          />
+
+          <SelectField
+            label="Preise beim Kopieren"
+            value={form.copyPriceMode}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                copyPriceMode: event.target.value as CopyPriceMode,
+              }))
+            }
+            hint="Gilt für die Kopie eines Belegs dieser Art. Im Kopierdialog übersteuerbar."
+          >
+            <option value="RECALCULATE">Neu aus dem Katalog holen</option>
+            <option value="COPY">Beträge des Originals behalten</option>
+          </SelectField>
+
           {save.error !== null && <ErrorNotice error={save.error} />}
         </div>
       </Dialog>
@@ -402,5 +443,65 @@ function CopyEditor({
         </button>
       )}
     </div>
+  )
+}
+
+/**
+ * Which kinds of document this one may be taken over from.
+ *
+ * <p>Only kinds of the same tenant, never the kind itself, and never one that already takes
+ * this one over — the backend refuses both, and offering them here would only invite the
+ * error. A kind that is being created has no id yet and therefore nothing to exclude.
+ */
+function PredecessorEditor({
+  all,
+  editingId,
+  chosen,
+  onChange,
+}: {
+  all: DocumentType[]
+  editingId: number | undefined
+  chosen: number[]
+  onChange: (ids: number[]) => void
+}) {
+  const offered = all.filter(
+    (type) =>
+      type.id !== editingId
+      && type.active
+      && !(type.predecessorTypeIds ?? []).some((id) => id === editingId),
+  )
+
+  if (offered.length === 0) {
+    return (
+      <fieldset className="border-t border-line-subtle pt-4">
+        <legend className="text-[12px] font-medium text-text-secondary">Vorgängerbelege</legend>
+        <p className="mt-1 text-[12px] text-text-tertiary">
+          Es gibt keine andere Belegart, aus der übernommen werden könnte.
+        </p>
+      </fieldset>
+    )
+  }
+
+  const toggle = (id: number, on: boolean) =>
+    onChange(on ? [...chosen, id] : chosen.filter((entry) => entry !== id))
+
+  return (
+    <fieldset className="border-t border-line-subtle pt-4">
+      <legend className="text-[12px] font-medium text-text-secondary">Vorgängerbelege</legend>
+      <p className="mt-1 mb-3 text-[12px] text-text-tertiary">
+        Aus welchen Belegarten ein Beleg dieser Art übernommen werden darf. Mehrere sind
+        erlaubt — eine Rechnung entsteht aus einem Auftrag oder aus einem Lieferschein.
+      </p>
+      <div className="grid gap-2">
+        {offered.map((type) => (
+          <CheckboxField
+            key={type.id}
+            label={type.name}
+            checked={chosen.includes(type.id)}
+            onChange={(event) => toggle(type.id, event.target.checked)}
+          />
+        ))}
+      </div>
+    </fieldset>
   )
 }

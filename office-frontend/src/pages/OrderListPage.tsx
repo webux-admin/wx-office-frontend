@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Copy, FileInput, Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
+import { SplitButton } from '../components/SplitButton'
 import { Panel } from '../components/Panel'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -14,8 +15,16 @@ import { api } from '../lib/api'
 import { formatAmount, formatCount, formatDate } from '../lib/format'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
-import type { DocumentStatus, DocumentSummary, Page } from '../lib/types'
+import type {
+  DocumentStatus,
+  DocumentSummary,
+  DocumentType,
+  Page,
+  SalesDocument,
+} from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+import { CopyOrderDialog } from './order/CopyOrderDialog'
+import { TakeoverDialog } from './order/TakeoverDialog'
 
 /** What an order mask returns to when it closes here. */
 const ORIGIN = originState('/auftraege', 'Aufträge')
@@ -130,14 +139,55 @@ function OrderList({ tenantId }: { tenantId: number }) {
     },
   ]
 
+  const navigate = useNavigate()
+  const [takeover, setTakeover] = useState(false)
+  const [copying, setCopying] = useState(false)
+
+  // The kinds of Auftrag, so the takeover dialog knows which of them names a predecessor.
+  const documentTypes = useQuery({
+    queryKey: ['document-types', tenantId],
+    queryFn: () => api.get<DocumentType[]>(`/api/tenants/${tenantId}/document-types`),
+    enabled: can('ORDER_WRITE'),
+  })
+  const orderTypes = (documentTypes.data ?? []).filter(
+    (type) => type.category === 'ORDER' && type.active,
+  )
+
+  // A document written this way is not finished: it opens straight away, the way a new one
+  // does, and the way back out leads to this list.
+  const openCreated = (order: SalesDocument) => {
+    setTakeover(false)
+    setCopying(false)
+    void navigate(`/auftraege/${order.id}`, { state: ORIGIN })
+  }
+
   return (
     <>
       <PageHeader title="Aufträge" subtitle={`${formatCount(result.totalElements)} Belege`}>
         {can('ORDER_WRITE') && (
-          <LinkButton to="/auftraege/neu" state={ORIGIN}>
+          <SplitButton
+            onClick={() => navigate('/auftraege/neu', { state: ORIGIN })}
+            menuLabel="Weitere Wege zu einem Auftrag"
+            actions={[
+              {
+                id: 'takeover',
+                label: 'Aus Vorgängerbeleg übernehmen…',
+                hint: 'Zum Beispiel aus einer Offerte. Beträge werden übernommen.',
+                icon: <FileInput size={15} aria-hidden />,
+                onSelect: () => setTakeover(true),
+              },
+              {
+                id: 'copy',
+                label: 'Auftrag kopieren…',
+                hint: 'Positionen eines bestehenden Auftrags als Vorlage.',
+                icon: <Copy size={15} aria-hidden />,
+                onSelect: () => setCopying(true),
+              },
+            ]}
+          >
             <Plus size={15} aria-hidden />
             Auftrag erfassen
-          </LinkButton>
+          </SplitButton>
         )}
       </PageHeader>
 
@@ -199,6 +249,21 @@ function OrderList({ tenantId }: { tenantId: number }) {
           />
         </Panel>
       </div>
+
+      <TakeoverDialog
+        tenantId={tenantId}
+        open={takeover}
+        onClose={() => setTakeover(false)}
+        orderTypes={orderTypes}
+        onCreated={openCreated}
+      />
+
+      <CopyOrderDialog
+        tenantId={tenantId}
+        open={copying}
+        onClose={() => setCopying(false)}
+        onCreated={openCreated}
+      />
     </>
   )
 }
