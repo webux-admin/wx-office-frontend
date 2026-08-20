@@ -12,7 +12,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
-import type { DocumentCategory, DocumentType } from '../lib/types'
+import type { DocumentCategory, DocumentType, DocumentTypeCopy } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
@@ -39,6 +39,8 @@ type TypeForm = {
   name: string
   numberPrefix: string
   layoutTemplate: string
+  /** One label per printed copy, in printing order. Empty means one copy without a label. */
+  copies: string[]
 }
 
 const EMPTY: TypeForm = {
@@ -47,7 +49,11 @@ const EMPTY: TypeForm = {
   name: '',
   numberPrefix: '',
   layoutTemplate: '',
+  copies: [],
 }
+
+/** What a first copy is usually called, offered when the tenant adds one. */
+const FIRST_COPY_LABELS = ['Original', 'Kopie', 'Buchhaltung', 'Spedition', 'Kunde']
 
 function DocumentTypes({ tenantId }: { tenantId: number }) {
   const { can } = useAuth()
@@ -75,6 +81,9 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
         name: form.name.trim(),
         numberPrefix: form.numberPrefix.trim() || undefined,
         layoutTemplate: form.layoutTemplate || undefined,
+        copies: form.copies
+          .map((label, index) => ({ position: index + 1, label: label.trim() }))
+          .filter((copy) => copy.label !== ''),
       }
       return editing
         ? api.put<DocumentType>(`/api/tenants/${tenantId}/document-types/${editing.id}`, payload)
@@ -106,6 +115,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       name: type.name,
       numberPrefix: type.numberPrefix ?? '',
       layoutTemplate: type.layoutTemplate ?? '',
+      copies: (type.copies ?? []).map((copy) => copy.label),
     })
     setEditing(type)
     setCreating(false)
@@ -151,6 +161,12 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
           {type.numberPrefix ?? '-'}
         </span>
       ),
+    },
+    {
+      key: 'copies',
+      header: 'Ausfertigungen',
+      width: 'w-[160px]',
+      render: (type) => <CopySummary copies={type.copies ?? []} />,
     },
     {
       key: 'address',
@@ -299,26 +315,94 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
             hint="Steht vor der laufenden Nummer, zum Beispiel AU."
           />
 
-          {/* Only when editing: POST /document-types drops the layout template it is handed,
-              so offering it while creating would promise a setting the backend throws away. */}
-          {editing !== null ? (
-            <MasterDataSelect
-              label="Druckvorlage"
-              tenantId={tenantId}
-              list="layout-templates"
-              value={form.layoutTemplate}
-              onChange={(code) => setForm((current) => ({ ...current, layoutTemplate: code }))}
-              emptyLabel="Ohne Vorlage"
-            />
-          ) : (
-            <p className="text-[12px] text-text-tertiary">
-              Die Druckvorlage lässt sich wählen, sobald die Belegart angelegt ist.
-            </p>
-          )}
+          <MasterDataSelect
+            label="Druckvorlage"
+            tenantId={tenantId}
+            list="layout-templates"
+            value={form.layoutTemplate}
+            onChange={(code) => setForm((current) => ({ ...current, layoutTemplate: code }))}
+            emptyLabel="Ohne Vorlage"
+          />
+
+          <CopyEditor
+            copies={form.copies}
+            onChange={(copies) => setForm((current) => ({ ...current, copies }))}
+          />
 
           {save.error !== null && <ErrorNotice error={save.error} />}
         </div>
       </Dialog>
     </>
+  )
+}
+
+/** How many copies of this kind of document come out of the printer. */
+function CopySummary({ copies }: { copies: DocumentTypeCopy[] }) {
+  if (copies.length === 0) {
+    return <span className="text-text-tertiary">1 ×</span>
+  }
+  return (
+    <span className="text-text-secondary" title={copies.map((copy) => copy.label).join(', ')}>
+      {copies.length} × <span className="text-text-tertiary">{copies[0].label} …</span>
+    </span>
+  )
+}
+
+/**
+ * Edits how often a document is printed and what each copy is called.
+ *
+ * <p>The order of the rows is the order in the PDF, so the first row is the original. Only
+ * the labels are edited; the position follows from the row.
+ */
+function CopyEditor({
+  copies,
+  onChange,
+}: {
+  copies: string[]
+  onChange: (copies: string[]) => void
+}) {
+  const replace = (index: number, label: string) =>
+    onChange(copies.map((current, position) => (position === index ? label : current)))
+
+  const add = () =>
+    onChange([...copies, FIRST_COPY_LABELS[copies.length] ?? `Exemplar ${copies.length + 1}`])
+
+  return (
+    <div className="grid gap-2">
+      <span className="text-[13px] font-medium">Ausfertigungen</span>
+      <p className="mb-1 text-[12px] text-text-tertiary">
+        Wie viele Exemplare beim Drucken herauskommen und wie sie beschriftet sind. Ohne Eintrag
+        kommt ein Exemplar ohne Beschriftung. Das Archiv behält immer genau ein Original.
+      </p>
+
+      {copies.map((label, index) => (
+        <div key={index} className="flex items-end gap-3">
+          <TextField
+            label={`${index + 1}. Ausfertigung`}
+            value={label}
+            maxLength={60}
+            onChange={(event) => replace(index, event.target.value)}
+            className="flex-1"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(copies.filter((_, position) => position !== index))}
+            className="h-10 text-[12px] text-text-tertiary transition-colors hover:text-danger"
+          >
+            Entfernen
+          </button>
+        </div>
+      ))}
+
+      {copies.length < 9 && (
+        <button
+          type="button"
+          onClick={add}
+          className="justify-self-start text-[12px] text-text-secondary transition-colors hover:text-accent-text"
+        >
+          + Ausfertigung
+        </button>
+      )}
+    </div>
   )
 }

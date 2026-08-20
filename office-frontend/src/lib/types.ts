@@ -436,7 +436,19 @@ export type DocumentType = {
   addressUsage?: AddressUsage
   layoutTemplateId?: number
   layoutTemplate?: string
+  copies?: DocumentTypeCopy[]
   active: boolean
+}
+
+/**
+ * One printed copy of a kind of document.
+ *
+ * <p>No entries means the document is printed once without a label. The copies decide what
+ * comes out of the printer, never what is archived.
+ */
+export type DocumentTypeCopy = {
+  position: number
+  label: string
 }
 
 /** Name and address as they were frozen onto the document when it was issued. */
