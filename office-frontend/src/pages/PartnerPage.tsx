@@ -503,6 +503,16 @@ function BaseData({
               disabled={disabled}
               hint="Bestimmt Fälligkeit und Skonto auf den Belegen dieses Partners."
             />
+            <MasterDataSelect
+              label="Währung"
+              tenantId={tenantId}
+              list="currencies"
+              value={form.currency}
+              storedLabel={partner?.currencyLabel}
+              onChange={(code) => set('currency', code)}
+              disabled={disabled}
+              hint="Belege an diesen Eintrag werden in dieser Währung geschrieben."
+            />
             <TextField
               label="Kreditlimite"
               value={form.creditLimit}
@@ -510,6 +520,7 @@ function BaseData({
               disabled={disabled}
               inputMode="decimal"
               numeric
+              hint="In der Buchführungswährung des Mandanten, nicht in der Währung oben."
             />
             {form.isSupplier && (
               <TextField

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
@@ -13,12 +13,16 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
-import { formatAmount, formatDate, formatDateTime } from '../lib/format'
+import { formatDate, formatDateTime } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
 import type { DocumentParty, DocumentStatusEntry, SalesDocument } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+import { ChangePartnerDialog } from './order/ChangePartnerDialog'
 import { NewOrderMask } from './order/NewOrderMask'
+import { OrderHeaderPanel } from './order/OrderHeaderPanel'
 import { OrderLines } from './order/OrderLines'
+import { OrderPaymentPanel } from './order/OrderPaymentPanel'
+import { headerKey, paymentKey } from './order/headerForm'
 import {
   itemLineCount,
   type FreeLine,
@@ -68,9 +72,17 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
 
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [changingPartner, setChangingPartner] = useState(false)
   const [reason, setReason] = useState('')
 
   const editable = order.status === 'DRAFT' && can('ORDER_WRITE')
+  // Two reasons keep a section read-only, and they are not the same thing. An issued
+  // document is finished; a draft without the permission is not, and saying so is the only
+  // way the user learns why nothing can be typed.
+  const readOnlyNote =
+    order.status === 'DRAFT' && !can('ORDER_WRITE')
+      ? 'Zum Ändern fehlt das Recht ORDER_WRITE.'
+      : undefined
   const base = `/api/tenants/${tenantId}/orders/${order.id}`
 
   const refresh = () => {
@@ -261,23 +273,63 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           busy={lineBusy}
           error={lineError}
           readOnlyNote={
-            order.status === 'DRAFT' && !can('ORDER_WRITE')
-              ? 'Zum Ändern der Positionen fehlt das Recht ORDER_WRITE.'
-              : undefined
+            readOnlyNote === undefined
+              ? undefined
+              : 'Zum Ändern der Positionen fehlt das Recht ORDER_WRITE.'
           }
         />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <OrderTexts tenantId={tenantId} order={order} editable={editable} />
+          <div className="grid gap-6 self-start">
+            {/* Keyed by what is stored: the section holds what was typed, and that has to give
+                way when a customer change rewrites language and currency underneath it. */}
+            <OrderHeaderPanel
+              key={headerKey(order)}
+              tenantId={tenantId}
+              base={base}
+              document={order}
+              editable={editable}
+              readOnlyNote={readOnlyNote}
+              onChanged={refresh}
+            />
+            <OrderTexts tenantId={tenantId} order={order} editable={editable} />
+          </div>
 
-          <div className="grid gap-6">
-            <PaymentPanel order={order} />
-            <PartyPanel title="Empfänger" party={order.recipient} number={order.partnerNumber} />
-            <PartyPanel title="Absender" party={order.issuer} />
+          <div className="grid gap-6 self-start">
+            <OrderPaymentPanel
+              key={paymentKey(order)}
+              tenantId={tenantId}
+              base={base}
+              document={order}
+              editable={editable}
+              readOnlyNote={readOnlyNote}
+              onChanged={refresh}
+            />
+            <PartyPanel
+              title="Empfänger"
+              party={order.recipient}
+              number={order.partnerNumber}
+              action={
+                editable ? (
+                  <Button variant="secondary" onClick={() => setChangingPartner(true)}>
+                    Kunde wechseln
+                  </Button>
+                ) : undefined
+              }
+            />
             <StatusTrail tenantId={tenantId} orderId={order.id} />
           </div>
         </div>
       </div>
+
+      <ChangePartnerDialog
+        tenantId={tenantId}
+        base={base}
+        open={changingPartner}
+        onClose={() => setChangingPartner(false)}
+        document={order}
+        onChanged={refresh}
+      />
 
       <Dialog
         open={cancelling}
@@ -409,62 +461,6 @@ function OrderTexts({
 }
 
 /**
- * What was agreed about paying, as it stands on the document.
- *
- * <p>A draft shows the term and the due date; both follow from the term and the document
- * date. The printed sentence and the discount amounts appear only once the document is
- * issued, because they name figures that the final total settles (ADR-0027).
- */
-function PaymentPanel({ order }: { order: SalesDocument }) {
-  if (!order.paymentTerm) return null
-
-  return (
-    <Panel title="Zahlung" description="Kopie aus den Stammdaten, festgehalten beim Anlegen.">
-      <dl className="grid gap-2.5 text-[13px]">
-        <div className="flex gap-3">
-          <dt className="w-[112px] shrink-0 text-text-tertiary">Kondition</dt>
-          <dd>{order.paymentTermName ?? order.paymentTerm}</dd>
-        </div>
-        {order.dueDate && (
-          <div className="flex gap-3">
-            <dt className="w-[112px] shrink-0 text-text-tertiary">Fällig am</dt>
-            <dd className="font-mono tabular-nums">{formatDate(order.dueDate)}</dd>
-          </div>
-        )}
-        {order.paymentReference && (
-          <div className="flex gap-3">
-            <dt className="w-[112px] shrink-0 text-text-tertiary">Referenz</dt>
-            <dd className="font-mono text-[12px] tabular-nums">{order.paymentReference}</dd>
-          </div>
-        )}
-      </dl>
-
-      {order.discountStages && order.discountStages.length > 0 && (
-        <ul className="mt-4 grid gap-1.5 border-t border-line-subtle pt-3 text-[13px]">
-          {order.discountStages.map((stage) => (
-            <li key={stage.days} className="flex items-baseline justify-between gap-3">
-              <span className="text-text-secondary">
-                {stage.percent}% bis {formatDate(stage.discountDate)}
-              </span>
-              <span className="font-mono tabular-nums">
-                {formatAmount(stage.amountAfterDiscount)}{' '}
-                <span className="text-text-tertiary">{order.currency}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {order.paymentTermText && (
-        <p className="mt-4 border-t border-line-subtle pt-3 text-[12px] text-text-secondary">
-          {order.paymentTermText}
-        </p>
-      )}
-    </Panel>
-  )
-}
-
-/**
  * Name and address as they stand on the document.
  *
  * <p>These are a copy taken when the draft was created, not a view of the partner record: a
@@ -474,15 +470,31 @@ function PartyPanel({
   title,
   party,
   number,
+  action,
 }: {
   title: string
   party?: DocumentParty
   number?: string
+  /** Control in the top right, for example "Kunde wechseln". */
+  action?: ReactNode
 }) {
-  if (!party) return null
+  if (!party) {
+    if (!action) return null
+    return (
+      <Panel title={title} action={action}>
+        <p className="text-[13px] text-text-secondary">
+          Für diesen Beleg ist keine Adresse festgehalten.
+        </p>
+      </Panel>
+    )
+  }
 
   return (
-    <Panel title={title} description="Kopie aus den Stammdaten, festgehalten beim Anlegen.">
+    <Panel
+      title={title}
+      description="Kopie aus den Stammdaten, festgehalten beim Anlegen."
+      action={action}
+    >
       <address className="not-italic text-[13px] leading-6">
         <span className="block font-medium">{party.name}</span>
         {party.addressLine && <span className="block">{party.addressLine}</span>}

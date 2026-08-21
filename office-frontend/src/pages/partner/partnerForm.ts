@@ -23,6 +23,7 @@ export type PartnerForm = {
   phone: string
   website: string
   paymentTerm: string
+  currency: string
   creditLimit: string
   notes: string
   creditorReference: string
@@ -60,6 +61,9 @@ const EMPTY: PartnerForm = {
   phone: '',
   website: '',
   paymentTerm: '',
+  // Empty, not 'CHF': the dropdown fills it with whatever this tenant marked as its default,
+  // and an empty one lets the backend write the currency of the tenant.
+  currency: '',
   creditLimit: '',
   notes: '',
   creditorReference: '',
@@ -89,6 +93,7 @@ export function toForm(partner: Partner): PartnerForm {
     phone: partner.phone ?? '',
     website: partner.website ?? '',
     paymentTerm: partner.paymentTerm ?? '',
+    currency: partner.currency ?? '',
     creditLimit: partner.creditLimit?.toString() ?? '',
     notes: partner.notes ?? '',
     creditorReference: partner.creditorReference ?? '',
@@ -138,6 +143,7 @@ export function toPayload(form: PartnerForm): Partial<Partner> {
     phone: blankToUndefined(form.phone),
     website: blankToUndefined(form.website),
     paymentTerm: blankToUndefined(form.paymentTerm),
+    currency: blankToUndefined(form.currency),
     creditLimit: parseDecimal(form.creditLimit) ?? undefined,
     notes: blankToUndefined(form.notes),
     creditorReference: blankToUndefined(form.creditorReference),

@@ -23,6 +23,7 @@ const STORED: Partner = {
   legalForm: 'AG',
   uid: 'CHE-123.456.789',
   paymentTerm: '30',
+  currency: 'EUR',
   creditLimit: 10000,
 }
 
@@ -52,6 +53,16 @@ describe('toForm', () => {
     expect(form.creditLimit).toBe('0')
   })
 
+  it('toFormReadsTheCurrencyTest', () => {
+    expect(toForm(STORED).currency).toBe('EUR')
+  })
+
+  it('toFormWithoutCurrencyTest', () => {
+    // Only a record written before the field existed has none; the dropdown then fills in
+    // the default of the tenant.
+    expect(toForm({ ...STORED, currency: undefined }).currency).toBe('')
+  })
+
   it('toFormWithoutPaymentTermTest', () => {
     const form = toForm({ ...STORED, paymentTerm: undefined })
 
@@ -65,6 +76,17 @@ describe('toPayload', () => {
 
     expect(payload.name).toBe('Muster AG')
     expect(payload.paymentTerm).toBe('30_2_10')
+  })
+
+  it('toPayloadSendsTheCurrencyTest', () => {
+    const payload = toPayload({ ...COMPANY, currency: 'EUR' })
+
+    expect(payload.currency).toBe('EUR')
+  })
+
+  it('toPayloadLeavesAnEmptyCurrencyOutTest', () => {
+    // Absent lets the backend write the currency of the tenant into a new record.
+    expect(toPayload(COMPANY).currency).toBeUndefined()
   })
 
   it('toPayloadSendsTheNumberTest', () => {
@@ -193,6 +215,10 @@ describe('emptyPartner', () => {
 
   it('emptyPartnerLeavesTheNumberToTheBackendTest', () => {
     expect(emptyPartner('customer').partnerNumber).toBe('')
+  })
+
+  it('emptyPartnerLeavesTheCurrencyToTheDropdownTest', () => {
+    expect(emptyPartner('customer').currency).toBe('')
   })
 
   it('emptyPartnerIsNotSharedBetweenMasksTest', () => {

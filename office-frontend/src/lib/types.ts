@@ -316,6 +316,21 @@ export type Partner = {
   /** The payment term as its stable code; sending it back is enough. */
   paymentTerm?: string
   paymentTermLabel?: string
+  currencyId?: number
+  /**
+   * The currency documents for this partner are written in, as its ISO 4217 code.
+   *
+   * <p>Set on every stored partner: leaving it empty while the record is created makes the
+   * backend write the currency of the tenant into it, so a document never has to guess.
+   */
+  currency?: string
+  currencyLabel?: string
+  /**
+   * Credit limit in the bookkeeping currency of the tenant, never in {@link Partner.currency}.
+   *
+   * <p>A limit is watched over every open document of the partner, and those may be written
+   * in different currencies; only the bookkeeping currency compares.
+   */
   creditLimit?: number
   /** Reference this supplier expects on payments made to it. */
   creditorReference?: string
@@ -744,6 +759,8 @@ export type SalesDocument = {
   recipient?: DocumentParty
   issuer?: DocumentParty
   language?: string
+  /** That language as it was named when the document was written, for showing a word. */
+  languageLabel?: string
   currency: string
   baseCurrency?: string
   exchangeRate?: number
@@ -807,6 +824,28 @@ export type DocumentSummary = {
   currency: string
   totalNet: number
   totalGross: number
+}
+
+/**
+ * What a new document would carry for one customer, worked out by the backend.
+ *
+ * <p>Answer of `GET /{documents}/defaults?documentTypeId=&partnerId=`. It exists so the mask
+ * that starts a document shows the values it is going to get instead of guessing them: which
+ * address is used, which language the customer is written to in, which currency and which
+ * payment term apply. Every one of them stays editable.
+ */
+export type DocumentDefaults = {
+  /** Address as it would be frozen onto the document. */
+  recipient?: DocumentParty
+  partnerNumber?: string
+  languageCode?: string
+  languageLabel?: string
+  currencyCode?: string
+  currencyLabel?: string
+  paymentTermId?: number
+  paymentTermName?: string
+  /** Which of the partner addresses the kind of document asks for. */
+  addressUsage?: AddressUsage
 }
 
 export type DocumentStatusEntry = {
