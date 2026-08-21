@@ -22,6 +22,7 @@ import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
 import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
+import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
 import {
   addressComplaint,
@@ -33,7 +34,7 @@ import {
 import { emptyPartner, firstComplaint, toForm, toPayload, type PartnerForm } from './partner/partnerForm'
 import { wordingFor, type PartnerRole, type RoleWording } from './partner/role'
 
-type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'preise'
+type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'verlauf' | 'preise'
 
 /** One customer or supplier, with its addresses, contact persons and agreed prices. */
 export function PartnerPage({ role }: { role: PartnerRole }) {
@@ -153,6 +154,8 @@ function PartnerMask({
     { id: 'stammdaten', label: 'Stammdaten' },
     { id: 'adressen', label: 'Adressen' },
     { id: 'kontakte', label: 'Kontaktpersonen' },
+    // For both roles: a supplier has a record with us just as a customer does.
+    { id: 'verlauf', label: 'Verlauf' },
     // Pricing is agreed with a buyer; a supplier has no price list of ours.
     ...(wording.role === 'customer' ? [{ id: 'preise' as Tab, label: 'Preise' }] : []),
   ]
@@ -250,6 +253,12 @@ function PartnerMask({
             contacts={partner.contacts ?? []}
             mayWrite={mayWrite}
           />
+        )}
+
+        {/* No permission check: the server narrows the rows to what the reader may see and
+            answers with an empty page when that is nothing. */}
+        {tab === 'verlauf' && partner && (
+          <PartnerHistory tenantId={tenantId} partnerId={partner.id} role={wording.role} />
         )}
 
         {tab === 'preise' && partner && can('PRODUCT_READ') && (

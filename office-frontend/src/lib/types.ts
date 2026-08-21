@@ -779,6 +779,45 @@ export type DocumentStatusEntry = {
   note?: string
 }
 
+/**
+ * One row of a partner's history: something that happened between the tenant and that
+ * partner.
+ *
+ * <p>Not a {@link DocumentSummary}. A history row names the kind of document the way the
+ * tenant calls it instead of by code, drops the recipient that is the same in every row, and
+ * adds what a reader looks for in a record — the due date, the reference and the document it
+ * was taken over from.
+ *
+ * <p>What is empty is `null` rather than absent: the backend answers every field of the
+ * record, and a draft has no number the same way it has no `finalisedAt`.
+ */
+export type DocumentHistoryEntry = {
+  id: number
+  documentTypeId: number
+  /** Code of that kind of document, for example `RE`. */
+  documentTypeCode: string
+  /** Name of that kind as the tenant wrote it; never translated here. */
+  documentTypeName: string
+  /** Behaviour this document follows, one of {@link DocumentCategory}. */
+  category: string
+  /** `DRAFT`, `FINALISED` or `CANCELLED`, one of {@link DocumentStatus}. */
+  status: string
+  /** The number as printed, `null` while it is a draft. */
+  documentNumber: string | null
+  fiscalYear: number | null
+  documentDate: string
+  /** When payment is due, `null` where nothing is owed. */
+  dueDate: string | null
+  /** What the partner asked us to quote. */
+  reference: string | null
+  predecessorDocumentNumber: string | null
+  currency: string
+  totalNet: number
+  totalGross: number
+  finalisedAt: string | null
+  cancelledAt: string | null
+}
+
 // --- numbering ---------------------------------------------------------------
 
 export type NumberRange = {

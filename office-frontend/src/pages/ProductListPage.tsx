@@ -1,7 +1,7 @@
-import { useDeferredValue, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
@@ -9,7 +9,8 @@ import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
-import { TextField } from '../components/TextField'
+import { QuickSearchField } from '../components/QuickSearch'
+import { useQuickSearch } from '../components/useQuickSearch'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -37,13 +38,12 @@ function ProductList({ tenantId }: { tenantId: number }) {
   const typeLabel = useCatalogueLabel(tenantId, 'product-type')
   const vatLabel = useCatalogueLabel(tenantId, 'vat-category')
   const units = useMasterDataEntries(tenantId, 'units')
-  const [search, setSearch] = useState('')
+  const search = useQuickSearch()
   const [activeOnly, setActiveOnly] = useState(true)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('name,asc')
-  const term = useDeferredValue(search.trim())
 
-  const query = listQuery({ search: term, activeOnly, page, size: PAGE_SIZE, sort })
+  const query = listQuery({ search: search.term, activeOnly, page, size: PAGE_SIZE, sort })
   const products = useQuery({
     queryKey: ['products', tenantId, query],
     queryFn: () => api.get<Page<Product>>(`/api/tenants/${tenantId}/products?${query}`),
@@ -134,16 +134,13 @@ function ProductList({ tenantId }: { tenantId: number }) {
       <div className="px-8 pb-12">
         <Panel padded={false}>
           <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
-            <TextField
-              label="Suchen"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
+            <QuickSearchField
+              value={search.value}
+              onChange={(next) => {
+                search.setValue(next)
                 setPage(0)
               }}
               placeholder="Bezeichnung oder Artikelnummer"
-              icon={<Search size={15} />}
-              className="min-w-[240px] flex-1"
             />
             <CheckboxField
               label="Nur aktive"
@@ -173,14 +170,14 @@ function ProductList({ tenantId }: { tenantId: number }) {
             error={products.error}
             empty={
               <EmptyState
-                title={term ? 'Nichts gefunden' : 'Noch keine Produkte'}
+                title={search.term ? 'Nichts gefunden' : 'Noch keine Produkte'}
                 description={
-                  term
-                    ? `Für «${term}» gibt es keinen Treffer.`
+                  search.term
+                    ? `Für «${search.term}» gibt es keinen Treffer.`
                     : 'Ohne Katalog lässt sich keine Belegzeile aus einem Produkt bilden.'
                 }
               >
-                {!term && can('PRODUCT_WRITE') && (
+                {!search.term && can('PRODUCT_WRITE') && (
                   <LinkButton to="/produkte/neu" state={ORIGIN}>
                     <Plus size={15} aria-hidden />
                     Erstes Produkt erfassen
