@@ -61,6 +61,7 @@ export type CatalogueName =
   | 'reference-type'
   | 'document-category'
   | 'document-status'
+  | 'line-kind'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -677,15 +678,33 @@ export type DocumentParty = {
   email?: string
 }
 
+/**
+ * What a line of a document is.
+ *
+ * <p>Only an `ITEM` is charged. The other three shape the printed document: a note between
+ * two positions, a running total, a page break.
+ */
+export type DocumentLineKind = 'ITEM' | 'COMMENT' | 'SUBTOTAL' | 'PAGE_BREAK'
+
 export type DocumentLine = {
+  /** Position as it is printed: the rank of the line, without gaps. */
   lineNumber: number
+  kind: DocumentLineKind
   productId?: number
   productNumber?: string
-  description: string
-  quantity: number
-  unit: string
-  unitPrice: number
+  /** Absent on a page break, and on a subtotal that carries no caption. */
+  description?: string
+  /** Only on an `ITEM`; the other kinds carry no figures. */
+  quantity?: number
+  unit?: string
+  unitPrice?: number
   discountPercent?: number
+  /**
+   * Discount as an amount on the whole line, not per piece, in the same basis as
+   * `unitPrice` — gross where the price includes VAT. Never set together with
+   * `discountPercent`.
+   */
+  discountAmount?: number
   vatCategory?: string
   vatRate?: number
   priceIncludesVat: boolean
@@ -695,6 +714,13 @@ export type DocumentLine = {
   lineNet: number
   lineVat: number
   lineGross: number
+  /**
+   * Only on a `SUBTOTAL`: the `ITEM` lines since the previous subtotal, added up by the
+   * backend. The browser never sums a document itself.
+   */
+  subtotalNet?: number
+  subtotalVat?: number
+  subtotalGross?: number
 }
 
 export type SalesDocument = {

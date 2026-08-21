@@ -1,43 +1,26 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Rows3 } from 'lucide-react'
 import { Button } from '../../components/Button'
-import { CheckboxField } from '../../components/CheckboxField'
-import { DataTable, type Column } from '../../components/DataTable'
 import { Dialog } from '../../components/Dialog'
-import { EmptyState, ErrorNotice } from '../../components/Notice'
+import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
-import { SelectField } from '../../components/SelectField'
-import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
 import { listQuery, PICKER_SIZE } from '../../lib/paging'
-import { formatAmount, formatPercent, formatQuantity, parseDecimal } from '../../lib/format'
-import { shortLabelForCode } from '../../lib/masterData'
-import type { DocumentLine, Page, Product, SalesDocument, VatCategory } from '../../lib/types'
-import { CatalogueSelect } from '../../masterdata/CatalogueSelect'
-import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
-import { useMasterDataEntries } from '../../masterdata/useMasterData'
+import type { DocumentLine, Page, Product, SalesDocument } from '../../lib/types'
+import { FreeLineDialog } from './FreeLineDialog'
+import { LinesTable } from './LinesTable'
+import { ProductLineDialog } from './ProductLineDialog'
+import { StructureLineDialog } from './StructureLineDialog'
+import { editorOf, type FreeLine, type ProductLine, type StructureLine } from './lineForm'
 
-/** What a line looks like when it comes from the catalogue. */
-export type ProductLine = {
-  productId: number
-  quantity: number
-  discountPercent?: number
-  serviceDateFrom?: string
-  serviceDateTo?: string
-}
-
-/** What a line looks like when it is written by hand. */
-export type FreeLine = {
-  description: string
-  quantity: number
-  unit: string
-  unitPrice: number
-  discountPercent?: number
-  vatCategory: VatCategory
-  priceIncludesVat: boolean
-  serviceDateFrom?: string
-  serviceDateTo?: string
+/** Which dialog is on screen, over which line, and how often one has been opened. */
+type OpenDialog = {
+  kind: 'product' | 'free' | 'structure'
+  /** The line being edited; absent while a new one is added. */
+  line?: DocumentLine
+  /** Bumped on every opening, so the dialog is mounted afresh and reads its fields again. */
+  id: number
 }
 
 /**
@@ -52,23 +35,68 @@ export function OrderLines({
   order,
   editable,
   onAddProductLine,
+  onUpdateProductLine,
   onAddFreeLine,
+  onUpdateFreeLine,
+  onAddStructureLine,
+  onUpdateStructureLine,
+  onMoveLine,
   onRemoveLine,
   busy,
   error,
+  readOnlyNote,
 }: {
   tenantId: number
   order: SalesDocument
   /** False once the order is issued: nothing may change about a document that is out. */
   editable: boolean
-  onAddProductLine: (line: ProductLine) => void
-  onAddFreeLine: (line: FreeLine) => void
+  /*
+   * The six that a dialog submits answer with a promise. The dialog closes on the answer and
+   * not on the click: a line the backend refuses has to stay on screen, because the dialog is
+   * the only place the typed values exist.
+   */
+  onAddProductLine: (line: ProductLine) => Promise<unknown>
+  onUpdateProductLine: (lineNumber: number, line: ProductLine) => Promise<unknown>
+  onAddFreeLine: (line: FreeLine) => Promise<unknown>
+  onUpdateFreeLine: (lineNumber: number, line: FreeLine) => Promise<unknown>
+  onAddStructureLine: (line: StructureLine) => Promise<unknown>
+  onUpdateStructureLine: (lineNumber: number, line: StructureLine) => Promise<unknown>
+  /** Moves a line to another position, counted the way the lines are numbered. */
+  onMoveLine: (lineNumber: number, position: number) => void
   onRemoveLine: (lineNumber: number) => void
   busy: boolean
   error: unknown
+  /** Why nothing can be changed here, where that is not the state of the document itself. */
+  readOnlyNote?: string
 }) {
-  const [adding, setAdding] = useState<'product' | 'free' | null>(null)
-  const units = useMasterDataEntries(tenantId, 'units')
+  const [dialog, setDialog] = useState<OpenDialog | null>(null)
+  const [open, setOpen] = useState(false)
+  const [removing, setRemoving] = useState<DocumentLine | null>(null)
+  const opened = useRef(0)
+
+  /**
+   * Brings a dialog up. The counter in the key is what resets the fields: a dialog that stays
+   * mounted after being closed would otherwise show the line before last.
+   */
+  const show = (kind: OpenDialog['kind'], line?: DocumentLine) => {
+    opened.current += 1
+    setDialog({ kind, line, id: opened.current })
+    setOpen(true)
+  }
+
+  // Closed, not thrown away: the box has to stay in the tree for as long as it fades out.
+  const close = () => setOpen(false)
+
+  /**
+   * Sends a line and closes the dialog only once the backend has taken it.
+   *
+   * <p>A refusal keeps the dialog open with everything still in it; the message appears at
+   * the head of the dialog. Closing first would throw the typed values away and leave the
+   * user to write the line a second time.
+   */
+  const submit = (run: () => Promise<unknown>) => {
+    void run().then(close, () => undefined)
+  }
 
   // A picker wants every entry, not a page, so it asks for the largest page the server
   // allows. Beyond that a dropdown is the wrong control anyway and this needs a type-ahead.
@@ -79,88 +107,7 @@ export function OrderLines({
     enabled: editable,
   })
 
-  const columns: Column<DocumentLine>[] = [
-    {
-      key: 'position',
-      header: 'Pos',
-      width: 'w-[60px]',
-      render: (line) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{line.lineNumber}</span>
-      ),
-    },
-    {
-      key: 'description',
-      header: 'Bezeichnung',
-      render: (line) => (
-        <span>
-          <span className="block">{line.description}</span>
-          {line.productNumber && (
-            <span className="block font-mono text-[11px] text-text-tertiary">
-              {line.productNumber}
-            </span>
-          )}
-        </span>
-      ),
-    },
-    {
-      key: 'quantity',
-      header: 'Menge',
-      align: 'right',
-      width: 'w-[110px]',
-      render: (line) => (
-        <span>
-          {formatQuantity(line.quantity)}{' '}
-          <span className="text-text-tertiary">{shortLabelForCode(units, line.unit)}</span>
-        </span>
-      ),
-    },
-    {
-      key: 'unitPrice',
-      header: 'Einzelpreis',
-      align: 'right',
-      width: 'w-[120px]',
-      render: (line) => formatAmount(line.unitPrice),
-    },
-    {
-      key: 'discount',
-      header: 'Rabatt',
-      align: 'right',
-      width: 'w-[90px]',
-      render: (line) => (line.discountPercent ? formatPercent(line.discountPercent) : '-'),
-    },
-    {
-      key: 'vat',
-      header: 'MwSt',
-      align: 'right',
-      width: 'w-[90px]',
-      render: (line) => (line.vatRate === undefined ? '-' : formatPercent(line.vatRate)),
-    },
-    {
-      key: 'net',
-      header: 'Netto',
-      align: 'right',
-      width: 'w-[120px]',
-      render: (line) => formatAmount(line.lineNet),
-    },
-  ]
-
-  if (editable) {
-    columns.push({
-      key: 'remove',
-      header: '',
-      width: 'w-[60px]',
-      render: (line) => (
-        <button
-          type="button"
-          onClick={() => onRemoveLine(line.lineNumber)}
-          aria-label={`Position ${line.lineNumber} entfernen`}
-          className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-danger/12 hover:text-danger"
-        >
-          <Trash2 size={14} />
-        </button>
-      ),
-    })
-  }
+  const edited = dialog?.line
 
   return (
     <>
@@ -169,63 +116,35 @@ export function OrderLines({
         padded={false}
         action={
           editable ? (
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setAdding('product')}>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => show('product')}>
                 <Plus size={15} aria-hidden />
                 Aus Katalog
               </Button>
-              <Button variant="secondary" onClick={() => setAdding('free')}>
+              <Button variant="secondary" onClick={() => show('free')}>
                 <Plus size={15} aria-hidden />
                 Freie Zeile
+              </Button>
+              <Button variant="secondary" onClick={() => show('structure')}>
+                <Rows3 size={15} aria-hidden />
+                Zeile einfügen
               </Button>
             </div>
           ) : undefined
         }
       >
-        <DataTable
-          columns={columns}
-          rows={order.lines ?? []}
-          keyOf={(line) => line.lineNumber}
-          empty={
-            <EmptyState
-              title="Noch keine Position"
-              description={
-                editable
-                  ? 'Ein Auftrag ohne Position lässt sich nicht ausstellen.'
-                  : 'Dieser Beleg wurde ohne Positionen ausgestellt.'
-              }
-            />
-          }
-          footer={
-            (order.lines?.length ?? 0) > 0 ? (
-              <>
-                <tr>
-                  <td colSpan={columns.length - 1} className="px-5 py-1.5 pt-3 text-right text-text-secondary">
-                    Netto
-                  </td>
-                  <td className="px-5 py-1.5 pt-3 text-right font-mono tabular-nums">
-                    {formatAmount(order.totalNet)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={columns.length - 1} className="px-5 py-1.5 text-right text-text-secondary">
-                    MwSt
-                  </td>
-                  <td className="px-5 py-1.5 text-right font-mono tabular-nums">
-                    {formatAmount(order.totalVat)}
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={columns.length - 1} className="px-5 pb-3 py-1.5 text-right font-medium">
-                    Total {order.currency}
-                  </td>
-                  <td className="px-5 pb-3 py-1.5 text-right font-mono font-medium tabular-nums">
-                    {formatAmount(order.totalGross)}
-                  </td>
-                </tr>
-              </>
-            ) : undefined
-          }
+        {readOnlyNote !== undefined && (
+          <p className="px-5 pt-4 text-[13px] text-text-secondary">{readOnlyNote}</p>
+        )}
+
+        <LinesTable
+          tenantId={tenantId}
+          document={order}
+          editable={editable}
+          busy={busy}
+          onEdit={(line) => show(editorOf(line), line)}
+          onMove={(line, position) => onMoveLine(line.lineNumber, position)}
+          onRemove={(line) => setRemoving(line)}
         />
 
         {error !== null && error !== undefined && (
@@ -235,270 +154,89 @@ export function OrderLines({
         )}
       </Panel>
 
-      <ProductLineDialog
-        open={adding === 'product'}
-        onClose={() => setAdding(null)}
-        onSubmit={(line) => {
-          onAddProductLine(line)
-          setAdding(null)
-        }}
-        products={products.data?.content ?? []}
-        busy={busy}
-      />
+      {dialog?.kind === 'product' && (
+        <ProductLineDialog
+          key={dialog.id}
+          open={open}
+          onClose={close}
+          onSubmit={(line) =>
+            submit(() =>
+              edited ? onUpdateProductLine(edited.lineNumber, line) : onAddProductLine(line),
+            )
+          }
+          products={products.data?.content ?? []}
+          productsLoading={products.isPending}
+          productsError={products.error}
+          line={edited}
+          busy={busy}
+          error={error}
+        />
+      )}
 
-      <FreeLineDialog
-        tenantId={tenantId}
-        open={adding === 'free'}
-        onClose={() => setAdding(null)}
-        onSubmit={(line) => {
-          onAddFreeLine(line)
-          setAdding(null)
-        }}
-        busy={busy}
-      />
+      {dialog?.kind === 'free' && (
+        <FreeLineDialog
+          key={dialog.id}
+          tenantId={tenantId}
+          open={open}
+          onClose={close}
+          onSubmit={(line) =>
+            submit(() =>
+              edited ? onUpdateFreeLine(edited.lineNumber, line) : onAddFreeLine(line),
+            )
+          }
+          line={edited}
+          busy={busy}
+          error={error}
+        />
+      )}
+
+      {dialog?.kind === 'structure' && (
+        <StructureLineDialog
+          key={dialog.id}
+          tenantId={tenantId}
+          open={open}
+          onClose={close}
+          onSubmit={(line) =>
+            submit(() =>
+              edited
+                ? onUpdateStructureLine(edited.lineNumber, line)
+                : onAddStructureLine(line),
+            )
+          }
+          line={edited}
+          busy={busy}
+          error={error}
+        />
+      )}
+
+      <Dialog
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title="Position entfernen"
+        description="Die folgenden Positionen rücken auf."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRemoving(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              busy={busy}
+              onClick={() => {
+                if (removing) onRemoveLine(removing.lineNumber)
+                setRemoving(null)
+              }}
+            >
+              Entfernen
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] text-text-secondary">
+          Position {removing?.lineNumber}
+          {removing?.description ? ` — ${removing.description}` : ''} wird endgültig entfernt.
+          Rückgängig machen lässt sich das nicht.
+        </p>
+      </Dialog>
     </>
-  )
-}
-
-/**
- * Adds a line from the catalogue.
- *
- * <p>No price is asked for: which one applies to this customer is decided by the backend from
- * the customer price, the price group and the base price, in that order.
- */
-function ProductLineDialog({
-  open,
-  onClose,
-  onSubmit,
-  products,
-  busy,
-}: {
-  open: boolean
-  onClose: () => void
-  onSubmit: (line: ProductLine) => void
-  products: Product[]
-  busy: boolean
-}) {
-  const [productId, setProductId] = useState('')
-  const [quantity, setQuantity] = useState('1')
-  const [discount, setDiscount] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-
-  const amount = parseDecimal(quantity)
-  // The catalogue decides whether a line may be discounted at all. The backend refuses the
-  // line either way; hiding the field here only spares the user a rejected dialog.
-  const chosen = products.find((product) => product.id === Number(productId))
-  const discountable = chosen === undefined || chosen.discountable !== false
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Position aus dem Katalog"
-      description="Der Preis kommt aus der Preisfindung des Backends."
-      wide
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Abbrechen
-          </Button>
-          <Button
-            busy={busy}
-            disabled={productId === '' || amount === null}
-            onClick={() =>
-              onSubmit({
-                productId: Number(productId),
-                quantity: amount ?? 1,
-                discountPercent: discountable ? (parseDecimal(discount) ?? undefined) : undefined,
-                serviceDateFrom: from || undefined,
-                serviceDateTo: to || undefined,
-              })
-            }
-          >
-            Hinzufügen
-          </Button>
-        </>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
-          label="Produkt"
-          value={productId}
-          onChange={(event) => setProductId(event.target.value)}
-          className="sm:col-span-2"
-        >
-          <option value="">Bitte wählen</option>
-          {products.map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.productNumber ? `${product.productNumber} · ` : ''}
-              {product.name}
-            </option>
-          ))}
-        </SelectField>
-
-        <TextField
-          label="Menge"
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          inputMode="decimal"
-          numeric
-        />
-        <TextField
-          label="Rabatt in Prozent"
-          value={discountable ? discount : ''}
-          onChange={(event) => setDiscount(event.target.value)}
-          inputMode="decimal"
-          numeric
-          disabled={!discountable}
-          hint={discountable ? undefined : 'Dieses Produkt ist nicht rabattfähig.'}
-        />
-        <TextField
-          label="Leistung von"
-          type="date"
-          value={from}
-          onChange={(event) => setFrom(event.target.value)}
-          hint="Bestimmt den MwSt-Satz."
-        />
-        <TextField
-          label="Leistung bis"
-          type="date"
-          value={to}
-          onChange={(event) => setTo(event.target.value)}
-        />
-      </div>
-    </Dialog>
-  )
-}
-
-/** Adds a line that is not in the catalogue, price and VAT treatment included. */
-function FreeLineDialog({
-  tenantId,
-  open,
-  onClose,
-  onSubmit,
-  busy,
-}: {
-  tenantId: number
-  open: boolean
-  onClose: () => void
-  onSubmit: (line: FreeLine) => void
-  busy: boolean
-}) {
-  const [description, setDescription] = useState('')
-  const [quantity, setQuantity] = useState('1')
-  // Empty, not a code: the dropdown fills it with what this tenant marked as its default.
-  const [unit, setUnit] = useState('')
-  const [unitPrice, setUnitPrice] = useState('')
-  const [discount, setDiscount] = useState('')
-  const [vatCategory, setVatCategory] = useState<VatCategory>('STANDARD')
-  const [priceIncludesVat, setPriceIncludesVat] = useState(false)
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-
-  const count = parseDecimal(quantity)
-  const price = parseDecimal(unitPrice)
-  const incomplete = description.trim() === '' || count === null || price === null
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Freie Position"
-      description="Für alles, was nicht im Katalog steht."
-      wide
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Abbrechen
-          </Button>
-          <Button
-            busy={busy}
-            disabled={incomplete}
-            onClick={() =>
-              onSubmit({
-                description: description.trim(),
-                quantity: count ?? 1,
-                unit,
-                unitPrice: price ?? 0,
-                discountPercent: parseDecimal(discount) ?? undefined,
-                vatCategory,
-                priceIncludesVat,
-                serviceDateFrom: from || undefined,
-                serviceDateTo: to || undefined,
-              })
-            }
-          >
-            Hinzufügen
-          </Button>
-        </>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Bezeichnung"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          maxLength={500}
-          className="sm:col-span-2"
-        />
-        <TextField
-          label="Menge"
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          inputMode="decimal"
-          numeric
-        />
-        <MasterDataSelect
-          label="Einheit"
-          tenantId={tenantId}
-          list="units"
-          value={unit}
-          onChange={setUnit}
-        />
-        <TextField
-          label="Einzelpreis"
-          value={unitPrice}
-          onChange={(event) => setUnitPrice(event.target.value)}
-          inputMode="decimal"
-          numeric
-        />
-        <TextField
-          label="Rabatt in Prozent"
-          value={discount}
-          onChange={(event) => setDiscount(event.target.value)}
-          inputMode="decimal"
-          numeric
-        />
-        <CatalogueSelect
-          label="MwSt-Behandlung"
-          tenantId={tenantId}
-          catalogue="vat-category"
-          value={vatCategory}
-          onChange={(code) => setVatCategory(code as VatCategory)}
-          className="sm:col-span-2"
-        />
-        <TextField
-          label="Leistung von"
-          type="date"
-          value={from}
-          onChange={(event) => setFrom(event.target.value)}
-          hint="Bestimmt den MwSt-Satz."
-        />
-        <TextField
-          label="Leistung bis"
-          type="date"
-          value={to}
-          onChange={(event) => setTo(event.target.value)}
-        />
-      </div>
-
-      <CheckboxField
-        label="Preis versteht sich inklusive MwSt"
-        checked={priceIncludesVat}
-        onChange={(event) => setPriceIncludesVat(event.target.checked)}
-        className="mt-5"
-      />
-    </Dialog>
   )
 }

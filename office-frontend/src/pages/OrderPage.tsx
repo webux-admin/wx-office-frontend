@@ -18,7 +18,13 @@ import { originOf, type Origin } from '../lib/origin'
 import type { DocumentParty, DocumentStatusEntry, SalesDocument } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { NewOrderMask } from './order/NewOrderMask'
-import { OrderLines, type FreeLine, type ProductLine } from './order/OrderLines'
+import { OrderLines } from './order/OrderLines'
+import {
+  itemLineCount,
+  type FreeLine,
+  type ProductLine,
+  type StructureLine,
+} from './order/lineForm'
 
 /** Where an order mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
@@ -78,8 +84,40 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     onSuccess: refresh,
   })
 
+  const updateProductLine = useMutation({
+    mutationFn: ({ lineNumber, line }: { lineNumber: number; line: ProductLine }) =>
+      api.put<SalesDocument>(`${base}/lines/${lineNumber}`, line),
+    onSuccess: refresh,
+  })
+
   const addFreeLine = useMutation({
     mutationFn: (line: FreeLine) => api.post<SalesDocument>(`${base}/free-lines`, line),
+    onSuccess: refresh,
+  })
+
+  const updateFreeLine = useMutation({
+    mutationFn: ({ lineNumber, line }: { lineNumber: number; line: FreeLine }) =>
+      api.put<SalesDocument>(`${base}/free-lines/${lineNumber}`, line),
+    onSuccess: refresh,
+  })
+
+  const addStructureLine = useMutation({
+    mutationFn: (line: StructureLine) =>
+      api.post<SalesDocument>(`${base}/structure-lines`, line),
+    onSuccess: refresh,
+  })
+
+  const updateStructureLine = useMutation({
+    mutationFn: ({ lineNumber, line }: { lineNumber: number; line: StructureLine }) =>
+      api.put<SalesDocument>(`${base}/structure-lines/${lineNumber}`, line),
+    onSuccess: refresh,
+  })
+
+  // The position a line is moved to is its new line number, and the backend renumbers the
+  // rest around it. The browser never renumbers anything itself.
+  const moveLine = useMutation({
+    mutationFn: ({ lineNumber, position }: { lineNumber: number; position: number }) =>
+      api.put<SalesDocument>(`${base}/lines/${lineNumber}/position`, { position }),
     onSuccess: refresh,
   })
 
@@ -118,8 +156,33 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     },
   })
 
-  const lineBusy =
-    addProductLine.isPending || addFreeLine.isPending || removeLine.isPending
+  const lineMutations = [
+    addProductLine,
+    updateProductLine,
+    addFreeLine,
+    updateFreeLine,
+    addStructureLine,
+    updateStructureLine,
+    moveLine,
+    removeLine,
+  ]
+  const lineBusy = lineMutations.some((mutation) => mutation.isPending)
+  const lineError = lineMutations.map((mutation) => mutation.error).find((one) => one !== null)
+
+  /**
+   * Starts a change to the positions, with a clean slate.
+   *
+   * <p>react-query keeps the error of a mutation until that same mutation runs again, so a
+   * free line that was refused would still be complained about after a catalogue position
+   * went through. Only the attempt that is running may be on screen.
+   *
+   * @param run the mutation to start
+   * @returns what the mutation answers, so the dialog can wait for it
+   */
+  const startLine = <T,>(run: () => Promise<T>): Promise<T> => {
+    lineMutations.forEach((mutation) => mutation.reset())
+    return run()
+  }
 
   return (
     <>
@@ -162,7 +225,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           <Button
             onClick={() => finalise.mutate()}
             busy={finalise.isPending}
-            disabled={(order.lines?.length ?? 0) === 0}
+            disabled={itemLineCount(order.lines) === 0}
           >
             Ausstellen
           </Button>
@@ -177,11 +240,31 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           tenantId={tenantId}
           order={order}
           editable={editable}
-          onAddProductLine={(line) => addProductLine.mutate(line)}
-          onAddFreeLine={(line) => addFreeLine.mutate(line)}
-          onRemoveLine={(lineNumber) => removeLine.mutate(lineNumber)}
+          onAddProductLine={(line) => startLine(() => addProductLine.mutateAsync(line))}
+          onUpdateProductLine={(lineNumber, line) =>
+            startLine(() => updateProductLine.mutateAsync({ lineNumber, line }))
+          }
+          onAddFreeLine={(line) => startLine(() => addFreeLine.mutateAsync(line))}
+          onUpdateFreeLine={(lineNumber, line) =>
+            startLine(() => updateFreeLine.mutateAsync({ lineNumber, line }))
+          }
+          onAddStructureLine={(line) => startLine(() => addStructureLine.mutateAsync(line))}
+          onUpdateStructureLine={(lineNumber, line) =>
+            startLine(() => updateStructureLine.mutateAsync({ lineNumber, line }))
+          }
+          onMoveLine={(lineNumber, position) =>
+            startLine(() => moveLine.mutateAsync({ lineNumber, position })).catch(() => undefined)
+          }
+          onRemoveLine={(lineNumber) =>
+            startLine(() => removeLine.mutateAsync(lineNumber)).catch(() => undefined)
+          }
           busy={lineBusy}
-          error={addProductLine.error ?? addFreeLine.error ?? removeLine.error}
+          error={lineError}
+          readOnlyNote={
+            order.status === 'DRAFT' && !can('ORDER_WRITE')
+              ? 'Zum Ändern der Positionen fehlt das Recht ORDER_WRITE.'
+              : undefined
+          }
         />
 
         <div className="grid gap-6 lg:grid-cols-2">
