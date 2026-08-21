@@ -80,6 +80,21 @@ describe('flattenNav', () => {
     ])
   })
 
+  /**
+   * The three screens of one document belong together, and the order is the order somebody
+   * sets them up in: first the kinds, then what they print on, then their numbers.
+   */
+  it('flattenNavHoldsTheDocumentScreensTogetherTest', () => {
+    const einstellungen = NAV_GROUPS.find((group) => group.title === 'Einstellungen')
+    const belegwesen = einstellungen?.entries.find(
+      (node) => isFolder(node) && node.label === 'Belegwesen',
+    )
+
+    expect(belegwesen).toBeDefined()
+    expect(flattenNav(belegwesen === undefined ? [] : [belegwesen]).map((entry) => entry.href))
+      .toEqual(['/belegarten', '/druckvorlagen', '/nummernkreise'])
+  })
+
   it('flattenNavWithoutFolderTest', () => {
     const uebersicht = NAV_GROUPS.find((group) => group.title === 'Übersicht')
 

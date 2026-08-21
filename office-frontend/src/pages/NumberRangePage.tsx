@@ -98,19 +98,29 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
     {
       key: 'type',
       header: 'Belegart',
-      width: 'w-[130px]',
-      render: (range) =>
-        mayWrite ? (
+      width: 'w-[210px]',
+      render: (range) => {
+        const name = nameOf(range.documentTypeCode)
+        const label = (
+          <>
+            <span className="font-mono text-[12px]">{range.documentTypeCode}</span>
+            {/* The name only where the kind still exists: a range outlives the kind it
+                counted for, and inventing a name for a code nobody has would be worse. */}
+            {name !== undefined && <span className="text-text-secondary"> · {name}</span>}
+          </>
+        )
+        return mayWrite ? (
           <button
             type="button"
             onClick={() => openEdit(range)}
-            className="font-mono text-[12px] font-medium transition-colors hover:text-accent-text"
+            className="font-medium transition-colors hover:text-accent-text"
           >
-            {range.documentTypeCode}
+            {label}
           </button>
         ) : (
-          <span className="font-mono text-[12px]">{range.documentTypeCode}</span>
-        ),
+          <span className="font-medium">{label}</span>
+        )
+      },
     },
     {
       key: 'year',
@@ -151,7 +161,10 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
     },
   ]
 
-  const orderTypeCodes = (types.data ?? []).filter((type) => type.active).map((type) => type.code)
+  // The kinds a range may be opened for, and what they are called. A range is read next to
+  // the Belegart it counts for, and a bare code sends the reader off to look it up.
+  const activeTypes = (types.data ?? []).filter((type) => type.active)
+  const nameOf = (code: string) => (types.data ?? []).find((type) => type.code === code)?.name
 
   return (
     <>
@@ -217,7 +230,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
       >
         {form && (
           <div className="grid gap-4">
-            {locked || orderTypeCodes.length === 0 ? (
+            {locked || activeTypes.length === 0 ? (
               <TextField
                 label="Belegart"
                 value={form.documentTypeCode}
@@ -235,9 +248,9 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
                 onChange={(event) => setForm({ ...form, documentTypeCode: event.target.value })}
               >
                 <option value="">Bitte wählen</option>
-                {orderTypeCodes.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
+                {activeTypes.map((type) => (
+                  <option key={type.id} value={type.code}>
+                    {type.code} · {type.name}
                   </option>
                 ))}
               </SelectField>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
@@ -9,6 +9,7 @@ import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
+import { originOf, type Origin } from '../lib/origin'
 import type { LayoutBlockType, PrintLayout, PrintLayoutDefinition } from '../lib/types'
 import {
   BLOCK_LABELS,
@@ -25,6 +26,9 @@ import {
 import { usePrintoutFields } from '../printlayout/usePrintLayouts'
 import { BlockProperties } from './printlayout/BlockProperties'
 import { DesignCanvas } from './printlayout/DesignCanvas'
+
+/** Where the designer goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/druckvorlagen', label: 'Druckvorlagen' }
 
 /** Blocks that are dragged onto the head or the foot. */
 const PLACED_TYPES: LayoutBlockType[] = ['TEXT', 'FIELD', 'ADDRESS', 'IMAGE', 'LINE']
@@ -70,6 +74,9 @@ function LayoutLoader({ tenantId }: { tenantId: number }) {
 function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout }) {
   const queryClient = useQueryClient()
   const catalogue = usePrintoutFields(tenantId)
+  // Reached from the list of forms, but just as often from a Belegart that prints on this
+  // one. The way back follows the way in, so nobody lands on a list they never came from.
+  const origin = originOf(useLocation().state, LIST)
 
   const [name, setName] = useState(layout.name)
   const [definition, setDefinition] = useState<PrintLayoutDefinition>(
@@ -115,7 +122,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
     <>
       <PageHeader
         title={layout.name}
-        back={{ to: '/druckvorlagen', label: 'Druckvorlagen' }}
+        back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="font-mono text-[12px] text-text-secondary">{layout.code}</span>
         }

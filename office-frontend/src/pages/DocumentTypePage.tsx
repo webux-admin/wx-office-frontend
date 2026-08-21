@@ -1,507 +1,292 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { CheckboxField } from '../components/CheckboxField'
-import { DataTable, type Column } from '../components/DataTable'
-import { Dialog } from '../components/Dialog'
-import { EmptyState, ErrorNotice } from '../components/Notice'
+import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
+import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
-import type {
-  CopyPriceMode,
-  DocumentCategory,
-  DocumentType,
-  DocumentTypeCopy,
-} from '../lib/types'
+import { originOf, type Origin } from '../lib/origin'
+import type { DocumentCategory, DocumentType } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
-import { PrintLayoutSelect } from '../printlayout/PrintLayoutSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+import { CopyEditor } from './documenttype/CopyEditor'
+import { PredecessorEditor } from './documenttype/PredecessorEditor'
+import { PrintPanel } from './documenttype/PrintPanel'
+import {
+  COPY_PRICE_MODES,
+  emptyDocumentType,
+  firstComplaint,
+  toForm,
+  toPayload,
+  type DocumentTypeForm,
+} from './documenttype/documentTypeForm'
+
+/** Where the mask goes when it was opened without naming a screen to return to. */
+const LIST: Origin = { from: '/belegarten', label: 'Belegarten' }
+
+type Register = 'hauptdaten' | 'druck' | 'uebernahme'
+
+const REGISTERS: { id: Register; label: string }[] = [
+  { id: 'hauptdaten', label: 'Hauptdaten' },
+  { id: 'druck', label: 'Druck' },
+  { id: 'uebernahme', label: 'Übernahme' },
+]
 
 /**
- * The kinds of document the tenant writes.
+ * One kind of document: what it is called, how its number looks, what it prints on, how
+ * often, and out of which other kind it may be written.
  *
- * <p>Every category can be set up here, but only Auftrag has a mask of its own. The other
- * categories have no controller yet, so a kind of category Rechnung can be created and will
- * simply sit unused until that module exists. Saying so is better than hiding the choice and
- * making the catalogue look narrower than it is.
+ * <p>A full screen rather than a dialog. Eight groups of settings with two hand-sorted lists
+ * do not fit a window that has to stay small enough to see the page behind it.
  */
 export function DocumentTypePage() {
   return (
     <RequireTenant permission="DOCUMENT_TYPE_READ">
-      {(tenantId) => <DocumentTypes tenantId={tenantId} />}
+      {(tenantId) => <DocumentTypeLoader tenantId={tenantId} />}
     </RequireTenant>
   )
 }
 
-type TypeForm = {
-  category: DocumentCategory
-  code: string
-  name: string
-  numberPrefix: string
-  /** The form it is printed on, as its stable code. */
-  documentLayout: string
-  /** One label per printed copy, in printing order. Empty means one copy without a label. */
-  copies: string[]
-  /** The kinds a document of this kind may be taken over from, by id. */
-  predecessorTypeIds: number[]
-  /** What a copy does with the amounts. */
-  copyPriceMode: CopyPriceMode
+function DocumentTypeLoader({ tenantId }: { tenantId: number }) {
+  const { id } = useParams()
+  const creating = id === 'neu'
+
+  const type = useQuery({
+    queryKey: ['document-type', tenantId, id],
+    queryFn: () => api.get<DocumentType>(`/api/tenants/${tenantId}/document-types/${id}`),
+    enabled: !creating,
+  })
+
+  if (creating) return <DocumentTypeMask tenantId={tenantId} type={null} />
+  if (type.isPending) return <LoadingBlock label="Belegart wird geladen" />
+  if (type.error) {
+    return (
+      <div className="p-8">
+        <ErrorNotice error={type.error} />
+      </div>
+    )
+  }
+  return <DocumentTypeMask key={type.data.id} tenantId={tenantId} type={type.data} />
 }
 
-const EMPTY: TypeForm = {
-  category: 'ORDER',
-  code: '',
-  name: '',
-  numberPrefix: '',
-  documentLayout: '',
-  copies: [],
-  predecessorTypeIds: [],
-  copyPriceMode: 'RECALCULATE',
-}
-
-/** What a first copy is usually called, offered when the tenant adds one. */
-const FIRST_COPY_LABELS = ['Original', 'Kopie', 'Buchhaltung', 'Spedition', 'Kunde']
-
-function DocumentTypes({ tenantId }: { tenantId: number }) {
+function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: DocumentType | null }) {
   const { can } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const origin = originOf(useLocation().state, LIST)
+  const mayWrite = can('DOCUMENT_TYPE_WRITE')
   const categoryLabel = useCatalogueLabel(tenantId, 'document-category')
   const usageLabel = useCatalogueLabel(tenantId, 'address-usage')
-  const mayWrite = can('DOCUMENT_TYPE_WRITE')
 
-  const [editing, setEditing] = useState<DocumentType | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState<TypeForm>(EMPTY)
+  const [form, setForm] = useState<DocumentTypeForm>(
+    type === null ? emptyDocumentType() : toForm(type),
+  )
+  const [tab, setTab] = useState<Register>('hauptdaten')
+  const [complaint, setComplaint] = useState<string | null>(null)
 
+  // Every kind of the tenant, for the predecessors and for the names in their list.
   const types = useQuery({
     queryKey: ['document-types', tenantId],
     queryFn: () => api.get<DocumentType[]>(`/api/tenants/${tenantId}/document-types`),
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+  const change = (patch: Partial<DocumentTypeForm>) =>
+    setForm((current) => ({ ...current, ...patch }))
 
   const save = useMutation({
     mutationFn: () => {
-      const payload = {
-        category: form.category,
-        code: form.code.trim() || undefined,
-        name: form.name.trim(),
-        numberPrefix: form.numberPrefix.trim() || undefined,
-        documentLayout: form.documentLayout || undefined,
-        copies: form.copies
-          .map((label, index) => ({ position: index + 1, label: label.trim() }))
-          .filter((copy) => copy.label !== ''),
-        predecessorTypeIds: form.predecessorTypeIds,
-        copyPriceMode: form.copyPriceMode,
-      }
-      return editing
-        ? api.put<DocumentType>(`/api/tenants/${tenantId}/document-types/${editing.id}`, payload)
-        : api.post<DocumentType>(`/api/tenants/${tenantId}/document-types`, payload)
+      const payload = toPayload(form)
+      return type === null
+        ? api.post<DocumentType>(`/api/tenants/${tenantId}/document-types`, payload)
+        : api.put<DocumentType>(`/api/tenants/${tenantId}/document-types/${type.id}`, payload)
     },
     onSuccess: () => {
-      void refresh()
-      close()
+      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+      // The forms carry which kinds print on them, so that list is stale now too.
+      void queryClient.invalidateQueries({ queryKey: ['print-layouts', tenantId] })
+      void navigate(origin.from, { replace: true })
     },
   })
 
   const deactivate = useMutation({
-    mutationFn: (id: number) =>
-      api.delete<DocumentType>(`/api/tenants/${tenantId}/document-types/${id}`),
-    onSuccess: refresh,
+    mutationFn: () =>
+      api.delete<DocumentType>(`/api/tenants/${tenantId}/document-types/${type?.id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+      void navigate(origin.from, { replace: true })
+    },
   })
 
-  const close = () => {
-    setCreating(false)
-    setEditing(null)
-    setForm(EMPTY)
-    save.reset()
+  const submit = () => {
+    const problem = firstComplaint(form, type === null)
+    setComplaint(problem)
+    if (problem === null) save.mutate()
   }
-
-  const openEdit = (type: DocumentType) => {
-    setForm({
-      category: type.category,
-      code: type.code,
-      name: type.name,
-      numberPrefix: type.numberPrefix ?? '',
-      documentLayout: type.documentLayout ?? '',
-      copies: (type.copies ?? []).map((copy) => copy.label),
-      predecessorTypeIds: type.predecessorTypeIds ?? [],
-      copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
-    })
-    setEditing(type)
-    setCreating(false)
-  }
-
-  const columns: Column<DocumentType>[] = [
-    {
-      key: 'code',
-      header: 'Code',
-      width: 'w-[100px]',
-      render: (type) => <span className="font-mono text-[12px]">{type.code}</span>,
-    },
-    {
-      key: 'name',
-      header: 'Bezeichnung',
-      render: (type) =>
-        mayWrite ? (
-          <button
-            type="button"
-            onClick={() => openEdit(type)}
-            className="font-medium transition-colors hover:text-accent-text"
-          >
-            {type.name}
-          </button>
-        ) : (
-          <span className="font-medium">{type.name}</span>
-        ),
-    },
-    {
-      key: 'category',
-      header: 'Kategorie',
-      width: 'w-[150px]',
-      render: (type) => (
-        <span className="text-text-secondary">{categoryLabel(type.category)}</span>
-      ),
-    },
-    {
-      key: 'prefix',
-      header: 'Präfix',
-      width: 'w-[110px]',
-      render: (type) => (
-        <span className="font-mono text-[12px] text-text-secondary">
-          {type.numberPrefix ?? '-'}
-        </span>
-      ),
-    },
-    {
-      key: 'copies',
-      header: 'Ausfertigungen',
-      width: 'w-[160px]',
-      render: (type) => <CopySummary copies={type.copies ?? []} />,
-    },
-    {
-      key: 'address',
-      header: 'Adresse',
-      width: 'w-[140px]',
-      render: (type) => (
-        <span className="text-text-secondary">{usageLabel(type.addressUsage)}</span>
-      ),
-    },
-    {
-      key: 'state',
-      header: 'Status',
-      width: 'w-[190px]',
-      render: (type) => (
-        <span className="flex items-center gap-2">
-          {type.active ? (
-            type.category === 'ORDER' ? (
-              <Badge tone="accent">Maske vorhanden</Badge>
-            ) : (
-              <Badge tone="neutral">Ohne Maske</Badge>
-            )
-          ) : (
-            <Badge tone="muted">Deaktiviert</Badge>
-          )}
-          {mayWrite && type.active && (
-            <button
-              type="button"
-              onClick={() => deactivate.mutate(type.id)}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
-            >
-              Deaktivieren
-            </button>
-          )}
-        </span>
-      ),
-    },
-  ]
 
   return (
     <>
       <PageHeader
-        title="Belegarten"
-        subtitle="Eine Maske gibt es bisher nur für Aufträge. Andere Kategorien lassen sich anlegen, werden aber von keinem Modul bedient."
+        title={type === null ? 'Neue Belegart' : type.name}
+        back={{ to: origin.from, label: origin.label }}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-2">
+            {type !== null && (
+              <span className="font-mono text-[12px] text-text-secondary">{type.code}</span>
+            )}
+            <span>{categoryLabel(form.category)}</span>
+            {type !== null && !type.active && <Badge tone="muted">Deaktiviert</Badge>}
+          </span>
+        }
       >
-        {mayWrite && (
+        {mayWrite && type !== null && type.active && (
           <Button
-            onClick={() => {
-              setForm(EMPTY)
-              setEditing(null)
-              setCreating(true)
-            }}
+            variant="secondary"
+            busy={deactivate.isPending}
+            onClick={() => deactivate.mutate()}
           >
-            <Plus size={15} aria-hidden />
-            Belegart
+            Deaktivieren
+          </Button>
+        )}
+        {mayWrite && (
+          <Button onClick={submit} busy={save.isPending}>
+            Speichern
           </Button>
         )}
       </PageHeader>
 
       <div className="px-8 pb-12">
-        {deactivate.error !== null && (
-          <div className="mb-6">
-            <ErrorNotice error={deactivate.error} />
-          </div>
-        )}
+        <Tabs tabs={REGISTERS} active={tab} onChange={setTab} label="Register der Belegart" />
 
-        <Panel padded={false}>
-          <DataTable
-            columns={columns}
-            rows={types.data ?? []}
-            keyOf={(type) => type.id}
-            onRowOpen={mayWrite ? openEdit : undefined}
-            loading={types.isPending}
-            error={types.error}
-            empty={
-              <EmptyState
-                title="Keine Belegarten"
-                description="Ohne Belegart lässt sich kein Beleg anlegen. Sie bestimmt Nummernkreis und Adresse."
-              />
-            }
-          />
-        </Panel>
-      </div>
-
-      <Dialog
-        open={creating || editing !== null}
-        onClose={close}
-        title={editing ? 'Belegart bearbeiten' : 'Neue Belegart'}
-        description={
-          editing ? 'Code und Kategorie stehen fest, sobald die Belegart existiert.' : undefined
-        }
-        footer={
-          <>
-            <Button variant="secondary" onClick={close}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={() => save.mutate()}
-              busy={save.isPending}
-              disabled={form.name.trim() === '' || (editing === null && form.code.trim() === '')}
-            >
-              Speichern
-            </Button>
-          </>
-        }
-      >
         <div className="grid gap-4">
-          <CatalogueSelect
-            label="Kategorie"
-            tenantId={tenantId}
-            catalogue="document-category"
-            value={form.category}
-            onChange={(code) =>
-              setForm((current) => ({ ...current, category: code as DocumentCategory }))
-            }
-            disabled={editing !== null}
-            hint={
-              form.category === 'ORDER'
-                ? undefined
-                : 'Für diese Kategorie gibt es im Frontend noch keine Maske.'
-            }
-          />
+          {(complaint !== null || save.error !== null) && (
+            <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
+          )}
+          {deactivate.error !== null && <ErrorNotice error={deactivate.error} />}
 
-          <TextField
-            label="Code"
-            value={form.code}
-            onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-            disabled={editing !== null}
-            maxLength={20}
-            hint="Pflicht und danach unveränderlich. Steht im Nummernkreis und auf dem Beleg."
-          />
+          {tab === 'hauptdaten' && (
+            <>
+              <Panel title="Stammdaten">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CatalogueSelect
+                    label="Kategorie"
+                    tenantId={tenantId}
+                    catalogue="document-category"
+                    value={form.category}
+                    onChange={(code) => change({ category: code as DocumentCategory })}
+                    disabled={!mayWrite || type !== null}
+                    hint={
+                      form.category === 'ORDER'
+                        ? 'Steht fest, sobald die Belegart existiert.'
+                        : 'Für diese Kategorie gibt es im Frontend noch keine Maske.'
+                    }
+                  />
+                  <TextField
+                    label="Code"
+                    value={form.code}
+                    onChange={(event) => change({ code: event.target.value })}
+                    disabled={!mayWrite || type !== null}
+                    maxLength={20}
+                    hint="Pflicht und danach unveränderlich. Steht im Nummernkreis und auf dem Beleg."
+                  />
+                  <TextField
+                    label="Bezeichnung"
+                    value={form.name}
+                    onChange={(event) => change({ name: event.target.value })}
+                    disabled={!mayWrite}
+                    maxLength={60}
+                    className="sm:col-span-2"
+                  />
+                  <TextField
+                    label="Nummernpräfix"
+                    value={form.numberPrefix}
+                    onChange={(event) => change({ numberPrefix: event.target.value })}
+                    disabled={!mayWrite}
+                    maxLength={10}
+                    hint="Steht vor der laufenden Nummer, zum Beispiel AU. Leer heisst: der Code."
+                  />
+                </div>
+              </Panel>
 
-          <TextField
-            label="Bezeichnung"
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            maxLength={60}
-          />
+              <Panel
+                title="Aus der Kategorie"
+                description="Diese Werte folgen aus der Kategorie und lassen sich nicht einstellen."
+              >
+                <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
+                  <div className="grid gap-0.5">
+                    <dt className="text-[12px] text-text-tertiary">Adressverwendung</dt>
+                    <dd>{type === null ? '—' : usageLabel(type.addressUsage)}</dd>
+                  </div>
+                  <div className="grid gap-0.5">
+                    <dt className="text-[12px] text-text-tertiary">Maske im Frontend</dt>
+                    <dd>{form.category === 'ORDER' ? 'vorhanden' : 'noch keine'}</dd>
+                  </div>
+                </dl>
+              </Panel>
+            </>
+          )}
 
-          <TextField
-            label="Nummernpräfix"
-            value={form.numberPrefix}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, numberPrefix: event.target.value }))
-            }
-            maxLength={10}
-            hint="Steht vor der laufenden Nummer, zum Beispiel AU."
-          />
+          {tab === 'druck' && (
+            <>
+              <PrintPanel
+                tenantId={tenantId}
+                documentTypeId={type?.id}
+                documentTypeName={form.name.trim() === '' ? 'Belegart' : form.name.trim()}
+                value={form.documentLayoutId}
+                onChange={(documentLayoutId) => change({ documentLayoutId })}
+                disabled={!mayWrite}
+              />
+              <CopyEditor
+                copies={form.copies}
+                onChange={(copies) => change({ copies })}
+                disabled={!mayWrite}
+              />
+            </>
+          )}
 
-          <PrintLayoutSelect
-            tenantId={tenantId}
-            value={form.documentLayout}
-            onChange={(code) => setForm((current) => ({ ...current, documentLayout: code }))}
-          />
-
-          <CopyEditor
-            copies={form.copies}
-            onChange={(copies) => setForm((current) => ({ ...current, copies }))}
-          />
-
-          <PredecessorEditor
-            all={types.data ?? []}
-            editingId={editing?.id}
-            chosen={form.predecessorTypeIds}
-            onChange={(predecessorTypeIds) =>
-              setForm((current) => ({ ...current, predecessorTypeIds }))
-            }
-          />
-
-          <SelectField
-            label="Preise beim Kopieren"
-            value={form.copyPriceMode}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                copyPriceMode: event.target.value as CopyPriceMode,
-              }))
-            }
-            hint="Gilt für die Kopie eines Belegs dieser Art. Im Kopierdialog übersteuerbar."
-          >
-            <option value="RECALCULATE">Neu aus dem Katalog holen</option>
-            <option value="COPY">Beträge des Originals behalten</option>
-          </SelectField>
-
-          {save.error !== null && <ErrorNotice error={save.error} />}
+          {tab === 'uebernahme' && (
+            <>
+              <PredecessorEditor
+                all={types.data ?? []}
+                editingId={type?.id}
+                chosen={form.predecessorTypeIds}
+                onChange={(predecessorTypeIds) => change({ predecessorTypeIds })}
+                disabled={!mayWrite}
+              />
+              <Panel
+                title="Kopie eines Belegs"
+                description="Gilt für die Kopie eines Belegs dieser Art. Im Kopierdialog übersteuerbar."
+              >
+                <SelectField
+                  label="Preise beim Kopieren"
+                  value={form.copyPriceMode}
+                  disabled={!mayWrite}
+                  onChange={(event) =>
+                    change({
+                      copyPriceMode: event.target.value as DocumentTypeForm['copyPriceMode'],
+                    })
+                  }
+                  hint={COPY_PRICE_MODES.find((mode) => mode.value === form.copyPriceMode)?.hint}
+                >
+                  {COPY_PRICE_MODES.map((mode) => (
+                    <option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </SelectField>
+              </Panel>
+            </>
+          )}
         </div>
-      </Dialog>
-    </>
-  )
-}
-
-/** How many copies of this kind of document come out of the printer. */
-function CopySummary({ copies }: { copies: DocumentTypeCopy[] }) {
-  if (copies.length === 0) {
-    return <span className="text-text-tertiary">1 ×</span>
-  }
-  return (
-    <span className="text-text-secondary" title={copies.map((copy) => copy.label).join(', ')}>
-      {copies.length} × <span className="text-text-tertiary">{copies[0].label} …</span>
-    </span>
-  )
-}
-
-/**
- * Edits how often a document is printed and what each copy is called.
- *
- * <p>The order of the rows is the order in the PDF, so the first row is the original. Only
- * the labels are edited; the position follows from the row.
- */
-function CopyEditor({
-  copies,
-  onChange,
-}: {
-  copies: string[]
-  onChange: (copies: string[]) => void
-}) {
-  const replace = (index: number, label: string) =>
-    onChange(copies.map((current, position) => (position === index ? label : current)))
-
-  const add = () =>
-    onChange([...copies, FIRST_COPY_LABELS[copies.length] ?? `Exemplar ${copies.length + 1}`])
-
-  return (
-    <div className="grid gap-2">
-      <span className="text-[13px] font-medium">Ausfertigungen</span>
-      <p className="mb-1 text-[12px] text-text-tertiary">
-        Wie viele Exemplare beim Drucken herauskommen und wie sie beschriftet sind. Ohne Eintrag
-        kommt ein Exemplar ohne Beschriftung. Das Archiv behält immer genau ein Original.
-      </p>
-
-      {copies.map((label, index) => (
-        <div key={index} className="flex items-end gap-3">
-          <TextField
-            label={`${index + 1}. Ausfertigung`}
-            value={label}
-            maxLength={60}
-            onChange={(event) => replace(index, event.target.value)}
-            className="flex-1"
-          />
-          <button
-            type="button"
-            onClick={() => onChange(copies.filter((_, position) => position !== index))}
-            className="h-10 text-[12px] text-text-tertiary transition-colors hover:text-danger"
-          >
-            Entfernen
-          </button>
-        </div>
-      ))}
-
-      {copies.length < 9 && (
-        <button
-          type="button"
-          onClick={add}
-          className="justify-self-start text-[12px] text-text-secondary transition-colors hover:text-accent-text"
-        >
-          + Ausfertigung
-        </button>
-      )}
-    </div>
-  )
-}
-
-/**
- * Which kinds of document this one may be taken over from.
- *
- * <p>Only kinds of the same tenant, never the kind itself, and never one that already takes
- * this one over — the backend refuses both, and offering them here would only invite the
- * error. A kind that is being created has no id yet and therefore nothing to exclude.
- */
-function PredecessorEditor({
-  all,
-  editingId,
-  chosen,
-  onChange,
-}: {
-  all: DocumentType[]
-  editingId: number | undefined
-  chosen: number[]
-  onChange: (ids: number[]) => void
-}) {
-  const offered = all.filter(
-    (type) =>
-      type.id !== editingId
-      && type.active
-      && !(type.predecessorTypeIds ?? []).some((id) => id === editingId),
-  )
-
-  if (offered.length === 0) {
-    return (
-      <fieldset className="border-t border-line-subtle pt-4">
-        <legend className="text-[12px] font-medium text-text-secondary">Vorgängerbelege</legend>
-        <p className="mt-1 text-[12px] text-text-tertiary">
-          Es gibt keine andere Belegart, aus der übernommen werden könnte.
-        </p>
-      </fieldset>
-    )
-  }
-
-  const toggle = (id: number, on: boolean) =>
-    onChange(on ? [...chosen, id] : chosen.filter((entry) => entry !== id))
-
-  return (
-    <fieldset className="border-t border-line-subtle pt-4">
-      <legend className="text-[12px] font-medium text-text-secondary">Vorgängerbelege</legend>
-      <p className="mt-1 mb-3 text-[12px] text-text-tertiary">
-        Aus welchen Belegarten ein Beleg dieser Art übernommen werden darf. Mehrere sind
-        erlaubt — eine Rechnung entsteht aus einem Auftrag oder aus einem Lieferschein.
-      </p>
-      <div className="grid gap-2">
-        {offered.map((type) => (
-          <CheckboxField
-            key={type.id}
-            label={type.name}
-            checked={chosen.includes(type.id)}
-            onChange={(event) => toggle(type.id, event.target.checked)}
-          />
-        ))}
       </div>
-    </fieldset>
+    </>
   )
 }

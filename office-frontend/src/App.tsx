@@ -21,6 +21,7 @@ import { LoginPage } from './pages/LoginPage'
  */
 const CataloguePage = lazy(() => import('./pages/CataloguePage').then((module) => ({ default: module.CataloguePage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const DocumentTypeListPage = lazy(() => import('./pages/DocumentTypeListPage').then((module) => ({ default: module.DocumentTypeListPage })))
 const DocumentTypePage = lazy(() => import('./pages/DocumentTypePage').then((module) => ({ default: module.DocumentTypePage })))
 const PrintLayoutListPage = lazy(() => import('./pages/PrintLayoutListPage').then((module) => ({ default: module.PrintLayoutListPage })))
 const PrintLayoutPage = lazy(() => import('./pages/PrintLayoutPage').then((module) => ({ default: module.PrintLayoutPage })))
@@ -106,7 +107,8 @@ export default function App() {
                 <Route path="/feste-werte" element={<CataloguePage />} />
                 <Route path="/zahlungskonditionen" element={<PaymentTermPage />} />
                 <Route path="/mehrwertsteuer" element={<VatPage />} />
-                <Route path="/belegarten" element={<DocumentTypePage />} />
+                <Route path="/belegarten" element={<DocumentTypeListPage />} />
+                <Route path="/belegarten/:id" element={<DocumentTypePage />} />
                 <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
                 <Route path="/druckvorlagen/:id" element={<PrintLayoutPage />} />
                 <Route path="/nummernkreise" element={<NumberRangePage />} />

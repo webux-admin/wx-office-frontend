@@ -167,23 +167,34 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Einstellungen',
     entries: [
       {
-        label: 'Belegarten',
+        // The three screens behind one document: what kinds there are, what they print on,
+        // and where their numbers come from. As three entries in a row they read as three
+        // unrelated lists, and the connection between a Belegart and its Druckvorlage was
+        // exactly the thing nobody could see. No permission of its own — each screen has
+        // its own right, and the shell filters the children one by one.
+        label: 'Belegwesen',
         icon: FileType2,
-        href: '/belegarten',
-        permission: 'DOCUMENT_TYPE_READ',
-      },
-      // Not a selection list any more: a form has a drawing and an editor of its own.
-      {
-        label: 'Druckvorlagen',
-        icon: Printer,
-        href: '/druckvorlagen',
-        permission: 'PRINT_LAYOUT_READ',
-      },
-      {
-        label: 'Nummernkreise',
-        icon: Hash,
-        href: '/nummernkreise',
-        permission: 'NUMBER_RANGE_READ',
+        children: [
+          {
+            label: 'Belegarten',
+            icon: FileType2,
+            href: '/belegarten',
+            permission: 'DOCUMENT_TYPE_READ',
+          },
+          // Not a selection list any more: a form has a drawing and an editor of its own.
+          {
+            label: 'Druckvorlagen',
+            icon: Printer,
+            href: '/druckvorlagen',
+            permission: 'PRINT_LAYOUT_READ',
+          },
+          {
+            label: 'Nummernkreise',
+            icon: Hash,
+            href: '/nummernkreise',
+            permission: 'NUMBER_RANGE_READ',
+          },
+        ],
       },
       // What the fifteen free places on a product mean. Set up once, then left alone --
       // which is why it sits here and not next to the articles themselves.

@@ -1,16 +1,37 @@
-import { CodeSelect } from '../masterdata/CodeSelect'
-import type { SelectableEntry } from '../lib/masterData'
+import { useEffect } from 'react'
+import { SelectField } from '../components/SelectField'
+import type { PrintLayout } from '../lib/types'
 import { usePrintLayouts } from './usePrintLayouts'
+
+/** The form every tenant starts with, and the one an empty field falls back to. */
+const STANDARD = 'STANDARD'
+
+/**
+ * The form a tenant starts with, or the first one it can still choose.
+ *
+ * @param forms the forms of the tenant, as the API returned them
+ * @returns the form to fall back to, `undefined` while the list is still empty
+ */
+function fallbackLayout(forms: readonly PrintLayout[]): PrintLayout | undefined {
+  return forms.find((form) => form.code === STANDARD && form.active)
+    ?? forms.find((form) => form.active)
+    ?? forms[0]
+}
 
 /**
  * A dropdown over the forms the tenant prints on.
  *
- * <p>Reads the same list the designer edits, so a form drawn a minute ago can be chosen right
- * away. A retired form stays selectable only where a record already carries it.
+ * <p>There is no "nothing chosen": a kind of document always prints on a form, and an empty
+ * field fills itself with the tenant's standard one. The entry used to exist and stood next
+ * to a real form of nearly the same name, which is exactly the confusion this screen was
+ * reworked to remove.
+ *
+ * <p>Selects by id rather than by code, because the id is what the payload carries and what
+ * survives a rename.
  *
  * @param tenantId the tenant, null while none exists yet
- * @param value the code the kind of document carries, empty when none is chosen
- * @param onChange called with the code that was picked
+ * @param value the id of the chosen form as a string, empty while none is chosen
+ * @param onChange called with the id that was picked
  */
 export function PrintLayoutSelect({
   tenantId,
@@ -20,25 +41,41 @@ export function PrintLayoutSelect({
 }: {
   tenantId: number | null
   value: string
-  onChange: (code: string) => void
+  onChange: (layoutId: string) => void
   disabled?: boolean
 }) {
   const layouts = usePrintLayouts(tenantId)
-  const entries: SelectableEntry[] = (layouts.data ?? []).map((form) => ({
-    code: form.code,
-    name: form.name,
-    active: form.active,
-  }))
+  const forms = layouts.data ?? []
+  const fallback = fallbackLayout(forms)
+
+  useEffect(() => {
+    if (disabled || value !== '' || fallback === undefined) return
+    onChange(`${fallback.id}`)
+  }, [disabled, fallback, onChange, value])
+
+  // A retired form stays in the list while a record still carries it: hiding it would show
+  // an empty field for a kind of document that prints perfectly well.
+  const offered = forms.filter((form) => form.active || `${form.id}` === value)
 
   return (
-    <CodeSelect
+    <SelectField
       label="Druckvorlage"
-      entries={entries}
       value={value}
-      onChange={onChange}
-      disabled={disabled}
-      emptyLabel="Standardvorlage"
-      hint="Bestimmt, wie ein Beleg dieser Art aussieht."
-    />
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled || layouts.isPending}
+      hint={
+        layouts.error !== null
+          ? 'Die Druckvorlagen konnten nicht geladen werden.'
+          : undefined
+      }
+      invalid={layouts.error !== null}
+    >
+      {value === '' && <option value="">Wird geladen …</option>}
+      {offered.map((form) => (
+        <option key={form.id} value={form.id}>
+          {form.active ? form.name : `${form.name} (deaktiviert)`}
+        </option>
+      ))}
+    </SelectField>
   )
 }

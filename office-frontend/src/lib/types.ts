@@ -496,6 +496,8 @@ export type DocumentType = {
   addressUsage?: AddressUsage
   documentLayoutId?: number
   documentLayout?: string
+  /** What that form is called, so a list can name it without reading the forms itself. */
+  documentLayoutName?: string
   copies?: DocumentTypeCopy[]
   /**
    * The kinds of document one of these may be taken over from, in the order they are
@@ -618,7 +620,16 @@ export type PrintLayout = {
   system: boolean
   active: boolean
   designed: boolean
+  /** The kinds of document printed on it. Empty means nobody prints on this form. */
+  usedBy?: DocumentTypeRef[]
   definition?: PrintLayoutDefinition
+}
+
+/** A kind of document named from somewhere else, with just enough to show and to link. */
+export type DocumentTypeRef = {
+  id: number
+  code: string
+  name: string
 }
 
 /** One value a form may place on the page. */
