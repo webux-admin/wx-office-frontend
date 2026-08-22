@@ -29,6 +29,8 @@ function document(fields: Partial<SalesDocument> = {}): SalesDocument {
     totalNet: 1250,
     totalVat: 101.25,
     totalGross: 1351.25,
+    subtotalsIncludeVat: false,
+    pricesIncludeVat: false,
     paymentTerm: '30',
     paymentTermName: '30 Tage netto',
     dueDate: '2026-09-20',

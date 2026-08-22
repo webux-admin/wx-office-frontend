@@ -184,6 +184,7 @@ export function DocumentLines({
             )
           }
           line={edited}
+          defaultPriceIncludesVat={document.pricesIncludeVat}
           busy={busy}
           error={error}
         />

@@ -5,16 +5,22 @@ import {
   discountFieldsOf,
   discountPayload,
   editorOf,
+  EVERYTHING_TOUCHED,
   hasProblem,
   itemLineCount,
   lineProblems,
   moreDetailsSummary,
   lockedDiscount,
   NO_DISCOUNT,
+  NOTHING_TOUCHED,
   structureKindOptions,
   structureLineProblem,
+  visibleProblems,
   withDiscountAmount,
   withDiscountPercent,
+  withTouched,
+  type LineProblems,
+  type TouchedFields,
 } from './lineForm'
 
 /** A line the way the backend answers it, with only what a test cares about spelled out. */
@@ -323,5 +329,130 @@ describe('lineProblems', () => {
     const problems = lineProblems({ quantity: '1', unitPrice: '', discount: NO_DISCOUNT })
 
     expect(problems.unitPrice).toBe('Der Einzelpreis fehlt.')
+  })
+
+  it('lineProblemsWithADescriptionTest', () => {
+    expect(
+      lineProblems({ description: 'Beratung vor Ort', quantity: '3', discount: NO_DISCOUNT }),
+    ).toEqual({})
+  })
+
+  it('lineProblemsWithoutADescriptionTest', () => {
+    const problems = lineProblems({ description: '   ', quantity: '1', discount: NO_DISCOUNT })
+
+    // Blanks are no description. The backend refuses the line either way.
+    expect(problems.description).toBe('Die Bezeichnung fehlt.')
+    expect(hasProblem(problems)).toBe(true)
+  })
+
+  it('lineProblemsWithoutADescriptionFieldTest', () => {
+    // A line from the catalogue takes its description from the product; the dialog that
+    // picks one hands no description in, and must not be asked for one.
+    expect(lineProblems({ quantity: '1', discount: NO_DISCOUNT }).description).toBeUndefined()
+  })
+})
+
+describe('withTouched', () => {
+  it('withTouchedTest', () => {
+    expect(withTouched(NOTHING_TOUCHED, 'unitPrice')).toEqual({ unitPrice: true })
+  })
+
+  it('withTouchedKeepsTheOthersTest', () => {
+    expect(withTouched({ quantity: true }, 'unitPrice')).toEqual({
+      quantity: true,
+      unitPrice: true,
+    })
+  })
+
+  it('withTouchedTwiceTest', () => {
+    const once = withTouched(NOTHING_TOUCHED, 'percent')
+
+    // The same field again is no change at all, and must not make the dialog draw anew.
+    expect(withTouched(once, 'percent')).toBe(once)
+  })
+
+  it('withTouchedLeavesTheOldSetAloneTest', () => {
+    withTouched(NOTHING_TOUCHED, 'amount')
+
+    expect(NOTHING_TOUCHED).toEqual({})
+  })
+})
+
+describe('visibleProblems', () => {
+  it('visibleProblemsTest', () => {
+    const problems = lineProblems({ quantity: '0', unitPrice: '', discount: NO_DISCOUNT })
+
+    const shown = visibleProblems(problems, { quantity: true })
+
+    // The quantity was typed into, the price was not: only the quantity may say anything.
+    expect(shown).toEqual({ quantity: 'Die Menge darf nicht null sein.' })
+  })
+
+  it('visibleProblemsWithNothingTouchedTest', () => {
+    const problems = lineProblems({ quantity: '1', unitPrice: '', discount: NO_DISCOUNT })
+
+    expect(visibleProblems(problems, NOTHING_TOUCHED)).toEqual({})
+  })
+
+  it('visibleProblemsWithEverythingTouchedTest', () => {
+    const problems = lineProblems({
+      quantity: '',
+      unitPrice: '',
+      discount: { percent: '10%', amount: '' },
+    })
+
+    const shown = visibleProblems(problems, {
+      quantity: true,
+      unitPrice: true,
+      percent: true,
+      amount: true,
+    })
+
+    expect(shown).toEqual(problems)
+  })
+
+  it('visibleProblemsWithoutAProblemTest', () => {
+    expect(visibleProblems({}, { quantity: true, unitPrice: true })).toEqual({})
+  })
+
+  it('visibleProblemsKeepAnUnsendableLineUnsendableTest', () => {
+    const problems = lineProblems({ quantity: '1', unitPrice: '', discount: NO_DISCOUNT })
+
+    // What the mask says and what it lets through are two questions. A line without a price
+    // stays unsendable while the dialog is still silent about it — the send is refused on the
+    // full set, not on the shown one, and the button is no longer locked for it.
+    expect(hasProblem(problems)).toBe(true)
+    expect(hasProblem(visibleProblems(problems, NOTHING_TOUCHED))).toBe(false)
+  })
+
+  it('visibleProblemsShowTheDescriptionTest', () => {
+    const problems = lineProblems({ description: '', quantity: '1', discount: NO_DISCOUNT })
+
+    expect(visibleProblems(problems, { description: true })).toEqual({
+      description: 'Die Bezeichnung fehlt.',
+    })
+  })
+
+  it('visibleProblemsShowAFieldNoListKnowsTest', () => {
+    // Cast on purpose: the point of this case is a field that no list next to the problems
+    // has ever heard of. What is shown is decided on the keys the problems carry, so a field
+    // added later is never swallowed while it still locks the dialog.
+    const problems = { serviceDate: 'Das Leistungsdatum fehlt.' } as unknown as LineProblems
+    const touched = { serviceDate: true } as unknown as TouchedFields
+
+    expect(visibleProblems(problems, touched)).toEqual(problems)
+  })
+
+  it('visibleProblemsWithEverythingTouchedAtOnceTest', () => {
+    const problems = lineProblems({
+      description: '',
+      quantity: '0',
+      unitPrice: '',
+      discount: { percent: '10%', amount: '' },
+    })
+
+    // What the press on the send button does: every field counts as dealt with, so the
+    // dialog names all four at once instead of one per visit.
+    expect(visibleProblems(problems, EVERYTHING_TOUCHED)).toEqual(problems)
   })
 })

@@ -97,7 +97,11 @@ const LINES: DocumentLine[] = [
   }),
 ]
 
-function salesDocument(lines: DocumentLine[]): SalesDocument {
+function salesDocument(
+  lines: DocumentLine[],
+  subtotalsIncludeVat: boolean,
+  pricesIncludeVat: boolean,
+): SalesDocument {
   return {
     id: 42,
     documentTypeId: 1,
@@ -109,6 +113,8 @@ function salesDocument(lines: DocumentLine[]): SalesDocument {
     totalNet: 750,
     totalVat: 60.75,
     totalGross: 810.75,
+    subtotalsIncludeVat,
+    pricesIncludeVat,
     lines,
   }
 }
@@ -179,10 +185,21 @@ type Setup = {
   readOnlyNote?: string
   /** What is shown under the table and at the head of an open dialog. */
   error?: unknown
+  /** True where the subtotals of the document lead with the gross amount. */
+  subtotalsIncludeVat?: boolean
+  /** True where every charged line is priced gross, the way a gross price group prices it. */
+  pricesIncludeVat?: boolean
 }
 
 async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> {
-  const { editable = true, refused = false, readOnlyNote, error = null } = setup
+  const {
+    editable = true,
+    refused = false,
+    readOnlyNote,
+    error = null,
+    subtotalsIncludeVat = false,
+    pricesIncludeVat = false,
+  } = setup
   const calls: Calls = {
     added: [],
     updatedProduct: [],
@@ -205,7 +222,7 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
           <DocumentLines
           tenantId={TENANT}
           kind={ORDER_KIND}
-          document={salesDocument(lines)}
+          document={salesDocument(lines, subtotalsIncludeVat, pricesIncludeVat)}
           editable={editable}
           onAddProductLine={(payload) => {
             calls.added.push(payload)
@@ -287,6 +304,15 @@ function field(label: string): HTMLInputElement | HTMLSelectElement {
   const id = owner?.getAttribute('for')
   const control = id ? container.querySelector<HTMLInputElement>(`[id="${id}"]`) : null
   if (!control) throw new Error(`Kein Feld mit der Beschriftung "${label}"`)
+  return control
+}
+
+/** The checkbox a label points at, so a test can read whether it is ticked. */
+function checkbox(label: string): HTMLInputElement {
+  const control = field(label)
+  if (!(control instanceof HTMLInputElement)) {
+    throw new Error(`"${label}" ist kein Kontrollkästchen`)
+  }
   return control
 }
 
@@ -418,6 +444,57 @@ describe('DocumentLines', () => {
     expect((field('Rabatt als Betrag') as HTMLInputElement).value).toBe('5')
   })
 
+  it('documentLinesStartsAFreeLineOnThePriceBaseOfTheDocumentTest', async () => {
+    const calls = await render(LINES, { subtotalsIncludeVat: true, pricesIncludeVat: true })
+
+    click(byText('Freie Zeile'))
+
+    // The document knows how it is priced, and it is the mask that has to say so — a net
+    // line slipped into a gross document drops every subtotal on it by the VAT.
+    expect(checkbox('Preis versteht sich inklusive MwSt').checked).toBe(true)
+
+    type(field('Bezeichnung'), 'Reisespesen')
+    type(field('Einzelpreis'), '120')
+    click(byText('Hinzufügen'))
+
+    expect(calls.addedFree).toHaveLength(1)
+    expect(calls.addedFree[0].priceIncludesVat).toBe(true)
+  })
+
+  it('documentLinesStartsAFreeLineGrossWhereTheDocumentShowsNoVatTest', async () => {
+    // A delivery note of a tenant who sells gross: every line is priced gross, but the
+    // document states no VAT, so its subtotals stay net. The tick asks how the document is
+    // priced, not what its subtotals lead with — reading the second one has the user type a
+    // gross price into a net field, and the invoice taken over from it comes out mixed.
+    const calls = await render(LINES, { subtotalsIncludeVat: false, pricesIncludeVat: true })
+
+    click(byText('Freie Zeile'))
+
+    expect(checkbox('Preis versteht sich inklusive MwSt').checked).toBe(true)
+
+    type(field('Bezeichnung'), 'Verpackung')
+    type(field('Einzelpreis'), '18')
+    click(byText('Hinzufügen'))
+
+    expect(calls.addedFree).toHaveLength(1)
+    expect(calls.addedFree[0].priceIncludesVat).toBe(true)
+  })
+
+  it('documentLinesKeepsThePriceBaseOfAnEditedLineTest', async () => {
+    // Only a new line takes the base of the document. Line 1 was written net, and opening it
+    // must not turn its price into a gross one behind the user's back.
+    const calls = await render(LINES, { subtotalsIncludeVat: true, pricesIncludeVat: true })
+
+    click(byLabel('Position 1 bearbeiten'))
+
+    expect(checkbox('Preis versteht sich inklusive MwSt').checked).toBe(false)
+
+    click(byText('Übernehmen'))
+
+    expect(calls.updatedFree).toHaveLength(1)
+    expect(calls.updatedFree[0].line.priceIncludesVat).toBe(false)
+  })
+
   it('documentLinesLocksTheOtherDiscountFieldTest', async () => {
     await render(LINES)
     click(byText('Freie Zeile'))
@@ -527,24 +604,28 @@ describe('DocumentLines', () => {
     type(field('Einzelpreis') as HTMLInputElement, '50')
     type(field('Menge') as HTMLInputElement, '0')
 
-    expect(byText('Hinzufügen').disabled).toBe(true)
     expect(text()).toContain('Die Menge darf nicht null sein.')
 
     click(byText('Hinzufügen'))
 
+    // The button takes the press rather than sitting there locked, and the line still does
+    // not go out.
     expect(calls.addedFree).toEqual([])
   })
 
   it('documentLinesRefusesADiscountOverAHundredTest', async () => {
-    await render(LINES)
+    const calls = await render(LINES)
 
     click(byText('Freie Zeile'))
     type(field('Bezeichnung') as HTMLInputElement, 'Beratung')
     type(field('Einzelpreis') as HTMLInputElement, '50')
     type(field('Rabatt in Prozent') as HTMLInputElement, '150')
 
-    expect(byText('Hinzufügen').disabled).toBe(true)
     expect(text()).toContain('Der Rabatt liegt zwischen 0 und 100 Prozent.')
+
+    click(byText('Hinzufügen'))
+
+    expect(calls.addedFree).toEqual([])
   })
 
   it('documentLinesWarnsWhenAStoredDiscountIsDroppedTest', async () => {

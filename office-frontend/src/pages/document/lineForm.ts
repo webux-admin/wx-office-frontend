@@ -25,6 +25,10 @@ export type ProductLine = {
 /** What a line looks like when it is written by hand. */
 export type FreeLine = {
   description: string
+  /** Second line of the description, printed under it. Left out while it is empty. */
+  subtitle?: string
+  /** Longer text under the description, printed as well. Left out while it is empty. */
+  note?: string
   quantity: number
   unit: string
   unitPrice: number
@@ -133,6 +137,7 @@ export function discountFieldsOf(line: DocumentLine | undefined): DiscountFields
 
 /** What the mask complains about before a position goes out, one sentence per field. */
 export type LineProblems = {
+  description?: string
   quantity?: string
   unitPrice?: string
   percent?: string
@@ -152,15 +157,21 @@ export type LineProblems = {
  * <p>A discount field that carries something unreadable is a problem of its own. It cannot be
  * sent, and sending nothing instead would raise the amount of the line without saying so.
  *
- * @param fields the values as they were typed; `unitPrice` only where the line names its own
+ * @param fields the values as they were typed; `description` and `unitPrice` only where the
+ * line names its own, which is the line written by hand rather than picked from the catalogue
  * @returns a sentence per field that is wrong, empty when the line may be sent
  */
 export function lineProblems(fields: {
+  description?: string
   quantity: string
   unitPrice?: string
   discount: DiscountFields
 }): LineProblems {
   const problems: LineProblems = {}
+  if (fields.description !== undefined && fields.description.trim() === '') {
+    problems.description = 'Die Bezeichnung fehlt.'
+  }
+
   const quantity = parseDecimal(fields.quantity)
   if (quantity === null) problems.quantity = 'Die Menge fehlt.'
   else if (quantity === 0) problems.quantity = 'Die Menge darf nicht null sein.'
@@ -195,6 +206,76 @@ export function lineProblems(fields: {
  */
 export function hasProblem(problems: LineProblems): boolean {
   return Object.values(problems).some((one) => one !== undefined)
+}
+
+/** A field of a position dialog that can carry a message of its own. */
+export type LineField = keyof LineProblems
+
+/** Which fields the user has already dealt with: typed into, or left again. */
+export type TouchedFields = Partial<Record<LineField, boolean>>
+
+/** Nothing touched, the state a dialog opens in. */
+export const NOTHING_TOUCHED: TouchedFields = {}
+
+/**
+ * Every field dealt with, the state a dialog goes into when the user presses send.
+ *
+ * <p>That press is the moment the user has had their chance at all of them, so from then on
+ * the mask may name everything that is wrong at once — including the fields they never
+ * reached, which are exactly the ones keeping the position from going out.
+ *
+ * <p>Written out per field rather than gathered from a list: a new field of
+ * {@link LineProblems} does not compile until it stands here, and a field missing here would
+ * stay silent under the very press that is meant to uncover it.
+ */
+export const EVERYTHING_TOUCHED: Required<TouchedFields> = {
+  description: true,
+  quantity: true,
+  unitPrice: true,
+  percent: true,
+  amount: true,
+}
+
+/**
+ * Notes that the user has dealt with a field, so what is wrong with it may be said.
+ *
+ * @param touched the fields dealt with so far
+ * @param field the field that was typed into or left
+ * @returns the fields dealt with, that one included
+ */
+export function withTouched(touched: TouchedFields, field: LineField): TouchedFields {
+  if (touched[field]) return touched
+  const marked: TouchedFields = { ...touched }
+  marked[field] = true
+  return marked
+}
+
+/**
+ * What the mask may say out loud: the problems of fields the user has already dealt with.
+ *
+ * <p>A dialog that opens on an empty price and answers "Der Einzelpreis fehlt." blames the
+ * user for something they have not had a chance to do. The line still cannot be sent —
+ * {@link hasProblem} runs on the full set, not on this one — the mask only waits with the
+ * sentence until the field has been typed into or left.
+ *
+ * <p>What is shown is decided on the keys the problems themselves carry, not on a list of
+ * fields kept alongside them. A field forgotten in such a list would be swallowed here while
+ * it still kept the position from going out — a dialog that refuses without a word.
+ *
+ * @param problems what {@link lineProblems} found
+ * @param touched the fields the user has typed into or left
+ * @returns the same problems, without those of fields nobody has touched yet
+ */
+export function visibleProblems(
+  problems: LineProblems,
+  touched: TouchedFields,
+): LineProblems {
+  const visible: LineProblems = {}
+  // `Object.entries` widens the key to `string`; the cast names back what the record holds.
+  for (const [field, message] of Object.entries(problems) as [LineField, string][]) {
+    if (message !== undefined && touched[field]) visible[field] = message
+  }
+  return visible
 }
 
 /**

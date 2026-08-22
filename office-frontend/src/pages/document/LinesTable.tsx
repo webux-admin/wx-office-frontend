@@ -269,6 +269,7 @@ export function LinesTable({
                 line={line}
                 units={units}
                 currency={document.currency}
+                subtotalsIncludeVat={document.subtotalsIncludeVat}
                 kindLabel={kindLabel}
               />
               {actionsOf(line)}
@@ -336,12 +337,15 @@ function LineCells({
   line,
   units,
   currency,
+  subtotalsIncludeVat,
   kindLabel,
 }: {
   line: DocumentLine
   units: readonly SelectableEntry[]
   /** Currency of the document, for a discount that was given as an amount. */
   currency: string
+  /** Which of the two amounts a subtotal leads with, as the document itself is priced. */
+  subtotalsIncludeVat: boolean
   kindLabel: (code: string) => string
 }) {
   if (line.kind === 'COMMENT') {
@@ -374,10 +378,15 @@ function LineCells({
           {formatAmount(line.subtotalVat)}{' '}
           <span className="text-text-tertiary">{currency}</span>
         </td>
+        {/* A subtotal leads with the amount the document is written in: gross where every
+            charged line carries a gross price, net otherwise. The other amount stands under
+            it, named, so neither figure can be read as the wrong one. */}
         <td className={`${NUMBER_CELL} font-medium`}>
-          {formatAmount(line.subtotalNet)}
+          {formatAmount(subtotalsIncludeVat ? line.subtotalGross : line.subtotalNet)}
           <span className="block text-[11px] font-normal text-text-tertiary">
-            {formatAmount(line.subtotalGross)} brutto
+            {subtotalsIncludeVat
+              ? `${formatAmount(line.subtotalNet)} netto`
+              : `${formatAmount(line.subtotalGross)} brutto`}
           </span>
         </td>
       </>
@@ -386,8 +395,16 @@ function LineCells({
 
   return (
     <>
+      {/* The three texts stand in the order they are printed in, so the mask says what the
+          document will say. `whitespace-pre-line` keeps the line breaks of the comment. */}
       <td className={CELL}>
         <span className="block">{line.description}</span>
+        {line.subtitle && <span className="block text-text-secondary">{line.subtitle}</span>}
+        {line.note && (
+          <span className="block whitespace-pre-line text-[12px] text-text-secondary">
+            {line.note}
+          </span>
+        )}
         {line.productNumber && (
           <span className="block font-mono text-[11px] text-text-tertiary">
             {line.productNumber}

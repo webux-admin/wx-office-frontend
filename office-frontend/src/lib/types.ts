@@ -805,6 +805,10 @@ export type DocumentLine = {
   productNumber?: string
   /** Absent on a page break, and on a subtotal that carries no caption. */
   description?: string
+  /** Second line of the description, printed under it. Only on an `ITEM`. */
+  subtitle?: string
+  /** Longer text under the description, printed as well. Only on an `ITEM`. */
+  note?: string
   /** Only on an `ITEM`; the other kinds carry no figures. */
   quantity?: number
   unit?: string
@@ -867,6 +871,19 @@ export type SalesDocument = {
   baseTotalNet?: number
   baseTotalVat?: number
   baseTotalGross?: number
+  /**
+   * Which of the three amounts of a subtotal is the one to read, on paper and in the mask:
+   * the gross one where this is true, the net one otherwise. It also takes the kind of
+   * document into account — one that shows no VAT never leads with a gross subtotal.
+   */
+  subtotalsIncludeVat: boolean
+  /**
+   * Which price base the document is written in: true when every charged line carries a
+   * gross price. Unlike {@link subtotalsIncludeVat} it knows nothing about VAT being shown,
+   * so a delivery note can be priced gross and still print none. This is the one to ask when
+   * a new line has to start on the base of the document; the two are not interchangeable.
+   */
+  pricesIncludeVat: boolean
   headerText?: string
   footerText?: string
   /** Payment term as its frozen code; absent when the tenant has none. */

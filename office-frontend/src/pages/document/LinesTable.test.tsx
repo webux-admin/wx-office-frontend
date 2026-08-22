@@ -37,7 +37,13 @@ const LINES: DocumentLine[] = [
   line({ lineNumber: 3, description: 'Ersatzteil', quantity: 1, unit: 'PIECE', unitPrice: 75, vatRate: 8.1, lineNet: 75 }),
 ]
 
-function order(lines: DocumentLine[], status: DocumentStatus = 'DRAFT'): SalesDocument {
+function order(
+  lines: DocumentLine[],
+  status: DocumentStatus = 'DRAFT',
+  subtotalsIncludeVat = false,
+  /** How the lines are priced, which the table asks nowhere: only the subtotals decide. */
+  pricesIncludeVat = subtotalsIncludeVat,
+): SalesDocument {
   return {
     id: 42,
     documentTypeId: 1,
@@ -49,6 +55,8 @@ function order(lines: DocumentLine[], status: DocumentStatus = 'DRAFT'): SalesDo
     totalNet: 750,
     totalVat: 60.75,
     totalGross: 810.75,
+    subtotalsIncludeVat,
+    pricesIncludeVat,
     lines,
   }
 }
@@ -170,6 +178,65 @@ describe('LinesTable', () => {
     // In the column headed "MwSt" a position shows a rate; a subtotal shows an amount, and
     // without its currency the 54.68 would read as a rate of 54.68 per cent.
     expect(text()).toContain('54.68 CHF')
+  })
+
+  it('linesTableLeadsTheSubtotalWithTheNetAmountTest', async () => {
+    await draw(order(LINES))
+
+    // The lines of this document are priced net, so the subtotal is the net one and the
+    // gross amount stands under it, named.
+    expect(text()).toContain('729.68 brutto')
+    expect(text()).not.toContain('netto')
+  })
+
+  it('linesTableLeadsTheSubtotalWithTheGrossAmountTest', async () => {
+    await draw(order(LINES, 'DRAFT', true))
+
+    // Every charged line carries a gross price, so the subtotal the user adds up to is the
+    // gross one — the same figure the document is going to print.
+    expect(text()).toContain('675.00 netto')
+    expect(text()).not.toContain('brutto')
+  })
+
+  it('linesTableLeadsTheSubtotalWithTheNetAmountWithoutAVatStatementTest', async () => {
+    // A delivery note of a tenant who sells gross: the lines are priced gross, but the
+    // document states no VAT and so its subtotals stay net. The row follows the subtotals,
+    // never the price base — the two answer different questions.
+    await draw(order(LINES, 'DRAFT', false, true))
+
+    expect(text()).toContain('729.68 brutto')
+    expect(text()).not.toContain('netto')
+  })
+
+  it('linesTableShowsTheSecondDescriptionAndTheCommentTest', async () => {
+    await draw(
+      order([
+        line({
+          lineNumber: 1,
+          description: 'Beratung vor Ort',
+          subtitle: 'Anfahrt inbegriffen',
+          note: 'Termin nach Absprache,\nMaterial separat verrechnet',
+          quantity: 4,
+          unit: 'PIECE',
+          unitPrice: 180,
+          vatRate: 8.1,
+          lineNet: 720,
+        }),
+      ]),
+    )
+
+    // Both are printed, so the mask has to show them too — otherwise the document says more
+    // than the screen it was written on.
+    expect(text()).toContain('Anfahrt inbegriffen')
+    expect(text()).toContain('Material separat verrechnet')
+  })
+
+  it('linesTableWithoutASecondDescriptionTest', async () => {
+    await draw(order(LINES))
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    // A line without the two texts keeps its cell to the one description.
+    expect(body.rows[0].cells[2].textContent).toBe('Wartung')
   })
 
   it('linesTableWithoutLinesInADraftTest', async () => {

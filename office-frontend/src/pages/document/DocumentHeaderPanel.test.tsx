@@ -40,6 +40,8 @@ function draft(lines: DocumentLine[] = CATALOGUE_LINES): SalesDocument {
     totalNet: 1250,
     totalVat: 101.25,
     totalGross: 1351.25,
+    subtotalsIncludeVat: false,
+    pricesIncludeVat: false,
     lines,
   }
 }

@@ -26,6 +26,7 @@ import {
 export function DiscountPair({
   fields,
   onChange,
+  onTouch,
   disabled = false,
   disabledHint,
   percentProblem,
@@ -33,6 +34,11 @@ export function DiscountPair({
 }: {
   fields: DiscountFields
   onChange: (fields: DiscountFields) => void
+  /**
+   * Says which of the two the user has typed into or left, for a dialog that keeps its
+   * messages back until a field has been dealt with.
+   */
+  onTouch?: (field: 'percent' | 'amount') => void
   /** True where the product may not be discounted at all. */
   disabled?: boolean
   /** Why both fields are off, shown under the percentage. */
@@ -50,7 +56,11 @@ export function DiscountPair({
       <TextField
         label="Rabatt in Prozent"
         value={fields.percent}
-        onChange={(event) => onChange(withDiscountPercent(fields, event.target.value))}
+        onChange={(event) => {
+          onTouch?.('percent')
+          onChange(withDiscountPercent(fields, event.target.value))
+        }}
+        onBlur={() => onTouch?.('percent')}
         inputMode="decimal"
         numeric
         disabled={disabled || locked === 'percent'}
@@ -63,7 +73,11 @@ export function DiscountPair({
       <TextField
         label="Rabatt als Betrag"
         value={fields.amount}
-        onChange={(event) => onChange(withDiscountAmount(fields, event.target.value))}
+        onChange={(event) => {
+          onTouch?.('amount')
+          onChange(withDiscountAmount(fields, event.target.value))
+        }}
+        onBlur={() => onTouch?.('amount')}
         inputMode="decimal"
         numeric
         disabled={disabled || locked === 'amount'}
