@@ -10,6 +10,7 @@ import { Panel } from '../../components/Panel'
 import { api } from '../../lib/api'
 import type { Partner, PartnerContact } from '../../lib/types'
 import { ContactDialog } from './ContactDialog'
+import { invalidateAfterPartnerChange } from './partnerRefresh'
 
 /** The name of a contact as it is read, without the gap a missing salutation would leave. */
 function nameOf(contact: PartnerContact): string {
@@ -42,10 +43,7 @@ export function PartnerContacts({
 
   const base = `/api/tenants/${tenantId}/partners/${partnerId}/contacts`
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['partner', tenantId] })
-    void queryClient.invalidateQueries({ queryKey: ['partners', tenantId] })
-  }
+  const refresh = () => invalidateAfterPartnerChange(queryClient, tenantId)
 
   const save = useMutation({
     mutationFn: (entry: PartnerContact) => {

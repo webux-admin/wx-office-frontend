@@ -32,6 +32,7 @@ import {
 } from './partner/addressForm'
 import { emptyPartner, firstComplaint, toForm, toPayload, type PartnerForm } from './partner/partnerForm'
 import { wordingFor, type PartnerRole, type RoleWording } from './partner/role'
+import { invalidateAfterPartnerChange } from './partner/partnerRefresh'
 
 type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'preise'
 
@@ -108,10 +109,7 @@ function PartnerMask({
   const set = <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['partner', tenantId] })
-    void queryClient.invalidateQueries({ queryKey: ['partners', tenantId] })
-  }
+  const refresh = () => invalidateAfterPartnerChange(queryClient, tenantId)
 
   const base = `/api/tenants/${tenantId}/partners`
 

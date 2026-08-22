@@ -15,7 +15,12 @@ import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
-import type { DocumentParty, DocumentStatusEntry, SalesDocument } from '../lib/types'
+import type {
+  DocumentParty,
+  DocumentStatus,
+  DocumentStatusEntry,
+  SalesDocument,
+} from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { ChangePartnerDialog } from './order/ChangePartnerDialog'
 import { NewOrderMask } from './order/NewOrderMask'
@@ -23,6 +28,7 @@ import { OrderHeaderPanel } from './order/OrderHeaderPanel'
 import { OrderLines } from './order/OrderLines'
 import { OrderPaymentPanel } from './order/OrderPaymentPanel'
 import { headerKey, paymentKey } from './order/headerForm'
+import { recipientNote } from './order/recipientNote'
 import {
   itemLineCount,
   type FreeLine,
@@ -309,6 +315,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
               title="Empfänger"
               party={order.recipient}
               number={order.partnerNumber}
+              status={order.status}
               action={
                 editable ? (
                   <Button variant="secondary" onClick={() => setChangingPartner(true)}>
@@ -463,18 +470,22 @@ function OrderTexts({
 /**
  * Name and address as they stand on the document.
  *
- * <p>These are a copy taken when the draft was created, not a view of the partner record: a
- * document must still read the way it was sent, even after the customer moves.
+ * <p>How long they stand there depends on the status, and the section says which of the two
+ * it is: a draft follows the partner record, while issuing the document freezes the copy so
+ * that it still reads the way it was sent, even after the customer moves (ADR-0040).
  */
 function PartyPanel({
   title,
   party,
   number,
+  status,
   action,
 }: {
   title: string
   party?: DocumentParty
   number?: string
+  /** Decides whether the address still follows the partner record. */
+  status: DocumentStatus
   /** Control in the top right, for example "Kunde wechseln". */
   action?: ReactNode
 }) {
@@ -492,7 +503,7 @@ function PartyPanel({
   return (
     <Panel
       title={title}
-      description="Kopie aus den Stammdaten, festgehalten beim Anlegen."
+      description={recipientNote(status)}
       action={action}
     >
       <address className="not-italic text-[13px] leading-6">

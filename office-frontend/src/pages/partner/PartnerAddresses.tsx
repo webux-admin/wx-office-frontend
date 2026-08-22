@@ -11,6 +11,7 @@ import { api } from '../../lib/api'
 import type { Partner, PartnerAddress } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { AddressDialog } from './AddressDialog'
+import { invalidateAfterPartnerChange } from './partnerRefresh'
 
 /**
  * The addresses of one record, with everything the API can do to them: add, replace, remove.
@@ -41,10 +42,7 @@ export function PartnerAddresses({
 
   const base = `/api/tenants/${tenantId}/partners/${partnerId}/addresses`
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['partner', tenantId] })
-    void queryClient.invalidateQueries({ queryKey: ['partners', tenantId] })
-  }
+  const refresh = () => invalidateAfterPartnerChange(queryClient, tenantId)
 
   const save = useMutation({
     mutationFn: (entry: PartnerAddress) => {
