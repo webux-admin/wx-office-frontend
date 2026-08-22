@@ -78,9 +78,14 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
   const origin = originOf(useLocation().state, LIST)
 
   const [cancelling, setCancelling] = useState(false)
+  const [reopening, setReopening] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [changingPartner, setChangingPartner] = useState(false)
   const [reason, setReason] = useState('')
+  // Its own field and not the one above: the reason for a reversal has nothing to do with
+  // the reason for taking a document back, and a leftover text in the other box invites
+  // sending the wrong one.
+  const [reopenReason, setReopenReason] = useState('')
 
   const editable = order.status === 'DRAFT' && can('ORDER_WRITE')
   // Two reasons keep a section read-only, and they are not the same thing. An issued
@@ -158,6 +163,18 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     },
   })
 
+  // Takes the Auftrag back to a draft. It keeps its number and is issued under the same one
+  // again, so nothing is lost and no gap is torn (ADR-0046).
+  const reopen = useMutation({
+    mutationFn: () =>
+      api.post<SalesDocument>(`${base}/reopen`, { reason: reopenReason.trim() }),
+    onSuccess: () => {
+      refresh()
+      setReopening(false)
+      setReopenReason('')
+    },
+  })
+
   // A draft renders on the spot and comes back with a watermark; an issued Auftrag hands out
   // the PDF that was archived when it was issued, so a reprint is the same document.
   const print = useMutation({
@@ -227,7 +244,9 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           </span>
         }
       >
-        {order.status === 'DRAFT' && can('ORDER_WRITE') && (
+        {/* A draft that has already been issued once carries its number, and a number that
+            belongs to nothing is the gap the series exists to avoid. */}
+        {order.status === 'DRAFT' && order.documentNumber === undefined && can('ORDER_WRITE') && (
           <Button variant="secondary" onClick={() => setDeleting(true)}>
             Entwurf löschen
           </Button>
@@ -235,6 +254,11 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
         <Button variant="secondary" onClick={() => print.mutate()} busy={print.isPending}>
           {order.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
         </Button>
+        {order.status === 'FINALISED' && can('ORDER_REOPEN') && (
+          <Button variant="secondary" onClick={() => setReopening(true)}>
+            Zurückstellen
+          </Button>
+        )}
         {order.status === 'FINALISED' && can('ORDER_CANCEL') && (
           <Button variant="secondary" onClick={() => setCancelling(true)}>
             Stornieren
@@ -345,6 +369,44 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
         document={order}
         onChanged={refresh}
       />
+
+      <Dialog
+        open={reopening}
+        onClose={() => setReopening(false)}
+        title="Auftrag zurückstellen"
+        description="Der Auftrag wird wieder zum Entwurf und lässt sich ändern."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReopening(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => reopen.mutate()}
+              busy={reopen.isPending}
+              disabled={reopenReason.trim() === ''}
+            >
+              Zurückstellen
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-4 text-[13px] text-text-secondary">
+          Die Belegnummer {order.documentNumber} bleibt am Auftrag und wird beim erneuten
+          Ausstellen wieder verwendet. Das bisher ausgestellte PDF bleibt im Archiv.
+        </p>
+        <TextField
+          label="Grund"
+          value={reopenReason}
+          onChange={(event) => setReopenReason(event.target.value)}
+          maxLength={200}
+          hint="Wird im Verlauf festgehalten und bleibt dort."
+        />
+        {reopen.error !== null && (
+          <div className="mt-4">
+            <ErrorNotice error={reopen.error} />
+          </div>
+        )}
+      </Dialog>
 
       <Dialog
         open={cancelling}

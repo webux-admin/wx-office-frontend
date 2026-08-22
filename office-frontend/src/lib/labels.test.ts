@@ -25,6 +25,15 @@ describe('permissionAction', () => {
     expect(permissionAction('ORDER_FINALISE')).toBe('Ausstellen')
   })
 
+  it('permissionActionForEveryDocumentVerbTest', () => {
+    // The three that decide what happens to an issued document. A verb the map does not know
+    // falls back to the raw code, and a raw code in the rights matrix is a regression nobody
+    // notices until a tenant asks what ORDER_REOPEN means.
+    expect(permissionAction('ORDER_REOPEN')).toBe('Zurückstellen')
+    expect(permissionAction('INVOICE_REOPEN')).toBe('Zurückstellen')
+    expect(permissionAction('ORDER_CANCEL')).toBe('Stornieren')
+  })
+
   it('permissionActionWithLongCodeTest', () => {
     expect(permissionAction('DOCUMENT_TYPE_READ')).toBe('Lesen')
     expect(permissionAction('ROLE_MANAGE')).toBe('Verwalten')

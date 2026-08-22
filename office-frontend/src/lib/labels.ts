@@ -55,6 +55,7 @@ const PERMISSION_VERBS: Record<string, string> = {
   WRITE: 'Bearbeiten',
   DEACTIVATE: 'Deaktivieren',
   FINALISE: 'Ausstellen',
+  REOPEN: 'Zurückstellen',
   CANCEL: 'Stornieren',
   MANAGE: 'Verwalten',
   RUN: 'Ausführen',
