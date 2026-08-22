@@ -30,7 +30,6 @@ const STORED: Product = {
   unit: 'HOUR',
   revenueAccount: '3200',
   vatCategory: 'STANDARD',
-  basePrice: 150,
 }
 
 describe('emptyProduct', () => {
@@ -63,7 +62,6 @@ describe('toForm', () => {
     expect(form.subtitle).toBe('Pro angefangene Stunde')
     expect(form.internalComment).toBe('Nur nach Absprache mit der Leitung')
     expect(form.eanCode).toBe('4006381333931')
-    expect(form.basePrice).toBe('150')
   })
 
   it('toFormTurnsMissingFieldsIntoEmptyStringsTest', () => {
@@ -73,7 +71,6 @@ describe('toForm', () => {
     expect(form.description).toBe('')
     expect(form.internalComment).toBe('')
     expect(form.eanCode).toBe('')
-    expect(form.basePrice).toBe('')
   })
 
   it('toFormReadsTheDiscountFlagTest', () => {
@@ -100,14 +97,12 @@ describe('toPayload', () => {
       subtitle: 'Pro angefangene Stunde',
       internalComment: 'Nur nach Absprache',
       eanCode: '4006381333931',
-      basePrice: '150.50',
     })
 
     expect(payload.name).toBe('Beratung')
     expect(payload.subtitle).toBe('Pro angefangene Stunde')
     expect(payload.internalComment).toBe('Nur nach Absprache')
     expect(payload.eanCode).toBe('4006381333931')
-    expect(payload.basePrice).toBe(150.5)
   })
 
   it('toPayloadLeavesOutEmptyTextsTest', () => {
@@ -137,8 +132,10 @@ describe('toPayload', () => {
     expect('active' in toPayload({ ...COMPLETE, active: false })).toBe(false)
   })
 
-  it('toPayloadWithoutABasePriceTest', () => {
-    expect(toPayload({ ...COMPLETE, basePrice: '' }).basePrice).toBeUndefined()
+  it('toPayloadLeavesOutThePricesTest', () => {
+    // They have an endpoint of their own, so a master data payload must not carry them.
+    expect('prices' in toPayload(COMPLETE)).toBe(false)
+    expect('basePrice' in toPayload(COMPLETE)).toBe(false)
   })
 })
 

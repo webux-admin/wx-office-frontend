@@ -10,7 +10,7 @@ import { TextField } from '../../components/TextField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
 import { listQuery, PICKER_SIZE } from '../../lib/paging'
-import { formatAmount, formatQuantity, parseDecimal } from '../../lib/format'
+import { formatAmount, formatDate, formatQuantity, parseDecimal } from '../../lib/format'
 import type { Page, PartnerPrice, PriceGroup, Product } from '../../lib/types'
 
 /**
@@ -54,8 +54,8 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
   })
 
   const removePrice = useMutation({
-    mutationFn: (productId: number) =>
-      api.delete<void>(`/api/tenants/${tenantId}/partners/${partnerId}/prices/${productId}`),
+    mutationFn: (priceId: number) =>
+      api.delete<void>(`/api/tenants/${tenantId}/partners/${partnerId}/prices/${priceId}`),
     onSuccess: refresh,
   })
 
@@ -77,8 +77,23 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
       key: 'quantity',
       header: 'Ab Menge',
       align: 'right',
-      width: 'w-[120px]',
+      width: 'w-[110px]',
       render: (price) => formatQuantity(price.minQuantity ?? 1),
+    },
+    {
+      key: 'validFrom',
+      header: 'Gültig ab',
+      align: 'right',
+      width: 'w-[120px]',
+      // formatDate already draws a hyphen for an open start.
+      render: (price) => formatDate(price.validFrom),
+    },
+    {
+      key: 'validTo',
+      header: 'Gültig bis',
+      align: 'right',
+      width: 'w-[120px]',
+      render: (price) => formatDate(price.validTo),
     },
     {
       key: 'price',
@@ -92,10 +107,10 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
       header: '',
       width: 'w-[60px]',
       render: (price) =>
-        mayWrite ? (
+        mayWrite && price.id !== undefined ? (
           <button
             type="button"
-            onClick={() => removePrice.mutate(price.productId)}
+            onClick={() => removePrice.mutate(price.id as number)}
             aria-label={`Preis für ${nameOf(price.productId)} entfernen`}
             className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-danger/12 hover:text-danger"
           >
@@ -129,13 +144,13 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
 
       <Panel
         title="Individuelle Preise"
-        description="Gelten vor der Preisgruppe und vor dem Grundpreis."
+        description="Gelten vor der Preisgruppe und vor dem Grundpreis. Ohne Datum gelten sie unbefristet."
         padded={false}
       >
         <DataTable
           columns={columns}
           rows={prices.data ?? []}
-          keyOf={(price) => price.productId}
+          keyOf={(price) => price.id ?? price.productId}
           loading={prices.isPending}
           error={prices.error}
           empty={
@@ -230,10 +245,13 @@ function PriceForm({
 }) {
   const [productId, setProductId] = useState('')
   const [minQuantity, setMinQuantity] = useState('1')
+  const [validFrom, setValidFrom] = useState('')
+  const [validTo, setValidTo] = useState('')
   const [price, setPrice] = useState('')
 
   const amount = parseDecimal(price)
-  const incomplete = productId === '' || amount === null
+  const backwards = validFrom !== '' && validTo !== '' && validTo < validFrom
+  const incomplete = productId === '' || amount === null || backwards
 
   return (
     <form
@@ -243,6 +261,8 @@ function PriceForm({
         onSubmit({
           productId: Number(productId),
           minQuantity: parseDecimal(minQuantity) ?? undefined,
+          validFrom: validFrom === '' ? undefined : validFrom,
+          validTo: validTo === '' ? undefined : validTo,
           price: amount,
         })
         setPrice('')
@@ -270,7 +290,25 @@ function PriceForm({
         onChange={(event) => setMinQuantity(event.target.value)}
         inputMode="decimal"
         numeric
-        className="w-[120px]"
+        className="w-[110px]"
+      />
+
+      <TextField
+        label="Gültig ab"
+        value={validFrom}
+        onChange={(event) => setValidFrom(event.target.value)}
+        type="date"
+        className="w-[160px]"
+      />
+
+      <TextField
+        label="Gültig bis"
+        value={validTo}
+        onChange={(event) => setValidTo(event.target.value)}
+        type="date"
+        invalid={backwards}
+        hint={backwards ? 'Nicht vor dem Ab-Datum.' : undefined}
+        className="w-[160px]"
       />
 
       <TextField

@@ -35,7 +35,6 @@ export type ProductForm = {
   active: boolean
   revenueAccount: string
   vatCategory: VatCategory
-  basePrice: string
   /**
    * The free fields as the mask holds them: by place, and as text, because that is what an
    * input carries. What each place means is not kept here — it comes with the product.
@@ -57,7 +56,6 @@ const EMPTY: ProductForm = {
   active: true,
   revenueAccount: '',
   vatCategory: 'STANDARD',
-  basePrice: '',
   freeFields: {},
 }
 
@@ -90,7 +88,6 @@ export function toForm(product: Product): ProductForm {
     active: product.active !== false,
     revenueAccount: product.revenueAccount ?? '',
     vatCategory: product.vatCategory ?? 'STANDARD',
-    basePrice: product.basePrice?.toString() ?? '',
     freeFields: toFreeFieldForm(product.freeFields),
   }
 }
@@ -156,8 +153,9 @@ export function toFreeFieldPayload(
  * <p>Whether the product is still offered is **not** part of it. That flag has its own
  * endpoint and its own right, so a master data payload cannot change it on the side.
  *
- * <p>Group prices are not part of it either: they have endpoints of their own, so a payload
- * cannot silently drop one that is already stored.
+ * <p>The prices are not part of it either: they have an endpoint of their own, so a master
+ * data payload cannot silently drop one that is already stored. That includes the base price,
+ * which is a price row like any other since it can be limited to a period.
  *
  * @param form the filled in mask
  * @returns the product as the API wants it
@@ -175,7 +173,6 @@ export function toPayload(form: ProductForm, defined?: FreeFieldSlot[]): Partial
     unit: form.unit,
     revenueAccount: blankToUndefined(form.revenueAccount),
     vatCategory: form.vatCategory,
-    basePrice: parseDecimal(form.basePrice) ?? undefined,
     freeFields: toFreeFieldPayload(form, defined),
   }
 }

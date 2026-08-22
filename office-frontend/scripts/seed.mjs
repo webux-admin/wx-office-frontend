@@ -508,7 +508,8 @@ const PARTNERS = [
 
 /**
  * Products and services of tenant WEBUX.
- * `retail` and `wholesale` set the group prices; `basePrice` stays the fallback.
+ * `basePrice`, `retail` and `wholesale` become price rows: the first without a price group,
+ * the other two for DETAIL and ENGROS. None of them is limited to a period here.
  */
 const PRODUCTS = [
   {
@@ -678,13 +679,24 @@ const PRODUCTS = [
   },
 ]
 
-/** Individually agreed customer prices: product number, minimum quantity, price. */
+/**
+ * Individually agreed customer prices: product number, minimum quantity, price, and an
+ * optional period. The last entry is a campaign, so the mask shows a dated row as well.
+ */
 const PARTNER_PRICES = [
   { partnerNumber: 'KD-1001', productNumber: 'AR-4821', minQuantity: 1, price: 10900 },
   { partnerNumber: 'KD-1001', productNumber: 'AR-4821', minQuantity: 5, price: 10400 },
   { partnerNumber: 'KD-1001', productNumber: 'DL-1001', minQuantity: 1, price: 98 },
   { partnerNumber: 'KD-1058', productNumber: 'AB-2001', minQuantity: 1, price: 390 },
   { partnerNumber: 'PA-3001', productNumber: 'AR-5240', minQuantity: 100, price: 11.4 },
+  {
+    partnerNumber: 'KD-1058',
+    productNumber: 'AR-4902',
+    minQuantity: 1,
+    price: 279,
+    validFrom: '2026-01-01',
+    validTo: '2026-12-31',
+  },
 ]
 
 /** Partners of the second tenant. Deliberately few, so the two tenants look different. */
@@ -809,22 +821,24 @@ async function createPartner(tenantId, definition, priceGroupsByCode) {
   return partner
 }
 
-/** Creates a product and sets its group prices. */
+/** Creates a product and sets its prices, base price and group prices in one request. */
 async function createProduct(tenantId, definition, priceGroupsByCode) {
-  const { retail, wholesale, ...master } = definition
+  const { retail, wholesale, basePrice, ...master } = definition
   const product = await post(`/api/tenants/${tenantId}/products`, master)
-  const groupPrices = [
+
+  const prices = []
+  if (basePrice !== undefined) prices.push({ price: basePrice })
+  for (const [code, price] of [
     ['DETAIL', retail],
     ['ENGROS', wholesale],
-  ]
-  for (const [code, price] of groupPrices) {
+  ]) {
     if (price === undefined || !priceGroupsByCode.has(code)) continue
-    const priceGroupId = priceGroupsByCode.get(code)
-    await put(`/api/tenants/${tenantId}/products/${product.id}/prices/${priceGroupId}`, {
-      priceGroupId,
-      price,
-    })
+    prices.push({ priceGroupId: priceGroupsByCode.get(code), price })
   }
+  if (prices.length > 0) {
+    await put(`/api/tenants/${tenantId}/products/${product.id}/prices`, { prices })
+  }
+
   log(`  ${(product.productNumber ?? '-').padEnd(9)} ${product.name}`)
   return product
 }
@@ -915,6 +929,8 @@ async function main() {
     await put(`/api/tenants/${webux.id}/partners/${partner.id}/prices`, {
       productId: product.id,
       minQuantity: price.minQuantity,
+      validFrom: price.validFrom,
+      validTo: price.validTo,
       price: price.price,
     })
     log(`  ${partner.name} · ${product.name} from ${price.minQuantity} → ${price.price}`)

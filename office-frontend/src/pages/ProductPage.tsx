@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
@@ -25,7 +25,14 @@ import type {
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { ProductFreeFields } from './product/ProductFreeFields'
-import { ProductGroupPrices } from './product/ProductGroupPrices'
+import { ProductPrices } from './product/ProductPrices'
+import {
+  firstPriceComplaint,
+  pricesChanged,
+  toPricePayload,
+  toPriceRowForm,
+  type PriceRowForm,
+} from './product/priceRows'
 import {
   activeChanged,
   emptyProduct,
@@ -46,7 +53,7 @@ const REGISTERS: { id: Register; label: string }[] = [
   { id: 'buchhaltung', label: 'Buchhaltung' },
 ]
 
-/** One article of the catalogue, with the prices of every price group. */
+/** One article of the catalogue, with its prices per group, quantity and period. */
 export function ProductPage() {
   return (
     <RequireTenant permission="PRODUCT_READ">
@@ -87,6 +94,13 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   const mayChangeActive = mayWrite && can('PRODUCT_DEACTIVATE')
 
   const [form, setForm] = useState<ProductForm>(product ? toForm(product) : emptyProduct())
+  // The price rows live next to the mask rather than inside it: they travel in their own
+  // request, and the master data payload must not be able to carry them.
+  const [prices, setPrices] = useState<PriceRowForm[]>(toPriceRowForm(product))
+  // Saving a new article is two requests. If the second one fails the article already exists,
+  // so a second attempt must correct it instead of creating it again — the number would be
+  // taken by the article the first attempt left behind.
+  const createdId = useRef<number | null>(null)
   const [tab, setTab] = useState<Register>('hauptdaten')
   const [complaint, setComplaint] = useState<string | null>(null)
 
@@ -124,9 +138,20 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   const save = useMutation({
     mutationFn: async () => {
       const payload = toPayload(form, freeFields)
-      const saved = product
-        ? await api.put<Product>(`${base}/${product.id}`, payload)
-        : await api.post<Product>(base, payload)
+      const known = product?.id ?? createdId.current
+      let saved =
+        known === null
+          ? await api.post<Product>(base, payload)
+          : await api.put<Product>(`${base}/${known}`, payload)
+      createdId.current = saved.id
+      // The prices replace the stored list in one request of their own, so that a mask which
+      // never opened the register cannot drop them and two rows of one period can be checked
+      // against each other. Sent only when the table really differs from what is stored.
+      if (pricesChanged(prices, product)) {
+        saved = await api.put<Product>(`${base}/${saved.id}/prices`, {
+          prices: toPricePayload(prices),
+        })
+      }
       // Whether the article is still offered has its own endpoint, so it travels in its own
       // request — and only when the checkbox really differs from what is stored.
       if (activeChanged(form, product)) {
@@ -136,8 +161,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
     },
     // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
     // The entry is replaced instead of pushed: a mask that has been saved is not a place to
-    // return to with the back button. Prices per price group are agreed on the stored record,
-    // which is reached again from the list.
+    // return to with the back button.
     onSuccess: () => {
       refresh()
       void navigate(origin.from, { replace: true })
@@ -145,7 +169,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   })
 
   const submit = () => {
-    const problem = firstComplaint(form)
+    const problem = firstComplaint(form) ?? firstPriceComplaint(prices)
     setComplaint(problem)
     if (!problem) save.mutate()
   }
@@ -287,30 +311,12 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
         )}
 
         {tab === 'preise' && (
-          <div className="grid gap-6">
-            <Panel title="Grundpreis">
-              <TextField
-                label="Grundpreis"
-                value={form.basePrice}
-                onChange={(event) => set('basePrice', event.target.value)}
-                disabled={!mayWrite}
-                inputMode="decimal"
-                numeric
-                hint="Gilt, wenn weder Kundenpreis noch Preisgruppe etwas anderes sagt."
-                className="sm:max-w-[240px]"
-              />
-            </Panel>
-
-            {product ? (
-              <ProductGroupPrices tenantId={tenantId} product={product} mayWrite={mayWrite} />
-            ) : (
-              <Panel title="Preise je Gruppe">
-                <p className="text-[13px] text-text-secondary">
-                  Gruppenpreise lassen sich vereinbaren, sobald das Produkt gespeichert ist.
-                </p>
-              </Panel>
-            )}
-          </div>
+          <ProductPrices
+            tenantId={tenantId}
+            rows={prices}
+            onChange={setPrices}
+            mayWrite={mayWrite}
+          />
         )}
 
         {tab === 'freifelder' && (

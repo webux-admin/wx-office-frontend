@@ -407,8 +407,15 @@ export type Product = {
   revenueAccount?: string
   revenueAccountLabel?: string
   vatCategory?: VatCategory
+  /**
+   * Read-only: the base price in force today, read from `prices`.
+   *
+   * <p>There so a list can show and sort by one number. Absent when no base price row applies
+   * today. It is never sent; the rows are the truth.
+   */
   basePrice?: number
-  groupPrices?: GroupPrice[]
+  /** Every price of this product, base price and group prices alike. */
+  prices?: PriceRow[]
   /**
    * The free fields this tenant defined, one entry each, filled in or not.
    *
@@ -463,7 +470,27 @@ export type ProductFreeFieldDefinition = {
   printable?: boolean
 }
 
-export type GroupPrice = { priceGroupId: number; price: number }
+/**
+ * One price of a product: for one price group or for none, from a quantity upwards, for a
+ * stretch of time.
+ *
+ * <p>A row without `priceGroupId` is the base price, the step the resolution falls back to
+ * when neither a customer price nor a group price applies. Both dates are inclusive and both
+ * may be left out: no start means it has always applied, no end means until further notice.
+ */
+export type PriceRow = {
+  /** Row id; echoed on read, ignored on write. */
+  id?: number
+  /** Absent for the base price. */
+  priceGroupId?: number
+  /** Quantity the price starts at; absent or 0 is the base entry. */
+  minQuantity?: number
+  /** ISO date, absent for no start. */
+  validFrom?: string
+  /** ISO date, absent for no end. */
+  validTo?: string
+  price: number
+}
 
 export type PriceGroup = {
   id: number
@@ -476,10 +503,19 @@ export type PriceGroup = {
   active?: boolean
 }
 
-/** A price agreed with one partner, valid from a minimum quantity upwards. */
+/**
+ * A price agreed with one partner, from a minimum quantity upwards and for a stretch of time.
+ *
+ * <p>`id` says which row to rewrite; without one a row is added.
+ */
 export type PartnerPrice = {
+  id?: number
   productId: number
   minQuantity?: number
+  /** ISO date, absent for no start. */
+  validFrom?: string
+  /** ISO date, absent for no end. */
+  validTo?: string
   price: number
 }
 
