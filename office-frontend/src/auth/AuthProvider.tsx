@@ -23,7 +23,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((error: unknown) => {
         if (error instanceof UnauthorizedError) setUser(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        // An aborted request has not answered the question. StrictMode aborts the first
+        // mount's request on purpose; ending the loading state on it declared the user
+        // signed out for a moment, and that moment bounced every reloaded deep link off
+        // the login route onto the dashboard. The re-mounted effect finishes instead.
+        if (!controller.signal.aborted) setLoading(false)
+      })
     return () => controller.abort()
   }, [])
 
