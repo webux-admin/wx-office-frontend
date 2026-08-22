@@ -45,8 +45,12 @@ type DataTableProps<T> = {
    * <p>Convenience on top of the link that one of the cells carries. That link stays the way
    * in for the keyboard, for the middle mouse button and for the context menu. Leave it out
    * for a table whose records have no screen of their own.
+   *
+   * <p>May answer `undefined` for a single row, for a list whose records do not all have a
+   * mask — a partner's history holds kinds of document that have one and kinds that do not.
+   * Such a row stays where it is instead of pointing at a route that is not there.
    */
-  rowTo?: (row: T) => string
+  rowTo?: (row: T) => string | undefined
   /**
    * Names this list as the screen the opened mask returns to.
    *
@@ -96,7 +100,6 @@ export function DataTable<T>({
   onSortChange,
 }: DataTableProps<T>) {
   const navigate = useNavigate()
-  const clickable = Boolean(rowTo || onRowOpen)
 
   /**
    * Opens a record from a click anywhere on its row.
@@ -110,8 +113,8 @@ export function DataTable<T>({
     if ((event.target as HTMLElement).closest('a, button, input, select, textarea, label')) return
     if (window.getSelection()?.toString()) return
 
-    if (rowTo) {
-      const to = rowTo(row)
+    const to = rowTo?.(row)
+    if (to) {
       if (event.metaKey || event.ctrlKey || event.shiftKey) {
         window.open(to, '_blank', 'noopener')
         return
@@ -186,26 +189,30 @@ export function DataTable<T>({
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="divide-y divide-line-subtle"
           >
-            {rows.map((row) => (
-              <tr
-                key={keyOf(row)}
-                onClick={clickable ? (event) => openRow(row, event) : undefined}
-                className={`transition-colors ${
-                  clickable ? 'cursor-pointer hover:bg-sunken' : 'hover:bg-sunken/60'
-                }`}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={column.key}
-                    className={`px-5 py-2.5 align-middle ${
-                      column.align === 'right' ? 'text-right font-mono tabular-nums' : ''
-                    }`}
-                  >
-                    {column.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {rows.map((row) => {
+              // Asked once per row, not once per use: rowTo is the caller's function.
+              const opens = Boolean(rowTo?.(row) || onRowOpen)
+              return (
+                <tr
+                  key={keyOf(row)}
+                  onClick={opens ? (event) => openRow(row, event) : undefined}
+                  className={`transition-colors ${
+                    opens ? 'cursor-pointer hover:bg-sunken' : 'hover:bg-sunken/60'
+                  }`}
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={`px-5 py-2.5 align-middle ${
+                        column.align === 'right' ? 'text-right font-mono tabular-nums' : ''
+                      }`}
+                    >
+                      {column.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
           </motion.tbody>
           {footer && <tfoot className="border-t border-line">{footer}</tfoot>}
         </table>

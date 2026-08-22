@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
@@ -9,8 +9,8 @@ import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
-import { TextField } from '../components/TextField'
-import { useDebouncedValue } from '../components/useDebouncedValue'
+import { QuickSearchField } from '../components/QuickSearch'
+import { useQuickSearch } from '../components/useQuickSearch'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -39,7 +39,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
   const { can } = useAuth()
   const typeLabel = useCatalogueLabel(tenantId, 'partner-type')
   const wording = wordingFor(role)
-  const [search, setSearch] = useState('')
+  const search = useQuickSearch()
   const [activeOnly, setActiveOnly] = useState(true)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('name,asc')
@@ -47,12 +47,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
   // among the customers.
   const origin = originState(wording.path, wording.listTitle)
 
-  // Debounced, not deferred: useDeferredValue only decides when React renders the new value,
-  // never whether a request goes out. What keeps the old rows on screen is the placeholder
-  // below, not the deferred render.
-  const term = useDebouncedValue(search.trim())
-
-  const query = listQuery({ role, search: term, activeOnly, page, size: PAGE_SIZE, sort })
+  const query = listQuery({ role, search: search.term, activeOnly, page, size: PAGE_SIZE, sort })
   const partners = useQuery({
     queryKey: ['partners', tenantId, query],
     queryFn: () => api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${query}`),
@@ -150,18 +145,14 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
       <div className="px-8 pb-12">
         <Panel padded={false}>
           <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
-            <TextField
-              label="Suchen"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
+            <QuickSearchField
+              value={search.value}
+              onChange={(next) => {
+                search.setValue(next)
                 setPage(0)
               }}
               placeholder={wording.searchPlaceholder}
-              // As wide as the column searched over; nothing longer can match anyway.
               maxLength={70}
-              icon={<Search size={15} />}
-              className="min-w-[240px] flex-1"
             />
             <CheckboxField
               label="Nur aktive"
@@ -191,14 +182,14 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
             error={partners.error}
             empty={
               <EmptyState
-                title={term ? 'Nichts gefunden' : wording.emptyTitle}
+                title={search.term ? 'Nichts gefunden' : wording.emptyTitle}
                 description={
-                  term
-                    ? `Für «${term}» gibt es keinen Treffer. Ein anderer Begriff hilft vielleicht.`
+                  search.term
+                    ? `Für «${search.term}» gibt es keinen Treffer. Ein anderer Begriff hilft vielleicht.`
                     : wording.emptyBody
                 }
               >
-                {!term && can('PARTNER_WRITE') && (
+                {!search.term && can('PARTNER_WRITE') && (
                   <LinkButton to={`${wording.path}/neu`} state={origin}>
                     <Plus size={15} aria-hidden />
                     {wording.firstAction}

@@ -56,7 +56,9 @@ function stubFetch() {
   sendLatency = 0
   ratesRefused = false
   vi.stubGlobal('fetch', (url: string) => {
-    if (url.includes('/price?')) {
+    // Matched on the customer's price list, not on "/price": the route is
+    // /partners/{id}/prices/{productId}, and "/products/" below would swallow it otherwise.
+    if (url.includes('/prices/')) {
       const body = priceRefused
         ? { detail: 'Dafür fehlt die Berechtigung.' }
         : { productId: 7, partnerId: PARTNER, price: 120, origin: 'PARTNER', includesVat: false }

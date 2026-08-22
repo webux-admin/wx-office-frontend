@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
@@ -9,8 +9,8 @@ import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
-import { TextField } from '../components/TextField'
-import { useDebouncedValue } from '../components/useDebouncedValue'
+import { QuickSearchField } from '../components/QuickSearch'
+import { useQuickSearch } from '../components/useQuickSearch'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -42,19 +42,15 @@ function ProductList({ tenantId }: { tenantId: number }) {
   // Read once: the field takes over from here, and rewriting the address on every keystroke
   // would fill the history with half typed words.
   const [params] = useSearchParams()
-  const [search, setSearch] = useState(params.get('suche') ?? '')
+  const search = useQuickSearch(params.get('suche') ?? '')
   // A list is normally reached through the navigation and shows no way back. It gets one
   // where another screen sent the user here, so the document is one click away again.
   const back = optionalOriginOf(useLocation().state)
   const [activeOnly, setActiveOnly] = useState(true)
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('name,asc')
-  // Debounced, not deferred: useDeferredValue only decides when React renders the new
-  // value, never whether a request goes out. With fifty rows the deferred render is done in
-  // a few milliseconds, so every keystroke got its own query key and its own call.
-  const term = useDebouncedValue(search.trim())
 
-  const query = listQuery({ search: term, activeOnly, page, size: PAGE_SIZE, sort })
+  const query = listQuery({ search: search.term, activeOnly, page, size: PAGE_SIZE, sort })
   const products = useQuery({
     queryKey: ['products', tenantId, query],
     queryFn: () => api.get<Page<Product>>(`/api/tenants/${tenantId}/products?${query}`),
@@ -152,18 +148,14 @@ function ProductList({ tenantId }: { tenantId: number }) {
       <div className="px-8 pb-12">
         <Panel padded={false}>
           <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
-            <TextField
-              label="Suchen"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
+            <QuickSearchField
+              value={search.value}
+              onChange={(next) => {
+                search.setValue(next)
                 setPage(0)
               }}
               placeholder="Bezeichnung oder Artikelnummer"
-              // As wide as the column searched over; nothing longer can match anyway.
               maxLength={140}
-              icon={<Search size={15} />}
-              className="min-w-[240px] flex-1"
             />
             <CheckboxField
               label="Nur aktive"
@@ -193,14 +185,14 @@ function ProductList({ tenantId }: { tenantId: number }) {
             error={products.error}
             empty={
               <EmptyState
-                title={term ? 'Nichts gefunden' : 'Noch keine Produkte'}
+                title={search.term ? 'Nichts gefunden' : 'Noch keine Produkte'}
                 description={
-                  term
-                    ? `Für «${term}» gibt es keinen Treffer.`
+                  search.term
+                    ? `Für «${search.term}» gibt es keinen Treffer.`
                     : 'Ohne Katalog lässt sich keine Belegzeile aus einem Produkt bilden.'
                 }
               >
-                {!term && can('PRODUCT_WRITE') && (
+                {!search.term && can('PRODUCT_WRITE') && (
                   <LinkButton to="/produkte/neu" state={ORIGIN}>
                     <Plus size={15} aria-hidden />
                     Erstes Produkt erfassen
