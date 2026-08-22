@@ -292,6 +292,13 @@ function click(element: HTMLElement) {
   })
 }
 
+/** Presses a key on an element the way a browser does, so React sees it bubble up. */
+function press(element: HTMLElement, key: string) {
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  })
+}
+
 /** Types into a field the way a browser does: set the value, then fire the native event. */
 function type(control: HTMLInputElement | HTMLSelectElement, value: string) {
   const prototype =
@@ -333,22 +340,24 @@ describe('OrderLines', () => {
 
     expect(text()).toContain('Wartung Serverraum')
     expect(container.querySelector('[aria-label="Position 1 bearbeiten"]')).toBeNull()
-    expect(container.querySelector('[aria-label="Position 1 nach unten"]')).toBeNull()
+    expect(container.querySelector('[aria-label="Position 1 verschieben"]')).toBeNull()
   })
 
   it('orderLinesMovesALineTest', async () => {
     const calls = await render(LINES)
 
-    click(byLabel('Position 2 nach oben'))
+    press(byLabel('Position 2 verschieben'), 'ArrowUp')
 
     expect(calls.moved).toEqual([{ lineNumber: 2, position: 1 }])
   })
 
   it('orderLinesCannotMoveTheFirstLineUpTest', async () => {
-    await render(LINES)
+    const calls = await render(LINES)
 
-    expect((byLabel('Position 1 nach oben') as HTMLButtonElement).disabled).toBe(true)
-    expect((byLabel('Position 5 nach unten') as HTMLButtonElement).disabled).toBe(true)
+    press(byLabel('Position 1 verschieben'), 'ArrowUp')
+    press(byLabel('Position 5 verschieben'), 'ArrowDown')
+
+    expect(calls.moved).toEqual([])
   })
 
   it('orderLinesRemovesALineTest', async () => {

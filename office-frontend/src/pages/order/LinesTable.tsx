@@ -1,8 +1,14 @@
 import { motion } from 'motion/react'
-import { Pencil, Trash2 } from 'lucide-react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { GripVertical, Pencil, Trash2 } from 'lucide-react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { EmptyState } from '../../components/Notice'
-import { RowOrderButtons } from '../../components/RowOrderButtons'
 import { formatAmount, formatPercent, formatQuantity } from '../../lib/format'
 import { shortLabelForCode, type SelectableEntry } from '../../lib/masterData'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
@@ -27,16 +33,16 @@ const COLUMNS: { key: string; header: string; right: boolean; width: string }[] 
 /** How many columns a row spans that has no figures of its own: everything but "Pos". */
 const VALUE_COLUMNS = COLUMNS.length - 1
 
-/** Which way a line is moved, in the word the arrow is labelled with. */
-type Direction = 'oben' | 'unten'
-
-/** How an arrow of the position table is named, for the reader and for the focus. */
-function arrowLabel(position: number, direction: Direction): string {
-  return `Position ${position} nach ${direction}`
+/** How the grip of a line is named, for the reader and for the focus. */
+function handleLabel(position: number): string {
+  return `Position ${position} verschieben`
 }
 
 const CELL = 'px-5 py-2.5 align-middle'
 const NUMBER_CELL = `${CELL} text-right font-mono tabular-nums`
+/** The grip stands in front of everything else and takes no more room than the icon needs. */
+const HANDLE_COLUMN = 'w-[44px] pr-0'
+const ACTION_COLUMN = 'w-[100px]'
 
 type LineAction = (line: DocumentLine) => void
 
@@ -47,6 +53,9 @@ type LineAction = (line: DocumentLine) => void
  * comment runs across the table, a subtotal carries sums instead of a price, and a page break
  * is a rule with a caption. Sorting and paging, which is what the shared table is for, a
  * document has none of — its order is the printed order.
+ *
+ * <p>Positions are sorted by dragging them at the grip in front of the row, or by holding the
+ * grip with the keyboard and pressing an arrow key.
  *
  * <p>No amount is worked out here, the subtotals included. What the backend answers is what
  * is shown.
@@ -75,27 +84,23 @@ export function LinesTable({
   const kindLabel = useCatalogueLabel(tenantId, 'line-kind')
   const lines = document.lines ?? []
   const table = useRef<HTMLTableElement>(null)
-  // Where the moved line ended up, so its arrow can be given the focus back once the change
-  // has been answered. A button that is disabled while the request runs loses the focus to
-  // the page body, and the reader would otherwise have to tab through the whole table again
-  // to move the line one place further.
-  const chased = useRef<{ position: number; direction: Direction } | null>(null)
+  // The line the grip is holding and the line the pointer stands over, both by their number.
+  const [dragged, setDragged] = useState<number | null>(null)
+  const [target, setTarget] = useState<number | null>(null)
+  // Where the moved line ended up, so its grip can be given the focus back once the change
+  // has been answered. A grip that is disabled while the request runs loses the focus to the
+  // page body, and the reader would otherwise have to tab through the whole table again to
+  // move the line one place further.
+  const chased = useRef<number | null>(null)
 
   useEffect(() => {
     if (busy) return
-    const moved = chased.current
+    const position = chased.current
     chased.current = null
-    if (moved === null) return
-    const arrow = (direction: Direction) =>
-      table.current?.querySelector<HTMLButtonElement>(
-        `[aria-label="${arrowLabel(moved.position, direction)}"]`,
-      )
-    // At the top and at the bottom the arrow that was pressed is disabled and cannot hold the
-    // focus. The one beside it keeps the reader in the row that was just moved.
-    const wanted = arrow(moved.direction)
-    const target =
-      wanted && !wanted.disabled ? wanted : arrow(moved.direction === 'oben' ? 'unten' : 'oben')
-    if (target && !target.disabled) target.focus()
+    if (position === null) return
+    table.current
+      ?.querySelector<HTMLButtonElement>(`[aria-label="${handleLabel(position)}"]`)
+      ?.focus()
   }, [busy, document])
 
   if (lines.length === 0) {
@@ -112,27 +117,87 @@ export function LinesTable({
   }
 
   /**
-   * Moves a line and remembers where its arrow will be afterwards.
+   * Moves a line with the keyboard and remembers where its grip will be afterwards.
    *
-   * <p>The backend renumbers the lines, so the button that was pressed belongs to another
-   * line once the answer is in. The focus follows the line, not the position.
+   * <p>The backend renumbers the lines, so the grip that was held belongs to another line once
+   * the answer is in. The focus follows the line, not the position.
    */
-  const move = (line: DocumentLine, position: number, direction: Direction) => {
-    chased.current = { position, direction }
+  const moveByKey = (line: DocumentLine, position: number) => {
+    chased.current = position
     onMove(line, position)
   }
 
-  const actionsOf = (line: DocumentLine, index: number) =>
+  /**
+   * Moves the held line one place per arrow key.
+   *
+   * <p>Dragging needs a pointer. Without this the order of a document could not be changed
+   * with the keyboard at all.
+   */
+  const pressKey = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    line: DocumentLine,
+    index: number,
+  ) => {
+    if (busy) return
+    if (event.key === 'ArrowUp' && index > 0) {
+      event.preventDefault()
+      moveByKey(line, line.lineNumber - 1)
+      return
+    }
+    if (event.key === 'ArrowDown' && index < lines.length - 1) {
+      event.preventDefault()
+      moveByKey(line, line.lineNumber + 1)
+    }
+  }
+
+  const startDrag = (event: DragEvent<HTMLButtonElement>, line: DocumentLine) => {
+    setDragged(line.lineNumber)
+    const transfer = event.dataTransfer
+    if (!transfer) return
+    transfer.effectAllowed = 'move'
+    // Firefox starts no drag at all when the transfer carries nothing.
+    transfer.setData('text/plain', String(line.lineNumber))
+    // The whole row travels under the pointer, not the grip: a lone icon says nothing about
+    // which position is being moved.
+    const row = event.currentTarget.closest('tr')
+    if (row) transfer.setDragImage(row, 24, row.clientHeight / 2)
+  }
+
+  const dragOver = (event: DragEvent<HTMLTableRowElement>, line: DocumentLine) => {
+    if (dragged === null) return
+    // Without this the browser refuses the drop and no drop event ever arrives.
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    setTarget(line.lineNumber)
+  }
+
+  const endDrag = () => {
+    setDragged(null)
+    setTarget(null)
+  }
+
+  /** Drops the held line on the row under the pointer, whose position it takes over. */
+  const drop = (event: DragEvent<HTMLTableRowElement>, line: DocumentLine) => {
+    if (dragged === null) return
+    event.preventDefault()
+    const held = lines.find((one) => one.lineNumber === dragged)
+    endDrag()
+    // No focus is chased here: the mouse moved the line, and no grip was holding it.
+    if (held && held.lineNumber !== line.lineNumber) onMove(held, line.lineNumber)
+  }
+
+  /** A row is dimmed while it travels and tinted while it is the place the line would land. */
+  const rowClass = (line: DocumentLine) => {
+    const kind = line.kind === 'SUBTOTAL' ? 'bg-sunken' : ''
+    if (dragged === line.lineNumber) return `${kind} opacity-40`
+    if (dragged !== null && target === line.lineNumber) return `${kind} bg-accent/12`
+    return kind
+  }
+
+  const actionsOf = (line: DocumentLine) =>
     editable ? (
-      <td className={`${CELL} w-[136px]`}>
+      <td className={`${CELL} ${ACTION_COLUMN}`}>
         <span className="flex items-center justify-end gap-1">
-          <RowOrderButtons
-            name={`Position ${line.lineNumber}`}
-            upDisabled={index === 0 || busy}
-            downDisabled={index === lines.length - 1 || busy}
-            onUp={() => move(line, line.lineNumber - 1, 'oben')}
-            onDown={() => move(line, line.lineNumber + 1, 'unten')}
-          />
           <IconButton
             label={`Position ${line.lineNumber} bearbeiten`}
             onClick={() => onEdit(line)}
@@ -150,11 +215,14 @@ export function LinesTable({
       </td>
     ) : null
 
+  const totalSpan = VALUE_COLUMNS + (editable ? 1 : 0)
+
   return (
     <div className="overflow-x-auto">
       <table ref={table} className="w-full min-w-[640px] border-collapse text-[13px]">
         <thead>
           <tr className="border-b border-line-subtle">
+            {editable && <th scope="col" className={`${CELL} ${HANDLE_COLUMN}`} />}
             {COLUMNS.map((column) => (
               <th
                 key={column.key}
@@ -166,7 +234,7 @@ export function LinesTable({
                 {column.header}
               </th>
             ))}
-            {editable && <th scope="col" className="w-[136px] px-5 py-2.5" />}
+            {editable && <th scope="col" className={`${ACTION_COLUMN} px-5 py-2.5`} />}
           </tr>
         </thead>
 
@@ -177,7 +245,23 @@ export function LinesTable({
           className="divide-y divide-line-subtle"
         >
           {lines.map((line, index) => (
-            <tr key={line.lineNumber} className={line.kind === 'SUBTOTAL' ? 'bg-sunken' : ''}>
+            <tr
+              key={line.lineNumber}
+              className={rowClass(line)}
+              onDragOver={editable ? (event) => dragOver(event, line) : undefined}
+              onDrop={editable ? (event) => drop(event, line) : undefined}
+            >
+              {editable && (
+                <td className={`${CELL} ${HANDLE_COLUMN}`}>
+                  <DragHandle
+                    position={line.lineNumber}
+                    disabled={busy}
+                    onDragStart={(event) => startDrag(event, line)}
+                    onDragEnd={endDrag}
+                    onKeyDown={(event) => pressKey(event, line, index)}
+                  />
+                </td>
+              )}
               <td className={`${CELL} font-mono text-[12px] text-text-tertiary`}>
                 {line.lineNumber}
               </td>
@@ -187,24 +271,63 @@ export function LinesTable({
                 currency={document.currency}
                 kindLabel={kindLabel}
               />
-              {actionsOf(line, index)}
+              {actionsOf(line)}
             </tr>
           ))}
         </motion.tbody>
 
         <tfoot className="border-t border-line">
-          <TotalRow label="Netto" span={VALUE_COLUMNS} pad="pt-3">
+          <TotalRow label="Netto" span={totalSpan} pad="pt-3">
             {formatAmount(document.totalNet)}
           </TotalRow>
-          <TotalRow label="MwSt" span={VALUE_COLUMNS}>
+          <TotalRow label="MwSt" span={totalSpan}>
             {formatAmount(document.totalVat)}
           </TotalRow>
-          <TotalRow label={`Total ${document.currency}`} span={VALUE_COLUMNS} strong pad="pb-3">
+          <TotalRow label={`Total ${document.currency}`} span={totalSpan} strong pad="pb-3">
             {formatAmount(document.totalGross)}
           </TotalRow>
         </tfoot>
       </table>
     </div>
+  )
+}
+
+/**
+ * The grip a position is dragged by, the six dots in front of every row.
+ *
+ * <p>It is a button and not a bare icon so that the keyboard reaches it: with the grip
+ * focused, the arrow keys move the line, which is the only way to sort without a pointer.
+ */
+function DragHandle({
+  position,
+  disabled,
+  onDragStart,
+  onDragEnd,
+  onKeyDown,
+}: {
+  /** The line being moved, as it is numbered on screen. */
+  position: number
+  /** True while a change is on its way; the grip stays visible but takes nothing. */
+  disabled: boolean
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
+  onDragEnd: () => void
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void
+}) {
+  return (
+    <button
+      type="button"
+      draggable={!disabled}
+      disabled={disabled}
+      aria-label={handleLabel(position)}
+      aria-keyshortcuts="ArrowUp ArrowDown"
+      title="Ziehen oder mit den Pfeiltasten verschieben"
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onKeyDown={onKeyDown}
+      className="grid h-7 w-6 cursor-grab place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary active:cursor-grabbing disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+    >
+      <GripVertical size={14} aria-hidden />
+    </button>
   )
 }
 

@@ -125,16 +125,36 @@ function lastColumnOf(row: HTMLTableRowElement): number {
   return [...row.cells].reduce((column, cell) => column + cell.colSpan, 0)
 }
 
+/** Presses a key on an element the way a browser does, so React sees it bubble up. */
+function press(element: HTMLElement, key: string) {
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  })
+}
+
+/**
+ * Fires one step of a drag the way a browser does.
+ *
+ * <p>jsdom knows no `DragEvent` and carries no `dataTransfer`; the table reads the transfer
+ * only when there is one, so a plain bubbling event is enough to walk through a drag.
+ */
+function drag(element: HTMLElement, step: 'dragstart' | 'dragover' | 'drop') {
+  act(() => {
+    element.dispatchEvent(new Event(step, { bubbles: true, cancelable: true }))
+  })
+}
+
 describe('LinesTable', () => {
   it('linesTableTotalsStandUnderTheLineAmountsTest', async () => {
     await draw(order(LINES))
 
     const body = container.querySelector('tbody') as HTMLTableSectionElement
     const foot = container.querySelector('tfoot') as HTMLTableSectionElement
-    // The amount of the first position and the net total have to end in the same column.
-    expect(lastColumnOf(body.rows[0])).toBe(8)
-    expect(lastColumnOf(foot.rows[0])).toBe(7)
-    expect(foot.rows[0].cells[0].colSpan).toBe(6)
+    // A row carries the grip, the position, the six value columns and the controls; the
+    // amount of the first position and the net total have to end in the same column.
+    expect(lastColumnOf(body.rows[0])).toBe(9)
+    expect(lastColumnOf(foot.rows[0])).toBe(8)
+    expect(foot.rows[0].cells[0].colSpan).toBe(7)
   })
 
   it('linesTableTotalsStandUnderTheLineAmountsWhenIssuedTest', async () => {
@@ -166,14 +186,51 @@ describe('LinesTable', () => {
     expect(text()).toContain('trägt keine Positionen')
   })
 
+  it('linesTableSortsWithTheGripInsteadOfArrowsTest', async () => {
+    await draw(order(LINES))
+
+    // Every position carries a grip, and no line is moved by an arrow any more.
+    expect(container.querySelectorAll('[aria-label$="verschieben"]')).toHaveLength(3)
+    expect(container.querySelector('[aria-label="Position 1 nach unten"]')).toBeNull()
+    expect(container.querySelector('[aria-label="Position 3 nach oben"]')).toBeNull()
+  })
+
+  it('linesTableMovesALineWithTheArrowKeysTest', async () => {
+    await draw(order(LINES))
+
+    press(byLabel('Position 3 verschieben'), 'ArrowUp')
+
+    expect(moved).toEqual([{ lineNumber: 3, position: 2 }])
+  })
+
+  it('linesTableKeepsTheFirstLineWhereItIsTest', async () => {
+    await draw(order(LINES))
+
+    press(byLabel('Position 1 verschieben'), 'ArrowUp')
+    press(byLabel('Position 3 verschieben'), 'ArrowDown')
+
+    // There is nothing above the first line and nothing below the last.
+    expect(moved).toEqual([])
+  })
+
+  it('linesTableMovesNoLineWhileBusyTest', async () => {
+    await draw(order(LINES), true, true)
+
+    press(byLabel('Position 3 verschieben'), 'ArrowUp')
+
+    // A second move on top of a running one would be counted against lines the backend has
+    // already renumbered.
+    expect(moved).toEqual([])
+  })
+
   it('linesTableKeepsTheFocusOnTheMovedLineTest', async () => {
     await draw(order(LINES))
 
-    byLabel('Position 3 nach oben').focus()
-    act(() => byLabel('Position 3 nach oben').click())
+    byLabel('Position 3 verschieben').focus()
+    press(byLabel('Position 3 verschieben'), 'ArrowUp')
     expect(moved).toEqual([{ lineNumber: 3, position: 2 }])
 
-    // While the change is on its way the arrow is disabled and the browser drops the focus.
+    // While the change is on its way the grip is disabled and the browser drops the focus.
     await draw(order(LINES), true, true)
     // The backend has answered and renumbered: the line that was third is now second.
     await draw(
@@ -181,20 +238,30 @@ describe('LinesTable', () => {
     )
 
     // The focus follows the line, not the position it was pressed at.
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Position 2 nach oben')
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Position 2 verschieben')
   })
 
-  it('linesTableKeepsTheFocusInTheRowAtTheTopTest', async () => {
+  it('linesTableDropsALineOnThePositionItLandsOnTest', async () => {
     await draw(order(LINES))
 
-    byLabel('Position 2 nach oben').focus()
-    act(() => byLabel('Position 2 nach oben').click())
-    await draw(order(LINES), true, true)
-    await draw(
-      order([{ ...LINES[1], lineNumber: 1 }, { ...LINES[0], lineNumber: 2 }, LINES[2]]),
-    )
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    drag(byLabel('Position 1 verschieben'), 'dragstart')
+    drag(body.rows[2], 'dragover')
+    drag(body.rows[2], 'drop')
 
-    // At the top the arrow that was pressed is disabled; the focus stays in the row.
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Position 1 nach unten')
+    // The line the grip held takes over the position it was dropped on.
+    expect(moved).toEqual([{ lineNumber: 1, position: 3 }])
+  })
+
+  it('linesTableDropsALineOnItselfWithoutMovingTest', async () => {
+    await draw(order(LINES))
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    drag(byLabel('Position 2 verschieben'), 'dragstart')
+    drag(body.rows[1], 'dragover')
+    drag(body.rows[1], 'drop')
+
+    // A line dropped where it started is no change, and must not be sent as one.
+    expect(moved).toEqual([])
   })
 })
