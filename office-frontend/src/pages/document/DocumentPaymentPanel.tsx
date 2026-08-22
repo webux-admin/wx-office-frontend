@@ -22,7 +22,7 @@ import { PaymentTermSelect } from '../../masterdata/PaymentTermSelect'
  * <p>"Ohne Kondition" is a real answer, not an empty field: what is sent replaces the whole
  * agreement, so choosing it takes a term off again (ADR-0037).
  */
-export function OrderPaymentPanel({
+export function DocumentPaymentPanel({
   tenantId,
   base,
   document,

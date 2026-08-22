@@ -32,7 +32,7 @@ const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
  * the create payload, so a changed one is applied to the fresh draft right afterwards, through
  * the same endpoints the draft mask uses.
  */
-export function NewOrderMask({ tenantId }: { tenantId: number }) {
+export function NewDocumentMask({ tenantId }: { tenantId: number }) {
   const navigate = useNavigate()
   const origin = originOf(useLocation().state, LIST)
   const usageLabel = useCatalogueLabel(tenantId, 'address-usage')

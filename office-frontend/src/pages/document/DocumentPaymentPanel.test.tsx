@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SalesDocument } from '../../lib/types'
-import { OrderPaymentPanel } from './OrderPaymentPanel'
+import { DocumentPaymentPanel } from './DocumentPaymentPanel'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -85,7 +85,7 @@ async function render(value: SalesDocument, editable = true, readOnlyNote?: stri
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <OrderPaymentPanel
+        <DocumentPaymentPanel
           tenantId={TENANT}
           base={BASE}
           document={value}
@@ -128,7 +128,7 @@ function apply(): HTMLButtonElement {
   return button as HTMLButtonElement
 }
 
-describe('OrderPaymentPanel', () => {
+describe('DocumentPaymentPanel', () => {
   it('orderPaymentSendsTheChosenTermTest', async () => {
     await render(document())
 

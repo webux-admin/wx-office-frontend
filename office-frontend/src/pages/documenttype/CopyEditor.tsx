@@ -7,7 +7,7 @@ import { TextField } from '../../components/TextField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
 import type { Printer } from '../../lib/types'
-import { selectablePrinters, traysOf } from '../order/printoutForm'
+import { selectablePrinters, traysOf } from '../document/printoutForm'
 import {
   MAX_COPIES,
   MAX_SHEETS,

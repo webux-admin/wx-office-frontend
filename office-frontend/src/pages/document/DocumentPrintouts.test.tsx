@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
 import type { DocumentPrintout, Printer } from '../../lib/types'
-import { OrderPrintouts } from './OrderPrintouts'
+import { DocumentPrintouts } from './DocumentPrintouts'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -110,7 +110,7 @@ async function render(options: {
     root.render(
       <QueryClientProvider client={client}>
         <AuthContext.Provider value={auth(options.permissions ?? ['PRINTER_READ'])}>
-          <OrderPrintouts
+          <DocumentPrintouts
             tenantId={TENANT}
             base={BASE}
             editable={options.editable ?? false}
@@ -161,7 +161,7 @@ function click(element: HTMLElement) {
   })
 }
 
-describe('OrderPrintouts', () => {
+describe('DocumentPrintouts', () => {
   it('orderPrintoutsShowsTheStoredCopiesTest', async () => {
     await render()
 

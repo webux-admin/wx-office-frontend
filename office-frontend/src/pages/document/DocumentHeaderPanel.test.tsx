@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
-import { OrderHeaderPanel } from './OrderHeaderPanel'
+import { DocumentHeaderPanel } from './DocumentHeaderPanel'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -112,7 +112,7 @@ async function renderWithNote(
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <OrderHeaderPanel
+        <DocumentHeaderPanel
           tenantId={TENANT}
           base={BASE}
           document={document}
@@ -168,7 +168,7 @@ function writes(): { url: string; method: string; body: unknown }[] {
   return sent.filter((call) => call.method === 'PUT')
 }
 
-describe('OrderHeaderPanel', () => {
+describe('DocumentHeaderPanel', () => {
   it('orderHeaderSendsOnlyWhatChangedTest', async () => {
     await render(draft())
 

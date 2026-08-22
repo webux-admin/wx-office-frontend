@@ -22,26 +22,26 @@ import type {
   SalesDocument,
 } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
-import { ChangePartnerDialog } from './order/ChangePartnerDialog'
-import { NewOrderMask } from './order/NewOrderMask'
-import { OrderHeaderPanel } from './order/OrderHeaderPanel'
-import { OrderLines } from './order/OrderLines'
-import { OrderPaymentPanel } from './order/OrderPaymentPanel'
-import { OrderPrintouts } from './order/OrderPrintouts'
-import { headerKey, paymentKey } from './order/headerForm'
-import { recipientNote } from './order/recipientNote'
+import { ChangePartnerDialog } from './document/ChangePartnerDialog'
+import { NewDocumentMask } from './document/NewDocumentMask'
+import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
+import { DocumentLines } from './document/DocumentLines'
+import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
+import { DocumentPrintouts } from './document/DocumentPrintouts'
+import { headerKey, paymentKey } from './document/headerForm'
+import { recipientNote } from './document/recipientNote'
 import {
   itemLineCount,
   type FreeLine,
   type ProductLine,
   type StructureLine,
-} from './order/lineForm'
+} from './document/lineForm'
 
 /** Where an order mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
 
 /** One order: its positions, its texts and the way from draft to issued. */
-export function OrderPage() {
+export function SalesDocumentPage() {
   return (
     <RequireTenant permission="ORDER_READ">
       {(tenantId) => <OrderLoader tenantId={tenantId} />}
@@ -58,7 +58,7 @@ function OrderLoader({ tenantId }: { tenantId: number }) {
     enabled: id !== 'neu',
   })
 
-  if (id === 'neu') return <NewOrderMask tenantId={tenantId} />
+  if (id === 'neu') return <NewDocumentMask tenantId={tenantId} />
   if (order.isPending) return <LoadingBlock label="Auftrag wird geladen" />
   if (order.error) {
     return (
@@ -279,7 +279,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
         {finalise.error !== null && <ErrorNotice error={finalise.error} />}
         {print.error !== null && <ErrorNotice error={print.error} />}
 
-        <OrderLines
+        <DocumentLines
           tenantId={tenantId}
           order={order}
           editable={editable}
@@ -314,7 +314,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           <div className="grid gap-6 self-start">
             {/* Keyed by what is stored: the section holds what was typed, and that has to give
                 way when a customer change rewrites language and currency underneath it. */}
-            <OrderHeaderPanel
+            <DocumentHeaderPanel
               key={headerKey(order)}
               tenantId={tenantId}
               base={base}
@@ -324,7 +324,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
               onChanged={refresh}
             />
             <OrderTexts tenantId={tenantId} order={order} editable={editable} />
-            <OrderPrintouts
+            <DocumentPrintouts
               tenantId={tenantId}
               base={base}
               editable={editable}
@@ -334,7 +334,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           </div>
 
           <div className="grid gap-6 self-start">
-            <OrderPaymentPanel
+            <DocumentPaymentPanel
               key={paymentKey(order)}
               tenantId={tenantId}
               base={base}

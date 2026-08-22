@@ -23,8 +23,8 @@ import type {
   SalesDocument,
 } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
-import { CopyOrderDialog } from './order/CopyOrderDialog'
-import { TakeoverDialog } from './order/TakeoverDialog'
+import { CopyDocumentDialog } from './document/CopyDocumentDialog'
+import { TakeoverDialog } from './document/TakeoverDialog'
 
 /** What an order mask returns to when it closes here. */
 const ORIGIN = originState('/auftraege', 'Aufträge')
@@ -49,7 +49,7 @@ const FILTERS: { id: 'alle' | DocumentStatus; label: string }[] = [
  * <p>Status, order and count come from the server. The rows are heads without lines: what a
  * list shows is the head of a document, and loading the lines cost a query per row.
  */
-export function OrderListPage() {
+export function SalesDocumentListPage() {
   return (
     <RequireTenant permission="ORDER_READ">
       {(tenantId) => <OrderList tenantId={tenantId} />}
@@ -258,7 +258,7 @@ function OrderList({ tenantId }: { tenantId: number }) {
         onCreated={openCreated}
       />
 
-      <CopyOrderDialog
+      <CopyDocumentDialog
         tenantId={tenantId}
         open={copying}
         onClose={() => setCopying(false)}

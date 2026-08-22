@@ -28,7 +28,7 @@ type OpenDialog = {
  * back is what is shown. The amount on a document is a legal statement, and there must be
  * exactly one place that decides it.
  */
-export function OrderLines({
+export function DocumentLines({
   tenantId,
   order,
   editable,

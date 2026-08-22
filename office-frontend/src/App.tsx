@@ -27,8 +27,8 @@ const PrintLayoutListPage = lazy(() => import('./pages/PrintLayoutListPage').the
 const PrintLayoutPage = lazy(() => import('./pages/PrintLayoutPage').then((module) => ({ default: module.PrintLayoutPage })))
 const MasterDataPage = lazy(() => import('./pages/MasterDataPage').then((module) => ({ default: module.MasterDataPage })))
 const NumberRangePage = lazy(() => import('./pages/NumberRangePage').then((module) => ({ default: module.NumberRangePage })))
-const OrderListPage = lazy(() => import('./pages/OrderListPage').then((module) => ({ default: module.OrderListPage })))
-const OrderPage = lazy(() => import('./pages/OrderPage').then((module) => ({ default: module.OrderPage })))
+const SalesDocumentListPage = lazy(() => import('./pages/SalesDocumentListPage').then((module) => ({ default: module.SalesDocumentListPage })))
+const SalesDocumentPage = lazy(() => import('./pages/SalesDocumentPage').then((module) => ({ default: module.SalesDocumentPage })))
 const PartnerListPage = lazy(() => import('./pages/PartnerListPage').then((module) => ({ default: module.PartnerListPage })))
 const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({ default: module.PartnerPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
@@ -94,8 +94,8 @@ export default function App() {
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 
-                <Route path="/auftraege" element={<OrderListPage />} />
-                <Route path="/auftraege/:id" element={<OrderPage />} />
+                <Route path="/auftraege" element={<SalesDocumentListPage />} />
+                <Route path="/auftraege/:id" element={<SalesDocumentPage />} />
 
                 {/* Every maintained list is a screen of its own, so it can be linked and
                     bookmarked. The old collective address stays and points at the first one. */}

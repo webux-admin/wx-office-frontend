@@ -8,7 +8,7 @@ import { api } from '../../lib/api'
 import { formatAmount, formatDate } from '../../lib/format'
 import type { CopyPriceMode, DocumentSummary, Page, SalesDocument } from '../../lib/types'
 
-type CopyOrderDialogProps = {
+type CopyDocumentDialogProps = {
   tenantId: number
   open: boolean
   onClose: () => void
@@ -25,7 +25,7 @@ const PICKER_SIZE = 50
  * be changed for this one copy. Nothing is written back to the setting: an exception stays an
  * exception.
  */
-export function CopyOrderDialog({ tenantId, open, onClose, onCreated }: CopyOrderDialogProps) {
+export function CopyDocumentDialog({ tenantId, open, onClose, onCreated }: CopyDocumentDialogProps) {
   const [sourceId, setSourceId] = useState<number | null>(null)
   const [priceMode, setPriceMode] = useState<CopyPriceMode | ''>('')
 

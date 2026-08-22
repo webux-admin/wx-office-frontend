@@ -46,7 +46,7 @@ const DESCRIPTION =
  * @param readOnlyNote why they may not be changed, when the reason is the missing right
  * @param draft whether the document is still a draft, which prints a preview
  */
-export function OrderPrintouts({
+export function DocumentPrintouts({
   tenantId,
   base,
   editable,

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
-import { OrderLines } from './OrderLines'
+import { DocumentLines } from './DocumentLines'
 import type { FreeLine, ProductLine, StructureLine } from './lineForm'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -199,7 +199,7 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
     root.render(
       <MemoryRouter>
         <QueryClientProvider client={client}>
-          <OrderLines
+          <DocumentLines
           tenantId={TENANT}
           order={order(lines)}
           editable={editable}
@@ -309,7 +309,7 @@ function type(control: HTMLInputElement | HTMLSelectElement, value: string) {
   })
 }
 
-describe('OrderLines', () => {
+describe('DocumentLines', () => {
   it('orderLinesShowsEveryKindOfLineTest', async () => {
     await render(LINES)
 

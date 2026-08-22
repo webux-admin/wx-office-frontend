@@ -29,7 +29,7 @@ import {
  * it is written in (ADR-0037). Prices are not looked up again here — for that the customer
  * has to change, which happens in its own dialog.
  */
-export function OrderHeaderPanel({
+export function DocumentHeaderPanel({
   tenantId,
   base,
   document,
