@@ -48,7 +48,10 @@ export function TextField({
         </span>
       )}
 
+      {/* What the caller passes is spread first, so the two handlers below stay in charge of
+          the focus line and call the caller's own afterwards. */}
       <input
+        {...rest}
         id={id}
         aria-invalid={invalid || undefined}
         aria-describedby={hint ? hintId : undefined}
@@ -63,7 +66,6 @@ export function TextField({
         className={`h-10 w-full bg-transparent px-3 text-[14px] text-text-primary outline-none placeholder:text-text-tertiary disabled:text-text-secondary ${
           numeric ? 'text-right font-mono tabular-nums' : ''
         }`}
-        {...rest}
       />
 
       {action && <span className="pr-1.5">{action}</span>}

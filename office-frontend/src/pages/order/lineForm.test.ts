@@ -5,7 +5,10 @@ import {
   discountFieldsOf,
   discountPayload,
   editorOf,
+  hasProblem,
   itemLineCount,
+  lineProblems,
+  moreDetailsSummary,
   lockedDiscount,
   NO_DISCOUNT,
   structureKindOptions,
@@ -235,5 +238,90 @@ describe('itemLineCount', () => {
 
   it('itemLineCountWithOnlyStructureLinesTest', () => {
     expect(itemLineCount([line({ kind: 'COMMENT' }), line({ kind: 'PAGE_BREAK' })])).toBe(0)
+  })
+})
+
+describe('moreDetailsSummary', () => {
+  it('moreDetailsSummaryTest', () => {
+    expect(moreDetailsSummary({ percent: '10', amount: '' }, '2026-01-01', '2026-01-31')).toBe(
+      'Rabatt 10 % · Leistung 01.01.2026 bis 31.01.2026',
+    )
+  })
+
+  it('moreDetailsSummaryWithNothingInItTest', () => {
+    expect(moreDetailsSummary(NO_DISCOUNT, '', '')).toBeUndefined()
+  })
+
+  it('moreDetailsSummaryWithADiscountAmountTest', () => {
+    expect(moreDetailsSummary({ percent: '', amount: '12.5' }, '', '')).toBe('Rabatt 12.50')
+  })
+
+  it('moreDetailsSummaryWithOnlyOneDayTest', () => {
+    expect(moreDetailsSummary(NO_DISCOUNT, '2026-01-01', '')).toBe('Leistung ab 01.01.2026')
+    expect(moreDetailsSummary(NO_DISCOUNT, '', '2026-01-31')).toBe('Leistung bis 31.01.2026')
+  })
+
+  /** A stored zero is no discount, and `discountFieldsOf` leaves the field empty for it. */
+  it('moreDetailsSummaryWithADiscountOfZeroTest', () => {
+    expect(moreDetailsSummary({ percent: '0', amount: '' }, '', '')).toBe('Rabatt 0 %')
+  })
+
+  it('moreDetailsSummaryWithAHalfTypedFigureTest', () => {
+    expect(moreDetailsSummary({ percent: '-', amount: '' }, '', '')).toBeUndefined()
+  })
+})
+
+describe('lineProblems', () => {
+  it('lineProblemsTest', () => {
+    expect(lineProblems({ quantity: '3', discount: { percent: '10', amount: '' } })).toEqual({})
+  })
+
+  it('lineProblemsWithoutAQuantityTest', () => {
+    const problems = lineProblems({ quantity: '', discount: NO_DISCOUNT })
+
+    expect(problems.quantity).toBe('Die Menge fehlt.')
+    expect(hasProblem(problems)).toBe(true)
+  })
+
+  it('lineProblemsWithAQuantityOfZeroTest', () => {
+    expect(lineProblems({ quantity: '0', discount: NO_DISCOUNT }).quantity).toBe(
+      'Die Menge darf nicht null sein.',
+    )
+  })
+
+  it('lineProblemsWithANegativeQuantityTest', () => {
+    // A returned item carries one, so it is not a problem.
+    expect(lineProblems({ quantity: '-2', discount: NO_DISCOUNT })).toEqual({})
+  })
+
+  it('lineProblemsWithADiscountThatIsNotANumberTest', () => {
+    // "10%" used to be dropped without a word: the line went out ten per cent too dear while
+    // the mask still showed a discount.
+    expect(
+      lineProblems({ quantity: '1', discount: { percent: '10%', amount: '' } }).percent,
+    ).toBe('Der Rabatt ist keine Zahl.')
+    expect(
+      lineProblems({ quantity: '1', discount: { percent: '', amount: 'zehn' } }).amount,
+    ).toBe('Der Rabatt ist keine Zahl.')
+  })
+
+  it('lineProblemsWithAnEmptyDiscountTest', () => {
+    // Empty is not unreadable: most lines carry no discount at all.
+    expect(lineProblems({ quantity: '1', discount: { percent: '  ', amount: '' } })).toEqual({})
+  })
+
+  it('lineProblemsWithADiscountOutOfRangeTest', () => {
+    expect(
+      lineProblems({ quantity: '1', discount: { percent: '120', amount: '' } }).percent,
+    ).toBe('Der Rabatt liegt zwischen 0 und 100 Prozent.')
+    expect(
+      lineProblems({ quantity: '1', discount: { percent: '', amount: '-5' } }).amount,
+    ).toBe('Der Rabatt darf nicht negativ sein.')
+  })
+
+  it('lineProblemsWithoutAUnitPriceTest', () => {
+    const problems = lineProblems({ quantity: '1', unitPrice: '', discount: NO_DISCOUNT })
+
+    expect(problems.unitPrice).toBe('Der Einzelpreis fehlt.')
   })
 })

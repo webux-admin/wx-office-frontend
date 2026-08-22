@@ -16,6 +16,8 @@ const STALE_AFTER_PARTNER_CHANGE = ['partner', 'partners', 'order', 'orders'] as
  */
 export function invalidateAfterPartnerChange(queryClient: QueryClient, tenantId: number) {
   for (const key of STALE_AFTER_PARTNER_CHANGE) {
-    void queryClient.invalidateQueries({ queryKey: [key, tenantId] })
+    // Caught, not merely discarded: a refused refetch is not the caller's problem — the mask
+    // has already saved by then — but an unhandled rejection would still be reported as one.
+    void queryClient.invalidateQueries({ queryKey: [key, tenantId] }).catch(() => undefined)
   }
 }

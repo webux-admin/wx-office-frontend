@@ -14,6 +14,8 @@ import {
   discountPayload,
   hasProblem,
   lineProblems,
+  moreDetailsSummary,
+  NO_DISCOUNT,
   type FreeLine,
 } from './lineForm'
 
@@ -60,6 +62,9 @@ export function FreeLineDialog({
   const price = parseDecimal(unitPrice)
   const problems = lineProblems({ quantity, unitPrice, discount })
   const incomplete = description.trim() === '' || hasProblem(problems)
+  // The discount stands outside the fold in this dialog, so only the period of supply can
+  // hide in it — and it decides the VAT rate, which is exactly what must not disappear.
+  const summary = moreDetailsSummary(NO_DISCOUNT, from, to)
 
   return (
     <Dialog
@@ -161,7 +166,7 @@ export function FreeLineDialog({
         className="mt-5"
       />
 
-      <MoreDetails defaultOpen={from !== '' || to !== ''}>
+      <MoreDetails defaultOpen={summary !== undefined} summary={summary}>
         <ServiceDateFields from={from} to={to} onFrom={setFrom} onTo={setTo} />
       </MoreDetails>
     </Dialog>

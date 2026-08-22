@@ -1,5 +1,5 @@
-import { useDeferredValue, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Badge } from '../components/Badge'
@@ -10,6 +10,7 @@ import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
+import { useDebouncedValue } from '../components/useDebouncedValue'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -46,14 +47,18 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
   // among the customers.
   const origin = originState(wording.path, wording.listTitle)
 
-  // Deferred rather than debounced: React keeps the old list on screen while the new one
-  // loads instead of blanking the table on every keystroke.
-  const term = useDeferredValue(search.trim())
+  // Debounced, not deferred: useDeferredValue only decides when React renders the new value,
+  // never whether a request goes out. What keeps the old rows on screen is the placeholder
+  // below, not the deferred render.
+  const term = useDebouncedValue(search.trim())
 
   const query = listQuery({ role, search: term, activeOnly, page, size: PAGE_SIZE, sort })
   const partners = useQuery({
     queryKey: ['partners', tenantId, query],
     queryFn: () => api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${query}`),
+    // The rows found last stay on screen while the next answer is on its way, instead of the
+    // table being replaced by its loading state on every term.
+    placeholderData: keepPreviousData,
   })
 
   // Filtering, sorting and counting all happen in the database now. This screen holds one
@@ -153,6 +158,8 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
                 setPage(0)
               }}
               placeholder={wording.searchPlaceholder}
+              // As wide as the column searched over; nothing longer can match anyway.
+              maxLength={70}
               icon={<Search size={15} />}
               className="min-w-[240px] flex-1"
             />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { originOf, originState, type Origin } from './origin'
+import { optionalOriginOf, originOf, originState, type Origin } from './origin'
 
 /** Where a product mask goes when the router names no origin. */
 const FALLBACK: Origin = { from: '/produkte', label: 'Produkte' }
@@ -86,5 +86,28 @@ describe('originOf', () => {
       from: '/',
       label: 'Übersicht',
     })
+  })
+})
+
+describe('optionalOriginOf', () => {
+  it('optionalOriginOfTest', () => {
+    expect(optionalOriginOf(originState('/auftraege/42', 'Auftrag'))).toEqual({
+      from: '/auftraege/42',
+      label: 'Auftrag',
+    })
+  })
+
+  /** A list reached through the navigation shows no way back, so there is nothing to fall to. */
+  it('optionalOriginOfWithoutStateTest', () => {
+    expect(optionalOriginOf(null)).toBeUndefined()
+    expect(optionalOriginOf(undefined)).toBeUndefined()
+  })
+
+  it('optionalOriginOfWithForeignStateTest', () => {
+    expect(optionalOriginOf({ scrollPosition: 120 })).toBeUndefined()
+  })
+
+  it('optionalOriginOfWithProtocolRelativePathTest', () => {
+    expect(optionalOriginOf({ origin: { from: '//example.test', label: 'Beleg' } })).toBeUndefined()
   })
 })

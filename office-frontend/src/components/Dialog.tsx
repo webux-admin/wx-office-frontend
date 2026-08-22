@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 
 type DialogProps = {
   open: boolean
@@ -11,6 +11,12 @@ type DialogProps = {
   footer?: ReactNode
   /** Wider box for a dialog holding a form rather than a question. */
   wide?: boolean
+  /**
+   * Where the focus lands when the box opens. Without it the first control in the box takes
+   * it, which is the close button — right for a question, wrong for a form whose first field
+   * is what the whole dialog is about.
+   */
+  initialFocus?: RefObject<HTMLElement | null>
   children: ReactNode
 }
 
@@ -28,6 +34,7 @@ export function Dialog({
   description,
   footer,
   wide = false,
+  initialFocus,
   children,
 }: DialogProps) {
   const titleId = useId()
@@ -47,9 +54,12 @@ export function Dialog({
     if (!open) return
 
     opener.current = document.activeElement as HTMLElement | null
-    panel.current?.querySelector<HTMLElement>(
-      'input, select, textarea, button, [href], [tabindex]:not([tabindex="-1"])',
-    )?.focus()
+    const first =
+      initialFocus?.current ??
+      panel.current?.querySelector<HTMLElement>(
+        'input, select, textarea, button, [href], [tabindex]:not([tabindex="-1"])',
+      )
+    first?.focus()
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -79,7 +89,7 @@ export function Dialog({
       document.removeEventListener('keydown', onKeyDown)
       opener.current?.focus()
     }
-  }, [open])
+  }, [open, initialFocus])
 
   return (
     <AnimatePresence>

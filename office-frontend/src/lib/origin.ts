@@ -39,15 +39,29 @@ export function originState(from: string, label: string): OriginState {
  * @returns the origin to return to, never `undefined`
  */
 export function originOf(state: unknown, fallback: Origin): Origin {
-  if (typeof state !== 'object' || state === null || !('origin' in state)) return fallback
+  return optionalOriginOf(state) ?? fallback
+}
+
+/**
+ * Reads back where a screen was opened from, where there is no way back without one.
+ *
+ * <p>A list is normally reached through the navigation and shows no way back at all. It gets
+ * one only when another screen sent the user there — the position dialog does, to let someone
+ * look a product up in its own mask and return to the document afterwards.
+ *
+ * @param state the router state of the screen, `location.state`
+ * @returns the origin to return to, or `undefined` when the state names none
+ */
+export function optionalOriginOf(state: unknown): Origin | undefined {
+  if (typeof state !== 'object' || state === null || !('origin' in state)) return undefined
 
   const origin = state.origin
-  if (typeof origin !== 'object' || origin === null) return fallback
-  if (!('from' in origin) || !('label' in origin)) return fallback
+  if (typeof origin !== 'object' || origin === null) return undefined
+  if (!('from' in origin) || !('label' in origin)) return undefined
 
   const { from, label } = origin
-  if (typeof from !== 'string' || typeof label !== 'string') return fallback
-  if (!isInApp(from) || label.trim() === '') return fallback
+  if (typeof from !== 'string' || typeof label !== 'string') return undefined
+  if (!isInApp(from) || label.trim() === '') return undefined
 
   return { from, label }
 }

@@ -1,13 +1,11 @@
 import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Plus, Rows3 } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
-import { api } from '../../lib/api'
-import { listQuery, PICKER_SIZE } from '../../lib/paging'
-import type { DocumentLine, Page, Product, SalesDocument } from '../../lib/types'
+import { originState } from '../../lib/origin'
+import type { DocumentLine, SalesDocument } from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
 import { LinesTable } from './LinesTable'
 import { ProductLineDialog } from './ProductLineDialog'
@@ -98,16 +96,13 @@ export function OrderLines({
     void run().then(close, () => undefined)
   }
 
-  // A picker wants every entry, not a page, so it asks for the largest page the server
-  // allows. Beyond that a dropdown is the wrong control anyway and this needs a type-ahead.
-  const productQuery = listQuery({ activeOnly: true, size: PICKER_SIZE })
-  const products = useQuery({
-    queryKey: ['products', tenantId, productQuery],
-    queryFn: () => api.get<Page<Product>>(`/api/tenants/${tenantId}/products?${productQuery}`),
-    enabled: editable,
-  })
-
   const edited = dialog?.line
+  // Where the way into the product mask leads back to. The catalogue is looked up in its own
+  // screen now and then, and the document has to be one click away afterwards.
+  const back = originState(
+    `/auftraege/${order.id}`,
+    order.documentNumber ? `Auftrag ${order.documentNumber}` : 'Auftrag',
+  )
 
   return (
     <>
@@ -157,16 +152,16 @@ export function OrderLines({
       {dialog?.kind === 'product' && (
         <ProductLineDialog
           key={dialog.id}
+          tenantId={tenantId}
+          partnerId={order.partnerId}
+          documentDate={order.documentDate}
+          currency={order.baseCurrency ?? order.currency}
+          back={back}
           open={open}
           onClose={close}
           onSubmit={(line) =>
-            submit(() =>
-              edited ? onUpdateProductLine(edited.lineNumber, line) : onAddProductLine(line),
-            )
+            edited ? onUpdateProductLine(edited.lineNumber, line) : onAddProductLine(line)
           }
-          products={products.data?.content ?? []}
-          productsLoading={products.isPending}
-          productsError={products.error}
           line={edited}
           busy={busy}
           error={error}

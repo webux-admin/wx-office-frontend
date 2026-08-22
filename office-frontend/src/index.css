@@ -95,6 +95,10 @@
   --color-success: #2f6b4f;
   --color-danger: #8c3023;
 
+  /* Behind what a search term matched. Tinted towards the accent, light enough that
+     `text-primary` keeps its contrast on top of it. */
+  --color-highlight: #cbe3d6;
+
   --color-module-kunden: #1e4d3f;
   --color-module-offerten: #33507e;
   --color-module-lieferscheine: #1f5b63;
@@ -156,6 +160,8 @@
     --color-accent-text: #7cc9aa;
     --color-success: #4fa07c;
     --color-danger: #e08c7e;
+
+    --color-highlight: #2c5b4a;
 
     /* The module colours are lifted with it, so a white icon keeps its footing. */
     --color-module-kunden: #2f7a63;

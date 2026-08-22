@@ -5,7 +5,7 @@
  * the form: a line carries either a percentage or an amount as its discount, never both. The
  * backend refuses the other case, and the mask has to say so before the request goes out.
  */
-import { parseDecimal } from '../../lib/format'
+import { formatAmount, formatDate, formatPercent, parseDecimal } from '../../lib/format'
 import type { SelectableEntry } from '../../lib/masterData'
 import type { DocumentLine, DocumentLineKind, VatCategory } from '../../lib/types'
 
@@ -149,6 +149,9 @@ export type LineProblems = {
  * <p>A negative quantity is deliberately allowed: a returned item carries one. Only zero is
  * refused, the way the backend refuses it.
  *
+ * <p>A discount field that carries something unreadable is a problem of its own. It cannot be
+ * sent, and sending nothing instead would raise the amount of the line without saying so.
+ *
  * @param fields the values as they were typed; `unitPrice` only where the line names its own
  * @returns a sentence per field that is wrong, empty when the line may be sent
  */
@@ -168,12 +171,19 @@ export function lineProblems(fields: {
     else if (price < 0) problems.unitPrice = 'Der Einzelpreis darf nicht negativ sein.'
   }
 
+  // A figure that does not parse is refused rather than dropped. "10%" in the percentage
+  // field used to be sent as no discount at all, so the line went out ten percent too dear
+  // while the mask showed a discount and said nothing.
   const percent = parseDecimal(fields.discount.percent)
-  if (percent !== null && (percent < 0 || percent > 100)) {
+  if (percent === null && fields.discount.percent.trim() !== '') {
+    problems.percent = 'Der Rabatt ist keine Zahl.'
+  } else if (percent !== null && (percent < 0 || percent > 100)) {
     problems.percent = 'Der Rabatt liegt zwischen 0 und 100 Prozent.'
   }
   const amount = parseDecimal(fields.discount.amount)
-  if (amount !== null && amount < 0) {
+  if (amount === null && fields.discount.amount.trim() !== '') {
+    problems.amount = 'Der Rabatt ist keine Zahl.'
+  } else if (amount !== null && amount < 0) {
     problems.amount = 'Der Rabatt darf nicht negativ sein.'
   }
   return problems
@@ -200,6 +210,36 @@ export function hasProblem(problems: LineProblems): boolean {
  */
 export function dropsDiscount(discountable: boolean, fields: DiscountFields): boolean {
   return !discountable && lockedDiscount(fields) !== null
+}
+
+/**
+ * What the folded away part of a position dialog carries, in one line.
+ *
+ * <p>A discount that nobody sees is a discount nobody corrects, and the same goes for a
+ * period of supply, which decides the VAT rate. The fold may hide the fields; it may not hide
+ * that something is in them.
+ *
+ * @param fields the two discount fields as they stand
+ * @param from the first day of supply, empty for the document date
+ * @param to the last day of supply, empty for none
+ * @returns the line to put next to "Weitere Angaben", or undefined while everything is empty
+ */
+export function moreDetailsSummary(
+  fields: DiscountFields,
+  from: string,
+  to: string,
+): string | undefined {
+  const entries: string[] = []
+  const percent = parseDecimal(fields.percent)
+  const amount = parseDecimal(fields.amount)
+  if (percent !== null) entries.push(`Rabatt ${formatPercent(percent)}`)
+  else if (amount !== null) entries.push(`Rabatt ${formatAmount(amount)}`)
+
+  if (from !== '' && to !== '') entries.push(`Leistung ${formatDate(from)} bis ${formatDate(to)}`)
+  else if (from !== '') entries.push(`Leistung ab ${formatDate(from)}`)
+  else if (to !== '') entries.push(`Leistung bis ${formatDate(to)}`)
+
+  return entries.length === 0 ? undefined : entries.join(' · ')
 }
 
 /**

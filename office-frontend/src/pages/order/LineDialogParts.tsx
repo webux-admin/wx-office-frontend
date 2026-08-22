@@ -90,10 +90,16 @@ export function DiscountPair({
  */
 export function MoreDetails({
   defaultOpen = false,
+  summary,
   children,
 }: {
   /** True where what is inside is already filled in, so it is not hidden from the user. */
   defaultOpen?: boolean
+  /**
+   * What is inside, in one line, shown next to the button whether it is open or not. Without
+   * it the fold would swallow a discount somebody set and folded away again.
+   */
+  summary?: string
   children: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -101,20 +107,28 @@ export function MoreDetails({
 
   return (
     <div className="mt-5 border-t border-line-subtle pt-3">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 rounded-[var(--radius-sm)] text-[12px] font-medium text-text-secondary transition-colors hover:text-text-primary"
-      >
-        <ChevronRight
-          size={14}
-          aria-hidden
-          className={`transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
-        />
-        Weitere Angaben
-      </button>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-1 rounded-[var(--radius-sm)] text-[12px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <ChevronRight
+            size={14}
+            aria-hidden
+            className={`transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+          />
+          Weitere Angaben
+        </button>
+
+        {summary && (
+          <span className="rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[11px] text-text-secondary">
+            {summary}
+          </span>
+        )}
+      </div>
 
       <div id={id} hidden={!open} className="mt-3">
         {children}

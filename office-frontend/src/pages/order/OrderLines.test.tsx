@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
 import { OrderLines } from './OrderLines'
@@ -119,21 +120,26 @@ let root: Root
  * session cookie and a CSRF header, and that is worth going through.
  */
 function stubFetch() {
-  vi.stubGlobal('fetch', (url: string) => {
-    const body = url.includes('/catalogues')
-      ? CATALOGUES
-      : url.includes('/units')
-        ? UNITS
-        : url.includes('/products')
-          ? PRODUCTS
-          : {}
-    return Promise.resolve(
-      new Response(JSON.stringify(body), {
+  vi.stubGlobal('fetch', (url: string) =>
+    Promise.resolve(
+      new Response(JSON.stringify(answer(url)), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
-    )
-  })
+    ),
+  )
+}
+
+/** What each of the endpoints the mask reads answers with. */
+function answer(url: string): unknown {
+  if (url.includes('/catalogues')) return CATALOGUES
+  if (url.includes('/units')) return UNITS
+  if (url.includes('/vat-rates')) return { STANDARD: 8.1 }
+  if (url.includes('/price?')) return { productId: 7, partnerId: 3, price: 80, origin: 'BASE', includesVat: false }
+  const single = /\/products\/(\d+)/.exec(url)
+  if (single) return PRODUCTS.content.find((product) => String(product.id) === single[1])
+  if (url.includes('/products')) return PRODUCTS
+  return {}
 }
 
 beforeEach(() => {
@@ -191,8 +197,9 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
 
   await act(async () => {
     root.render(
-      <QueryClientProvider client={client}>
-        <OrderLines
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <OrderLines
           tenantId={TENANT}
           order={order(lines)}
           editable={editable}
@@ -224,9 +231,10 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
           onRemoveLine={(lineNumber) => calls.removed.push(lineNumber)}
           busy={false}
           error={error}
-          readOnlyNote={readOnlyNote}
-        />
-      </QueryClientProvider>,
+            readOnlyNote={readOnlyNote}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     )
   })
   await settle()
@@ -392,7 +400,8 @@ describe('OrderLines', () => {
     click(byLabel('Position 5 bearbeiten'))
 
     expect(text()).toContain('Position bearbeiten')
-    expect((field('Produkt') as HTMLSelectElement).value).toBe('7')
+    // The field names what is on the line, not what the catalogue calls the product today.
+    expect((field('Produkt') as HTMLInputElement).value).toBe('P-100 · Ersatzteil')
     expect((field('Rabatt als Betrag') as HTMLInputElement).value).toBe('5')
   })
 
@@ -541,6 +550,9 @@ describe('OrderLines', () => {
     ])
 
     click(byLabel('Position 1 bearbeiten'))
+    // The dialog reads the product of the line when it opens; whether it may be discounted
+    // is the answer to that request.
+    await settle()
 
     // The figure is still in the field but is not sent any more; saying nothing would let the
     // amount of the line rise without a word.
