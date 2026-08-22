@@ -98,6 +98,9 @@ const TENANTS = [
       qrIban: 'CH4431999123000889012',
       bankName: 'Zürcher Kantonalbank',
       referenceType: 'QRR',
+      // The six digits after the institute number in the QR-IBAN. A QR reference is built
+      // from it, so a tenant that issues one cannot be stored without it.
+      qrCustomerId: '123000',
     },
     baseCurrency: 'CHF',
     fiscalYearStartMonth: 1,
