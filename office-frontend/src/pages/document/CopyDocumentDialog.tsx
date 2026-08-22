@@ -6,41 +6,52 @@ import { ErrorNotice, LoadingBlock } from '../../components/Notice'
 import { SelectField } from '../../components/SelectField'
 import { api } from '../../lib/api'
 import { formatAmount, formatDate } from '../../lib/format'
+import { salesDocumentListKey, type SalesDocumentKind } from '../../lib/salesDocument'
 import type { CopyPriceMode, DocumentSummary, Page, SalesDocument } from '../../lib/types'
 
 type CopyDocumentDialogProps = {
   tenantId: number
+  /** Which kind of document is being written, which decides resource and wording. */
+  kind: SalesDocumentKind
   open: boolean
   onClose: () => void
-  onCreated: (order: SalesDocument) => void
+  onCreated: (created: SalesDocument) => void
 }
 
-/** How many orders the picker offers. Beyond that the search field is the better control. */
+/** How many documents the picker offers. Beyond that the search field is the better control. */
 const PICKER_SIZE = 50
 
 /**
- * Picks the Auftrag a new one is copied from, and what happens to its amounts.
+ * Picks the document a new one is copied from, and what happens to its amounts.
  *
  * <p>The price mode starts on what the kind of document says the tenant usually wants and can
  * be changed for this one copy. Nothing is written back to the setting: an exception stays an
  * exception.
+ *
+ * @param kind which kind of document is being written
  */
-export function CopyDocumentDialog({ tenantId, open, onClose, onCreated }: CopyDocumentDialogProps) {
+export function CopyDocumentDialog({
+  tenantId,
+  kind,
+  open,
+  onClose,
+  onCreated,
+}: CopyDocumentDialogProps) {
   const [sourceId, setSourceId] = useState<number | null>(null)
   const [priceMode, setPriceMode] = useState<CopyPriceMode | ''>('')
 
-  const orders = useQuery({
-    queryKey: ['orders', tenantId, 'copy-picker'],
+  const documents = useQuery({
+    queryKey: salesDocumentListKey(kind, tenantId, 'copy-picker'),
     queryFn: () =>
       api.get<Page<DocumentSummary>>(
-        `/api/tenants/${tenantId}/orders?size=${PICKER_SIZE}&sort=documentDate,desc`,
+        `/api/tenants/${tenantId}/${kind.resource}?size=${PICKER_SIZE}&sort=documentDate,desc`,
       ),
     enabled: open,
   })
 
   const create = useMutation({
     mutationFn: () =>
-      api.post<SalesDocument>(`/api/tenants/${tenantId}/orders/copies`, {
+      api.post<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}/copies`, {
         sourceId,
         priceMode: priceMode === '' ? undefined : priceMode,
       }),
@@ -54,15 +65,15 @@ export function CopyDocumentDialog({ tenantId, open, onClose, onCreated }: CopyD
     onClose()
   }
 
-  const rows = orders.data?.content ?? []
+  const rows = documents.data?.content ?? []
 
   return (
     <Dialog
       open={open}
       onClose={close}
       wide
-      title="Auftrag kopieren"
-      description="Positionen und Texte werden übernommen. Der neue Auftrag steht für sich und verweist nicht auf das Original."
+      title={`${kind.singular} kopieren`}
+      description="Positionen und Texte werden übernommen. Der neue Beleg steht für sich und verweist nicht auf das Original."
       footer={
         <>
           <Button variant="secondary" onClick={close}>
@@ -79,12 +90,12 @@ export function CopyDocumentDialog({ tenantId, open, onClose, onCreated }: CopyD
       }
     >
       <div className="grid gap-4">
-        {orders.isPending && <LoadingBlock label="Aufträge werden geladen" />}
-        {orders.error !== null && <ErrorNotice error={orders.error} />}
+        {documents.isPending && <LoadingBlock label={`${kind.plural} werden geladen`} />}
+        {documents.error !== null && <ErrorNotice error={documents.error} />}
 
-        {orders.isSuccess && rows.length === 0 && (
+        {documents.isSuccess && rows.length === 0 && (
           <p className="text-[13px] text-text-secondary">
-            Es gibt noch keinen Auftrag, der sich kopieren liesse.
+            Es gibt noch keinen Beleg, der sich kopieren liesse.
           </p>
         )}
 

@@ -1,7 +1,17 @@
+import type { ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ClipboardList, Package, Tags, Truck, Users } from 'lucide-react'
+import {
+  ClipboardList,
+  FileText,
+  Package,
+  PackageCheck,
+  ReceiptText,
+  Tags,
+  Truck,
+  Users,
+} from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Spinner } from '../components/Spinner'
 import { PageHeader } from '../components/PageHeader'
@@ -12,7 +22,13 @@ import { api } from '../lib/api'
 import { formatAmount, formatCount, formatDate, formatLongDate } from '../lib/format'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery } from '../lib/paging'
-import type { DocumentSummary, Page, Partner, PriceGroup } from '../lib/types'
+import {
+  ORDER_KIND,
+  SALES_DOCUMENT_KINDS,
+  salesDocumentListKey,
+  type SalesDocumentKind,
+} from '../lib/salesDocument'
+import type { DocumentCategory, DocumentSummary, Page, Partner, PriceGroup } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 
 /**
@@ -30,17 +46,21 @@ const ORIGIN = originState('/', 'Übersicht')
  * @param allowed whether the signed in user may read that list at all
  * @param path the list, as its path segment
  * @param query the filters plus `size=1`
+ * @param key where to file the answer; left out, the path names it. A tile whose number a
+ *            mask has to be able to mark stale hands in the key that mask invalidates —
+ *            otherwise the overview keeps counting what was true before the save.
  * @returns the query, whose data carries `totalElements`
  */
-function useCount(tenantId: number | null, allowed: boolean, path: string, query: string) {
+function useCount(tenantId: number | null, allowed: boolean, path: string, query: string,
+                  key?: unknown[]) {
   return useQuery({
-    queryKey: [path, tenantId, query],
+    queryKey: key ?? [path, tenantId, query],
     queryFn: () => api.get<Page<unknown>>(`/api/tenants/${tenantId}/${path}?${query}`),
     enabled: tenantId !== null && allowed,
   })
 }
 
-/** A module tile of the overview. */
+/** A module tile of the overview: what it is called, where it leads, what colour it wears. */
 type ModuleTile = {
   label: string
   icon: typeof Users
@@ -48,18 +68,22 @@ type ModuleTile = {
   tone: string
   permission: string
   href: string
-  detail: (data: DashboardData) => string
 }
+
+/** A tile whose number comes out of the counts the overview fetches for all of them at once. */
+type CountedTile = ModuleTile & { detail: (data: DashboardData) => string }
+
+/** A tile of the sale, which asks for the drafts of its own kind. */
+type SalesTile = ModuleTile & { kind: SalesDocumentKind }
 
 type DashboardData = {
   customers: number
   suppliers: number
   products: number
   priceGroups: number
-  openOrders: number
 }
 
-const TILES: ModuleTile[] = [
+const TILES: CountedTile[] = [
   {
     label: 'Kunden',
     icon: Users,
@@ -69,20 +93,14 @@ const TILES: ModuleTile[] = [
     detail: (data) => `${formatCount(data.customers)} aktiv`,
   },
   {
+    // Not the Lieferschein colour any more: that one now belongs to the tile of the same name,
+    // and two squares in one row wearing it would read as one thing split in two.
     label: 'Lieferanten',
     icon: Truck,
-    tone: 'bg-module-lieferscheine',
+    tone: 'bg-module-zahlungen',
     permission: 'PARTNER_READ',
     href: '/lieferanten',
     detail: (data) => `${formatCount(data.suppliers)} aktiv`,
-  },
-  {
-    label: 'Aufträge',
-    icon: ClipboardList,
-    tone: 'bg-module-offerten',
-    permission: 'ORDER_READ',
-    href: '/auftraege',
-    detail: (data) => `${formatCount(data.openOrders)} Entwürfe`,
   },
   {
     label: 'Produkte',
@@ -103,6 +121,37 @@ const TILES: ModuleTile[] = [
 ]
 
 /**
+ * The icon and the colour of each kind of document.
+ *
+ * <p>Everything else on such a tile — its name, its address and its right — comes from
+ * {@link SALES_DOCUMENT_KINDS}, so a tile cannot lead somewhere the router does not go.
+ *
+ * <p>Three of the four have a colour named after them in `index.css`. The Auftrag has none and
+ * takes the one nothing else claims, rather than a second copy of a neighbour's.
+ */
+const SALES_LOOKS: Partial<Record<DocumentCategory, { icon: typeof Users; tone: string }>> = {
+  OFFER: { icon: FileText, tone: 'bg-module-offerten' },
+  ORDER: { icon: ClipboardList, tone: 'bg-module-system' },
+  DELIVERY_NOTE: { icon: PackageCheck, tone: 'bg-module-lieferscheine' },
+  INVOICE: { icon: ReceiptText, tone: 'bg-module-rechnungen' },
+}
+
+/** One tile per kind of document, in the order a sale runs through them. */
+const SALES_TILES: SalesTile[] = SALES_DOCUMENT_KINDS.map((kind) => ({
+  label: kind.plural,
+  // A kind added to the table without a look of its own still gets a tile rather than none.
+  icon: SALES_LOOKS[kind.category]?.icon ?? FileText,
+  tone: SALES_LOOKS[kind.category]?.tone ?? 'bg-module-system',
+  permission: kind.rights.read,
+  href: kind.path,
+  kind,
+}))
+
+/** What a document tile counts: one row, to read the number of drafts off the page. */
+const DRAFTS = listQuery({ status: ['DRAFT'], size: 1 })
+
+
+/**
  * The overview after signing in.
  *
  * <p>Every tile leads somewhere and counts something the backend actually answers. A module
@@ -121,8 +170,6 @@ export function DashboardPage() {
     listQuery({ role: 'supplier', activeOnly: true, size: 1 }))
   const productCount = useCount(tenantId, can('PRODUCT_READ'), 'products',
     listQuery({ activeOnly: true, size: 1 }))
-  const openOrders = useCount(tenantId, can('ORDER_READ'), 'orders',
-    listQuery({ status: ['DRAFT'], size: 1 }))
 
   const priceGroups = useQuery({
     queryKey: ['price-groups', tenantId],
@@ -142,7 +189,7 @@ export function DashboardPage() {
 
   const recentOrdersQuery = listQuery({ sort: 'documentDate,desc', size: 6 })
   const recentOrders = useQuery({
-    queryKey: ['orders', tenantId, recentOrdersQuery],
+    queryKey: salesDocumentListKey(ORDER_KIND, tenantId, recentOrdersQuery),
     queryFn: () =>
       api.get<Page<DocumentSummary>>(`/api/tenants/${tenantId}/orders?${recentOrdersQuery}`),
     enabled: tenantId !== null && can('ORDER_READ'),
@@ -153,16 +200,12 @@ export function DashboardPage() {
     suppliers: suppliers.data?.totalElements ?? 0,
     products: productCount.data?.totalElements ?? 0,
     priceGroups: priceGroups.data?.length ?? 0,
-    openOrders: openOrders.data?.totalElements ?? 0,
   }
 
   const loading =
-    customers.isPending ||
-    suppliers.isPending ||
-    productCount.isPending ||
-    priceGroups.isPending ||
-    openOrders.isPending
+    customers.isPending || suppliers.isPending || productCount.isPending || priceGroups.isPending
   const tiles = TILES.filter((tile) => can(tile.permission))
+  const salesTiles = SALES_TILES.filter((tile) => can(tile.permission))
 
   return (
     <>
@@ -173,32 +216,23 @@ export function DashboardPage() {
       ) : (
         <div className="px-8 pb-12">
           <section aria-busy={loading}>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {/* Four across, so the sale stands in one row and the master data under it. */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {salesTiles.map((tile, index) => (
+                <SalesDocumentTile
+                  key={tile.kind.category}
+                  tile={tile}
+                  tenantId={tenantId}
+                  index={index}
+                />
+              ))}
               {tiles.map((tile, index) => (
-                <motion.div
+                <TileCard
                   key={tile.label}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: index * 0.04, ease: [0.16, 1, 0.3, 1] }}
-                  whileHover={{ y: -2 }}
-                >
-                  <Link
-                    to={tile.href}
-                    className="block h-full rounded-[var(--radius-lg)] border border-line-subtle bg-surface p-6 text-center transition-shadow hover:shadow-card"
-                  >
-                    <span
-                      className={`mx-auto grid h-14 w-14 place-items-center rounded-[var(--radius-lg)] text-white ${tile.tone}`}
-                    >
-                      <tile.icon size={22} aria-hidden />
-                    </span>
-                    <h2 className="mt-4 text-[15px] font-semibold tracking-[-0.2px]">
-                      {tile.label}
-                    </h2>
-                    <p className="mt-1 text-[13px] text-text-secondary">
-                      {loading ? <Spinner size={12} /> : tile.detail(data)}
-                    </p>
-                  </Link>
-                </motion.div>
+                  tile={tile}
+                  index={salesTiles.length + index}
+                  detail={loading ? <Spinner size={12} /> : tile.detail(data)}
+                />
               ))}
             </div>
 
@@ -217,6 +251,79 @@ export function DashboardPage() {
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * The visible half of a tile: the coloured square, the name and the one line under it.
+ *
+ * <p>The place in the grid staggers the tiles as they come in, and the line underneath is
+ * handed over rather than computed, because two sorts of tile count in two ways.
+ */
+function TileCard({
+  tile,
+  index,
+  detail,
+}: {
+  tile: ModuleTile
+  index: number
+  detail: ReactNode
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.04, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -2 }}
+    >
+      <Link
+        to={tile.href}
+        className="block h-full rounded-[var(--radius-lg)] border border-line-subtle bg-surface p-6 text-center transition-shadow hover:shadow-card"
+      >
+        <span
+          className={`mx-auto grid h-14 w-14 place-items-center rounded-[var(--radius-lg)] text-white ${tile.tone}`}
+        >
+          <tile.icon size={22} aria-hidden />
+        </span>
+        <h2 className="mt-4 text-[15px] font-semibold tracking-[-0.2px]">{tile.label}</h2>
+        <p className="mt-1 text-[13px] text-text-secondary">{detail}</p>
+      </Link>
+    </motion.div>
+  )
+}
+
+/**
+ * One tile of the sale, with the drafts of its kind on it.
+ *
+ * <p>A component of its own, because the number belongs to one kind and a hook may not be
+ * called in a loop. Four `useCount` calls in the overview would say the same thing four times
+ * and would have to be written out again the day a fifth kind gets a mask.
+ */
+function SalesDocumentTile({
+  tile,
+  tenantId,
+  index,
+}: {
+  tile: SalesTile
+  tenantId: number
+  index: number
+}) {
+  const { can } = useAuth()
+  const drafts = useCount(tenantId, can(tile.permission), tile.kind.resource, DRAFTS,
+    salesDocumentListKey(tile.kind, tenantId, DRAFTS))
+
+  return (
+    <TileCard
+      tile={tile}
+      index={index}
+      detail={
+        drafts.isPending ? (
+          <Spinner size={12} />
+        ) : (
+          `${formatCount(drafts.data?.totalElements ?? 0)} Entwürfe`
+        )
+      }
+    />
   )
 }
 
@@ -252,7 +359,13 @@ function RecentPartners({ partners, loading }: { partners: Partner[]; loading: b
   )
 }
 
-/** The newest orders, so an unfinished draft is one click away. */
+/**
+ * The newest orders, so an unfinished draft is one click away.
+ *
+ * <p>Orders and nothing else, although there are four kinds of document now: every kind is a
+ * list of its own, and one list across all four would be four requests for six rows. The
+ * heading says which kind it is, and the tile above leads to the rest.
+ */
 function RecentOrders({
   tenantId,
   orders,

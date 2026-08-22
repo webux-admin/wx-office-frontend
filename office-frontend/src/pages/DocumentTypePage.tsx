@@ -13,6 +13,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf, type Origin } from '../lib/origin'
+import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory, DocumentType } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
@@ -183,10 +184,12 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     value={form.category}
                     onChange={(code) => change({ category: code as DocumentCategory })}
                     disabled={!mayWrite || type !== null}
+                    // Only the Gutschrift has no mask; it is written from the invoice it
+                    // corrects. Saying so before saving is cheaper than finding out after.
                     hint={
-                      form.category === 'ORDER'
-                        ? 'Steht fest, sobald die Belegart existiert.'
-                        : 'Für diese Kategorie gibt es im Frontend noch keine Maske.'
+                      salesDocumentFor(form.category) === undefined
+                        ? 'Für diese Kategorie gibt es im Frontend noch keine Maske.'
+                        : 'Steht fest, sobald die Belegart existiert.'
                     }
                   />
                   <TextField
@@ -227,7 +230,9 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                   </div>
                   <div className="grid gap-0.5">
                     <dt className="text-[12px] text-text-tertiary">Maske im Frontend</dt>
-                    <dd>{form.category === 'ORDER' ? 'vorhanden' : 'noch keine'}</dd>
+                    <dd>
+                      {salesDocumentFor(form.category) === undefined ? 'noch keine' : 'vorhanden'}
+                    </dd>
                   </div>
                 </dl>
               </Panel>

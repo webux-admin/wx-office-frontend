@@ -14,7 +14,13 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
-import { originOf, type Origin } from '../lib/origin'
+import { originOf } from '../lib/origin'
+import {
+  salesDocumentKey,
+  salesDocumentListKey,
+  salesDocumentTrailKey,
+  type SalesDocumentKind,
+} from '../lib/salesDocument'
 import type {
   DocumentParty,
   DocumentStatus,
@@ -37,45 +43,59 @@ import {
   type StructureLine,
 } from './document/lineForm'
 
-/** Where an order mask goes when it was opened without naming a screen to return to. */
-const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
-
-/** One order: its positions, its texts and the way from draft to issued. */
-export function SalesDocumentPage() {
+/**
+ * One sales document: its positions, its texts and the way from draft to issued.
+ *
+ * <p>Offerte, Auftrag, Lieferschein and Rechnung share this mask. The kind carries what
+ * differs between them — resource, rights and wording — so that four screens stay one screen.
+ */
+export function SalesDocumentPage({ kind }: { kind: SalesDocumentKind }) {
   return (
-    <RequireTenant permission="ORDER_READ">
-      {(tenantId) => <OrderLoader tenantId={tenantId} />}
+    <RequireTenant permission={kind.rights.read}>
+      {(tenantId) => <DocumentLoader tenantId={tenantId} kind={kind} />}
     </RequireTenant>
   )
 }
 
-function OrderLoader({ tenantId }: { tenantId: number }) {
+function DocumentLoader({ tenantId, kind }: { tenantId: number; kind: SalesDocumentKind }) {
   const { id } = useParams()
 
-  const order = useQuery({
-    queryKey: ['order', tenantId, id],
-    queryFn: () => api.get<SalesDocument>(`/api/tenants/${tenantId}/orders/${id}`),
+  // The kind belongs in the key. Without it the invoice mask would show the order that was
+  // looked at before it, because both ask under the same number.
+  const document = useQuery({
+    queryKey: salesDocumentKey(kind, tenantId, id),
+    queryFn: () => api.get<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}/${id}`),
     enabled: id !== 'neu',
   })
 
-  if (id === 'neu') return <NewDocumentMask tenantId={tenantId} />
-  if (order.isPending) return <LoadingBlock label="Auftrag wird geladen" />
-  if (order.error) {
+  if (id === 'neu') return <NewDocumentMask tenantId={tenantId} kind={kind} />
+  if (document.isPending) return <LoadingBlock label={`${kind.singular} wird geladen`} />
+  if (document.error) {
     return (
       <div className="p-8">
-        <ErrorNotice error={order.error} />
+        <ErrorNotice error={document.error} />
       </div>
     )
   }
-  return <OrderMask tenantId={tenantId} order={order.data} />
+  return <DocumentMask tenantId={tenantId} kind={kind} document={document.data} />
 }
 
-function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument }) {
+function DocumentMask({
+  tenantId,
+  kind,
+  document,
+}: {
+  tenantId: number
+  kind: SalesDocumentKind
+  document: SalesDocument
+}) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const origin = originOf(useLocation().state, LIST)
+  // Falls back to the list of this kind when the mask was opened without naming a screen to
+  // return to.
+  const origin = originOf(useLocation().state, { from: kind.path, label: kind.plural })
 
   const [cancelling, setCancelling] = useState(false)
   const [reopening, setReopening] = useState(false)
@@ -87,20 +107,22 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
   // sending the wrong one.
   const [reopenReason, setReopenReason] = useState('')
 
-  const editable = order.status === 'DRAFT' && can('ORDER_WRITE')
+  const editable = document.status === 'DRAFT' && can(kind.rights.write)
   // Two reasons keep a section read-only, and they are not the same thing. An issued
   // document is finished; a draft without the permission is not, and saying so is the only
   // way the user learns why nothing can be typed.
   const readOnlyNote =
-    order.status === 'DRAFT' && !can('ORDER_WRITE')
-      ? 'Zum Ändern fehlt das Recht ORDER_WRITE.'
+    document.status === 'DRAFT' && !can(kind.rights.write)
+      ? `Zum Ändern fehlt das Recht ${kind.rights.write}.`
       : undefined
-  const base = `/api/tenants/${tenantId}/orders/${order.id}`
+  const base = `/api/tenants/${tenantId}/${kind.resource}/${document.id}`
 
   const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['order', tenantId] })
-    void queryClient.invalidateQueries({ queryKey: ['orders', tenantId] })
-    void queryClient.invalidateQueries({ queryKey: ['order-trail', tenantId] })
+    // Scoped by the kind, so that a saved invoice does not throw away the orders that were
+    // loaded next to it.
+    void queryClient.invalidateQueries({ queryKey: salesDocumentKey(kind, tenantId) })
+    void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
+    void queryClient.invalidateQueries({ queryKey: salesDocumentTrailKey(kind, tenantId) })
   }
 
   const addProductLine = useMutation({
@@ -163,7 +185,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     },
   })
 
-  // Takes the Auftrag back to a draft. It keeps its number and is issued under the same one
+  // Takes the document back to a draft. It keeps its number and is issued under the same one
   // again, so nothing is lost and no gap is torn (ADR-0046).
   const reopen = useMutation({
     mutationFn: () =>
@@ -175,7 +197,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
     },
   })
 
-  // A draft renders on the spot and comes back with a watermark; an issued Auftrag hands out
+  // A draft renders on the spot and comes back with a watermark; an issued document hands out
   // the PDF that was archived when it was issued, so a reprint is the same document.
   const print = useMutation({
     mutationFn: () => api.file(`${base}/pdf`),
@@ -223,52 +245,54 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
   return (
     <>
       <PageHeader
-        title={order.documentNumber ?? `Entwurf ${order.id}`}
+        title={document.documentNumber ?? `Entwurf ${document.id}`}
         back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <Badge
               tone={
-                order.status === 'CANCELLED'
+                document.status === 'CANCELLED'
                   ? 'danger'
-                  : order.status === 'FINALISED'
+                  : document.status === 'FINALISED'
                     ? 'accent'
                     : 'muted'
               }
             >
-              {statusLabel(order.status)}
+              {statusLabel(document.status)}
             </Badge>
-            <span>{formatDate(order.documentDate)}</span>
+            <span>{formatDate(document.documentDate)}</span>
             <span className="text-text-tertiary">·</span>
-            <span>{order.recipient?.name ?? `Kunde ${order.partnerId}`}</span>
+            <span>{document.recipient?.name ?? `Kunde ${document.partnerId}`}</span>
           </span>
         }
       >
         {/* A draft that has already been issued once carries its number, and a number that
             belongs to nothing is the gap the series exists to avoid. */}
-        {order.status === 'DRAFT' && order.documentNumber === undefined && can('ORDER_WRITE') && (
-          <Button variant="secondary" onClick={() => setDeleting(true)}>
-            Entwurf löschen
-          </Button>
-        )}
+        {document.status === 'DRAFT' &&
+          document.documentNumber === undefined &&
+          can(kind.rights.write) && (
+            <Button variant="secondary" onClick={() => setDeleting(true)}>
+              Entwurf löschen
+            </Button>
+          )}
         <Button variant="secondary" onClick={() => print.mutate()} busy={print.isPending}>
-          {order.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
+          {document.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
         </Button>
-        {order.status === 'FINALISED' && can('ORDER_REOPEN') && (
+        {document.status === 'FINALISED' && can(kind.rights.reopen) && (
           <Button variant="secondary" onClick={() => setReopening(true)}>
             Zurückstellen
           </Button>
         )}
-        {order.status === 'FINALISED' && can('ORDER_CANCEL') && (
+        {document.status === 'FINALISED' && can(kind.rights.cancel) && (
           <Button variant="secondary" onClick={() => setCancelling(true)}>
             Stornieren
           </Button>
         )}
-        {order.status === 'DRAFT' && can('ORDER_FINALISE') && (
+        {document.status === 'DRAFT' && can(kind.rights.finalise) && (
           <Button
             onClick={() => finalise.mutate()}
             busy={finalise.isPending}
-            disabled={itemLineCount(order.lines) === 0}
+            disabled={itemLineCount(document.lines) === 0}
           >
             Ausstellen
           </Button>
@@ -281,7 +305,8 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
 
         <DocumentLines
           tenantId={tenantId}
-          order={order}
+          kind={kind}
+          document={document}
           editable={editable}
           onAddProductLine={(line) => startLine(() => addProductLine.mutateAsync(line))}
           onUpdateProductLine={(lineNumber, line) =>
@@ -306,7 +331,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
           readOnlyNote={
             readOnlyNote === undefined
               ? undefined
-              : 'Zum Ändern der Positionen fehlt das Recht ORDER_WRITE.'
+              : `Zum Ändern der Positionen fehlt das Recht ${kind.rights.write}.`
           }
         />
 
@@ -315,39 +340,44 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
             {/* Keyed by what is stored: the section holds what was typed, and that has to give
                 way when a customer change rewrites language and currency underneath it. */}
             <DocumentHeaderPanel
-              key={headerKey(order)}
+              key={headerKey(document)}
               tenantId={tenantId}
               base={base}
-              document={order}
+              document={document}
               editable={editable}
               readOnlyNote={readOnlyNote}
               onChanged={refresh}
             />
-            <OrderTexts tenantId={tenantId} order={order} editable={editable} />
+            <DocumentTexts
+              tenantId={tenantId}
+              kind={kind}
+              document={document}
+              editable={editable}
+            />
             <DocumentPrintouts
               tenantId={tenantId}
               base={base}
               editable={editable}
               readOnlyNote={readOnlyNote}
-              draft={order.status === 'DRAFT'}
+              draft={document.status === 'DRAFT'}
             />
           </div>
 
           <div className="grid gap-6 self-start">
             <DocumentPaymentPanel
-              key={paymentKey(order)}
+              key={paymentKey(document)}
               tenantId={tenantId}
               base={base}
-              document={order}
+              document={document}
               editable={editable}
               readOnlyNote={readOnlyNote}
               onChanged={refresh}
             />
             <PartyPanel
               title="Empfänger"
-              party={order.recipient}
-              number={order.partnerNumber}
-              status={order.status}
+              party={document.recipient}
+              number={document.partnerNumber}
+              status={document.status}
               action={
                 editable ? (
                   <Button variant="secondary" onClick={() => setChangingPartner(true)}>
@@ -356,7 +386,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
                 ) : undefined
               }
             />
-            <StatusTrail tenantId={tenantId} orderId={order.id} />
+            <StatusTrail tenantId={tenantId} kind={kind} documentId={document.id} />
           </div>
         </div>
       </div>
@@ -366,15 +396,15 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
         base={base}
         open={changingPartner}
         onClose={() => setChangingPartner(false)}
-        document={order}
+        document={document}
         onChanged={refresh}
       />
 
       <Dialog
         open={reopening}
         onClose={() => setReopening(false)}
-        title="Auftrag zurückstellen"
-        description="Der Auftrag wird wieder zum Entwurf und lässt sich ändern."
+        title={`${kind.singular} zurückstellen`}
+        description="Der Beleg wird wieder zum Entwurf und lässt sich ändern."
         footer={
           <>
             <Button variant="secondary" onClick={() => setReopening(false)}>
@@ -391,7 +421,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
         }
       >
         <p className="mb-4 text-[13px] text-text-secondary">
-          Die Belegnummer {order.documentNumber} bleibt am Auftrag und wird beim erneuten
+          Die Belegnummer {document.documentNumber} bleibt auf dem Beleg und wird beim erneuten
           Ausstellen wieder verwendet. Das bisher ausgestellte PDF bleibt im Archiv.
         </p>
         <TextField
@@ -411,7 +441,7 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
       <Dialog
         open={cancelling}
         onClose={() => setCancelling(false)}
-        title="Auftrag stornieren"
+        title={`${kind.singular} stornieren`}
         description="Ein ausgestellter Beleg wird nicht gelöscht, sondern storniert."
         footer={
           <>
@@ -472,28 +502,31 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
 }
 
 /** Header text, footer text and the reference of the customer. */
-function OrderTexts({
+function DocumentTexts({
   tenantId,
-  order,
+  kind,
+  document,
   editable,
 }: {
   tenantId: number
-  order: SalesDocument
+  kind: SalesDocumentKind
+  document: SalesDocument
   editable: boolean
 }) {
   const queryClient = useQueryClient()
-  const [headerText, setHeaderText] = useState(order.headerText ?? '')
-  const [footerText, setFooterText] = useState(order.footerText ?? '')
-  const [reference, setReference] = useState(order.reference ?? '')
+  const [headerText, setHeaderText] = useState(document.headerText ?? '')
+  const [footerText, setFooterText] = useState(document.footerText ?? '')
+  const [reference, setReference] = useState(document.reference ?? '')
 
   const save = useMutation({
     mutationFn: () =>
-      api.put<SalesDocument>(`/api/tenants/${tenantId}/orders/${order.id}/texts`, {
+      api.put<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}/${document.id}/texts`, {
         headerText: headerText.trim() || undefined,
         footerText: footerText.trim() || undefined,
         reference: reference.trim() || undefined,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['order', tenantId] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: salesDocumentKey(kind, tenantId) }),
   })
 
   return (
@@ -599,12 +632,22 @@ function PartyPanel({
 }
 
 /** Who moved the document where, and when. */
-function StatusTrail({ tenantId, orderId }: { tenantId: number; orderId: number }) {
+function StatusTrail({
+  tenantId,
+  kind,
+  documentId,
+}: {
+  tenantId: number
+  kind: SalesDocumentKind
+  documentId: number
+}) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const trail = useQuery({
-    queryKey: ['order-trail', tenantId, orderId],
+    queryKey: salesDocumentTrailKey(kind, tenantId, documentId),
     queryFn: () =>
-      api.get<DocumentStatusEntry[]>(`/api/tenants/${tenantId}/orders/${orderId}/status-trail`),
+      api.get<DocumentStatusEntry[]>(
+        `/api/tenants/${tenantId}/${kind.resource}/${documentId}/status-trail`,
+      ),
   })
 
   return (

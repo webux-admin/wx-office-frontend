@@ -18,7 +18,8 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **dashboard** — Übersicht mit Modulkacheln. ✅ umgesetzt
 - **partner** — Kunden und Lieferanten
 - **product** — Produkte, Preisgruppen, Kundenpreise
-- **document** — Offerte, Lieferschein, Rechnung
+- **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je
+  Belegart, aus `lib/salesDocument.ts` erzeugt
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

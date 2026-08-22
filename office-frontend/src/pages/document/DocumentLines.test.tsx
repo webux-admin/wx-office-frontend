@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ORDER_KIND } from '../../lib/salesDocument'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
 import { DocumentLines } from './DocumentLines'
 import type { FreeLine, ProductLine, StructureLine } from './lineForm'
@@ -12,6 +13,8 @@ import type { FreeLine, ProductLine, StructureLine } from './lineForm'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const TENANT = 1
+
+// Which of the four kinds it is only decides the way back out of a position dialog.
 
 /** What the selection endpoints answer, so the mask has its labels. */
 const CATALOGUES = {
@@ -94,7 +97,7 @@ const LINES: DocumentLine[] = [
   }),
 ]
 
-function order(lines: DocumentLine[]): SalesDocument {
+function salesDocument(lines: DocumentLine[]): SalesDocument {
   return {
     id: 42,
     documentTypeId: 1,
@@ -201,7 +204,8 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
         <QueryClientProvider client={client}>
           <DocumentLines
           tenantId={TENANT}
-          order={order(lines)}
+          kind={ORDER_KIND}
+          document={salesDocument(lines)}
           editable={editable}
           onAddProductLine={(payload) => {
             calls.added.push(payload)
@@ -310,7 +314,7 @@ function type(control: HTMLInputElement | HTMLSelectElement, value: string) {
 }
 
 describe('DocumentLines', () => {
-  it('orderLinesShowsEveryKindOfLineTest', async () => {
+  it('documentLinesShowsEveryKindOfLineTest', async () => {
     await render(LINES)
 
     expect(text()).toContain('Wartung Serverraum')
@@ -321,21 +325,21 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Seitenwechsel')
   })
 
-  it('orderLinesShowsBothKindsOfDiscountTest', async () => {
+  it('documentLinesShowsBothKindsOfDiscountTest', async () => {
     await render(LINES)
 
     expect(text()).toContain('10 %')
     expect(text()).toContain('5.00 CHF')
   })
 
-  it('orderLinesWithoutLinesTest', async () => {
+  it('documentLinesWithoutLinesTest', async () => {
     await render([])
 
     expect(text()).toContain('Noch keine Position')
     expect(text()).toContain('lässt sich nicht ausstellen')
   })
 
-  it('orderLinesWhenIssuedTest', async () => {
+  it('documentLinesWhenIssuedTest', async () => {
     await render(LINES, { editable: false })
 
     expect(text()).toContain('Wartung Serverraum')
@@ -343,7 +347,7 @@ describe('DocumentLines', () => {
     expect(container.querySelector('[aria-label="Position 1 verschieben"]')).toBeNull()
   })
 
-  it('orderLinesMovesALineTest', async () => {
+  it('documentLinesMovesALineTest', async () => {
     const calls = await render(LINES)
 
     press(byLabel('Position 2 verschieben'), 'ArrowUp')
@@ -351,7 +355,7 @@ describe('DocumentLines', () => {
     expect(calls.moved).toEqual([{ lineNumber: 2, position: 1 }])
   })
 
-  it('orderLinesCannotMoveTheFirstLineUpTest', async () => {
+  it('documentLinesCannotMoveTheFirstLineUpTest', async () => {
     const calls = await render(LINES)
 
     press(byLabel('Position 1 verschieben'), 'ArrowUp')
@@ -360,7 +364,7 @@ describe('DocumentLines', () => {
     expect(calls.moved).toEqual([])
   })
 
-  it('orderLinesRemovesALineTest', async () => {
+  it('documentLinesRemovesALineTest', async () => {
     const calls = await render(LINES)
 
     click(byLabel('Position 2 entfernen'))
@@ -369,7 +373,7 @@ describe('DocumentLines', () => {
     expect(calls.removed).toEqual([2])
   })
 
-  it('orderLinesAsksBeforeRemovingALineTest', async () => {
+  it('documentLinesAsksBeforeRemovingALineTest', async () => {
     const calls = await render(LINES)
 
     click(byLabel('Position 2 entfernen'))
@@ -385,7 +389,7 @@ describe('DocumentLines', () => {
     expect(calls.removed).toEqual([])
   })
 
-  it('orderLinesEditsAFreeLineTest', async () => {
+  it('documentLinesEditsAFreeLineTest', async () => {
     const calls = await render(LINES)
 
     click(byLabel('Position 1 bearbeiten'))
@@ -403,7 +407,7 @@ describe('DocumentLines', () => {
     expect(calls.updatedFree[0].line.discountPercent).toBe(10)
   })
 
-  it('orderLinesEditsACatalogueLineTest', async () => {
+  it('documentLinesEditsACatalogueLineTest', async () => {
     await render(LINES)
 
     click(byLabel('Position 5 bearbeiten'))
@@ -414,7 +418,7 @@ describe('DocumentLines', () => {
     expect((field('Rabatt als Betrag') as HTMLInputElement).value).toBe('5')
   })
 
-  it('orderLinesLocksTheOtherDiscountFieldTest', async () => {
+  it('documentLinesLocksTheOtherDiscountFieldTest', async () => {
     await render(LINES)
     click(byText('Freie Zeile'))
 
@@ -423,7 +427,7 @@ describe('DocumentLines', () => {
     expect((field('Rabatt als Betrag') as HTMLInputElement).disabled).toBe(true)
   })
 
-  it('orderLinesEmptiesTheOtherDiscountFieldTest', async () => {
+  it('documentLinesEmptiesTheOtherDiscountFieldTest', async () => {
     await render(LINES)
     click(byLabel('Position 5 bearbeiten'))
 
@@ -432,7 +436,7 @@ describe('DocumentLines', () => {
     expect((field('Rabatt als Betrag') as HTMLInputElement).value).toBe('')
   })
 
-  it('orderLinesAddsACommentTest', async () => {
+  it('documentLinesAddsACommentTest', async () => {
     const calls = await render(LINES)
 
     click(byText('Zeile einfügen'))
@@ -442,7 +446,7 @@ describe('DocumentLines', () => {
     expect(calls.addedStructure).toEqual([{ kind: 'COMMENT', text: 'Lieferung frei Haus' }])
   })
 
-  it('orderLinesRefusesACommentWithoutTextTest', async () => {
+  it('documentLinesRefusesACommentWithoutTextTest', async () => {
     const calls = await render(LINES)
 
     click(byText('Zeile einfügen'))
@@ -452,7 +456,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Eine Kommentarzeile braucht einen Text.')
   })
 
-  it('orderLinesAddsAPageBreakWithoutTextTest', async () => {
+  it('documentLinesAddsAPageBreakWithoutTextTest', async () => {
     const calls = await render(LINES)
 
     click(byText('Zeile einfügen'))
@@ -463,7 +467,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Ein Seitenwechsel trägt keinen Text.')
   })
 
-  it('orderLinesEditsAStructureLineTest', async () => {
+  it('documentLinesEditsAStructureLineTest', async () => {
     const calls = await render(LINES)
 
     click(byLabel('Position 3 bearbeiten'))
@@ -477,7 +481,7 @@ describe('DocumentLines', () => {
     ])
   })
 
-  it('orderLinesKeepsTheDialogOpenWhenTheLineIsRefusedTest', async () => {
+  it('documentLinesKeepsTheDialogOpenWhenTheLineIsRefusedTest', async () => {
     const calls = await render(LINES, { refused: true })
 
     click(byText('Freie Zeile'))
@@ -494,7 +498,7 @@ describe('DocumentLines', () => {
     expect((field('Einzelpreis') as HTMLInputElement).value).toBe('50')
   })
 
-  it('orderLinesClosesTheDialogWhenTheLineIsTakenTest', async () => {
+  it('documentLinesClosesTheDialogWhenTheLineIsTakenTest', async () => {
     await render(LINES)
 
     click(byText('Freie Zeile'))
@@ -507,7 +511,7 @@ describe('DocumentLines', () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it('orderLinesShowsWhyALineWasRefusedInTheDialogTest', async () => {
+  it('documentLinesShowsWhyALineWasRefusedInTheDialogTest', async () => {
     await render(LINES, { error: new Error('quantity must not be zero') })
 
     click(byText('Freie Zeile'))
@@ -515,7 +519,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('quantity must not be zero')
   })
 
-  it('orderLinesRefusesAQuantityOfZeroTest', async () => {
+  it('documentLinesRefusesAQuantityOfZeroTest', async () => {
     const calls = await render(LINES)
 
     click(byText('Freie Zeile'))
@@ -531,7 +535,7 @@ describe('DocumentLines', () => {
     expect(calls.addedFree).toEqual([])
   })
 
-  it('orderLinesRefusesADiscountOverAHundredTest', async () => {
+  it('documentLinesRefusesADiscountOverAHundredTest', async () => {
     await render(LINES)
 
     click(byText('Freie Zeile'))
@@ -543,7 +547,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Der Rabatt liegt zwischen 0 und 100 Prozent.')
   })
 
-  it('orderLinesWarnsWhenAStoredDiscountIsDroppedTest', async () => {
+  it('documentLinesWarnsWhenAStoredDiscountIsDroppedTest', async () => {
     await render([
       line({
         lineNumber: 1,
@@ -569,7 +573,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Der gespeicherte Rabatt entfällt beim Übernehmen')
   })
 
-  it('orderLinesExplainsAMissingWriteRightTest', async () => {
+  it('documentLinesExplainsAMissingWriteRightTest', async () => {
     await render(LINES, {
       editable: false,
       readOnlyNote: 'Zum Ändern der Positionen fehlt das Recht ORDER_WRITE.',
@@ -578,7 +582,7 @@ describe('DocumentLines', () => {
     expect(text()).toContain('fehlt das Recht ORDER_WRITE')
   })
 
-  it('orderLinesShowsAStoredServiceDateTest', async () => {
+  it('documentLinesShowsAStoredServiceDateTest', async () => {
     await render([
       line({
         lineNumber: 1,
@@ -598,7 +602,7 @@ describe('DocumentLines', () => {
     expect((field('Leistung von') as HTMLInputElement).value).toBe('2023-12-20')
   })
 
-  it('orderLinesKeepsTheServiceDatesOutOfTheWayTest', async () => {
+  it('documentLinesKeepsTheServiceDatesOutOfTheWayTest', async () => {
     await render(LINES)
 
     click(byText('Freie Zeile'))

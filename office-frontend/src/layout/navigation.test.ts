@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
+import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
 import { flattenNav, isFolder, NAV_GROUPS, type NavEntry } from './navigation'
 
 /** Every screen the menu links to, across all groups. */
@@ -23,6 +24,25 @@ describe('NAV_GROUPS', () => {
       expect(linked).toContain(`/basisdaten/${list.slug}`)
     }
     expect(linked.size).toBe(BASIC_DATA_LISTS.length)
+  })
+
+  /**
+   * Menu and routes are built from one table, and this says so: a kind of document added there
+   * has to be reachable through the menu too, under its own address and behind its own read
+   * right — not only by typing the path.
+   */
+  it('navGroupsCoverEverySalesDocumentTest', () => {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    const entries = flattenNav(sales?.entries ?? [])
+
+    expect(entries.map((entry) => entry.href)).toEqual(
+      SALES_DOCUMENT_KINDS.map((kind) => kind.path),
+    )
+    for (const kind of SALES_DOCUMENT_KINDS) {
+      const entry = entries.find((candidate) => candidate.href === kind.path)
+      expect(entry?.label).toBe(kind.plural)
+      expect(entry?.permission).toBe(kind.rights.read)
+    }
   })
 
   /** Menu and page heading name the same list, so neither can be renamed on its own. */

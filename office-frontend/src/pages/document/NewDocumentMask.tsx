@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/Notice'
@@ -8,19 +8,21 @@ import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
-import { originOf, type Origin } from '../../lib/origin'
+import { originOf } from '../../lib/origin'
 import { listQuery, PICKER_SIZE } from '../../lib/paging'
 import { parseDecimal, toIsoDate } from '../../lib/format'
+import {
+  newDocumentTitle,
+  salesDocumentListKey,
+  type SalesDocumentKind,
+} from '../../lib/salesDocument'
 import type { DocumentDefaults, DocumentType, Page, Partner, SalesDocument } from '../../lib/types'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../../masterdata/PaymentTermSelect'
 import { useCatalogueLabel, usePaymentTerms } from '../../masterdata/useMasterData'
 
-/** Where this mask goes when it was opened without naming a screen to return to. */
-const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
-
 /**
- * Starts an order.
+ * Starts a sales document of one kind.
  *
  * <p>The customer comes first, because everything else follows from them. Once the kind of
  * document and the customer are picked, the backend says what the draft would carry — address,
@@ -32,14 +34,25 @@ const LIST: Origin = { from: '/auftraege', label: 'Aufträge' }
  * the create payload, so a changed one is applied to the fresh draft right afterwards, through
  * the same endpoints the draft mask uses.
  */
-export function NewDocumentMask({ tenantId }: { tenantId: number }) {
+export function NewDocumentMask({
+  tenantId,
+  kind,
+}: {
+  tenantId: number
+  /** Which of the four kinds of document is being started. */
+  kind: SalesDocumentKind
+}) {
   const navigate = useNavigate()
-  const origin = originOf(useLocation().state, LIST)
+  // Falls back to the list of this kind when the mask was opened without naming a screen to
+  // return to.
+  const origin = originOf(useLocation().state, { from: kind.path, label: kind.plural })
   const usageLabel = useCatalogueLabel(tenantId, 'address-usage')
   const [documentTypeId, setDocumentTypeId] = useState('')
   const [partnerId, setPartnerId] = useState('')
   const [documentDate, setDocumentDate] = useState(toIsoDate())
   const [exchangeRate, setExchangeRate] = useState('')
+
+  const queryClient = useQueryClient()
 
   const documentTypes = useQuery({
     queryKey: ['document-types', tenantId],
@@ -56,10 +69,10 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
 
   const chosen = documentTypeId !== '' && partnerId !== ''
   const defaults = useQuery({
-    queryKey: ['document-defaults', tenantId, 'orders', documentTypeId, partnerId],
+    queryKey: ['document-defaults', tenantId, kind.resource, documentTypeId, partnerId],
     queryFn: () =>
       api.get<DocumentDefaults>(
-        `/api/tenants/${tenantId}/orders/defaults?documentTypeId=${documentTypeId}&partnerId=${partnerId}`,
+        `/api/tenants/${tenantId}/${kind.resource}/defaults?documentTypeId=${documentTypeId}&partnerId=${partnerId}`,
       ),
     enabled: chosen,
   })
@@ -105,7 +118,7 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
   const create = useMutation({
     mutationFn: async () => {
       if (draftId.current === null) {
-        const draft = await api.post<SalesDocument>(`/api/tenants/${tenantId}/orders`, {
+        const draft = await api.post<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}`, {
           documentTypeId: Number(documentTypeId),
           partnerId: Number(partnerId),
           documentDate,
@@ -114,7 +127,7 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
         })
         draftId.current = draft.id
       }
-      const base = `/api/tenants/${tenantId}/orders/${draftId.current}`
+      const base = `/api/tenants/${tenantId}/${kind.resource}/${draftId.current}`
       // Neither belongs in the create payload, so a changed one is applied to the draft that
       // was just made — through the very endpoints the draft mask uses for them.
       if (language !== '' && language !== suggested.language) {
@@ -131,12 +144,15 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
     },
     // A draft without a single line is no document, so this one step continues into the new
     // record rather than closing. The origin travels with it, so the way back out of the
-    // order leads to where it was started from.
-    onSuccess: (id) => void navigate(`/auftraege/${id}`, { replace: true, state: { origin } }),
+    // document leads to where it was started from — and that list is a row longer now.
+    onSuccess: (id) => {
+      void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
+      void navigate(`${kind.path}/${id}`, { replace: true, state: { origin } })
+    },
   })
 
-  const orderTypes = (documentTypes.data ?? []).filter(
-    (type) => type.category === 'ORDER' && type.active,
+  const activeTypes = (documentTypes.data ?? []).filter(
+    (type) => type.category === kind.category && type.active,
   )
   // The server already left the deactivated ones out; nothing is filtered again here.
   const customers = partners.data?.content ?? []
@@ -146,7 +162,7 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
   return (
     <>
       <PageHeader
-        title="Neuer Auftrag"
+        title={newDocumentTitle(kind)}
         back={{ to: origin.from, label: origin.label }}
         subtitle="Der Beleg entsteht als Entwurf. Die Nummer wird erst beim Ausstellen gezogen."
       >
@@ -171,14 +187,14 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
                 onChange={(event) => setDocumentTypeId(event.target.value)}
                 disabled={documentTypes.isPending}
                 hint={
-                  orderTypes.length === 0 && !documentTypes.isPending
-                    ? 'Es gibt keine aktive Belegart der Kategorie Auftrag.'
+                  activeTypes.length === 0 && !documentTypes.isPending
+                    ? `Es gibt keine aktive Belegart der Kategorie ${kind.singular}.`
                     : undefined
                 }
-                invalid={orderTypes.length === 0 && !documentTypes.isPending}
+                invalid={activeTypes.length === 0 && !documentTypes.isPending}
               >
                 <option value="">Bitte wählen</option>
-                {orderTypes.map((type) => (
+                {activeTypes.map((type) => (
                   <option key={type.id} value={type.id}>
                     {type.code} · {type.name}
                   </option>
@@ -202,7 +218,7 @@ export function NewDocumentMask({ tenantId }: { tenantId: number }) {
                   partners.isPending
                     ? 'Kunden werden geladen ...'
                     : partners.isSuccess && customers.length === 0
-                      ? 'Es gibt noch keinen aktiven Kunden. Ein Auftrag braucht einen.'
+                      ? 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.'
                       : 'Sprache, Währung und Zahlungskondition kommen von diesem Kunden.'
                 }
               >

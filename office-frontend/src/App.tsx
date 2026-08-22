@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { Fragment, lazy, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
@@ -7,6 +7,7 @@ import { AppShell } from './layout/AppShell'
 import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
+import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
 
 /**
@@ -94,8 +95,15 @@ export default function App() {
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 
-                <Route path="/auftraege" element={<SalesDocumentListPage />} />
-                <Route path="/auftraege/:id" element={<SalesDocumentPage />} />
+                {/* Offerte, Auftrag, Lieferschein and Rechnung share one list and one mask,
+                    so their routes come out of the same table the menu is built from. Written
+                    out eight times, a fifth kind would be four chances to forget a line. */}
+                {SALES_DOCUMENT_KINDS.map((kind) => (
+                  <Fragment key={kind.category}>
+                    <Route path={kind.path} element={<SalesDocumentListPage kind={kind} />} />
+                    <Route path={`${kind.path}/:id`} element={<SalesDocumentPage kind={kind} />} />
+                  </Fragment>
+                ))}
 
                 {/* Every maintained list is a screen of its own, so it can be linked and
                     bookmarked. The old collective address stays and points at the first one. */}

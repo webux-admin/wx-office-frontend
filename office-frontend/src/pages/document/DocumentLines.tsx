@@ -5,6 +5,7 @@ import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { originState } from '../../lib/origin'
+import type { SalesDocumentKind } from '../../lib/salesDocument'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
 import { LinesTable } from './LinesTable'
@@ -22,7 +23,7 @@ type OpenDialog = {
 }
 
 /**
- * The positions of an order.
+ * The positions of a sales document.
  *
  * <p>Prices and totals are never computed here. A line is sent to the backend, and what comes
  * back is what is shown. The amount on a document is a legal statement, and there must be
@@ -30,7 +31,8 @@ type OpenDialog = {
  */
 export function DocumentLines({
   tenantId,
-  order,
+  kind,
+  document,
   editable,
   onAddProductLine,
   onUpdateProductLine,
@@ -45,8 +47,10 @@ export function DocumentLines({
   readOnlyNote,
 }: {
   tenantId: number
-  order: SalesDocument
-  /** False once the order is issued: nothing may change about a document that is out. */
+  /** Which of the four kinds of document this is, so that a way back leads to this one. */
+  kind: SalesDocumentKind
+  document: SalesDocument
+  /** False once the document is issued: nothing may change about one that is out. */
   editable: boolean
   /*
    * The six that a dialog submits answer with a promise. The dialog closes on the answer and
@@ -76,9 +80,9 @@ export function DocumentLines({
    * Brings a dialog up. The counter in the key is what resets the fields: a dialog that stays
    * mounted after being closed would otherwise show the line before last.
    */
-  const show = (kind: OpenDialog['kind'], line?: DocumentLine) => {
+  const show = (dialogKind: OpenDialog['kind'], line?: DocumentLine) => {
     opened.current += 1
-    setDialog({ kind, line, id: opened.current })
+    setDialog({ kind: dialogKind, line, id: opened.current })
     setOpen(true)
   }
 
@@ -100,8 +104,8 @@ export function DocumentLines({
   // Where the way into the product mask leads back to. The catalogue is looked up in its own
   // screen now and then, and the document has to be one click away afterwards.
   const back = originState(
-    `/auftraege/${order.id}`,
-    order.documentNumber ? `Auftrag ${order.documentNumber}` : 'Auftrag',
+    `${kind.path}/${document.id}`,
+    document.documentNumber ? `${kind.singular} ${document.documentNumber}` : kind.singular,
   )
 
   return (
@@ -134,7 +138,7 @@ export function DocumentLines({
 
         <LinesTable
           tenantId={tenantId}
-          document={order}
+          document={document}
           editable={editable}
           busy={busy}
           onEdit={(line) => show(editorOf(line), line)}
@@ -153,9 +157,9 @@ export function DocumentLines({
         <ProductLineDialog
           key={dialog.id}
           tenantId={tenantId}
-          partnerId={order.partnerId}
-          documentDate={order.documentDate}
-          currency={order.baseCurrency ?? order.currency}
+          partnerId={document.partnerId}
+          documentDate={document.documentDate}
+          currency={document.baseCurrency ?? document.currency}
           back={back}
           open={open}
           onClose={close}

@@ -6,6 +6,7 @@ import {
   Coins,
   CreditCard,
   Ellipsis,
+  FileText,
   FileType2,
   Globe,
   HandCoins,
@@ -15,9 +16,11 @@ import {
   LayoutTemplate,
   Lock,
   Package,
+  PackageCheck,
   Percent,
   Printer,
   Receipt,
+  ReceiptText,
   Ruler,
   Scale,
   ShieldCheck,
@@ -30,6 +33,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { basicDataFor } from '../lib/basicData'
+import { salesDocumentFor } from '../lib/salesDocument'
+import type { DocumentCategory } from '../lib/types'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -89,6 +94,30 @@ function listEntry(slug: string, icon: LucideIcon): NavEntry {
 }
 
 /**
+ * A menu entry for one kind of sales document.
+ *
+ * <p>Wording, address and right come from {@link SALES_DOCUMENT_KINDS} — the same table the
+ * routes are built from — so an entry cannot point at a screen the router does not know or ask
+ * for a right the mask does not check. Only the icon is decided here, as it is a React
+ * component and has no place in `lib/`.
+ *
+ * <p>A category without a kind would lead to the overview, which shows up as a duplicate
+ * address in `navigation.test.ts` rather than as a row that quietly goes nowhere.
+ *
+ * @param category the kind of document, as the backend spells it
+ * @param icon what the entry shows, also in the folded rail
+ */
+function salesEntry(category: DocumentCategory, icon: LucideIcon): NavEntry {
+  const kind = salesDocumentFor(category)
+  return {
+    label: kind?.plural ?? category,
+    icon,
+    href: kind?.path ?? '/',
+    permission: kind?.rights.read,
+  }
+}
+
+/**
  * The navigation, and with it the map of the application.
  *
  * <p>Only what the backend answers is listed. A module without a controller would be an entry
@@ -107,8 +136,14 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: 'Verkauf',
+    // In the order a sale runs through them, not alphabetically: what is offered, ordered,
+    // delivered and then billed. The Gutschrift is missing on purpose — it is written from the
+    // invoice it corrects and has no list of its own.
     entries: [
-      { label: 'Aufträge', icon: ClipboardList, href: '/auftraege', permission: 'ORDER_READ' },
+      salesEntry('OFFER', FileText),
+      salesEntry('ORDER', ClipboardList),
+      salesEntry('DELIVERY_NOTE', PackageCheck),
+      salesEntry('INVOICE', ReceiptText),
     ],
   },
   {

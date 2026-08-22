@@ -11,6 +11,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originState } from '../lib/origin'
+import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentType } from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { describeCopies } from './documenttype/documentTypeForm'
@@ -74,9 +75,12 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       render: (type) => (
         <span className="flex items-center gap-2">
           <span className="text-text-secondary">{categoryLabel(type.category)}</span>
-          {/* Auftrag is the only category with a mask of its own so far. A kind of any other
-              can be set up here and will simply sit unused until that module exists. */}
-          {type.category !== 'ORDER' && <Badge tone="neutral">Ohne Maske</Badge>}
+          {/* The Gutschrift is the only category left without a mask: it corrects an invoice
+              and is written from it, not from a list of its own. A kind of that category can
+              be set up here and will simply sit unused until that way exists. */}
+          {salesDocumentFor(type.category) === undefined && (
+            <Badge tone="neutral">Ohne Maske</Badge>
+          )}
         </span>
       ),
     },

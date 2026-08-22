@@ -109,7 +109,7 @@ export function LinesTable({
         title="Noch keine Position"
         description={
           document.status === 'DRAFT'
-            ? 'Ein Auftrag ohne Position lässt sich nicht ausstellen.'
+            ? 'Ein Beleg ohne Position lässt sich nicht ausstellen.'
             : 'Dieser Beleg trägt keine Positionen.'
         }
       />

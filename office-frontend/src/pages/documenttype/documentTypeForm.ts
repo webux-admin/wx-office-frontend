@@ -60,8 +60,10 @@ export const COPY_LABELS = ['Original', 'Kopie', 'Buchhaltung', 'Spedition', 'Ku
 /**
  * An empty mask, for a kind of document that is being added.
  *
- * <p>Starts on Auftrag because that is the only category with a mask of its own today. The
- * form is left empty and filled by the mask with the tenant's standard one.
+ * <p>Starts on Auftrag: a category has to stand before the rest of the mask means anything, and
+ * the Auftrag is the step of a sale every tenant writes. It stays a suggestion — the category
+ * can be picked freely until the kind is saved, after which it is fixed. The form is left empty
+ * and filled by the mask with the tenant's standard one.
  */
 export function emptyDocumentType(): DocumentTypeForm {
   return {

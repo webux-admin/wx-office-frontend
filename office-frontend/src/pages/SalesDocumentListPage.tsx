@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { Copy, FileInput, Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
@@ -7,7 +7,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
 import { PageHeader } from '../components/PageHeader'
-import { SplitButton } from '../components/SplitButton'
+import { SplitButton, type SplitButtonAction } from '../components/SplitButton'
 import { Panel } from '../components/Panel'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -15,6 +15,11 @@ import { api } from '../lib/api'
 import { formatAmount, formatCount, formatDate } from '../lib/format'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
+import {
+  indefiniteArticle,
+  salesDocumentListKey,
+  type SalesDocumentKind,
+} from '../lib/salesDocument'
 import type {
   DocumentStatus,
   DocumentSummary,
@@ -25,9 +30,6 @@ import type {
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { CopyDocumentDialog } from './document/CopyDocumentDialog'
 import { TakeoverDialog } from './document/TakeoverDialog'
-
-/** What an order mask returns to when it closes here. */
-const ORIGIN = originState('/auftraege', 'Aufträge')
 
 /** Status of the badge next to a document. */
 const TONES: Record<DocumentStatus, 'muted' | 'accent' | 'danger'> = {
@@ -44,25 +46,30 @@ const FILTERS: { id: 'alle' | DocumentStatus; label: string }[] = [
 ]
 
 /**
- * The orders of the tenant.
+ * The documents of one kind belonging to the tenant.
  *
  * <p>Status, order and count come from the server. The rows are heads without lines: what a
  * list shows is the head of a document, and loading the lines cost a query per row.
+ *
+ * @param kind which kind of document this list shows, named by the route
  */
-export function SalesDocumentListPage() {
+export function SalesDocumentListPage({ kind }: { kind: SalesDocumentKind }) {
   return (
-    <RequireTenant permission="ORDER_READ">
-      {(tenantId) => <OrderList tenantId={tenantId} />}
+    <RequireTenant permission={kind.rights.read}>
+      {(tenantId) => <DocumentList tenantId={tenantId} kind={kind} />}
     </RequireTenant>
   )
 }
 
-function OrderList({ tenantId }: { tenantId: number }) {
+function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumentKind }) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const { can } = useAuth()
   const [filter, setFilter] = useState<'alle' | DocumentStatus>('alle')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('documentDate,desc')
+
+  /** What a mask opened from here returns to when it closes. */
+  const origin = originState(kind.path, kind.plural)
 
   const query = listQuery({
     status: filter === 'alle' ? undefined : [filter],
@@ -70,14 +77,17 @@ function OrderList({ tenantId }: { tenantId: number }) {
     size: PAGE_SIZE,
     sort,
   })
-  const orders = useQuery({
-    queryKey: ['orders', tenantId, query],
-    queryFn: () => api.get<Page<DocumentSummary>>(`/api/tenants/${tenantId}/orders?${query}`),
+  // The kind belongs in the key: the four lists read the same shape off four resources, and
+  // without it the Rechnungen would be answered out of the cache with the Aufträge.
+  const documents = useQuery({
+    queryKey: salesDocumentListKey(kind, tenantId, query),
+    queryFn: () =>
+      api.get<Page<DocumentSummary>>(`/api/tenants/${tenantId}/${kind.resource}?${query}`),
   })
 
   // The status filter, the order and the count are the server's answer. A list row carries
   // no lines any more, which is why this is a DocumentSummary and not a SalesDocument.
-  const result = orders.data ?? emptyPage<DocumentSummary>()
+  const result = documents.data ?? emptyPage<DocumentSummary>()
   const rows = result.content
 
   const columns: Column<DocumentSummary>[] = [
@@ -86,13 +96,13 @@ function OrderList({ tenantId }: { tenantId: number }) {
       header: 'Nummer',
       width: 'w-[150px]',
       sortKey: 'documentNumber',
-      render: (order) => (
+      render: (row) => (
         <Link
-          to={`/auftraege/${order.id}`}
-          state={ORIGIN}
+          to={`${kind.path}/${row.id}`}
+          state={origin}
           className="font-mono text-[12px] transition-colors hover:text-accent-text"
         >
-          {order.documentNumber ?? `Entwurf ${order.id}`}
+          {row.documentNumber ?? `Entwurf ${row.id}`}
         </Link>
       ),
     },
@@ -101,28 +111,26 @@ function OrderList({ tenantId }: { tenantId: number }) {
       header: 'Datum',
       width: 'w-[110px]',
       sortKey: 'documentDate',
-      render: (order) => formatDate(order.documentDate),
+      render: (row) => formatDate(row.documentDate),
     },
     {
       key: 'partner',
       header: 'Empfänger',
       sortKey: 'partnerName',
-      render: (order) => order.partnerName ?? `Kunde ${order.partnerId}`,
+      render: (row) => row.partnerName ?? `Kunde ${row.partnerId}`,
     },
     {
       key: 'status',
       header: 'Status',
       width: 'w-[130px]',
-      render: (order) => (
-        <Badge tone={TONES[order.status]}>{statusLabel(order.status)}</Badge>
-      ),
+      render: (row) => <Badge tone={TONES[row.status]}>{statusLabel(row.status)}</Badge>,
     },
     {
       key: 'net',
       header: 'Netto',
       align: 'right',
       width: 'w-[120px]',
-      render: (order) => formatAmount(order.totalNet),
+      render: (row) => formatAmount(row.totalNet),
     },
     {
       key: 'gross',
@@ -130,63 +138,84 @@ function OrderList({ tenantId }: { tenantId: number }) {
       align: 'right',
       width: 'w-[130px]',
       sortKey: 'totalGross',
-      render: (order) => (
+      render: (row) => (
         <span className="font-medium">
-          {formatAmount(order.totalGross)}{' '}
-          <span className="text-text-tertiary">{order.currency}</span>
+          {formatAmount(row.totalGross)}{' '}
+          <span className="text-text-tertiary">{row.currency}</span>
         </span>
       ),
     },
   ]
 
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [takeover, setTakeover] = useState(false)
   const [copying, setCopying] = useState(false)
 
-  // The kinds of Auftrag, so the takeover dialog knows which of them names a predecessor.
+  // The kinds of document of this category, so the takeover dialog knows which of them names
+  // a predecessor. The catalogue has a right of its own, so asking without it would only
+  // collect a 403 nobody shows.
   const documentTypes = useQuery({
     queryKey: ['document-types', tenantId],
     queryFn: () => api.get<DocumentType[]>(`/api/tenants/${tenantId}/document-types`),
-    enabled: can('ORDER_WRITE'),
+    enabled: can(kind.rights.write) && can('DOCUMENT_TYPE_READ'),
   })
-  const orderTypes = (documentTypes.data ?? []).filter(
-    (type) => type.category === 'ORDER' && type.active,
+  const activeTypes = (documentTypes.data ?? []).filter(
+    (type) => type.category === kind.category && type.active,
   )
 
+  // A way that does not exist does not belong in the menu: where no kind names a predecessor,
+  // there is nothing to take over from. For the Offerte that is the normal case and not a gap
+  // in the settings — it stands at the beginning of the sale.
+  //
+  // Hidden only where that is known, which needs the catalogue to have arrived. Whoever may
+  // not read it keeps the entry, and the dialog behind it says what is missing — an entry
+  // that vanishes says nothing at all.
+  const canTakeOver =
+    !documentTypes.isSuccess || activeTypes.some((type) => (type.predecessorTypeIds ?? []).length > 0)
+
+  const actions: SplitButtonAction[] = [
+    ...(canTakeOver
+      ? [
+          {
+            id: 'takeover',
+            label: 'Aus Vorgängerbeleg übernehmen…',
+            hint: 'Aus einem ausgestellten Vorgängerbeleg. Beträge werden übernommen.',
+            icon: <FileInput size={15} aria-hidden />,
+            onSelect: () => setTakeover(true),
+          },
+        ]
+      : []),
+    {
+      id: 'copy',
+      label: `${kind.singular} kopieren…`,
+      hint: 'Positionen eines bestehenden Belegs als Vorlage.',
+      icon: <Copy size={15} aria-hidden />,
+      onSelect: () => setCopying(true),
+    },
+  ]
+
   // A document written this way is not finished: it opens straight away, the way a new one
-  // does, and the way back out leads to this list.
-  const openCreated = (order: SalesDocument) => {
+  // does, and the way back out leads to this list. That list is a row longer from now on, so
+  // it is marked stale before it is left — otherwise the way back shows the state from before.
+  const openCreated = (created: SalesDocument) => {
     setTakeover(false)
     setCopying(false)
-    void navigate(`/auftraege/${order.id}`, { state: ORIGIN })
+    void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
+    void navigate(`${kind.path}/${created.id}`, { state: origin })
   }
 
   return (
     <>
-      <PageHeader title="Aufträge" subtitle={`${formatCount(result.totalElements)} Belege`}>
-        {can('ORDER_WRITE') && (
+      <PageHeader title={kind.plural} subtitle={`${formatCount(result.totalElements)} Belege`}>
+        {can(kind.rights.write) && (
           <SplitButton
-            onClick={() => navigate('/auftraege/neu', { state: ORIGIN })}
-            menuLabel="Weitere Wege zu einem Auftrag"
-            actions={[
-              {
-                id: 'takeover',
-                label: 'Aus Vorgängerbeleg übernehmen…',
-                hint: 'Zum Beispiel aus einer Offerte. Beträge werden übernommen.',
-                icon: <FileInput size={15} aria-hidden />,
-                onSelect: () => setTakeover(true),
-              },
-              {
-                id: 'copy',
-                label: 'Auftrag kopieren…',
-                hint: 'Positionen eines bestehenden Auftrags als Vorlage.',
-                icon: <Copy size={15} aria-hidden />,
-                onSelect: () => setCopying(true),
-              },
-            ]}
+            onClick={() => navigate(`${kind.path}/neu`, { state: origin })}
+            menuLabel={`Weitere Wege zu ${indefiniteArticle(kind, 'dative')} ${kind.singular}`}
+            actions={actions}
           >
             <Plus size={15} aria-hidden />
-            Auftrag erfassen
+            {kind.singular} erfassen
           </SplitButton>
         )}
       </PageHeader>
@@ -217,9 +246,9 @@ function OrderList({ tenantId }: { tenantId: number }) {
           <DataTable
             columns={columns}
             rows={rows}
-            keyOf={(order) => order.id}
-            rowTo={(order) => `/auftraege/${order.id}`}
-            rowState={ORIGIN}
+            keyOf={(row) => row.id}
+            rowTo={(row) => `${kind.path}/${row.id}`}
+            rowState={origin}
             page={result}
             onPageChange={setPage}
             sort={sort}
@@ -227,21 +256,21 @@ function OrderList({ tenantId }: { tenantId: number }) {
               setSort(next)
               setPage(0)
             }}
-            loading={orders.isPending}
-            error={orders.error}
+            loading={documents.isPending}
+            error={documents.error}
             empty={
               <EmptyState
-                title={filter === 'alle' ? 'Noch keine Aufträge' : 'Nichts in diesem Status'}
+                title={filter === 'alle' ? `Noch keine ${kind.plural}` : 'Nichts in diesem Status'}
                 description={
                   filter === 'alle'
-                    ? 'Ein Auftrag beginnt als Entwurf und bekommt seine Nummer erst beim Ausstellen.'
+                    ? 'Ein Beleg beginnt als Entwurf und bekommt seine Nummer erst beim Ausstellen.'
                     : 'Ein anderer Filter zeigt vielleicht mehr.'
                 }
               >
-                {filter === 'alle' && can('ORDER_WRITE') && (
-                  <LinkButton to="/auftraege/neu" state={ORIGIN}>
+                {filter === 'alle' && can(kind.rights.write) && (
+                  <LinkButton to={`${kind.path}/neu`} state={origin}>
                     <Plus size={15} aria-hidden />
-                    Ersten Auftrag erfassen
+                    {kind.singular} erfassen
                   </LinkButton>
                 )}
               </EmptyState>
@@ -252,14 +281,16 @@ function OrderList({ tenantId }: { tenantId: number }) {
 
       <TakeoverDialog
         tenantId={tenantId}
+        kind={kind}
         open={takeover}
         onClose={() => setTakeover(false)}
-        orderTypes={orderTypes}
+        documentTypes={activeTypes}
         onCreated={openCreated}
       />
 
       <CopyDocumentDialog
         tenantId={tenantId}
+        kind={kind}
         open={copying}
         onClose={() => setCopying(false)}
         onCreated={openCreated}

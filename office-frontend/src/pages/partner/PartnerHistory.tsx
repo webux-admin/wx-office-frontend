@@ -11,7 +11,8 @@ import { api } from '../../lib/api'
 import { formatAmount, formatDate } from '../../lib/format'
 import { originState } from '../../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../../lib/paging'
-import type { DocumentHistoryEntry, Page } from '../../lib/types'
+import { salesDocumentFor } from '../../lib/salesDocument'
+import type { DocumentCategory, DocumentHistoryEntry, Page } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { wordingFor, type PartnerRole } from './role'
 
@@ -29,25 +30,20 @@ const TONES: Record<string, BadgeTone> = {
 }
 
 /**
- * Where a row leads, by the kind of document it holds.
- *
- * <p>Only the kinds that have a mask of their own today. Offers, delivery notes, invoices and
- * credit notes appear in the list and are not clickable, because there is no screen to send
- * anyone to — a route invented here would end on the dashboard.
- */
-const ROUTES: Record<string, string> = {
-  ORDER: '/auftraege',
-}
-
-/**
  * The mask of one row.
+ *
+ * <p>The four kinds of a sale lead to their own mask. Only the Gutschrift appears in the list
+ * without being clickable, because there is no screen to send anyone to — a route invented here
+ * would end on the dashboard.
  *
  * @param entry the row
  * @returns the route to its mask, `undefined` for a kind of document that has none
  */
 function routeOf(entry: DocumentHistoryEntry): string | undefined {
-  const base = ROUTES[entry.category]
-  return base ? `${base}/${entry.id}` : undefined
+  // A history row carries its category the way the server wrote it, as a plain string. The
+  // cast only names that string; anything outside the table simply finds no kind.
+  const kind = salesDocumentFor(entry.category as DocumentCategory)
+  return kind === undefined ? undefined : `${kind.path}/${entry.id}`
 }
 
 /**
