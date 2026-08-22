@@ -209,7 +209,7 @@ src/
 ### Befehle
 
 ```bash
-npm run dev        # Entwicklungsserver auf http://localhost:5173, /api geht an :8080
+npm run dev        # Entwicklungsserver auf http://localhost:5173, /api geht an :8082
 npm run lint       # ESLint
 npm run typecheck  # TypeScript ohne Ausgabe
 npm run test       # Vitest, einmalig (im Wachmodus: npx vitest)

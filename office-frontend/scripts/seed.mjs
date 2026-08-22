@@ -7,12 +7,12 @@
  *
  * Usage:  npm run seed
  * Environment variables:
- *   API_URL         base URL of the backend    (default http://localhost:8080)
+ *   API_URL         base URL of the backend    (default http://127.0.0.1:8082)
  *   ADMIN_USER      name of the superuser      (default admin)
  *   ADMIN_PASSWORD  password of the superuser  (default webux-admin-2026)
  */
 
-const API = process.env.API_URL ?? 'http://localhost:8080'
+const API = process.env.API_URL ?? 'http://127.0.0.1:8082'
 const ADMIN_USER = process.env.ADMIN_USER ?? 'admin'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'webux-admin-2026'
 

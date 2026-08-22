@@ -58,7 +58,7 @@ function messageFor(error: unknown): string {
     return 'Benutzername oder Passwort stimmt nicht. Nach fünf Fehlversuchen wird das Konto für 15 Minuten gesperrt.'
   }
   if (error instanceof ApiError) return error.message
-  return 'Das Backend ist nicht erreichbar. Läuft es auf Port 8080?'
+  return 'Das Backend ist nicht erreichbar. Läuft es auf Port 8082?'
 }
 
 /**
