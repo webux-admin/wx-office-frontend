@@ -179,6 +179,8 @@ type Calls = {
 /** How the mask is put on screen for one test. */
 type Setup = {
   editable?: boolean
+  /** True while a change to a line is on its way and its answer is still to come. */
+  busy?: boolean
   /** True where every line change is refused, the way the backend refuses one. */
   refused?: boolean
   /** What the panel says instead of nothing when the write right is missing. */
@@ -194,6 +196,7 @@ type Setup = {
 async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> {
   const {
     editable = true,
+    busy = false,
     refused = false,
     readOnlyNote,
     error = null,
@@ -250,7 +253,7 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
           }}
           onMoveLine={(lineNumber, position) => calls.moved.push({ lineNumber, position })}
           onRemoveLine={(lineNumber) => calls.removed.push(lineNumber)}
-          busy={false}
+          busy={busy}
           error={error}
             readOnlyNote={readOnlyNote}
           />
@@ -413,6 +416,143 @@ describe('DocumentLines', () => {
     click(byText('Abbrechen'))
 
     expect(calls.removed).toEqual([])
+  })
+
+  it('documentLinesOpensNoDialogOverALineWhileAChangeRunsTest', async () => {
+    const calls = await render(LINES, { busy: true })
+
+    click(byLabel('Position 2 entfernen'))
+    click(byLabel('Position 1 bearbeiten'))
+
+    // The bug this pins down: a dialog carries the line as this render numbers it, and the
+    // backend numbers the lines afresh with every change. Asked while the removal of the
+    // first line was still running, the question read "Position 3" and, by the time its
+    // button came free, took the line that had moved up into position 3 off the document.
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    expect(calls.removed).toEqual([])
+  })
+
+  it('documentLinesAddsAFreeLineOnceOnADoubleClickTest', async () => {
+    const calls = await render(LINES)
+
+    click(byText('Freie Zeile'))
+    type(field('Bezeichnung') as HTMLInputElement, 'Beratung')
+    type(field('Einzelpreis') as HTMLInputElement, '50')
+    const add = byText('Hinzufügen')
+    click(add)
+    click(add)
+
+    // Both presses land in the same tick, which is where the second click of a double click
+    // lands when the backend is quick. On a document an amount is a statement, and a
+    // statement must not stand there twice.
+    expect(calls.addedFree).toHaveLength(1)
+  })
+
+  it('documentLinesAddsAFreeLineOnceWhileTheBoxFadesOutTest', async () => {
+    const calls = await render(LINES)
+
+    click(byText('Freie Zeile'))
+    type(field('Bezeichnung') as HTMLInputElement, 'Beratung')
+    type(field('Einzelpreis') as HTMLInputElement, '50')
+    const add = byText('Hinzufügen')
+    click(add)
+    await settle()
+
+    // The backend has answered and the box has been told to go, but it is still on screen for
+    // as long as it fades — with the button of the render before, which is not locked.
+    expect(container.contains(add)).toBe(true)
+    click(add)
+
+    expect(calls.addedFree).toHaveLength(1)
+  })
+
+  it('documentLinesAddsAnotherFreeLineAfterTheFirstOneTest', async () => {
+    const calls = await render(LINES)
+
+    click(byText('Freie Zeile'))
+    type(field('Bezeichnung') as HTMLInputElement, 'Beratung')
+    type(field('Einzelpreis') as HTMLInputElement, '50')
+    click(byText('Hinzufügen'))
+    await settle()
+    await fadeOut()
+
+    // One press per opened dialog, not one per document: opening the dialog again starts over.
+    click(byText('Freie Zeile'))
+    type(field('Bezeichnung') as HTMLInputElement, 'Anfahrt')
+    type(field('Einzelpreis') as HTMLInputElement, '90')
+    click(byText('Hinzufügen'))
+
+    expect(calls.addedFree).toHaveLength(2)
+    expect(calls.addedFree[1].description).toBe('Anfahrt')
+  })
+
+  it('documentLinesSendsACorrectedFreeLineAfterARefusalTest', async () => {
+    const calls = await render(LINES, { refused: true })
+
+    click(byText('Freie Zeile'))
+    type(field('Bezeichnung') as HTMLInputElement, 'Beratung')
+    type(field('Einzelpreis') as HTMLInputElement, '50')
+    click(byText('Hinzufügen'))
+    await settle()
+
+    // The backend said no, so the dialog stayed open with everything in it. The lock on a
+    // second press has to come off with the refusal, or the message in the dialog names
+    // something nobody can put right any more.
+    type(field('Einzelpreis') as HTMLInputElement, '60')
+    click(byText('Hinzufügen'))
+
+    expect(calls.addedFree).toHaveLength(2)
+    expect(calls.addedFree[1].unitPrice).toBe(60)
+  })
+
+  it('documentLinesAddsAStructureLineOnceOnADoubleClickTest', async () => {
+    const calls = await render(LINES)
+
+    click(byText('Zeile einfügen'))
+    type(field('Text') as HTMLInputElement, 'Lieferung frei Haus')
+    const insert = byText('Einfügen')
+    click(insert)
+    click(insert)
+
+    expect(calls.addedStructure).toEqual([{ kind: 'COMMENT', text: 'Lieferung frei Haus' }])
+  })
+
+  it('documentLinesAddsACatalogueLineOnceOnADoubleClickTest', async () => {
+    const calls = await render(LINES)
+
+    click(byText('Aus Katalog'))
+    await settle()
+    press(field('Produkt') as HTMLInputElement, 'Enter')
+    const add = byText('Hinzufügen')
+    click(add)
+    click(add)
+
+    expect(calls.added).toHaveLength(1)
+  })
+
+  it('documentLinesRemovesALineOnceOnADoubleClickTest', async () => {
+    const calls = await render(LINES)
+
+    click(byLabel('Position 2 entfernen'))
+    const remove = byText('Entfernen')
+    click(remove)
+    click(remove)
+
+    // The second press reads the line of the render before it, and the lines below have moved
+    // up by then — it would take a different one off the document than the one asked about.
+    expect(calls.removed).toEqual([2])
+  })
+
+  it('documentLinesRemovesAnotherLineAfterTheFirstOneTest', async () => {
+    const calls = await render(LINES)
+
+    click(byLabel('Position 2 entfernen'))
+    click(byText('Entfernen'))
+    await fadeOut()
+    click(byLabel('Position 4 entfernen'))
+    click(byText('Entfernen'))
+
+    expect(calls.removed).toEqual([2, 4])
   })
 
   it('documentLinesEditsAFreeLineTest', async () => {

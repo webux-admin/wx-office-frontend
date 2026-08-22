@@ -86,6 +86,13 @@ export function ProductLineDialog({
   const [to, setTo] = useState(line?.serviceDateTo ?? '')
   const search = useRef<HTMLInputElement>(null)
   const count = useRef<HTMLInputElement>(null)
+  /**
+   * True once this dialog has sent a position and is not staying open for the next one.
+   *
+   * <p>A ref and not `useState`: the two clicks of a double click can land in the same tick,
+   * and a state value read in the second one would still be the old one.
+   */
+  const sent = useRef(false)
 
   const productId = picked?.id ?? (taken ? line?.productId : undefined)
   // The day of supply decides the VAT rate and the price period; without one the document
@@ -130,7 +137,15 @@ export function ProductLineDialog({
     // The buttons are locked while a line is on its way; the keyboard was not. Three presses
     // of Enter in the quantity — key repeat is enough — put the same position on the document
     // three times, and on a document an amount is a statement.
-    if (busy) return
+    //
+    // And one step further: `busy` is false again the moment the backend answers, while the
+    // box is still on screen and still takes a click for the length of its fade. The second
+    // click of a double click lands in there. `sent` closes that window, and closes it
+    // whatever the fade is timed at.
+    //
+    // It is also the only lock the tests reach: jsdom acts on neither `inert` nor a hit test,
+    // so the lock the dialog puts on the fading box is pinned as an attribute and no more.
+    if (busy || sent.current) return
     const id = taking?.id ?? productId
     if (id === undefined || hasProblem(problems)) return
     // Taken from the product being picked where there is one: the state of this render still
@@ -143,18 +158,31 @@ export function ProductLineDialog({
       serviceDateFrom: from || undefined,
       serviceDateTo: to || undefined,
     }
-    void onSubmit(payload).then(() => {
-      if (!again) {
-        onClose()
-        return
-      }
-      setPicked(undefined)
-      setTaken(false)
-      setTerm('')
-      setQuantity('1')
-      setDiscount(NO_DISCOUNT)
-      search.current?.focus()
-    }, () => undefined)
+    // Set before the line goes out, not in the answer: the second click is there long before
+    // the backend is.
+    sent.current = true
+    void onSubmit(payload).then(
+      () => {
+        if (!again) {
+          onClose()
+          return
+        }
+        // "Hinzufügen und weiter" promises the next position, so the way has to be open for
+        // it. The dialog stays where it is and takes them one after the other.
+        sent.current = false
+        setPicked(undefined)
+        setTaken(false)
+        setTerm('')
+        setQuantity('1')
+        setDiscount(NO_DISCOUNT)
+        search.current?.focus()
+      },
+      () => {
+        // Refused, so the dialog stays open with everything in it — and the corrected
+        // position has to be able to go out.
+        sent.current = false
+      },
+    )
   }
 
   const take = (chosen: Product, andAdd = false) => {

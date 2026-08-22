@@ -64,6 +64,9 @@ function order(
 let container: HTMLDivElement
 let root: Root
 const moved: { lineNumber: number; position: number }[] = []
+/** Which line the table asked to have edited or taken off, by its number. */
+const edited: number[] = []
+const removed: number[] = []
 
 beforeEach(() => {
   vi.stubGlobal('fetch', (url: string) =>
@@ -78,6 +81,8 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   moved.length = 0
+  edited.length = 0
+  removed.length = 0
 })
 
 afterEach(() => {
@@ -98,9 +103,9 @@ async function draw(document: SalesDocument, editable = true, busy = false) {
           document={document}
           editable={editable}
           busy={busy}
-          onEdit={() => undefined}
+          onEdit={(one) => edited.push(one.lineNumber)}
           onMove={(one, position) => moved.push({ lineNumber: one.lineNumber, position })}
-          onRemove={() => undefined}
+          onRemove={(one) => removed.push(one.lineNumber)}
         />
       </QueryClientProvider>,
     )
@@ -131,6 +136,12 @@ function byLabel(label: string): HTMLButtonElement {
  */
 function lastColumnOf(row: HTMLTableRowElement): number {
   return [...row.cells].reduce((column, cell) => column + cell.colSpan, 0)
+}
+
+function click(element: HTMLElement) {
+  act(() => {
+    element.click()
+  })
 }
 
 /** Presses a key on an element the way a browser does, so React sees it bubble up. */
@@ -288,6 +299,48 @@ describe('LinesTable', () => {
     // A second move on top of a running one would be counted against lines the backend has
     // already renumbered.
     expect(moved).toEqual([])
+  })
+
+  it('linesTableLocksTheLineControlsWhileBusyTest', async () => {
+    await draw(order(LINES), true, true)
+
+    // The backend numbers the lines afresh after every change, so an action begun on top of a
+    // running one names a position that is about to be a different line. The grip has always
+    // refused one; the pencil and the bin now do the same, and say so to a reader.
+    expect(byLabel('Position 3 bearbeiten').getAttribute('aria-disabled')).toBe('true')
+    expect(byLabel('Position 3 entfernen').getAttribute('aria-disabled')).toBe('true')
+    expect(byLabel('Position 3 verschieben').disabled).toBe(true)
+
+    click(byLabel('Position 3 bearbeiten'))
+    click(byLabel('Position 3 entfernen'))
+
+    expect(edited).toEqual([])
+    expect(removed).toEqual([])
+  })
+
+  it('linesTableKeepsTheLockedControlsFocusableTest', async () => {
+    await draw(order(LINES), true, true)
+
+    // Said to be unavailable, not switched off. A dialog gives the focus back to the control
+    // that opened it, and that control is locked at exactly that moment — the change it
+    // started is still running. With the DOM attribute the focus would land nowhere and the
+    // reader would tab through the whole mask again.
+    byLabel('Position 3 entfernen').focus()
+
+    expect(document.activeElement).toBe(byLabel('Position 3 entfernen'))
+  })
+
+  it('linesTableFreesTheLineControlsOnceTheChangeIsThroughTest', async () => {
+    await draw(order(LINES), true, true)
+    await draw(order(LINES))
+
+    click(byLabel('Position 3 bearbeiten'))
+    click(byLabel('Position 3 entfernen'))
+
+    // Locked is only for as long as the change runs: afterwards the table works again.
+    expect(byLabel('Position 3 bearbeiten').getAttribute('aria-disabled')).toBe(null)
+    expect(edited).toEqual([3])
+    expect(removed).toEqual([3])
   })
 
   it('linesTableKeepsTheFocusOnTheMovedLineTest', async () => {

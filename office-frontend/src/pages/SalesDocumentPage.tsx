@@ -77,17 +77,34 @@ function DocumentLoader({ tenantId, kind }: { tenantId: number; kind: SalesDocum
       </div>
     )
   }
-  return <DocumentMask tenantId={tenantId} kind={kind} document={document.data} />
+  return (
+    <DocumentMask
+      tenantId={tenantId}
+      kind={kind}
+      document={document.data}
+      refreshing={document.isFetching}
+    />
+  )
 }
 
 function DocumentMask({
   tenantId,
   kind,
   document,
+  refreshing,
 }: {
   tenantId: number
   kind: SalesDocumentKind
   document: SalesDocument
+  /**
+   * True while the document is being read again — which is what every change to it ends with.
+   *
+   * <p>A change to the positions is not over when the backend answers: the lines on screen
+   * are still the ones from before it until the answer to the new read is in, and the backend
+   * numbers them afresh on every change. Between the two the table would show position 3 as a
+   * line that is about to become position 2.
+   */
+  refreshing: boolean
 }) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const { can } = useAuth()
@@ -224,7 +241,10 @@ function DocumentMask({
     moveLine,
     removeLine,
   ]
-  const lineBusy = lineMutations.some((mutation) => mutation.isPending)
+  // The read that follows a change counts as part of it. Otherwise the controls of the table
+  // come alive again over the numbering from before the change, for as long as that read
+  // takes — long enough to open a dialog on a position that is about to be another line.
+  const lineBusy = lineMutations.some((mutation) => mutation.isPending) || refreshing
   const lineError = lineMutations.map((mutation) => mutation.error).find((one) => one !== null)
 
   /**

@@ -194,12 +194,22 @@ export function LinesTable({
     return kind
   }
 
+  /**
+   * The two controls of a row, locked for as long as a change to any line is on its way.
+   *
+   * <p>Both hand the line over as it is numbered in this render, and the backend numbers the
+   * lines afresh after every change. A dialog opened on top of a running change would be
+   * asking about position 3 and, once the answer is in, take position 3 off a document where
+   * that is a different line. The grip has always refused a second move for the same reason;
+   * these two do now as well.
+   */
   const actionsOf = (line: DocumentLine) =>
     editable ? (
       <td className={`${CELL} ${ACTION_COLUMN}`}>
         <span className="flex items-center justify-end gap-1">
           <IconButton
             label={`Position ${line.lineNumber} bearbeiten`}
+            disabled={busy}
             onClick={() => onEdit(line)}
           >
             <Pencil size={14} />
@@ -207,6 +217,7 @@ export function LinesTable({
           <IconButton
             label={`Position ${line.lineNumber} entfernen`}
             danger
+            disabled={busy}
             onClick={() => onRemove(line)}
           >
             <Trash2 size={14} />
@@ -482,25 +493,49 @@ function TotalRow({
   )
 }
 
-/** One of the small square controls at the end of a row. */
+/**
+ * One of the small square controls at the end of a row.
+ *
+ * <p>A locked one is locked with the `disabled` of the button itself and not by dropping its
+ * handler: that is the one state a reader is told about without being able to see it, and it
+ * takes the control out of the tab order along the way.
+ */
 function IconButton({
   label,
   danger = false,
+  disabled = false,
   onClick,
   children,
 }: {
   label: string
   danger?: boolean
+  /** True while a change is on its way; the control stays visible but takes nothing. */
+  disabled?: boolean
   onClick: () => void
   children: ReactNode
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      // Marked as unavailable rather than switched off. A button carrying the DOM `disabled`
+      // attribute cannot hold the focus, and the browser hands it to the page body the moment
+      // the attribute appears — which is exactly the moment a change starts, right after this
+      // very button opened the dialog that started it. The dialog gives the focus back to
+      // whatever opened it when it closes, and that would then land nowhere, leaving a reader
+      // to tab through the whole mask again. `aria-disabled` says the same thing to a reader
+      // and keeps the button where the focus can return to it; the click is refused below.
+      aria-disabled={disabled || undefined}
+      onClick={() => {
+        if (disabled) return
+        onClick()
+      }}
       aria-label={label}
       className={`grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors ${
-        danger ? 'hover:bg-danger/12 hover:text-danger' : 'hover:bg-sunken hover:text-text-primary'
+        disabled
+          ? 'cursor-default opacity-40'
+          : danger
+            ? 'hover:bg-danger/12 hover:text-danger'
+            : 'hover:bg-sunken hover:text-text-primary'
       }`}
     >
       {children}

@@ -472,6 +472,64 @@ describe('ProductLineDialog', () => {
     expect(calls.closed).toBe(1)
   })
 
+  it('productLineDialogAddsAPositionOnceOnADoubleClickTest', async () => {
+    const calls = await render()
+
+    takeFirstProduct()
+    type(field('Menge'), '3')
+    click(button('Hinzufügen'))
+    await settle(0)
+
+    // The backend has answered, so `busy` is false and the button is live again — and the box
+    // is still on screen, because it only goes once it has faded out. That is the state the
+    // second click of an ordinary double click arrives in.
+    click(button('Hinzufügen'))
+    await settle(0)
+
+    expect(calls.sent).toHaveLength(1)
+    expect(calls.closed).toBe(1)
+  })
+
+  it('productLineDialogAddsPositionAfterPositionTest', async () => {
+    const calls = await render()
+
+    takeFirstProduct()
+    type(field('Menge'), '4')
+    click(button('Hinzufügen und weiter'))
+    await settle()
+
+    takeFirstProduct()
+    type(field('Menge'), '2')
+    click(button('Hinzufügen und weiter'))
+    await settle()
+
+    // This is what "und weiter" is for: the dialog stays open and takes one position after
+    // the other. A lock that never comes off again would end a document after its first line.
+    expect(calls.sent).toHaveLength(2)
+    expect(calls.sent[0].quantity).toBe(4)
+    expect(calls.sent[1].quantity).toBe(2)
+    expect(calls.closed).toBe(0)
+  })
+
+  it('productLineDialogSendsACorrectedPositionAfterARefusalTest', async () => {
+    const calls = await render(undefined, true)
+
+    takeFirstProduct()
+    type(field('Menge'), '5')
+    click(button('Hinzufügen'))
+    await settle(0)
+
+    // The backend said no and the dialog stayed open with everything in it. The lock has to
+    // come off with the refusal, or the message names something nobody can put right.
+    type(field('Menge'), '2')
+    click(button('Hinzufügen'))
+    await settle(0)
+
+    expect(calls.sent).toHaveLength(2)
+    expect(calls.sent[1].quantity).toBe(2)
+    expect(calls.closed).toBe(0)
+  })
+
   it('productLineDialogIgnoresARepeatedEnterTest', async () => {
     const calls = await render()
 
