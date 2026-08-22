@@ -253,7 +253,6 @@ export function ProductLineDialog({
             product={product}
             quantity={askedQuantity}
             perUnitOnly={settledQuantity <= 0}
-            dateOfSupply={dateOfSupply}
             currency={currency}
             vatOf={vatOf}
             vatFailed={vatFailed}

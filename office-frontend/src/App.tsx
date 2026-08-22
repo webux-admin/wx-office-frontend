@@ -32,6 +32,7 @@ const OrderPage = lazy(() => import('./pages/OrderPage').then((module) => ({ def
 const PartnerListPage = lazy(() => import('./pages/PartnerListPage').then((module) => ({ default: module.PartnerListPage })))
 const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({ default: module.PartnerPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
+const PrinterListPage = lazy(() => import('./pages/PrinterListPage').then((module) => ({ default: module.PrinterListPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const ProductListPage = lazy(() => import('./pages/ProductListPage').then((module) => ({ default: module.ProductListPage })))
 const ProductPage = lazy(() => import('./pages/ProductPage').then((module) => ({ default: module.ProductPage })))
@@ -111,6 +112,7 @@ export default function App() {
                 <Route path="/belegarten/:id" element={<DocumentTypePage />} />
                 <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
                 <Route path="/druckvorlagen/:id" element={<PrintLayoutPage />} />
+                <Route path="/drucker" element={<PrinterListPage />} />
                 <Route path="/nummernkreise" element={<NumberRangePage />} />
 
                 <Route path="/mandanten" element={<TenantListPage />} />

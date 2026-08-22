@@ -27,6 +27,7 @@ import { NewOrderMask } from './order/NewOrderMask'
 import { OrderHeaderPanel } from './order/OrderHeaderPanel'
 import { OrderLines } from './order/OrderLines'
 import { OrderPaymentPanel } from './order/OrderPaymentPanel'
+import { OrderPrintouts } from './order/OrderPrintouts'
 import { headerKey, paymentKey } from './order/headerForm'
 import { recipientNote } from './order/recipientNote'
 import {
@@ -299,6 +300,13 @@ function OrderMask({ tenantId, order }: { tenantId: number; order: SalesDocument
               onChanged={refresh}
             />
             <OrderTexts tenantId={tenantId} order={order} editable={editable} />
+            <OrderPrintouts
+              tenantId={tenantId}
+              base={base}
+              editable={editable}
+              readOnlyNote={readOnlyNote}
+              draft={order.status === 'DRAFT'}
+            />
           </div>
 
           <div className="grid gap-6 self-start">

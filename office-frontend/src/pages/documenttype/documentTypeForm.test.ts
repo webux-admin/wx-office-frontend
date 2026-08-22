@@ -5,14 +5,20 @@ import {
   describeCopies,
   emptyDocumentType,
   firstComplaint,
-  nextCopyLabel,
+  nextCopyRow,
   toForm,
   togglePredecessor,
   toPayload,
   withMovedCopy,
   withMovedPredecessor,
+  type CopyRow,
   type DocumentTypeForm,
 } from './documentTypeForm'
+
+/** One copy row, with only what the test cares about spelled out. */
+function copy(fields: Partial<CopyRow> = {}): CopyRow {
+  return { label: 'Original', copies: '1', printerId: '', trayId: '', ...fields }
+}
 import type { DocumentType } from '../../lib/types'
 
 const STORED: DocumentType = {
@@ -25,8 +31,8 @@ const STORED: DocumentType = {
   documentLayout: 'AUFTRAG-A4',
   documentLayoutName: 'Auftrag A4 mit Logo',
   copies: [
-    { position: 1, label: 'Original' },
-    { position: 2, label: 'Buchhaltung' },
+    { position: 1, label: 'Original', copies: 1, printerId: 7, printerName: 'Empfang', trayId: 71 },
+    { position: 2, label: 'Buchhaltung', copies: 2 },
   ],
   predecessorTypeIds: [3, 5],
   copyPriceMode: 'COPY',
@@ -49,7 +55,10 @@ describe('toForm', () => {
     expect(form.name).toBe('Auftrag')
     expect(form.numberPrefix).toBe('AU')
     expect(form.documentLayoutId).toBe('12')
-    expect(form.copies).toEqual(['Original', 'Buchhaltung'])
+    expect(form.copies).toEqual([
+      { label: 'Original', copies: '1', printerId: '7', trayId: '71' },
+      { label: 'Buchhaltung', copies: '2', printerId: '', trayId: '' },
+    ])
     expect(form.predecessorTypeIds).toEqual([3, 5])
     expect(form.copyPriceMode).toBe('COPY')
   })
@@ -76,8 +85,20 @@ describe('toPayload', () => {
       numberPrefix: 'AU',
       documentLayoutId: 12,
       copies: [
-        { position: 1, label: 'Original' },
-        { position: 2, label: 'Buchhaltung' },
+        {
+          position: 1,
+          label: 'Original',
+          copies: 1,
+          printerId: 7,
+          trayId: 71,
+        },
+        {
+          position: 2,
+          label: 'Buchhaltung',
+          copies: 2,
+          printerId: undefined,
+          trayId: undefined,
+        },
       ],
       predecessorTypeIds: [3, 5],
       copyPriceMode: 'COPY',
@@ -85,13 +106,14 @@ describe('toPayload', () => {
   })
 
   it('toPayloadNumbersTheCopiesByTheirPlaceTest', () => {
-    // The mask holds labels only; the position follows from the row, so reordering the rows
-    // is what reorders the PDF.
-    const payload = toPayload({ ...COMPLETE, copies: ['Spedition', 'Original'] })
+    // The position follows from the row, so reordering the rows is what reorders the PDF.
+    const copies = [copy({ label: 'Spedition' }), copy({ label: 'Original' })]
+
+    const payload = toPayload({ ...COMPLETE, copies })
 
     expect(payload.copies).toEqual([
-      { position: 1, label: 'Spedition' },
-      { position: 2, label: 'Original' },
+      expect.objectContaining({ position: 1, label: 'Spedition' }),
+      expect.objectContaining({ position: 2, label: 'Original' }),
     ])
   })
 
@@ -178,49 +200,81 @@ describe('firstComplaint', () => {
   })
 
   it('firstComplaintWithBlankCopyLabelTest', () => {
-    expect(firstComplaint({ ...COMPLETE, copies: ['Original', ' '] }, true))
+    expect(firstComplaint({ ...COMPLETE, copies: [copy(), copy({ label: ' ' })] }, true))
       .toBe('Eine Ausfertigung braucht eine Beschriftung. Sonst die Zeile entfernen.')
   })
 
+  it('firstComplaintWithAnUnreadableSheetCountTest', () => {
+    expect(firstComplaint({ ...COMPLETE, copies: [copy({ copies: 'zwei' })] }, true))
+      .toBe('Die Anzahl ist keine Zahl.')
+  })
+
+  it('firstComplaintWithZeroSheetsTest', () => {
+    expect(firstComplaint({ ...COMPLETE, copies: [copy({ copies: '0' })] }, true))
+      .toBe('Die Anzahl liegt zwischen 1 und 99.')
+  })
+
+  it('firstComplaintWithTooManySheetsTest', () => {
+    expect(firstComplaint({ ...COMPLETE, copies: [copy({ copies: '100' })] }, true))
+      .toBe('Die Anzahl liegt zwischen 1 und 99.')
+  })
+
+  it('firstComplaintWithATrayButNoPrinterTest', () => {
+    expect(firstComplaint({ ...COMPLETE, copies: [copy({ trayId: '71' })] }, true))
+      .toBe('Ein Schacht gehört zu einem Drucker. Bitte zuerst den Drucker wählen.')
+  })
+
   it('firstComplaintWithTooLongCopyLabelTest', () => {
-    expect(firstComplaint({ ...COMPLETE, copies: ['x'.repeat(61)] }, true))
+    expect(firstComplaint({ ...COMPLETE, copies: [copy({ label: 'x'.repeat(61) })] }, true))
       .toBe('Eine Beschriftung darf höchstens 60 Zeichen lang sein.')
   })
 
   it('firstComplaintWithTooManyCopiesTest', () => {
-    const copies = Array.from({ length: MAX_COPIES + 1 }, (_, index) => `Exemplar ${index + 1}`)
+    const copies = Array.from({ length: MAX_COPIES + 1 }, (_, index) =>
+      copy({ label: `Exemplar ${index + 1}` }),
+    )
 
     expect(firstComplaint({ ...COMPLETE, copies }, true))
       .toBe('Ein Beleg wird höchstens 9 Mal gedruckt.')
   })
 
   it('firstComplaintWithExactlyNineCopiesTest', () => {
-    const copies = Array.from({ length: MAX_COPIES }, (_, index) => `Exemplar ${index + 1}`)
+    const copies = Array.from({ length: MAX_COPIES }, (_, index) =>
+      copy({ label: `Exemplar ${index + 1}` }),
+    )
 
     expect(firstComplaint({ ...COMPLETE, copies }, true)).toBeNull()
   })
 })
 
+/** The labels of a list of copy rows, which is what the order tests are about. */
+function labelsOf(rows: readonly CopyRow[]): string[] {
+  return rows.map((row) => row.label)
+}
+
 describe('withMovedCopy', () => {
   it('withMovedCopyTest', () => {
-    expect(withMovedCopy(['Original', 'Kopie', 'Spedition'], 1, 1))
+    expect(labelsOf(withMovedCopy([copy(), copy({ label: 'Kopie' }), copy({ label: 'Spedition' })], 1, 1)))
       .toEqual(['Original', 'Spedition', 'Kopie'])
   })
 
   it('withMovedCopyUpTest', () => {
-    expect(withMovedCopy(['Original', 'Kopie'], 1, -1)).toEqual(['Kopie', 'Original'])
+    expect(labelsOf(withMovedCopy([copy(), copy({ label: 'Kopie' })], 1, -1)))
+      .toEqual(['Kopie', 'Original'])
   })
 
   it('withMovedCopyAtTheTopTest', () => {
-    expect(withMovedCopy(['Original', 'Kopie'], 0, -1)).toEqual(['Original', 'Kopie'])
+    expect(labelsOf(withMovedCopy([copy(), copy({ label: 'Kopie' })], 0, -1)))
+      .toEqual(['Original', 'Kopie'])
   })
 
   it('withMovedCopyAtTheBottomTest', () => {
-    expect(withMovedCopy(['Original', 'Kopie'], 1, 1)).toEqual(['Original', 'Kopie'])
+    expect(labelsOf(withMovedCopy([copy(), copy({ label: 'Kopie' })], 1, 1)))
+      .toEqual(['Original', 'Kopie'])
   })
 
   it('withMovedCopyInASingleRowListTest', () => {
-    expect(withMovedCopy(['Original'], 0, 1)).toEqual(['Original'])
+    expect(labelsOf(withMovedCopy([copy()], 0, 1))).toEqual(['Original'])
   })
 
   it('withMovedCopyInAnEmptyListTest', () => {
@@ -228,11 +282,11 @@ describe('withMovedCopy', () => {
   })
 
   it('withMovedCopyLeavesTheOriginalAloneTest', () => {
-    const copies = ['Original', 'Kopie']
+    const copies = [copy(), copy({ label: 'Kopie' })]
 
     withMovedCopy(copies, 0, 1)
 
-    expect(copies).toEqual(['Original', 'Kopie'])
+    expect(labelsOf(copies)).toEqual(['Original', 'Kopie'])
   })
 })
 
@@ -268,23 +322,29 @@ describe('togglePredecessor', () => {
   })
 })
 
-describe('nextCopyLabel', () => {
-  it('nextCopyLabelTest', () => {
-    expect(nextCopyLabel(2)).toBe('Buchhaltung')
+describe('nextCopyRow', () => {
+  it('nextCopyRowTest', () => {
+    expect(nextCopyRow(2)).toEqual({
+      label: 'Buchhaltung',
+      copies: '1',
+      printerId: '',
+      trayId: '',
+    })
   })
 
-  it('nextCopyLabelForTheFirstCopyTest', () => {
-    expect(nextCopyLabel(0)).toBe('Original')
+  it('nextCopyRowForTheFirstCopyTest', () => {
+    expect(nextCopyRow(0).label).toBe('Original')
   })
 
-  it('nextCopyLabelBeyondTheUsualNamesTest', () => {
-    expect(nextCopyLabel(5)).toBe('Exemplar 6')
+  it('nextCopyRowBeyondTheUsualNamesTest', () => {
+    expect(nextCopyRow(5).label).toBe('Exemplar 6')
   })
 })
 
 describe('describeCopies', () => {
   it('describeCopiesTest', () => {
-    expect(describeCopies(STORED.copies)).toBe('2 ×')
+    // Three sheets from two rows: the second copy asks for two of itself.
+    expect(describeCopies(STORED.copies)).toBe('3 ×')
   })
 
   it('describeCopiesWithoutEntriesTest', () => {

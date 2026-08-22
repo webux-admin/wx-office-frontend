@@ -92,7 +92,7 @@ describe('flattenNav', () => {
 
     expect(belegwesen).toBeDefined()
     expect(flattenNav(belegwesen === undefined ? [] : [belegwesen]).map((entry) => entry.href))
-      .toEqual(['/belegarten', '/druckvorlagen', '/nummernkreise'])
+      .toEqual(['/belegarten', '/druckvorlagen', '/drucker', '/nummernkreise'])
   })
 
   it('flattenNavWithoutFolderTest', () => {

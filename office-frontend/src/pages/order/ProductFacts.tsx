@@ -24,7 +24,6 @@ export function ProductFacts({
   product,
   quantity,
   perUnitOnly = false,
-  dateOfSupply,
   currency,
   vatOf,
   vatFailed = false,
@@ -38,8 +37,6 @@ export function ProductFacts({
   quantity: number
   /** True where `quantity` stands in for one the price resolution cannot answer for. */
   perUnitOnly?: boolean
-  /** The day that decides the VAT rate, as `yyyy-MM-dd`. */
-  dateOfSupply: string
   /** The currency the price list is kept in, left out where the document does not say. */
   currency?: string
   vatOf: (category: VatCategory | undefined) => string | undefined

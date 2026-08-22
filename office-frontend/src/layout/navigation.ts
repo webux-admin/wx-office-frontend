@@ -12,6 +12,7 @@ import {
   Hash,
   Languages,
   LayoutGrid,
+  LayoutTemplate,
   Lock,
   Package,
   Percent,
@@ -182,11 +183,20 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: 'DOCUMENT_TYPE_READ',
           },
           // Not a selection list any more: a form has a drawing and an editor of its own.
+          // The printer icon belongs to the devices below; a form is a template.
           {
             label: 'Druckvorlagen',
-            icon: Printer,
+            icon: LayoutTemplate,
             href: '/druckvorlagen',
             permission: 'PRINT_LAYOUT_READ',
+          },
+          // The devices themselves, not what is printed on them: a Belegart names a
+          // printer per copy, and a document takes that over when it is started.
+          {
+            label: 'Drucker',
+            icon: Printer,
+            href: '/drucker',
+            permission: 'PRINTER_READ',
           },
           {
             label: 'Nummernkreise',

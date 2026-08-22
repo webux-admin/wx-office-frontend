@@ -674,10 +674,70 @@ export type PrintLayoutFields = {
  *
  * <p>No entries means the document is printed once without a label. The copies decide what
  * comes out of the printer, never what is archived.
+ *
+ * <p>Printer and tray are a note, not a command: no web API lets a page choose where a print
+ * goes, so they are shown next to the print dialog and the user picks them there (ADR-0009).
  */
 export type DocumentTypeCopy = {
   position: number
   label: string
+  /** How many sheets of this copy, at least 1. */
+  copies?: number
+  printerId?: number
+  /** What that printer is called, so a mask can name it without reading the printers. */
+  printerName?: string
+  trayId?: number
+  /** What that tray is called, read only. */
+  trayName?: string
+}
+
+/**
+ * One of the copies a concrete document is printed in.
+ *
+ * <p>Materialised from the kind of document when the draft is started, and editable while it
+ * stays a draft. Issuing the document freezes the list: a reprint has to come out the way it
+ * went out.
+ */
+export type DocumentPrintout = {
+  /** Row id; absent for a row the mask has just added. */
+  id?: number
+  /** Order in the print, 1 is the original. */
+  position: number
+  label: string
+  copies: number
+  printerId?: number
+  printerName?: string
+  trayId?: number
+  trayName?: string
+}
+
+/**
+ * A printer of the tenant.
+ *
+ * <p>Carries no address of any kind. Nothing in this application talks to a printer; the name
+ * and the place are there so a person standing in the office knows which machine is meant
+ * (ADR-0042 of the backend).
+ */
+export type Printer = {
+  id: number
+  /** Short key, upper case, unique per tenant and fixed once the printer exists. */
+  code: string
+  name: string
+  /** Where the machine stands, for example `2. OG, neben der Kueche`. */
+  location?: string
+  active?: boolean
+  /** The trays it has. A printer with a single tray names none. */
+  trays?: PrinterTray[]
+}
+
+/** One paper tray of a printer. */
+export type PrinterTray = {
+  /** Row id; absent for a tray the mask has just added. */
+  id?: number
+  code: string
+  name: string
+  /** Order in the list, 1 first. */
+  position?: number
 }
 
 /** Name and address as they were frozen onto the document when it was issued. */

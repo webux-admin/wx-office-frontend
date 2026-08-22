@@ -245,6 +245,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                 disabled={!mayWrite}
               />
               <CopyEditor
+                tenantId={tenantId}
                 copies={form.copies}
                 onChange={(copies) => change({ copies })}
                 disabled={!mayWrite}
