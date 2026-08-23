@@ -1096,6 +1096,26 @@ export type PartnerDocumentType = {
   overridden: boolean
   /** Whether that kind may still be used for new documents. */
   active: boolean
+  /** What comes out of the printer for this customer, copy by copy. */
+  copies?: PartnerDocumentCopy[]
+}
+
+/**
+ * One copy of a kind of document, as one customer gets it.
+ *
+ * <p>Carries both numbers: what the kind of document asks for, and what this customer
+ * agreed. Only a difference between the two is stored (ADR-0055 of the backend).
+ */
+export type PartnerDocumentCopy = {
+  /** Which copy, by its place in the printing order. */
+  position: number
+  label: string
+  /** How many sheets the kind of document asks for. */
+  defaultCopies: number
+  /** How many sheets this customer gets; 0 means they do not get it at all. */
+  copies: number
+  /** True when this customer deviates from the kind of document here. */
+  overridden: boolean
 }
 
 export type DocumentStatusEntry = {

@@ -8,17 +8,21 @@ import { SelectField } from '../../components/SelectField'
 import { api } from '../../lib/api'
 import type { DocumentType, PartnerDocumentType } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
+import { TextField } from '../../components/TextField'
 import {
+  assignmentComplaint,
   assignmentPayload,
   defaultNameOf,
+  describeCopyRow,
   toAssignmentRows,
   type AssignmentRow,
+  type CopyRow,
 } from './partnerTypeForm'
 
 const TITLE = 'Dokumente'
 
 const DESCRIPTION =
-  'Welche Belegart dieser Kunde je Vorgang bekommt. Ohne eigene Abmachung gilt die Standardbelegart des Mandanten — sie steht hier und ändert sich mit ihr.'
+  'Welche Belegart dieser Kunde je Vorgang bekommt und wie viele Exemplare davon gedruckt werden. Ohne eigene Abmachung gilt die Belegart des Mandanten — sie steht hier und ändert sich mit ihr.'
 
 /**
  * Which kind of document this customer gets, step of a sale by step of a sale.
@@ -72,7 +76,13 @@ export function PartnerDocumentTypes({
     <AssignmentPanel
       /* Keyed by what is stored: the rows below hold what was picked, and that has to give
          way when a save rewrites the list underneath them. */
-      key={assigned.data.map((entry) => `${entry.category}:${entry.documentTypeId}`).join('|')}
+      key={assigned.data
+        .map(
+          (entry) =>
+            `${entry.category}:${entry.documentTypeId}:` +
+            (entry.copies ?? []).map((copy) => `${copy.position}=${copy.copies}`).join(','),
+        )
+        .join('|')}
       tenantId={tenantId}
       base={base}
       partnerId={partnerId}
@@ -101,6 +111,7 @@ function AssignmentPanel({
   const queryClient = useQueryClient()
   const categoryLabel = useCatalogueLabel(tenantId, 'document-category')
   const [rows, setRows] = useState<AssignmentRow[]>(() => toAssignmentRows(stored))
+  const [complaint, setComplaint] = useState<string | null>(null)
 
   const save = useMutation({
     mutationFn: () => api.put<PartnerDocumentType[]>(base, assignmentPayload(rows)),
@@ -111,12 +122,43 @@ function AssignmentPanel({
     },
   })
 
-  const replace = (category: string, documentTypeId: string) => {
-    setRows(
-      rows.map((row) => (row.category === category ? { ...row, documentTypeId } : row)),
-    )
+  const change = (next: AssignmentRow[]) => {
+    setRows(next)
+    setComplaint(null)
     save.reset()
   }
+
+  const replace = (category: string, documentTypeId: string) => {
+    // The copies belong to the kind that was picked, so the rows for the old one go. What
+    // the new kind prints comes back with the next answer.
+    change(
+      rows.map((row) =>
+        row.category === category ? { ...row, documentTypeId, copies: [] } : row,
+      ),
+    )
+  }
+
+  const setCopies = (category: string, position: number, value: string) =>
+    change(
+      rows.map((row) =>
+        row.category === category
+          ? {
+              ...row,
+              copies: row.copies.map((copy) =>
+                copy.position === position ? { ...copy, copies: value } : copy,
+              ),
+            }
+          : row,
+      ),
+    )
+
+  const submit = () => {
+    const problem = assignmentComplaint(rows)
+    setComplaint(problem)
+    if (problem === null) save.mutate()
+  }
+
+  const failure = complaint === null ? save.error : new Error(complaint)
 
   if (rows.length === 0) {
     return (
@@ -135,7 +177,7 @@ function AssignmentPanel({
       description={DESCRIPTION}
       action={
         mayWrite ? (
-          <Button variant="secondary" onClick={() => save.mutate()} busy={save.isPending}>
+          <Button variant="secondary" onClick={submit} busy={save.isPending}>
             Übernehmen
           </Button>
         ) : undefined
@@ -184,12 +226,70 @@ function AssignmentPanel({
                   </option>
                 ))}
               </SelectField>
+
+              <CopiesForCustomer
+                copies={row.copies}
+                disabled={!mayWrite}
+                onChange={(position, value) => setCopies(row.category, position, value)}
+              />
             </div>
           )
         })}
 
-        {save.error !== null && <ErrorNotice error={save.error} />}
+        {failure !== null && failure !== undefined && <ErrorNotice error={failure} />}
       </div>
     </Panel>
+  )
+}
+
+/**
+ * How many sheets of each copy this customer gets.
+ *
+ * <p>Shows what the kind of document says next to what was agreed, because that is the whole
+ * question here: only a difference is stored, and a field that shows «2» without saying what
+ * it deviates from would leave the reader guessing.
+ *
+ * <p>Zero is a value, not an empty field: this customer does not get that copy at all.
+ */
+function CopiesForCustomer({
+  copies,
+  disabled,
+  onChange,
+}: {
+  copies: CopyRow[]
+  disabled: boolean
+  onChange: (position: number, value: string) => void
+}) {
+  if (copies.length === 0) {
+    return (
+      <p className="mt-3 border-t border-line-subtle pt-3 text-[12px] text-text-tertiary">
+        Diese Belegart wird nicht gedruckt, also gibt es nichts einzustellen.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-3 border-t border-line-subtle pt-3">
+      <p className="pb-2 text-[12px] font-medium text-text-secondary">Ausfertigungen</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {copies.map((copy) => (
+          <TextField
+            key={copy.position}
+            label={copy.label}
+            value={copy.copies}
+            inputMode="numeric"
+            numeric
+            maxLength={2}
+            disabled={disabled}
+            onChange={(event) => onChange(copy.position, event.target.value)}
+            hint={describeCopyRow(copy)}
+          />
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] text-text-tertiary">
+        0 heisst: dieser Kunde bekommt diese Ausfertigung nicht. Gespeichert wird nur, was von
+        der Belegart abweicht.
+      </p>
+    </div>
   )
 }

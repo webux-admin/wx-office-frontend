@@ -114,6 +114,40 @@ function selects(): HTMLSelectElement[] {
   return [...container.querySelectorAll('select')]
 }
 
+/** The input a label points at, found the way a user finds it: by its wording. */
+function fieldNamed(label: string): HTMLInputElement {
+  const found = [...container.querySelectorAll('label')].find(
+    (element) => element.textContent?.trim() === label,
+  )
+  if (found === undefined) throw new Error(`no field labelled ${label}`)
+  return document.getElementById(found.htmlFor) as HTMLInputElement
+}
+
+/** Types into a field the way a browser does: set the value, then fire the native event. */
+function type(input: HTMLInputElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setValue?.call(input, value)
+  act(() => {
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+/** One invoice step whose kind of document prints two copies. */
+const WITH_COPIES: PartnerDocumentType[] = [
+  {
+    category: 'INVOICE',
+    documentTypeId: 4,
+    documentTypeCode: 'RE',
+    documentTypeName: 'Rechnung',
+    overridden: false,
+    active: true,
+    copies: [
+      { position: 1, label: 'Original', defaultCopies: 1, copies: 1, overridden: false },
+      { position: 2, label: 'Ablage', defaultCopies: 1, copies: 1, overridden: false },
+    ],
+  },
+]
+
 function buttonNamed(label: string): HTMLButtonElement {
   const found = [...container.querySelectorAll('button')].find(
     (button) => button.textContent?.trim() === label,
@@ -181,7 +215,7 @@ describe('PartnerDocumentTypes', () => {
     const written = sent.find((request) => request.method === 'PUT')
     expect(written?.url).toBe(BASE)
     expect(written?.body).toEqual({
-      assignments: [{ category: 'INVOICE', documentTypeId: 9 }],
+      assignments: [{ category: 'INVOICE', documentTypeId: 9, copies: [] }],
     })
   })
 
@@ -224,5 +258,60 @@ describe('PartnerDocumentTypes', () => {
     await render()
 
     expect(text()).toContain('führt noch keine Belegart')
+  })
+
+  it('partnerDocumentTypesShowsTheCopiesOfTheKindTest', async () => {
+    assigned = WITH_COPIES
+
+    await render()
+
+    expect(fieldNamed('Original').value).toBe('1')
+    expect(fieldNamed('Ablage').value).toBe('1')
+    expect(text()).toContain('Wie die Belegart: 1.')
+  })
+
+  /** The point of the register: only the copy that differs travels. */
+  it('partnerDocumentTypesSendsOnlyTheDeviatingCopyTest', async () => {
+    assigned = WITH_COPIES
+
+    await render()
+    type(fieldNamed('Ablage'), '3')
+    click(buttonNamed('Übernehmen'))
+    await settle()
+
+    expect(sent.find((request) => request.method === 'PUT')?.body).toEqual({
+      assignments: [
+        { category: 'INVOICE', documentTypeId: undefined, copies: [{ position: 2, copies: 3 }] },
+      ],
+    })
+  })
+
+  it('partnerDocumentTypesSaysWhenACopyIsSwitchedOffTest', async () => {
+    assigned = WITH_COPIES
+
+    await render()
+    type(fieldNamed('Ablage'), '0')
+
+    expect(text()).toContain('Wird für diesen Kunden nicht gedruckt.')
+  })
+
+  it('partnerDocumentTypesRefusesAnUnreadableCountTest', async () => {
+    assigned = WITH_COPIES
+
+    await render()
+    type(fieldNamed('Ablage'), 'zwei')
+    click(buttonNamed('Übernehmen'))
+    await settle()
+
+    expect(text()).toContain('Die Anzahl bei «Ablage» ist keine Zahl.')
+    expect(sent.some((request) => request.method === 'PUT')).toBe(false)
+  })
+
+  it('partnerDocumentTypesWithAKindThatIsNotPrintedTest', async () => {
+    assigned = [{ ...WITH_COPIES[0], copies: [] }]
+
+    await render()
+
+    expect(text()).toContain('wird nicht gedruckt, also gibt es nichts einzustellen')
   })
 })
