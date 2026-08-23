@@ -6,7 +6,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
 import { OFFER_KIND, ORDER_KIND } from '../lib/salesDocument'
-import type { OfferOutcome, OfferTracking, SalesDocument } from '../lib/types'
+import type {
+  DocumentChainEntry,
+  OfferOutcome,
+  OfferTracking,
+  SalesDocument,
+} from '../lib/types'
 import { SalesDocumentPage } from './SalesDocumentPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -100,6 +105,24 @@ let sent: { url: string; method: string; body: unknown }[]
 /** The follow-up state the stub holds, rewritten by the outcome endpoint like the backend. */
 let trackingState: OfferTracking
 
+/** The chain the mask reads; a test that cares about it sets its own. */
+let chainState: DocumentChainEntry[]
+
+/** The document itself, which every chain carries. */
+const SELF_ENTRY: DocumentChainEntry = {
+  id: 42,
+  documentTypeCode: 'OF',
+  documentTypeName: 'Offerte',
+  category: 'OFFER',
+  status: 'FINALISED',
+  documentNumber: 'OF-2026-0042',
+  documentDate: '2026-08-20',
+  currencyCode: 'CHF',
+  totalGross: 100,
+  relation: 'SELF',
+  distance: 0,
+}
+
 function json(body: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
@@ -112,6 +135,7 @@ function json(body: unknown, status = 200) {
 function stubFetch() {
   sent = []
   trackingState = { outcome: 'OPEN', expired: false }
+  chainState = [SELF_ENTRY]
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     const method = options?.method ?? 'GET'
     const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
@@ -138,6 +162,7 @@ function stubFetch() {
     if (url.endsWith('/tracking')) return json(trackingState)
     if (url.includes('/reminders')) return json([])
     if (url.includes('/status-trail')) return json([])
+    if (url.includes('/related')) return json(chainState)
     if (url.includes('/printouts') || url.includes('/printers')) return json([])
     if (url.includes('/catalogues')) return json(CATALOGUES)
     if (url.includes('/offers/42')) return json(issued('OFFER'))
@@ -281,10 +306,12 @@ describe('SalesDocumentPage', () => {
     expect(text()).toContain('Nachfassen')
   })
 
-  it('salesDocumentPageShowsNoRegisterOnTheOrderMaskTest', async () => {
+  it('salesDocumentPageShowsNoFollowUpRegisterOnTheOrderMaskTest', async () => {
     await render('/auftraege/42')
 
-    expect(document.querySelector('[role="tablist"]')).toBeNull()
+    // The chain register is there for every kind; only the follow-up belongs to the offer.
+    expect(document.querySelector('[role="tablist"]')).not.toBeNull()
+    expect(text()).toContain('Zusammenhänge')
     expect(text()).not.toContain('Nachfassen')
     // The order mask never asks for a follow-up state that does not exist for it.
     expect(sent.some((call) => call.url.includes('/orders/42/tracking'))).toBe(false)
@@ -336,5 +363,53 @@ describe('SalesDocumentPage', () => {
 
     expect(text()).toContain('Angenommen')
     expect(text()).not.toContain('Abgelaufen')
+  })
+
+  /** The one fact the mask hid until now: that somebody already wrote on from this offer. */
+  it('salesDocumentPageWarnsAboutASuccessorTest', async () => {
+    chainState = [
+      SELF_ENTRY,
+      {
+        ...SELF_ENTRY,
+        id: 43,
+        documentTypeCode: 'AU',
+        documentTypeName: 'Auftrag',
+        category: 'ORDER',
+        documentNumber: 'AU-2026-0007',
+        relation: 'SUCCESSOR',
+        distance: 1,
+      },
+    ]
+
+    await render('/offerten/42')
+
+    expect(text()).toContain('Aus diesem Beleg wurde AU-2026-0007 geschrieben.')
+  })
+
+  it('salesDocumentPageSaysNothingWithoutASuccessorTest', async () => {
+    await render('/offerten/42')
+
+    expect(text()).not.toContain('Aus diesem Beleg')
+  })
+
+  it('salesDocumentPageShowsTheChainRegisterTest', async () => {
+    chainState = [
+      SELF_ENTRY,
+      {
+        ...SELF_ENTRY,
+        id: 43,
+        documentTypeName: 'Auftrag',
+        category: 'ORDER',
+        documentNumber: 'AU-2026-0007',
+        relation: 'SUCCESSOR',
+        distance: 1,
+      },
+    ]
+
+    await render('/offerten/42')
+    await press('Zusammenhänge')
+
+    expect(text()).toContain('Nachfolgebeleg')
+    expect(text()).toContain('AU-2026-0007')
   })
 })

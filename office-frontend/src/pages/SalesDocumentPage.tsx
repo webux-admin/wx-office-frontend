@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { GitBranch } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
@@ -25,6 +26,7 @@ import {
   type SalesDocumentKind,
 } from '../lib/salesDocument'
 import type {
+  DocumentChainEntry,
   DocumentParty,
   DocumentStatus,
   DocumentStatusEntry,
@@ -40,11 +42,13 @@ import { NewDocumentMask } from './document/NewDocumentMask'
 import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
 import { DocumentLines } from './document/DocumentLines'
 import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
+import { DocumentChainPanel } from './document/DocumentChainPanel'
 import { DocumentPrintouts } from './document/DocumentPrintouts'
 import { OfferReminders } from './document/OfferReminders'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
 import { headerKey, paymentKey } from './document/headerForm'
+import { successorNotice } from './document/documentChain'
 import { recipientNote } from './document/recipientNote'
 import {
   itemLineCount,
@@ -54,7 +58,7 @@ import {
 } from './document/lineForm'
 
 /** The two registers of a mask whose kind is followed up (ADR-0010). */
-type DocumentTab = 'beleg' | 'nachfassen'
+type DocumentTab = 'beleg' | 'nachfassen' | 'zusammenhaenge'
 
 /**
  * Reads the register a link asked the mask to open on.
@@ -170,6 +174,12 @@ function DocumentMask({
   const [declineNote, setDeclineNote] = useState('')
   const [creatingOrder, setCreatingOrder] = useState(false)
 
+  // The mask instance survives a route change between the categories, so a leftover
+  // 'nachfassen' from an offer would blank an order. Clamped rather than reset, because a
+  // reset would also throw away the register somebody deliberately opened.
+  const activeTab: DocumentTab =
+    tab === 'nachfassen' && !kind.tracking ? 'beleg' : tab
+
   const editable = document.status === 'DRAFT' && can(kind.rights.write)
   // Two reasons keep a section read-only, and they are not the same thing. An issued
   // document is finished; a draft without the permission is not, and saying so is the only
@@ -179,6 +189,14 @@ function DocumentMask({
       ? `Zum Ändern fehlt das Recht ${kind.rights.write}.`
       : undefined
   const base = `/api/tenants/${tenantId}/${kind.resource}/${document.id}`
+
+  // Loaded with the document, not with the register: the header warns about documents
+  // written from this one, and a warning that only appears after a click is no warning.
+  const chain = useQuery({
+    queryKey: ['document-chain', tenantId, kind.resource, document.id],
+    queryFn: () => api.get<DocumentChainEntry[]>(`${base}/related`),
+  })
+  const successors = successorNotice(chain.data)
 
   const refresh = () => {
     // Scoped by the kind, so that a saved invoice does not throw away the orders that were
@@ -398,6 +416,19 @@ function DocumentMask({
             <span>{formatDate(document.documentDate)}</span>
             <span className="text-text-tertiary">·</span>
             <span>{document.recipient?.name ?? `Kunde ${document.partnerId}`}</span>
+            {/* The one fact a document mask hid until now: that somebody already wrote on
+                from it. It decides whether this document may still be taken back, so it
+                belongs next to the status and not one register away. */}
+            {successors !== null && (
+              <button
+                type="button"
+                onClick={() => setTab('zusammenhaenge')}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[12px] text-text-primary transition-colors hover:text-accent-text"
+              >
+                <GitBranch size={13} aria-hidden />
+                {successors}
+              </button>
+            )}
           </span>
         }
       >
@@ -495,22 +526,20 @@ function DocumentMask({
           </div>
         )}
 
-        {kind.tracking && (
-          <Tabs
-            tabs={[
-              { id: 'beleg', label: 'Beleg' },
-              { id: 'nachfassen', label: 'Nachfassen' },
-            ]}
-            active={tab}
-            onChange={setTab}
-            label="Register"
-          />
-        )}
+        <Tabs<DocumentTab>
+          tabs={[
+            { id: 'beleg', label: 'Beleg' },
+            ...(kind.tracking
+              ? [{ id: 'nachfassen' as const, label: 'Nachfassen' }]
+              : []),
+            { id: 'zusammenhaenge', label: 'Zusammenhänge' },
+          ]}
+          active={activeTab}
+          onChange={setTab}
+          label="Register"
+        />
 
-        {/* Without tracking there are no tabs, so the body must not depend on the tab
-            state: the mask instance survives a route change between the categories, and a
-            leftover 'nachfassen' from an offer would blank an order otherwise. */}
-        {(!kind.tracking || tab === 'beleg') && (
+        {activeTab === 'beleg' && (
         <div className="grid gap-6">
         <DocumentLines
           tenantId={tenantId}
@@ -603,7 +632,7 @@ function DocumentMask({
         )}
 
         {kind.tracking &&
-          tab === 'nachfassen' &&
+          activeTab === 'nachfassen' &&
           (tracking.isPending ? (
             <LoadingBlock label="Nachfassen wird geladen" />
           ) : tracking.error !== null ? (
@@ -648,6 +677,17 @@ function DocumentMask({
               </div>
             </div>
           ) : null)}
+
+        {activeTab === 'zusammenhaenge' && (
+          <DocumentChainPanel
+            chain={chain.data ?? []}
+            loading={chain.isPending}
+            error={chain.error}
+            currentId={document.id}
+            backTo={`${kind.path}/${document.id}`}
+            backLabel={document.documentNumber ?? kind.singular}
+          />
+        )}
       </div>
 
       <ChangePartnerDialog

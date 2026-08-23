@@ -1118,6 +1118,38 @@ export type PartnerDocumentCopy = {
   overridden: boolean
 }
 
+/**
+ * How one document of a chain hangs together with the one that was asked about.
+ *
+ * <p>`RELATED` is the second Lieferschein of the same Auftrag: on the chain, but not on the
+ * way to this document.
+ */
+export type DocumentRelation = 'SELF' | 'PREDECESSOR' | 'SUCCESSOR' | 'REVERSAL' | 'RELATED'
+
+/**
+ * One document of the chain another one hangs on.
+ *
+ * <p>A read model: what a list row shows, plus how it relates. The relation is the point —
+ * a list of numbers alone would leave the reader to work out which came out of which.
+ */
+export type DocumentChainEntry = {
+  id: number
+  documentTypeCode: string
+  documentTypeName: string
+  category: DocumentCategory
+  status: DocumentStatus
+  /** Absent while it is a draft. */
+  documentNumber?: string
+  documentDate: string
+  currencyCode: string
+  totalGross: number
+  finalisedAt?: string
+  cancelledAt?: string
+  relation: DocumentRelation
+  /** How many takeovers lie between the two; negative upstream, positive downstream. */
+  distance: number
+}
+
 export type DocumentStatusEntry = {
   status: DocumentStatus
   changedAt: string
