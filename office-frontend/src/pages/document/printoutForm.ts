@@ -16,6 +16,13 @@ export type PrintoutRow = {
   printerId: string
   /** Id of the tray, as a string; empty means none is stored. */
   trayId: string
+  /**
+   * Id of the form this copy prints on, as a string. Empty means the copy is made from the
+   * document itself, which is what every copy did before forms could differ per copy.
+   */
+  documentLayoutId: string
+  /** True for a copy that stays in the house and is never mailed to the customer. */
+  internal: boolean
 }
 
 /** How many copies one document may be printed in; the backend agrees. */
@@ -43,6 +50,9 @@ export function toPrintoutRows(printouts: readonly DocumentPrintout[] | undefine
     copies: `${printout.copies ?? 1}`,
     printerId: printout.printerId === undefined ? '' : `${printout.printerId}`,
     trayId: printout.trayId === undefined ? '' : `${printout.trayId}`,
+    documentLayoutId:
+      printout.documentLayoutId === undefined ? '' : `${printout.documentLayoutId}`,
+    internal: printout.internal === true,
   }))
 }
 
@@ -52,6 +62,8 @@ export type PrintoutPayload = {
   copies: number
   printerId?: number
   trayId?: number
+  documentLayoutId?: number
+  internal: boolean
 }
 
 /**
@@ -75,6 +87,9 @@ export function toPrintoutPayload(rows: readonly PrintoutRow[]): {
       copies: parseDecimal(row.copies) ?? 1,
       printerId: row.printerId === '' ? undefined : Number(row.printerId),
       trayId: row.trayId === '' ? undefined : Number(row.trayId),
+      documentLayoutId:
+        row.documentLayoutId === '' ? undefined : Number(row.documentLayoutId),
+      internal: row.internal,
     })),
   }
 }
@@ -147,6 +162,8 @@ export function nextPrintoutRow(count: number): PrintoutRow {
     copies: '1',
     printerId: '',
     trayId: '',
+    documentLayoutId: '',
+    internal: false,
   }
 }
 
@@ -299,6 +316,8 @@ export function printoutsKey(printouts: readonly DocumentPrintout[] | undefined)
         printout.copies,
         printout.printerId ?? '',
         printout.trayId ?? '',
+        printout.documentLayoutId ?? '',
+        printout.internal === true ? 'i' : '',
       ].join(':'),
     )
     .join('|')

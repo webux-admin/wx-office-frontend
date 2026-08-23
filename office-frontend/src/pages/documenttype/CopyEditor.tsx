@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
+import { CheckboxField } from '../../components/CheckboxField'
 import { Panel } from '../../components/Panel'
 import { RowOrderButtons } from '../../components/RowOrderButtons'
 import { SelectField } from '../../components/SelectField'
@@ -7,6 +8,7 @@ import { TextField } from '../../components/TextField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
 import type { Printer } from '../../lib/types'
+import { usePrintLayouts } from '../../printlayout/usePrintLayouts'
 import { selectablePrinters, traysOf } from '../document/printoutForm'
 import {
   MAX_COPIES,
@@ -52,6 +54,11 @@ export function CopyEditor({
     enabled: mayReadPrinters,
   })
   const devices = printers.data ?? []
+  // For the per-copy form. Asked only where the right is there: a user without
+  // PRINT_LAYOUT_READ keeps what is stored, and asking anyway would be a 403.
+  const mayReadLayouts = can('PRINT_LAYOUT_READ')
+  const layouts = usePrintLayouts(mayReadLayouts ? tenantId : null)
+  const forms = layouts.data ?? []
 
   const replace = (index: number, patch: Partial<CopyRow>) =>
     onChange(copies.map((row, position) => (position === index ? { ...row, ...patch } : row)))
@@ -59,11 +66,14 @@ export function CopyEditor({
   return (
     <Panel
       title="Ausfertigungen"
-      description="Wie viele Exemplare beim Drucken herauskommen, wie sie beschriftet sind und auf welchem Drucker sie gedacht sind. Ohne Eintrag kommt ein Exemplar ohne Beschriftung. Das Archiv behält immer genau ein Original."
+      description="Wie viele Exemplare beim Drucken herauskommen, wie sie beschriftet sind, auf welcher Vorlage und auf welchem Drucker sie gedacht sind. Das Archiv behält immer genau ein Original."
     >
       <div className="grid gap-3">
         {copies.length === 0 && (
-          <p className="text-[13px] text-text-secondary">Ein Exemplar ohne Beschriftung.</p>
+          <p className="text-[13px] text-text-secondary">
+            Ohne Ausfertigung wird nichts gedruckt. Der Beleg lässt sich weiterhin ansehen und
+            als PDF öffnen — aus dem Drucker kommt er nicht.
+          </p>
         )}
 
         {copies.map((row, index) => {
@@ -159,6 +169,44 @@ export function CopyEditor({
                     Recht PRINTER_READ.
                   </p>
                 )}
+              </div>
+
+              <div className="mt-3 grid gap-3 border-t border-line-subtle pt-3 sm:grid-cols-2">
+                {mayReadLayouts ? (
+                  <SelectField
+                    label="Druckvorlage"
+                    value={row.documentLayoutId}
+                    disabled={disabled || layouts.isPending}
+                    onChange={(event) =>
+                      replace(index, { documentLayoutId: event.target.value })
+                    }
+                    hint="Leer: wie der Beleg selbst. Sonst wird dieses Exemplar auf der gewählten Vorlage gezeichnet — etwa eine Lagerkopie ohne Preise."
+                  >
+                    <option value="">Wie der Beleg</option>
+                    {forms
+                      .filter(
+                        (form) => form.active || `${form.id}` === row.documentLayoutId,
+                      )
+                      .map((form) => (
+                        <option key={form.id} value={form.id}>
+                          {form.active ? form.name : `${form.name} (deaktiviert)`}
+                        </option>
+                      ))}
+                  </SelectField>
+                ) : (
+                  <p className="text-[12px] text-text-tertiary">
+                    Die Druckvorlage bleibt, wie sie hinterlegt ist. Zum Ändern fehlt das Recht
+                    PRINT_LAYOUT_READ.
+                  </p>
+                )}
+
+                <CheckboxField
+                  label="Internes Dokument"
+                  checked={row.internal}
+                  disabled={disabled}
+                  onChange={(event) => replace(index, { internal: event.target.checked })}
+                  hint="Bleibt im Haus: wird dem Kunden später nicht per Mail mitgeschickt. Gedruckt wird es normal."
+                />
               </div>
             </div>
           )

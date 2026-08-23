@@ -23,6 +23,13 @@ export type CopyRow = {
   printerId: string
   /** Id of the tray, as a string; empty means none. */
   trayId: string
+  /**
+   * Id of the form this copy prints on, as a string. Empty means the copy is made from the
+   * document itself — which is what every copy did before forms could differ per copy.
+   */
+  documentLayoutId: string
+  /** True for a copy that stays in the house and is never mailed to the customer. */
+  internal: boolean
 }
 
 /** The document type mask while it is being filled in. */
@@ -69,6 +76,10 @@ export const COPY_LABELS = ['Original', 'Kopie', 'Buchhaltung', 'Spedition', 'Ku
  * the Auftrag is the step of a sale every tenant writes. It stays a suggestion — the category
  * can be picked freely until the kind is saved, after which it is fixed. The form is left empty
  * and filled by the mask with the tenant's standard one.
+ *
+ * <p>One copy is there from the start, because no copy means no print at all (ADR-0053 of the
+ * backend). A kind that is only mailed is made by removing that row — a decision, not an
+ * oversight.
  */
 export function emptyDocumentType(): DocumentTypeForm {
   return {
@@ -77,7 +88,7 @@ export function emptyDocumentType(): DocumentTypeForm {
     name: '',
     numberPrefix: '',
     documentLayoutId: '',
-    copies: [],
+    copies: [nextCopyRow(0)],
     predecessorTypeIds: [],
     copyPriceMode: 'RECALCULATE',
     offerValidityDays: '',
@@ -102,6 +113,9 @@ export function toForm(type: DocumentType): DocumentTypeForm {
       copies: `${copy.copies ?? 1}`,
       printerId: copy.printerId === undefined ? '' : `${copy.printerId}`,
       trayId: copy.trayId === undefined ? '' : `${copy.trayId}`,
+      documentLayoutId:
+        copy.documentLayoutId === undefined ? '' : `${copy.documentLayoutId}`,
+      internal: copy.internal === true,
     })),
     predecessorTypeIds: type.predecessorTypeIds ?? [],
     copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
@@ -252,6 +266,8 @@ export function nextCopyRow(count: number): CopyRow {
     copies: '1',
     printerId: '',
     trayId: '',
+    documentLayoutId: '',
+    internal: false,
   }
 }
 
@@ -262,11 +278,11 @@ export function nextCopyRow(count: number): CopyRow {
  * be a number nobody can place.
  *
  * @param copies the copies as the API returned them
- * @returns for example "3 ×", and "1 ×" for a kind that names no copies at all
+ * @returns for example "3 ×", and "kein Druck" for a kind that names no copy at all
  */
 export function describeCopies(copies: DocumentTypeCopy[] | undefined): string {
   const sheets = (copies ?? []).reduce((total, copy) => total + (copy.copies ?? 1), 0)
-  return `${sheets === 0 ? 1 : sheets} ×`
+  return sheets === 0 ? 'kein Druck' : `${sheets} ×`
 }
 
 /** The two things a copy of a document can do with its amounts, in German. */
@@ -294,6 +310,9 @@ function enteredCopies(rows: readonly CopyRow[]): DocumentTypeCopy[] {
       copies: parseDecimal(row.copies) ?? 1,
       printerId: row.printerId === '' ? undefined : Number(row.printerId),
       trayId: row.trayId === '' ? undefined : Number(row.trayId),
+      documentLayoutId:
+        row.documentLayoutId === '' ? undefined : Number(row.documentLayoutId),
+      internal: row.internal,
     })
   }
   return entered

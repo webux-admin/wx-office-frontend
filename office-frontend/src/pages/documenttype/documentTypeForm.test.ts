@@ -17,7 +17,15 @@ import {
 
 /** One copy row, with only what the test cares about spelled out. */
 function copy(fields: Partial<CopyRow> = {}): CopyRow {
-  return { label: 'Original', copies: '1', printerId: '', trayId: '', ...fields }
+  return {
+    label: 'Original',
+    copies: '1',
+    printerId: '',
+    trayId: '',
+    documentLayoutId: '',
+    internal: false,
+    ...fields,
+  }
 }
 import type { DocumentType } from '../../lib/types'
 
@@ -64,12 +72,26 @@ describe('toForm', () => {
     expect(form.numberPrefix).toBe('AU')
     expect(form.documentLayoutId).toBe('12')
     expect(form.copies).toEqual([
-      { label: 'Original', copies: '1', printerId: '7', trayId: '71' },
-      { label: 'Buchhaltung', copies: '2', printerId: '', trayId: '' },
+      copy({ label: 'Original', copies: '1', printerId: '7', trayId: '71' }),
+      copy({ label: 'Buchhaltung', copies: '2', printerId: '', trayId: '' }),
     ])
     expect(form.predecessorTypeIds).toEqual([3, 5])
     expect(form.copyPriceMode).toBe('COPY')
     expect(form.offerValidityDays).toBe('')
+  })
+
+  it('toFormCarriesTheFormAndTheInternalMarkOfACopyTest', () => {
+    const form = toForm({
+      id: 3,
+      code: 'LS',
+      category: 'DELIVERY_NOTE',
+      name: 'Lieferschein',
+      active: true,
+      copies: [{ position: 1, label: 'Lager', documentLayoutId: 12, internal: true }],
+    })
+
+    expect(form.copies[0].documentLayoutId).toBe('12')
+    expect(form.copies[0].internal).toBe(true)
   })
 
   it('toFormTurnsMissingValuesIntoEmptyOnesTest', () => {
@@ -114,6 +136,8 @@ describe('toPayload', () => {
           copies: 1,
           printerId: 7,
           trayId: 71,
+          documentLayoutId: undefined,
+          internal: false,
         },
         {
           position: 2,
@@ -121,6 +145,8 @@ describe('toPayload', () => {
           copies: 2,
           printerId: undefined,
           trayId: undefined,
+          documentLayoutId: undefined,
+          internal: false,
         },
       ],
       predecessorTypeIds: [3, 5],
@@ -156,8 +182,30 @@ describe('toPayload', () => {
       'offerValidityDays',
       'predecessorTypeIds',
     ])
-    expect(payload.copies).toEqual([])
+    // One copy, because a new kind starts with an Original: without one it would print
+    // nothing at all (ADR-0053 of the backend).
+    expect(payload.copies).toEqual([
+      expect.objectContaining({ position: 1, label: 'Original', internal: false }),
+    ])
     expect(payload.predecessorTypeIds).toEqual([])
+  })
+
+  it('toPayloadCarriesTheFormAndTheInternalMarkOfACopyTest', () => {
+    const copies = [copy({ label: 'Lager', documentLayoutId: '12', internal: true })]
+
+    const payload = toPayload({ ...COMPLETE, copies })
+
+    expect(payload.copies).toEqual([
+      expect.objectContaining({ documentLayoutId: 12, internal: true }),
+    ])
+  })
+
+  it('toPayloadWithoutAFormOfItsOwnLeavesItOutTest', () => {
+    const payload = toPayload({ ...COMPLETE, copies: [copy({ documentLayoutId: '' })] })
+
+    expect(payload.copies).toEqual([
+      expect.objectContaining({ documentLayoutId: undefined, internal: false }),
+    ])
   })
 
   it('toPayloadWithoutPrefixLeavesItOutTest', () => {
@@ -408,6 +456,8 @@ describe('nextCopyRow', () => {
       copies: '1',
       printerId: '',
       trayId: '',
+      documentLayoutId: '',
+      internal: false,
     })
   })
 
@@ -427,12 +477,24 @@ describe('describeCopies', () => {
   })
 
   it('describeCopiesWithoutEntriesTest', () => {
-    // No entries means one copy without a label, not zero copies.
-    expect(describeCopies([])).toBe('1 ×')
+    // No entry means this kind of document is not printed at all (ADR-0053 of the backend).
+    expect(describeCopies([])).toBe('kein Druck')
   })
 
   it('describeCopiesWithoutTheFieldTest', () => {
-    expect(describeCopies(undefined)).toBe('1 ×')
+    expect(describeCopies(undefined)).toBe('kein Druck')
+  })
+})
+
+describe('emptyDocumentType', () => {
+  /** Without a copy a new kind would print nothing at all (ADR-0053 of the backend). */
+  it('emptyDocumentTypeStartsWithOneOriginalTest', () => {
+    const form = emptyDocumentType()
+
+    expect(form.copies).toHaveLength(1)
+    expect(form.copies[0].label).toBe('Original')
+    expect(form.copies[0].internal).toBe(false)
+    expect(form.copies[0].documentLayoutId).toBe('')
   })
 })
 

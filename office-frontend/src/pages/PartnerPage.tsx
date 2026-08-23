@@ -22,6 +22,7 @@ import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
 import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
+import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
 import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
 import {
@@ -35,7 +36,7 @@ import { emptyPartner, firstComplaint, toForm, toPayload, type PartnerForm } fro
 import { wordingFor, type PartnerRole, type RoleWording } from './partner/role'
 import { invalidateAfterPartnerChange } from './partner/partnerRefresh'
 
-type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'verlauf' | 'preise'
+type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'preise' | 'dokumente' | 'verlauf'
 
 /** One customer or supplier, with its addresses, contact persons and agreed prices. */
 export function PartnerPage({ role }: { role: PartnerRole }) {
@@ -152,10 +153,14 @@ function PartnerMask({
     { id: 'stammdaten', label: 'Stammdaten' },
     { id: 'adressen', label: 'Adressen' },
     { id: 'kontakte', label: 'Kontaktpersonen' },
-    // For both roles: a supplier has a record with us just as a customer does.
-    { id: 'verlauf', label: 'Verlauf' },
     // Pricing is agreed with a buyer; a supplier has no price list of ours.
     ...(wording.role === 'customer' ? [{ id: 'preise' as Tab, label: 'Preise' }] : []),
+    // Which kind of document this partner is written with. Needs the right on the catalogue:
+    // the data are kinds of document, not partner data (ADR-0054 of the backend).
+    ...(can('DOCUMENT_TYPE_READ') ? [{ id: 'dokumente' as Tab, label: 'Dokumente' }] : []),
+    // Last on purpose: the history is what happened, and one looks it up rather than works
+    // in it. For both roles — a supplier has a record with us just as a customer does.
+    { id: 'verlauf', label: 'Verlauf' },
   ]
 
   return (
@@ -250,6 +255,14 @@ function PartnerMask({
             partnerId={partner.id}
             contacts={partner.contacts ?? []}
             mayWrite={mayWrite}
+          />
+        )}
+
+        {tab === 'dokumente' && partner && can('DOCUMENT_TYPE_READ') && (
+          <PartnerDocumentTypes
+            tenantId={tenantId}
+            partnerId={partner.id}
+            mayWrite={can('DOCUMENT_TYPE_WRITE')}
           />
         )}
 

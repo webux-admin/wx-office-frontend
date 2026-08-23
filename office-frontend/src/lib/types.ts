@@ -580,6 +580,11 @@ export type DocumentType = {
    */
   offerValidityDays?: number
   active: boolean
+  /**
+   * True for the kind its step of a sale starts with. Exactly one per tenant and category,
+   * and it is what a new document and a new customer are suggested (ADR-0054 of the backend).
+   */
+  categoryDefault?: boolean
 }
 
 /**
@@ -746,6 +751,15 @@ export type DocumentTypeCopy = {
   trayId?: number
   /** What that tray is called, read only. */
   trayName?: string
+  /**
+   * The form this copy prints on. Absent means it is made from the document itself — a copy
+   * with a form of its own is drawn on that form instead (ADR-0053 of the backend).
+   */
+  documentLayoutId?: number
+  /** What that form is called, read only. */
+  documentLayoutName?: string
+  /** True for a copy that stays in the house and is never mailed to the customer. */
+  internal?: boolean
 }
 
 /**
@@ -766,6 +780,11 @@ export type DocumentPrintout = {
   printerName?: string
   trayId?: number
   trayName?: string
+  /** The form this copy prints on; absent means the document itself (ADR-0053). */
+  documentLayoutId?: number
+  documentLayoutName?: string
+  /** True for a copy that stays in the house and is never mailed to the customer. */
+  internal?: boolean
 }
 
 /**
@@ -1053,6 +1072,30 @@ export type DocumentDefaults = {
   paymentTermName?: string
   /** Which of the partner addresses the kind of document asks for. */
   addressUsage?: AddressUsage
+  /**
+   * The kind of document this answer is about: the one that was asked for, or the one this
+   * customer gets for this step of a sale when none was named (ADR-0054 of the backend).
+   */
+  documentTypeId?: number
+  documentTypeCode?: string
+  documentTypeName?: string
+}
+
+/**
+ * Which kind of document one customer gets for one step of a sale.
+ *
+ * <p>Always answers with a kind where the tenant has one, whether the customer was assigned
+ * it or the default of the step applies. `overridden` says which of the two it was.
+ */
+export type PartnerDocumentType = {
+  category: DocumentCategory
+  documentTypeId: number
+  documentTypeCode: string
+  documentTypeName: string
+  /** True when this customer carries a kind of its own instead of the default. */
+  overridden: boolean
+  /** Whether that kind may still be used for new documents. */
+  active: boolean
 }
 
 export type DocumentStatusEntry = {

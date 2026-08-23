@@ -73,8 +73,11 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       header: 'Kategorie',
       width: 'w-[180px]',
       render: (type) => (
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           <span className="text-text-secondary">{categoryLabel(type.category)}</span>
+          {/* Which of several kinds of a category a new document starts with. Shown here
+              rather than in a column of its own: it is a statement about the category. */}
+          {type.categoryDefault === true && <Badge tone="accent">Standard</Badge>}
           {/* The Gutschrift is the only category left without a mask: it corrects an invoice
               and is written from it, not from a list of its own. A kind of that category can
               be set up here and will simply sit unused until that way exists. */}
@@ -116,10 +119,18 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       width: 'w-[150px]',
       render: (type) => (
         <span className="grid">
-          <span className="text-text-secondary">{describeCopies(type.copies)}</span>
+          <span
+            className={
+              (type.copies ?? []).length === 0 ? 'text-text-tertiary' : 'text-text-secondary'
+            }
+          >
+            {describeCopies(type.copies)}
+          </span>
           {(type.copies ?? []).length > 0 && (
             <span className="truncate text-[11px] text-text-tertiary">
-              {(type.copies ?? []).map((copy) => copy.label).join(', ')}
+              {(type.copies ?? [])
+                .map((copy) => (copy.internal === true ? `${copy.label} (intern)` : copy.label))
+                .join(', ')}
             </span>
           )}
         </span>

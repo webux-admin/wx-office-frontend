@@ -127,6 +127,20 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
     },
   })
 
+  // Its own request, not part of Save: the mark belongs to the category and moving it
+  // changes another kind of document too. Saving this one must not do that as a side effect.
+  const markDefault = useMutation({
+    mutationFn: () =>
+      api.put<DocumentType>(
+        `/api/tenants/${tenantId}/document-types/${type?.id}/default`,
+        {},
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+    },
+  })
+
   const submit = () => {
     const problem = firstComplaint(form, type === null)
     setComplaint(problem)
@@ -144,6 +158,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
               <span className="font-mono text-[12px] text-text-secondary">{type.code}</span>
             )}
             <span>{categoryLabel(form.category)}</span>
+            {type?.categoryDefault === true && <Badge tone="accent">Standard</Badge>}
             {type !== null && !type.active && <Badge tone="muted">Deaktiviert</Badge>}
           </span>
         }
@@ -172,6 +187,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
             <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
           )}
           {deactivate.error !== null && <ErrorNotice error={deactivate.error} />}
+          {markDefault.error !== null && <ErrorNotice error={markDefault.error} />}
 
           {tab === 'hauptdaten' && (
             <>
@@ -249,6 +265,40 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                   </div>
                 </dl>
               </Panel>
+
+              {type !== null && (
+                <Panel
+                  title="Standardbelegart"
+                  description={`Die Belegart, mit der ${categoryLabel(form.category)} normalerweise geschrieben wird. Sie wird beim Anlegen eines Belegs vorgeschlagen und gilt für jeden Kunden ohne eigene Abmachung.`}
+                  action={
+                    mayWrite && type.active && type.categoryDefault !== true ? (
+                      <Button
+                        variant="secondary"
+                        busy={markDefault.isPending}
+                        onClick={() => markDefault.mutate()}
+                      >
+                        Zur Standardbelegart machen
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  <p className="text-[13px] text-text-secondary">
+                    {type.categoryDefault === true
+                      ? 'Diese Belegart ist der Standard ihrer Kategorie. Der Standard wird verschoben, nicht abgeschaltet: eine andere Belegart derselben Kategorie übernimmt ihn.'
+                      : `Der Standard liegt bei einer anderen Belegart. ${
+                          type.active
+                            ? 'Übernehmen heisst: die bisherige verliert ihn.'
+                            : 'Eine deaktivierte Belegart kann ihn nicht übernehmen.'
+                        }`}
+                  </p>
+                  {type.categoryDefault === true && (
+                    <p className="mt-2 text-[12px] text-text-tertiary">
+                      Solange es eine andere aktive Belegart dieser Kategorie gibt, lässt sich
+                      diese hier nicht deaktivieren — erst den Standard umhängen.
+                    </p>
+                  )}
+                </Panel>
+              )}
             </>
           )}
 

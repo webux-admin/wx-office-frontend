@@ -24,15 +24,19 @@ import { useCatalogueLabel, usePaymentTerms } from '../../masterdata/useMasterDa
 /**
  * Starts a sales document of one kind.
  *
- * <p>The customer comes first, because everything else follows from them. Once the kind of
- * document and the customer are picked, the backend says what the draft would carry — address,
- * language, currency, payment term — and the mask shows exactly that. It works none of it out
- * itself: which address a kind of document uses and which currency a customer is invoiced in
- * are decisions of the backend, and a second opinion in the browser would be a second truth.
+ * <p>The customer comes first — literally, as the first field — because everything else
+ * follows from them: the address, the language, the currency, the payment term, and since
+ * ADR-0054 of the backend the kind of document too. Picking the customer therefore fills the
+ * kind in, and the same request brings the rest along.
  *
- * <p>Everything that was filled in stays editable. Language and payment term have no place in
- * the create payload, so a changed one is applied to the fresh draft right afterwards, through
- * the same endpoints the draft mask uses.
+ * <p>The mask works none of it out itself. Which address a kind of document uses, which
+ * currency a customer is invoiced in and which kind of document they get are decisions of the
+ * backend, and a second opinion in the browser would be a second truth.
+ *
+ * <p>Everything that was filled in stays editable, the kind of document included: suggested
+ * is not prescribed. Language and payment term have no place in the create payload, so a
+ * changed one is applied to the fresh draft right afterwards, through the same endpoints the
+ * draft mask uses.
  */
 export function NewDocumentMask({
   tenantId,
@@ -67,15 +71,26 @@ export function NewDocumentMask({
     queryFn: () => api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${partnerQuery}`),
   })
 
-  const chosen = documentTypeId !== '' && partnerId !== ''
+  // The customer alone is enough to ask: without a kind of document the backend works out
+  // which one this customer gets and answers with it (ADR-0054 of the backend). Naming one
+  // pins the answer to it, which is what happens once the user picks another.
+  const chosen = partnerId !== ''
   const defaults = useQuery({
     queryKey: ['document-defaults', tenantId, kind.resource, documentTypeId, partnerId],
     queryFn: () =>
       api.get<DocumentDefaults>(
-        `/api/tenants/${tenantId}/${kind.resource}/defaults?documentTypeId=${documentTypeId}&partnerId=${partnerId}`,
+        `/api/tenants/${tenantId}/${kind.resource}/defaults?partnerId=${partnerId}`
+          + (documentTypeId === '' ? '' : `&documentTypeId=${documentTypeId}`),
       ),
     enabled: chosen,
   })
+
+  // What the backend answered fills the empty field, and only the empty one: once someone
+  // has picked a kind of document, the answer follows that pick instead of overwriting it.
+  const suggestedType = defaults.data?.documentTypeId
+  if (documentTypeId === '' && suggestedType !== undefined) {
+    setDocumentTypeId(`${suggestedType}`)
+  }
 
   // The payment term arrives as an id and the dropdown speaks codes: the terms of the tenant
   // are the only place that knows both.
@@ -156,7 +171,7 @@ export function NewDocumentMask({
   )
   // The server already left the deactivated ones out; nothing is filtered again here.
   const customers = partners.data?.content ?? []
-  const incomplete = !chosen || documentDate === ''
+  const incomplete = !chosen || documentTypeId === '' || documentDate === ''
   const recipient = defaults.data?.recipient
 
   return (
@@ -181,19 +196,57 @@ export function NewDocumentMask({
         <div className="grid max-w-[860px] gap-6">
           <Panel title="Beleg">
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* First, and across the whole width: the customer decides everything below,
+                  the kind of document included (ADR-0054 of the backend). */}
+              <SelectField
+                label="Kunde"
+                value={partnerId}
+                onChange={(event) => {
+                  setPartnerId(event.target.value)
+                  // The kind belongs to the customer that was picked. Clearing it lets the
+                  // answer for the new customer fill it, instead of carrying the old one over.
+                  setDocumentTypeId('')
+                }}
+                disabled={partners.isPending}
+                className="sm:col-span-2"
+                hint={
+                  partners.isPending
+                    ? 'Kunden werden geladen ...'
+                    : partners.isSuccess && customers.length === 0
+                      ? 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.'
+                      : 'Belegart, Sprache, Währung und Zahlungskondition kommen von diesem Kunden.'
+                }
+              >
+                <option value="">Bitte wählen</option>
+                {customers.map((partner) => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.partnerNumber ? `${partner.partnerNumber} · ` : ''}
+                    {partner.name}
+                  </option>
+                ))}
+              </SelectField>
+
               <SelectField
                 label="Belegart"
                 value={documentTypeId}
                 onChange={(event) => setDocumentTypeId(event.target.value)}
-                disabled={documentTypes.isPending}
+                disabled={documentTypes.isPending || !chosen}
                 hint={
-                  activeTypes.length === 0 && !documentTypes.isPending
-                    ? `Es gibt keine aktive Belegart der Kategorie ${kind.singular}.`
-                    : undefined
+                  !chosen
+                    ? 'Wird gefüllt, sobald der Kunde gewählt ist.'
+                    : activeTypes.length === 0 && !documentTypes.isPending
+                      ? `Es gibt keine aktive Belegart der Kategorie ${kind.singular}.`
+                      : defaults.data?.documentTypeName !== undefined &&
+                          `${defaults.data.documentTypeId}` === documentTypeId
+                        ? 'Vorschlag für diesen Kunden. Änderbar.'
+                        : 'Weicht vom Vorschlag für diesen Kunden ab.'
                 }
-                invalid={activeTypes.length === 0 && !documentTypes.isPending}
+                invalid={chosen && activeTypes.length === 0 && !documentTypes.isPending}
               >
-                <option value="">Bitte wählen</option>
+                {/* No empty entry once a customer stands: there is always a kind, and the
+                    backend named it. Before that the field is disabled anyway. */}
+                {!chosen && <option value="">Zuerst den Kunden wählen</option>}
+                {chosen && documentTypeId === '' && <option value="">Wird ermittelt …</option>}
                 {activeTypes.map((type) => (
                   <option key={type.id} value={type.id}>
                     {type.code} · {type.name}
@@ -207,29 +260,6 @@ export function NewDocumentMask({
                 value={documentDate}
                 onChange={(event) => setDocumentDate(event.target.value)}
               />
-
-              <SelectField
-                label="Kunde"
-                value={partnerId}
-                onChange={(event) => setPartnerId(event.target.value)}
-                disabled={partners.isPending}
-                className="sm:col-span-2"
-                hint={
-                  partners.isPending
-                    ? 'Kunden werden geladen ...'
-                    : partners.isSuccess && customers.length === 0
-                      ? 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.'
-                      : 'Sprache, Währung und Zahlungskondition kommen von diesem Kunden.'
-                }
-              >
-                <option value="">Bitte wählen</option>
-                {customers.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.partnerNumber ? `${partner.partnerNumber} · ` : ''}
-                    {partner.name}
-                  </option>
-                ))}
-              </SelectField>
             </div>
 
             {partners.error !== null && (
@@ -250,7 +280,7 @@ export function NewDocumentMask({
           >
             {!chosen && (
               <p className="text-[13px] text-text-secondary">
-                Wählen Sie zuerst Belegart und Kunde. Danach steht hier, womit der Entwurf
+                Wählen Sie zuerst den Kunden. Danach steht hier, womit der Entwurf
                 beginnt.
               </p>
             )}

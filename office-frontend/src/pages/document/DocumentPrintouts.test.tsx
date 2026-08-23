@@ -207,8 +207,22 @@ describe('DocumentPrintouts', () => {
     expect(written?.url).toBe(`${BASE}/printouts`)
     expect(written?.body).toEqual({
       printouts: [
-        { label: 'Kundenexemplar', copies: 1, printerId: 7, trayId: 71 },
-        { label: 'Buchhaltung', copies: 2, printerId: 8, trayId: undefined },
+        {
+          label: 'Kundenexemplar',
+          copies: 1,
+          printerId: 7,
+          trayId: 71,
+          documentLayoutId: undefined,
+          internal: false,
+        },
+        {
+          label: 'Buchhaltung',
+          copies: 2,
+          printerId: 8,
+          trayId: undefined,
+          documentLayoutId: undefined,
+          internal: false,
+        },
       ],
     })
   })

@@ -40,7 +40,15 @@ function printout(fields: Partial<DocumentPrintout> = {}): DocumentPrintout {
 
 /** One row of the mask, with only what the test cares about spelled out. */
 function row(fields: Partial<PrintoutRow> = {}): PrintoutRow {
-  return { label: 'Original', copies: '1', printerId: '', trayId: '', ...fields }
+  return {
+    label: 'Original',
+    copies: '1',
+    printerId: '',
+    trayId: '',
+    documentLayoutId: '',
+    internal: false,
+    ...fields,
+  }
 }
 
 describe('toPrintoutRows', () => {
@@ -51,9 +59,26 @@ describe('toPrintoutRows', () => {
     ])
 
     expect(rows).toEqual([
-      { id: 1, label: 'Original', copies: '1', printerId: '7', trayId: '71' },
-      { id: 2, label: 'Buchhaltung', copies: '2', printerId: '8', trayId: '' },
+      row({ id: 1, label: 'Original', copies: '1', printerId: '7', trayId: '71' }),
+      row({ id: 2, label: 'Buchhaltung', copies: '2', printerId: '8', trayId: '' }),
     ])
+  })
+
+  it('toPrintoutRowsCarriesTheFormAndTheInternalMarkTest', () => {
+    const rows = toPrintoutRows([
+      printout({ id: 3, label: 'Lager', documentLayoutId: 12, internal: true }),
+    ])
+
+    expect(rows[0].documentLayoutId).toBe('12')
+    expect(rows[0].internal).toBe(true)
+  })
+
+  /** Absent means «like the document itself», which is an empty field, not a missing one. */
+  it('toPrintoutRowsWithoutAFormOfItsOwnTest', () => {
+    const rows = toPrintoutRows([printout()])
+
+    expect(rows[0].documentLayoutId).toBe('')
+    expect(rows[0].internal).toBe(false)
   })
 
   it('toPrintoutRowsWithoutCopiesTest', () => {
@@ -74,10 +99,37 @@ describe('toPrintoutPayload', () => {
 
     expect(payload).toEqual({
       printouts: [
-        { label: 'Original', copies: 1, printerId: 7, trayId: 71 },
-        { label: 'Buchhaltung', copies: 2, printerId: 8, trayId: undefined },
+        {
+          label: 'Original',
+          copies: 1,
+          printerId: 7,
+          trayId: 71,
+          documentLayoutId: undefined,
+          internal: false,
+        },
+        {
+          label: 'Buchhaltung',
+          copies: 2,
+          printerId: 8,
+          trayId: undefined,
+          documentLayoutId: undefined,
+          internal: false,
+        },
       ],
     })
+  })
+
+  it('toPrintoutPayloadCarriesTheFormAndTheInternalMarkTest', () => {
+    const payload = toPrintoutPayload([row({ documentLayoutId: '12', internal: true })])
+
+    expect(payload.printouts[0].documentLayoutId).toBe(12)
+    expect(payload.printouts[0].internal).toBe(true)
+  })
+
+  it('toPrintoutPayloadWithoutAFormOfItsOwnTest', () => {
+    const payload = toPrintoutPayload([row({ documentLayoutId: '' })])
+
+    expect(payload.printouts[0].documentLayoutId).toBeUndefined()
   })
 
   /** Neither id nor position travels: the order of the list is the order on the paper. */
@@ -100,7 +152,7 @@ describe('printoutComplaint', () => {
   })
 
   it('printoutComplaintWithoutRowsTest', () => {
-    // No copies at all is a valid answer: the backend then prints one unlabelled sheet.
+    // No copy at all is a valid answer: this document is then not printed (ADR-0053).
     expect(printoutComplaint([])).toBeNull()
   })
 
@@ -196,6 +248,8 @@ describe('nextPrintoutRow', () => {
       copies: '1',
       printerId: '',
       trayId: '',
+      documentLayoutId: '',
+      internal: false,
     })
   })
 
@@ -336,7 +390,21 @@ describe('printoutsKey', () => {
       printout({ id: 1, position: 1, label: 'Original', copies: 1, printerId: 7, trayId: 71 }),
     ])
 
-    expect(key).toBe('1:1:Original:1:7:71')
+    expect(key).toBe('1:1:Original:1:7:71::')
+  })
+
+  it('printoutsKeyChangesWithTheFormTest', () => {
+    const before = printoutsKey([printout()])
+    const after = printoutsKey([printout({ documentLayoutId: 12 })])
+
+    expect(after).not.toBe(before)
+  })
+
+  it('printoutsKeyChangesWithTheInternalMarkTest', () => {
+    const before = printoutsKey([printout()])
+    const after = printoutsKey([printout({ internal: true })])
+
+    expect(after).not.toBe(before)
   })
 
   /** The point of it: a changed value has to produce a different key. */

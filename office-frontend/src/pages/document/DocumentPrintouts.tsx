@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Printer as PrinterIcon, X } from 'lucide-react'
+import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
+import { CheckboxField } from '../../components/CheckboxField'
 import { ErrorNotice, LoadingBlock } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { RowOrderButtons } from '../../components/RowOrderButtons'
@@ -9,7 +11,8 @@ import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
-import type { DocumentPrintout, Printer } from '../../lib/types'
+import type { DocumentPrintout, PrintLayout, Printer } from '../../lib/types'
+import { usePrintLayouts } from '../../printlayout/usePrintLayouts'
 import { PrintQueueDialog } from './PrintQueueDialog'
 import {
   MAX_PRINTOUTS,
@@ -31,7 +34,7 @@ import {
 const TITLE = 'Dokumente'
 
 const DESCRIPTION =
-  'Die Ausfertigungen dieses Belegs: wie sie beschriftet sind, wie viele Exemplare und auf welchem Drucker sie gedacht sind.'
+  'Die Ausfertigungen dieses Belegs: wie sie beschriftet sind, wie viele Exemplare, auf welcher Vorlage und auf welchem Drucker sie gedacht sind. Ohne Ausfertigung wird nichts gedruckt.'
 
 /**
  * The copies one document is printed in, and the way to the printer.
@@ -75,6 +78,12 @@ export function DocumentPrintouts({
     enabled: mayReadPrinters,
   })
 
+  // The same for the form a copy may print on. Asked only where the right is there: the name
+  // travels with the copy, so a user without PRINT_LAYOUT_READ still sees what is set — and
+  // asking anyway would be a 403 on every document.
+  const mayReadLayouts = can('PRINT_LAYOUT_READ')
+  const layouts = usePrintLayouts(mayReadLayouts ? tenantId : null)
+
   if (printouts.isPending) {
     return (
       <Panel title={TITLE} description={DESCRIPTION}>
@@ -99,6 +108,8 @@ export function DocumentPrintouts({
       base={base}
       stored={printouts.data}
       printers={printers.data ?? []}
+      forms={layouts.data ?? []}
+      mayReadLayouts={mayReadLayouts}
       mayReadPrinters={mayReadPrinters}
       editable={editable}
       readOnlyNote={readOnlyNote}
@@ -112,6 +123,8 @@ function PrintoutsPanel({
   base,
   stored,
   printers,
+  forms,
+  mayReadLayouts,
   mayReadPrinters,
   editable,
   readOnlyNote,
@@ -121,6 +134,8 @@ function PrintoutsPanel({
   base: string
   stored: DocumentPrintout[]
   printers: Printer[]
+  forms: PrintLayout[]
+  mayReadLayouts: boolean
   mayReadPrinters: boolean
   editable: boolean
   readOnlyNote?: string
@@ -177,10 +192,14 @@ function PrintoutsPanel({
                 Übernehmen
               </Button>
             )}
-            <Button variant="secondary" onClick={() => print(stored)} disabled={dirty}>
-              <PrinterIcon size={15} aria-hidden />
-              {stored.length > 1 ? 'Alle drucken' : 'Drucken'}
-            </Button>
+            {/* No copy, no print: there is nothing to hand to a print dialog, so the button
+                is not offered rather than offered and then failing (ADR-0053 of the backend). */}
+            {stored.length > 0 && (
+              <Button variant="secondary" onClick={() => print(stored)} disabled={dirty}>
+                <PrinterIcon size={15} aria-hidden />
+                {stored.length > 1 ? 'Alle drucken' : 'Drucken'}
+              </Button>
+            )}
           </span>
         }
       >
@@ -193,8 +212,11 @@ function PrintoutsPanel({
 
           {rows.length === 0 && (
             <p className="text-[13px] text-text-secondary">
-              Für diesen Beleg ist keine Ausfertigung hinterlegt. Gedruckt wird ein Exemplar ohne
-              Beschriftung.
+              Für diesen Beleg ist keine Ausfertigung hinterlegt — er wird nicht gedruckt.
+              {editable
+                ? ' Wer ihn doch drucken will, legt eine Ausfertigung an.'
+                : ''}{' '}
+              Ansehen und als PDF öffnen lässt er sich weiterhin.
             </p>
           )}
 
@@ -206,6 +228,8 @@ function PrintoutsPanel({
                 index={index}
                 count={rows.length}
                 printers={printers}
+                forms={forms}
+                mayReadLayouts={mayReadLayouts}
                 mayReadPrinters={mayReadPrinters}
                 onChange={(patch) => replace(index, patch)}
                 onMove={(direction) => change(withMovedPrintout(rows, index, direction))}
@@ -271,6 +295,8 @@ function EditableRow({
   index,
   count,
   printers,
+  forms,
+  mayReadLayouts,
   mayReadPrinters,
   onChange,
   onMove,
@@ -282,6 +308,8 @@ function EditableRow({
   index: number
   count: number
   printers: Printer[]
+  forms: PrintLayout[]
+  mayReadLayouts: boolean
   mayReadPrinters: boolean
   onChange: (patch: Partial<PrintoutRow>) => void
   onMove: (direction: -1 | 1) => void
@@ -392,6 +420,38 @@ function EditableRow({
         )}
       </div>
 
+      <div className="mt-3 grid gap-3 border-t border-line-subtle pt-3 sm:grid-cols-2">
+        {mayReadLayouts ? (
+          <SelectField
+            label="Druckvorlage"
+            value={row.documentLayoutId}
+            onChange={(event) => onChange({ documentLayoutId: event.target.value })}
+            hint="Leer: wie der Beleg selbst. Sonst wird dieses Exemplar auf der gewählten Vorlage gezeichnet."
+          >
+            <option value="">Wie der Beleg</option>
+            {forms
+              .filter((form) => form.active || `${form.id}` === row.documentLayoutId)
+              .map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.active ? form.name : `${form.name} (deaktiviert)`}
+                </option>
+              ))}
+          </SelectField>
+        ) : (
+          <p className="text-[12px] text-text-tertiary">
+            Die Druckvorlage bleibt, wie sie hinterlegt ist. Zum Ändern fehlt das Recht
+            PRINT_LAYOUT_READ.
+          </p>
+        )}
+
+        <CheckboxField
+          label="Internes Dokument"
+          checked={row.internal}
+          onChange={(event) => onChange({ internal: event.target.checked })}
+          hint="Bleibt im Haus: geht später nicht per Mail an den Kunden."
+        />
+      </div>
+
       <p className="mt-2 text-[12px] text-text-tertiary">
         Höchstens {MAX_SHEETS} Exemplare. Drucker und Schacht sind eine Notiz für den Druckdialog,
         keine Steuerung.
@@ -415,11 +475,10 @@ function ReadOnlyRow({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-line-subtle px-3.5 py-3">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium">
-          <span className="mr-2 font-mono text-[12px] text-text-tertiary">
-            {printout.position}
-          </span>
+        <p className="flex flex-wrap items-center gap-2 text-[13px] font-medium">
+          <span className="font-mono text-[12px] text-text-tertiary">{printout.position}</span>
           {printout.label}
+          {printout.internal === true && <Badge tone="neutral">Intern</Badge>}
         </p>
         <p className="mt-0.5 text-[12px] text-text-secondary">
           {describeSheets(printout.copies)} ·{' '}
@@ -427,6 +486,9 @@ function ReadOnlyRow({
           {trayNameOf(printout, printers) === null
             ? ''
             : ` · ${trayNameOf(printout, printers)}`}
+          {printout.documentLayoutName === undefined
+            ? ''
+            : ` · Vorlage ${printout.documentLayoutName}`}
         </p>
       </div>
       <Button variant="secondary" onClick={onPrint}>
