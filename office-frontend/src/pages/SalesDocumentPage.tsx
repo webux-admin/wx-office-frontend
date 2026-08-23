@@ -41,6 +41,7 @@ import { ChangePartnerDialog } from './document/ChangePartnerDialog'
 import { NewDocumentMask } from './document/NewDocumentMask'
 import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
 import { DocumentLines } from './document/DocumentLines'
+import { DocumentDiscountPanel } from './document/DocumentDiscountPanel'
 import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
 import { DocumentChainPanel } from './document/DocumentChainPanel'
 import { DocumentPrintouts } from './document/DocumentPrintouts'
@@ -603,6 +604,16 @@ function DocumentMask({
           </div>
 
           <div className="grid gap-6 self-start">
+            {/* Keyed by what is stored: the panel holds what was typed, and that has to give
+                way when a save or a change to the positions rewrites it underneath. */}
+            <DocumentDiscountPanel
+              key={`${document.discountPercent ?? ''}-${document.discountAmount ?? ''}`}
+              base={base}
+              document={document}
+              editable={editable}
+              readOnlyNote={readOnlyNote}
+              onChanged={refresh}
+            />
             <DocumentPaymentPanel
               key={paymentKey(document)}
               tenantId={tenantId}

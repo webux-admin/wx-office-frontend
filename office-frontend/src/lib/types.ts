@@ -908,6 +908,22 @@ export type SalesDocument = {
   totalNet: number
   totalVat: number
   totalGross: number
+  /**
+   * Discount on the whole document as a percentage; absent when none was given or an amount
+   * was. Already deducted from the totals above (ADR-0058 of the backend).
+   */
+  discountPercent?: number
+  /** That discount as an amount without VAT; absent when none was given or a percentage was. */
+  discountAmount?: number
+  /** What the discount comes to without VAT; 0 where there is none. */
+  discountNet?: number
+  /** The VAT that falls away with it. */
+  discountVat?: number
+  /**
+   * What a discount could reduce at all: the net sum of the positions the catalogue allows to
+   * be reduced. The mask needs it to say what a percentage would come to before it is saved.
+   */
+  discountableBase?: number
   baseTotalNet?: number
   baseTotalVat?: number
   baseTotalGross?: number

@@ -319,7 +319,31 @@ export function LinesTable({
         </motion.tbody>
 
         <tfoot className="border-t border-line">
-          <TotalRow label="Netto" span={totalSpan} pad="pt-3">
+          {/* With a discount on the whole document the sum of the positions comes first,
+              then what is taken off: a total nobody can get to from the positions is not a
+              document that can be checked (ADR-0058 of the backend). */}
+          {document.discountNet !== undefined && document.discountNet !== 0 && (
+            <>
+              <TotalRow label="Zwischentotal" span={totalSpan} pad="pt-3">
+                {formatAmount(document.totalNet + document.discountNet)}
+              </TotalRow>
+              <TotalRow
+                label={
+                  document.discountPercent === undefined
+                    ? 'Rabatt'
+                    : `Rabatt ${formatPercent(document.discountPercent)}%`
+                }
+                span={totalSpan}
+              >
+                {`-${formatAmount(document.discountNet)}`}
+              </TotalRow>
+            </>
+          )}
+          <TotalRow
+            label="Netto"
+            span={totalSpan}
+            pad={document.discountNet ? undefined : 'pt-3'}
+          >
             {formatAmount(document.totalNet)}
           </TotalRow>
           <TotalRow label="MwSt" span={totalSpan}>
