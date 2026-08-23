@@ -143,7 +143,7 @@ export function SplitButton({
             openAt(actions.length - 1)
           }
         }}
-        className="inline-flex h-9 items-center justify-center rounded-r-[var(--radius-md)] border-l border-white/25 bg-accent px-2 text-white transition-colors duration-150 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-accent"
+        className="inline-flex h-9 items-center justify-center rounded-r-[var(--radius-md)] border-l border-on-accent/25 bg-accent px-2 text-on-accent transition-colors duration-150 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-accent"
       >
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}

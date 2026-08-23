@@ -30,7 +30,7 @@ export function CheckboxField({ label, hint, className = '', ...rest }: Checkbox
         />
         <span
           aria-hidden
-          className="pointer-events-none grid h-[18px] w-[18px] place-items-center rounded-[5px] border border-line bg-surface text-white transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent-text peer-disabled:opacity-50"
+          className="pointer-events-none grid h-[18px] w-[18px] place-items-center rounded-[5px] border border-line bg-surface text-on-accent transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent-text peer-disabled:opacity-50"
         >
           <motion.span
             initial={false}

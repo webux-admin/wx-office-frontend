@@ -308,7 +308,7 @@ function TileCard({
         className="block h-full rounded-[var(--radius-lg)] border border-line-subtle bg-surface p-6 text-center transition-shadow hover:shadow-card"
       >
         <span
-          className={`mx-auto grid h-14 w-14 place-items-center rounded-[var(--radius-lg)] text-white ${tile.tone}`}
+          className={`mx-auto grid h-14 w-14 place-items-center rounded-[var(--radius-lg)] text-on-accent ${tile.tone}`}
         >
           <tile.icon size={22} aria-hidden />
         </span>

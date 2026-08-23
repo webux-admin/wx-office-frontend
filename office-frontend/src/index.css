@@ -92,6 +92,9 @@
   --color-accent: #1e4d3f;
   --color-accent-hover: #245c4b;
   --color-accent-text: #1e4d3f;
+  /* The light foreground on strong fills — accent buttons, module tiles, the brand mark
+     on ink. Pure white in both appearances: those fills stay dark either way. */
+  --color-on-accent: #ffffff;
   --color-success: #2f6b4f;
   --color-danger: #8c3023;
 

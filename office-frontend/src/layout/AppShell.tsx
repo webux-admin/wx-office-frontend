@@ -131,7 +131,7 @@ function Sidebar({
             to="/profil"
             title={collapsed ? `${user?.username} · Konto` : 'Konto'}
             aria-label="Eigenes Konto"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-full)] bg-ink-hover text-[11px] font-medium transition-colors hover:bg-accent hover:text-white"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-full)] bg-ink-hover text-[11px] font-medium transition-colors hover:bg-accent hover:text-on-accent"
           >
             {initialsOf(user?.username ?? '')}
           </Link>
@@ -428,7 +428,7 @@ function TenantSwitcher({ collapsed }: { collapsed: boolean }) {
           collapsed ? 'justify-center p-1' : 'p-1.5'
         }`}
       >
-        <BrandMark size={30} className="shrink-0 text-white" />
+        <BrandMark size={30} className="shrink-0 text-on-accent" />
         {!collapsed && (
           <>
             <span className="min-w-0 flex-1">

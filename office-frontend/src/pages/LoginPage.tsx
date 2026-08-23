@@ -127,7 +127,7 @@ export function LoginPage() {
         >
           {/* The mark repeats here for the narrow layout, where the dark panel is hidden. */}
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <BrandMark size={30} className="text-white" />
+            <BrandMark size={30} className="text-on-accent" />
             <span className="text-[16px] font-semibold tracking-tight">webux ERP</span>
           </div>
 
@@ -259,7 +259,7 @@ function BrandPanel({ reduceMotion }: { reduceMotion: boolean }) {
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="flex items-center gap-2.5"
         >
-          <BrandMark size={30} className="text-white" />
+          <BrandMark size={30} className="text-on-accent" />
           <span className="text-[16px] font-semibold tracking-tight">webux ERP</span>
         </motion.div>
 

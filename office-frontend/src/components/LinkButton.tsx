@@ -5,7 +5,7 @@ import type { OriginState } from '../lib/origin'
 type Variant = 'primary' | 'secondary'
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-accent text-white hover:bg-accent-hover',
+  primary: 'bg-accent text-on-accent hover:bg-accent-hover',
   secondary: 'bg-surface text-text-primary border border-line hover:bg-sunken',
 }
 
