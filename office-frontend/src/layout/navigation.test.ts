@@ -121,6 +121,7 @@ describe('flattenNav', () => {
       '/produkte',
       '/zahlungskonditionen',
       '/preisgruppen',
+      '/preise-erfassen',
     ])
   })
 

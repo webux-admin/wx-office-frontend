@@ -35,6 +35,7 @@ const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PrinterListPage = lazy(() => import('./pages/PrinterListPage').then((module) => ({ default: module.PrinterListPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
+const PriceEntryPage = lazy(() => import('./pages/PriceEntryPage').then((module) => ({ default: module.PriceEntryPage })))
 const ProductListPage = lazy(() => import('./pages/ProductListPage').then((module) => ({ default: module.ProductListPage })))
 const ProductPage = lazy(() => import('./pages/ProductPage').then((module) => ({ default: module.ProductPage })))
 const ProductFreeFieldPage = lazy(() => import('./pages/ProductFreeFieldPage').then((module) => ({ default: module.ProductFreeFieldPage })))
@@ -92,6 +93,7 @@ export default function App() {
                 <Route path="/produkte/:id" element={<ProductPage />} />
 
                 <Route path="/preisgruppen" element={<PriceGroupPage />} />
+                <Route path="/preise-erfassen" element={<PriceEntryPage />} />
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 

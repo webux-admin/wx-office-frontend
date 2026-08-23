@@ -533,6 +533,41 @@ export type ResolvedPrice = {
   includesVat: boolean
 }
 
+/**
+ * One product of the quick entry screen, as `PriceEntryRowDto` sends it.
+ *
+ * <p>Two prices, and the difference is the point. `effectivePrice` is what the chosen target
+ * pays on the chosen day, wherever that price comes from; `ownPrice` is what the target has
+ * of its own for exactly the period being edited, and only that one is written back.
+ */
+export type PriceEntryRow = {
+  productId: number
+  productNumber?: string
+  name: string
+  unitLabel?: string
+  /** Absent where nothing applies to this product at all. */
+  effectivePrice?: number
+  origin?: PriceOrigin
+  /** Absent where the target has no price of its own for that period. */
+  ownPrice?: number
+  /** ISO date, first day of that own row. */
+  ownValidFrom?: string
+  /** ISO date, last day of that own row. */
+  ownValidTo?: string
+}
+
+/**
+ * What one save of the quick entry screen did.
+ *
+ * <p>`removed` and `closed` are changes nobody typed — a price taken away, and a running
+ * price ended so the new period could start — so the screen says them out loud (ADR-0059).
+ */
+export type PriceEntryResult = {
+  written: number
+  removed: number
+  closed: number
+}
+
 /** Percentage per VAT category, keyed by {@link VatCategory}. */
 export type VatRates = Partial<Record<VatCategory, number>>
 

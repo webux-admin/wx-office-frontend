@@ -25,6 +25,7 @@ import {
   Scale,
   ShieldCheck,
   SlidersHorizontal,
+  TableProperties,
   Tags,
   Truck,
   UserCog,
@@ -169,6 +170,14 @@ export const NAV_GROUPS: NavGroup[] = [
             label: 'Preisgruppen',
             icon: Tags,
             href: '/preisgruppen',
+            permission: 'PRODUCT_READ',
+          },
+          // Prices over the whole catalogue rather than one product at a time: the way a
+          // price round is actually worked through (see ADR-0059 of the backend).
+          {
+            label: 'Schnellerfassung',
+            icon: TableProperties,
+            href: '/preise-erfassen',
             permission: 'PRODUCT_READ',
           },
         ],
