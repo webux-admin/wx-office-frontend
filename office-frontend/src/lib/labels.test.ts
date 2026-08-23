@@ -40,6 +40,12 @@ describe('permissionAction', () => {
     expect(permissionAction('DATA_EXPORT')).toBe('Exportieren')
   })
 
+  it('permissionActionForVatRateWriteTest', () => {
+    // Sits next to PRODUCT_WRITE in the same module group: a bare "Bearbeiten" twice over
+    // would leave nobody knowing which box maintains the federal rates.
+    expect(permissionAction('VAT_RATE_WRITE')).toBe('MwSt-Sätze pflegen')
+  })
+
   it('permissionActionWithUnknownVerbTest', () => {
     expect(permissionAction('PARTNER_SOMETHING')).toBe('PARTNER_SOMETHING')
     expect(permissionAction('')).toBe('')

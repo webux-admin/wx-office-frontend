@@ -536,6 +536,20 @@ export type ResolvedPrice = {
 /** Percentage per VAT category, keyed by {@link VatCategory}. */
 export type VatRates = Partial<Record<VatCategory, number>>
 
+/**
+ * One VAT rate period, as `ch.webux.office.product.web.VatRateDto` serialises it.
+ *
+ * <p>`validTo` is read-only: the backend closes and reopens periods itself when a change
+ * is recorded or taken back.
+ */
+export type VatRatePeriod = {
+  id?: number
+  category: VatCategory
+  validFrom: string
+  validTo?: string
+  rate: number
+}
+
 // --- document ----------------------------------------------------------------
 
 export type DocumentCategory = 'OFFER' | 'ORDER' | 'DELIVERY_NOTE' | 'INVOICE' | 'CREDIT_NOTE'

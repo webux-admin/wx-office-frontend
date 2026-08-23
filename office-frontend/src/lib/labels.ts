@@ -64,12 +64,24 @@ const PERMISSION_VERBS: Record<string, string> = {
 }
 
 /**
+ * Codes whose bare verb would not tell them apart from their neighbours in the matrix.
+ *
+ * <p>`VAT_RATE_WRITE` sits in the PRODUCT module next to `PRODUCT_WRITE`; two rows both
+ * saying "Bearbeiten" would be indistinguishable, so this one names its subject.
+ */
+const PERMISSION_LABELS: Record<string, string> = {
+  VAT_RATE_WRITE: 'MwSt-Sätze pflegen',
+}
+
+/**
  * Turns a permission code into the action it allows.
  *
  * @param code a permission code such as `PARTNER_DEACTIVATE`
- * @returns the German verb, or the raw code when its ending is unknown
+ * @returns the German label, or the raw code when its ending is unknown
  */
 export function permissionAction(code: string): string {
+  const special = PERMISSION_LABELS[code]
+  if (special) return special
   const verb = code.slice(code.lastIndexOf('_') + 1)
   return PERMISSION_VERBS[verb] ?? code
 }
