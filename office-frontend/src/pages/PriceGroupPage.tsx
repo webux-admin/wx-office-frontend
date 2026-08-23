@@ -237,6 +237,9 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
         open={open}
         onClose={close}
         title={editing ? 'Preisgruppe bearbeiten' : 'Neue Preisgruppe'}
+        onSubmit={save.isPending || form.code.trim() === '' || form.name.trim() === ''
+            ? undefined
+            : () => save.mutate()}
         footer={
           <>
             <Button variant="secondary" onClick={close}>
@@ -246,6 +249,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
               onClick={() => save.mutate()}
               busy={save.isPending}
               disabled={form.code.trim() === '' || form.name.trim() === ''}
+              shortcut
             >
               Speichern
             </Button>

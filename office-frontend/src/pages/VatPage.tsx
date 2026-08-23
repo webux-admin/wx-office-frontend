@@ -352,6 +352,7 @@ function VatRateChanges({
         open={open}
         onClose={close}
         title={editing ? 'Satzänderung korrigieren' : 'Neue Satzänderung'}
+        onSubmit={save.isPending || form.validFrom === '' || parsedRate === null ? undefined : () => save.mutate()}
         footer={
           <>
             <Button variant="secondary" onClick={close}>
@@ -361,6 +362,7 @@ function VatRateChanges({
               onClick={() => save.mutate()}
               busy={save.isPending}
               disabled={form.validFrom === '' || parsedRate === null}
+              shortcut
             >
               Speichern
             </Button>

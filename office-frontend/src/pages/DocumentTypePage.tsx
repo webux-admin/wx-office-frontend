@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -147,6 +148,10 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
     if (problem === null) save.mutate()
   }
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
+  // filled in and finished without reaching for the mouse.
+  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
+
   return (
     <>
       <PageHeader
@@ -173,7 +178,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
           </Button>
         )}
         {mayWrite && (
-          <Button onClick={submit} busy={save.isPending}>
+          <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
         )}

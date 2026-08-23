@@ -100,6 +100,9 @@ export function TakeoverDialog({
       wide
       title="Aus Vorgängerbeleg übernehmen"
       description="Positionen und Beträge werden übernommen. Der MwSt-Satz richtet sich nach dem Leistungsdatum des neuen Belegs."
+      onSubmit={create.isPending || selectedId === null || chosenType === undefined
+            ? undefined
+            : () => create.mutate()}
       footer={
         <>
           <Button variant="secondary" onClick={close}>
@@ -109,6 +112,7 @@ export function TakeoverDialog({
             onClick={() => create.mutate()}
             busy={create.isPending}
             disabled={selectedId === null || chosenType === undefined}
+            shortcut
           >
             Übernehmen
           </Button>

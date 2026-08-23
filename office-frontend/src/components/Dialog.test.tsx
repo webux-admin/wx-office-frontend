@@ -35,6 +35,22 @@ function Mask({ onClosed }: { onClosed?: () => void }) {
 }
 
 /**
+ * A mask whose dialog has something to save, the way every maintenance dialog does.
+ */
+function Submittable({ onSubmit }: { onSubmit?: () => void }) {
+  const [value, setValue] = useState('')
+  return (
+    <Dialog open onClose={() => undefined} title="Wert bearbeiten" onSubmit={onSubmit}>
+      <input
+        aria-label="Bezeichnung"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+    </Dialog>
+  )
+}
+
+/**
  * A mask whose dialog is closed by a button inside it, the way a position dialog closes once
  * the backend has taken the line.
  */
@@ -201,6 +217,69 @@ describe('Dialog', () => {
 
     // A shield that outlives the fade would swallow every click on the page behind it.
     expect(container.querySelector('[data-dialog-shield]')).toBeNull()
+  })
+
+  it('dialogSavesOnControlSTest', () => {
+    let saved = 0
+    act(() => root.render(<Submittable onSubmit={() => (saved += 1)} />))
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    })
+
+    expect(saved).toBe(1)
+  })
+
+  it('dialogSavesOnControlEnterTest', () => {
+    let saved = 0
+    act(() => root.render(<Submittable onSubmit={() => (saved += 1)} />))
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true }))
+    })
+
+    expect(saved).toBe(1)
+  })
+
+  /** Enter on its own belongs to the field somebody is typing in. */
+  it('dialogIgnoresBareEnterTest', () => {
+    let saved = 0
+    act(() => root.render(<Submittable onSubmit={() => (saved += 1)} />))
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    })
+
+    expect(saved).toBe(0)
+  })
+
+  /** A box that only asks something has nothing to save, and the keys stay unbound. */
+  it('dialogWithoutAPrimaryActionIgnoresTheShortcutTest', () => {
+    act(() => root.render(<Submittable />))
+
+    // Nothing to assert but that it does not throw: no handler, no action.
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    })
+  })
+
+  /** The shortcut has to survive typing, which re-renders the caller on every character. */
+  it('dialogKeepsTheShortcutWhileTypingTest', () => {
+    let saved = 0
+    act(() => root.render(<Submittable onSubmit={() => (saved += 1)} />))
+
+    const input = container.querySelector('input') as HTMLInputElement
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setValue?.call(input, 'Buchhaltung')
+    act(() => {
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    })
+
+    expect(saved).toBe(1)
   })
 
   it('dialogLeavesNothingBehindOnceItHasFadedOutTest', async () => {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -118,6 +119,11 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
   const selected =
     selection === null ? undefined : definition[selection.band][selection.index]
 
+
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be filled in
+  // and finished without reaching for the mouse.
+  useSubmitShortcut(problem === undefined && !save.isPending ? () => save.mutate() : undefined)
+
   return (
     <>
       <PageHeader
@@ -130,7 +136,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
         <Button variant="secondary" onClick={() => preview.mutate()} busy={preview.isPending}>
           Vorschau
         </Button>
-        <Button onClick={() => save.mutate()} busy={save.isPending} disabled={problem !== undefined}>
+        <Button onClick={() => save.mutate()} busy={save.isPending} disabled={problem !== undefined} shortcut>
           Speichern
         </Button>
       </PageHeader>

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { CheckboxField } from '../components/CheckboxField'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
@@ -149,6 +150,10 @@ function PartnerMask({
     if (!problem) save.mutate()
   }
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
+  // filled in and finished without reaching for the mouse.
+  useSubmitShortcut(mayWrite && tab === 'stammdaten' && !save.isPending ? submit : undefined)
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'stammdaten', label: 'Stammdaten' },
     { id: 'adressen', label: 'Adressen' },
@@ -190,7 +195,7 @@ function PartnerMask({
           </Button>
         )}
         {mayWrite && tab === 'stammdaten' && (
-          <Button onClick={submit} busy={save.isPending}>
+          <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
         )}

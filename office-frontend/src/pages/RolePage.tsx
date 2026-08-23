@@ -215,6 +215,7 @@ function Roles({ tenantId }: { tenantId: number }) {
         onClose={close}
         title={editing ? `Rolle ${editing.name}` : 'Neue Rolle'}
         description="Die angekreuzten Rechte gelten für jeden, der diese Rolle hält."
+        onSubmit={save.isPending || name.trim() === '' ? undefined : () => save.mutate()}
         wide
         footer={
           <>
@@ -225,6 +226,7 @@ function Roles({ tenantId }: { tenantId: number }) {
               onClick={() => save.mutate()}
               busy={save.isPending}
               disabled={name.trim() === ''}
+              shortcut
             >
               Speichern
             </Button>

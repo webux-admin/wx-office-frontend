@@ -93,6 +93,7 @@ export function PaymentTermDialog({
       onClose={onClose}
       wide
       title={editing ? 'Zahlungskondition bearbeiten' : 'Neue Zahlungskondition'}
+      onSubmit={busy || form.code.trim() === '' || form.name.trim() === '' ? undefined : onSubmit}
       description={
         editing?.system === true
           ? 'Eine ausgelieferte Kondition lässt sich ändern, aber nicht löschen.'
@@ -107,6 +108,7 @@ export function PaymentTermDialog({
             onClick={onSubmit}
             busy={busy}
             disabled={form.code.trim() === '' || form.name.trim() === ''}
+            shortcut
           >
             Speichern
           </Button>

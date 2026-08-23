@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
+import { useSubmitShortcut } from '../../components/useSubmitShortcut'
 import { ErrorNotice } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { Panel } from '../../components/Panel'
@@ -174,6 +175,10 @@ export function NewDocumentMask({
   const incomplete = !chosen || documentTypeId === '' || documentDate === ''
   const recipient = defaults.data?.recipient
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so the draft can be started
+  // without reaching for the mouse.
+  useSubmitShortcut(incomplete || create.isPending ? undefined : () => create.mutate())
+
   return (
     <>
       <PageHeader
@@ -181,7 +186,12 @@ export function NewDocumentMask({
         back={{ to: origin.from, label: origin.label }}
         subtitle="Der Beleg entsteht als Entwurf. Die Nummer wird erst beim Ausstellen gezogen."
       >
-        <Button onClick={() => create.mutate()} busy={create.isPending} disabled={incomplete}>
+        <Button
+          onClick={() => create.mutate()}
+          busy={create.isPending}
+          disabled={incomplete}
+          shortcut
+        >
           Entwurf anlegen
         </Button>
       </PageHeader>

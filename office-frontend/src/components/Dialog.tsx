@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { isSubmitShortcut } from '../lib/shortcuts'
 
 type DialogProps = {
   open: boolean
@@ -9,6 +10,12 @@ type DialogProps = {
   description?: string
   /** Buttons closing the dialog, drawn on a rule at the foot. */
   footer?: ReactNode
+  /**
+   * The primary action, bound to Ctrl+S and Ctrl+Enter while the box is open — the same
+   * thing the primary button in the foot does. Left out where the box only asks something
+   * and has nothing to save.
+   */
+  onSubmit?: () => void
   /** Wider box for a dialog holding a form rather than a question. */
   wide?: boolean
   /**
@@ -24,8 +31,9 @@ type DialogProps = {
  * A window over the screen for a question or a short form.
  *
  * <p>Keeps the keyboard inside while it is open: focus moves into the box, Escape and the
- * backdrop close it, and the element that opened it gets focus back afterwards, because
- * otherwise the next Tab would start again at the top of the page.
+ * backdrop close it, Ctrl+S and Ctrl+Enter run its primary action, and the element that
+ * opened it gets focus back afterwards, because otherwise the next Tab would start again at
+ * the top of the page.
  *
  * <p>A box that is closing takes nothing any more. It stays on screen for the length of its
  * fade, and everything in it — buttons, fields, the backdrop — is locked for that whole time,
@@ -37,6 +45,7 @@ export function Dialog({
   title,
   description,
   footer,
+  onSubmit,
   wide = false,
   initialFocus,
   children,
@@ -61,6 +70,13 @@ export function Dialog({
     close.current = onClose
   }, [onClose])
 
+  // The same reasoning as for onClose: a caller that builds it inline would otherwise
+  // re-bind the listener on every keystroke.
+  const submit = useRef(onSubmit)
+  useEffect(() => {
+    submit.current = onSubmit
+  }, [onSubmit])
+
   useEffect(() => {
     if (!open) return
 
@@ -75,6 +91,13 @@ export function Dialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         close.current()
+        return
+      }
+      // Ctrl+S would otherwise be the browser offering to save the page, so this both takes
+      // the press and suppresses that.
+      if (submit.current !== undefined && isSubmitShortcut(event)) {
+        event.preventDefault()
+        submit.current()
         return
       }
       if (event.key !== 'Tab' || !panel.current) return

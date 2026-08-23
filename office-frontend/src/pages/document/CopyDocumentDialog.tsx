@@ -74,6 +74,7 @@ export function CopyDocumentDialog({
       wide
       title={`${kind.singular} kopieren`}
       description="Positionen und Texte werden übernommen. Der neue Beleg steht für sich und verweist nicht auf das Original."
+      onSubmit={create.isPending || sourceId === null ? undefined : () => create.mutate()}
       footer={
         <>
           <Button variant="secondary" onClick={close}>
@@ -83,6 +84,7 @@ export function CopyDocumentDialog({
             onClick={() => create.mutate()}
             busy={create.isPending}
             disabled={sourceId === null}
+            shortcut
           >
             Kopieren
           </Button>

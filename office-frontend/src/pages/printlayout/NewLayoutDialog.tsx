@@ -73,12 +73,13 @@ export function NewLayoutDialog({
       onClose={onClose}
       title="Neue Druckvorlage"
       description="Eine Kopie startet mit derselben Anordnung und lässt sich danach frei gestalten."
+      onSubmit={create.isPending ? undefined : submit}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Abbrechen
           </Button>
-          <Button onClick={submit} busy={create.isPending}>
+          <Button onClick={submit} busy={create.isPending} shortcut>
             Anlegen
           </Button>
         </>

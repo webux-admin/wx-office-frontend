@@ -46,12 +46,13 @@ export function CatalogueDialog({
       onClose={onClose}
       title="Wert anpassen"
       description="Der Wert selbst gehört zur Anwendung. Anpassen lässt sich, wie er heisst und ob er noch angeboten wird."
+      onSubmit={busy || form.name.trim() === '' ? undefined : onSubmit}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Abbrechen
           </Button>
-          <Button onClick={onSubmit} busy={busy} disabled={form.name.trim() === ''}>
+          <Button onClick={onSubmit} busy={busy} disabled={form.name.trim() === ''} shortcut>
             Speichern
           </Button>
         </>

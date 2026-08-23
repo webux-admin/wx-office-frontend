@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
@@ -88,6 +89,10 @@ function NewUserMask() {
     displayName.trim() === '' ||
     password.length < MIN_PASSWORD
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so the account can be entered
+  // and created without reaching for the mouse.
+  useSubmitShortcut(incomplete || create.isPending ? undefined : () => create.mutate())
+
   return (
     <>
       <PageHeader
@@ -95,7 +100,12 @@ function NewUserMask() {
         back={{ to: origin.from, label: origin.label }}
         subtitle="Das Konto entsteht ohne Zugriff auf einen Mandanten. Der wird danach erteilt."
       >
-        <Button onClick={() => create.mutate()} busy={create.isPending} disabled={incomplete}>
+        <Button
+          onClick={() => create.mutate()}
+          busy={create.isPending}
+          disabled={incomplete}
+          shortcut
+        >
           Anlegen
         </Button>
       </PageHeader>
@@ -200,6 +210,10 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
 
   const self = signedIn?.userId === user.id
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be filled in and
+  // finished without reaching for the mouse.
+  useSubmitShortcut(mayWrite && !save.isPending ? () => save.mutate() : undefined)
+
   return (
     <>
       <PageHeader
@@ -227,7 +241,7 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
           </Button>
         )}
         {mayWrite && (
-          <Button onClick={() => save.mutate()} busy={save.isPending}>
+          <Button onClick={() => save.mutate()} busy={save.isPending} shortcut>
             Speichern
           </Button>
         )}

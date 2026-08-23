@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { CheckboxField } from '../components/CheckboxField'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
@@ -221,6 +222,10 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     if (!problem) save.mutate()
   }
 
+  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
+  // filled in and finished without reaching for the mouse.
+  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
+
   return (
     <>
       <PageHeader
@@ -238,7 +243,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
         }
       >
         {mayWrite && (
-          <Button onClick={submit} busy={save.isPending}>
+          <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
         )}

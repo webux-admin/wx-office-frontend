@@ -230,6 +230,7 @@ export function ProductLineDialog({
       // Editing a stored line starts in the quantity: the search field carries the name of
       // the product, and the first keystroke there would give the product up.
       initialFocus={line ? count : search}
+      onSubmit={!ready || busy ? undefined : () => send(false)}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -245,7 +246,7 @@ export function ProductLineDialog({
               Hinzufügen und weiter
             </Button>
           )}
-          <Button busy={busy} disabled={!ready || busy} onClick={() => send(false)}>
+          <Button busy={busy} disabled={!ready || busy} onClick={() => send(false)} shortcut>
             {line ? 'Übernehmen' : 'Hinzufügen'}
           </Button>
         </>

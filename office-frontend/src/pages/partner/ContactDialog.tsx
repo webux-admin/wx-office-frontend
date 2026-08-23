@@ -63,6 +63,7 @@ export function ContactDialog({
       open={open}
       onClose={onClose}
       title={edited ? 'Kontaktperson bearbeiten' : 'Kontaktperson hinzufügen'}
+      onSubmit={busy || complaint !== null ? undefined : () => onSubmit(toContactPayload(form))}
       description="Nur der Nachname ist Pflicht."
       wide
       footer={
@@ -74,6 +75,7 @@ export function ContactDialog({
             onClick={() => onSubmit(toContactPayload(form))}
             busy={busy}
             disabled={complaint !== null}
+            shortcut
           >
             {edited ? 'Speichern' : 'Hinzufügen'}
           </Button>

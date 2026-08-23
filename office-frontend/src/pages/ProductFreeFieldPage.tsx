@@ -275,6 +275,9 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
         open={open}
         onClose={close}
         title={editing ? 'Freifeld bearbeiten' : 'Neues Freifeld'}
+        onSubmit={save.isPending || form.code === '' || form.name.trim() === ''
+            ? undefined
+            : () => save.mutate()}
         footer={
           <>
             {editing && mayWrite && (
@@ -293,6 +296,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
               onClick={() => save.mutate()}
               busy={save.isPending}
               disabled={form.code === '' || form.name.trim() === ''}
+              shortcut
             >
               Speichern
             </Button>

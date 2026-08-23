@@ -61,6 +61,7 @@ export function AddressDialog({
       open={open}
       onClose={onClose}
       title={edited ? 'Adresse bearbeiten' : 'Adresse hinzufügen'}
+      onSubmit={busy || complaint !== null ? undefined : () => onSubmit(toAddressPayload(form))}
       description={
         edited
           ? 'Was leer bleibt, wird gelöscht. Die Adresse wird als Ganzes ersetzt.'
@@ -76,6 +77,7 @@ export function AddressDialog({
             onClick={() => onSubmit(toAddressPayload(form))}
             busy={busy}
             disabled={complaint !== null}
+            shortcut
           >
             {edited ? 'Speichern' : 'Hinzufügen'}
           </Button>

@@ -49,6 +49,7 @@ export function EntryDialog({
       open={open}
       onClose={onClose}
       title={editing ? 'Wert bearbeiten' : 'Neuer Wert'}
+      onSubmit={busy || form.code.trim() === '' || form.name.trim() === '' ? undefined : onSubmit}
       description={
         editing?.system === true
           ? 'Ein ausgelieferter Wert lässt sich umbenennen, aber nicht löschen.'
@@ -63,6 +64,7 @@ export function EntryDialog({
             onClick={onSubmit}
             busy={busy}
             disabled={form.code.trim() === '' || form.name.trim() === ''}
+            shortcut
           >
             Speichern
           </Button>

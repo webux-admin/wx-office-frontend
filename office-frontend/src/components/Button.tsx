@@ -1,5 +1,6 @@
 import { motion, type HTMLMotionProps } from 'motion/react'
 import type { ReactNode } from 'react'
+import { onMac, submitShortcutTitle } from '../lib/shortcuts'
 import { Spinner } from './Spinner'
 
 type Variant = 'primary' | 'secondary' | 'ghost'
@@ -23,6 +24,11 @@ type ButtonProps = HTMLMotionProps<'button'> & {
   busy?: boolean
   /** Stretches the button to the width of its container. */
   block?: boolean
+  /**
+   * Names the keys that do the same thing, in the tooltip. Only for the one button that
+   * finishes a mask — the shortcut is bound by the mask or by the dialog, never here.
+   */
+  shortcut?: boolean
   children: ReactNode
 }
 
@@ -36,17 +42,27 @@ export function Button({
   variant = 'primary',
   busy = false,
   block = false,
+  shortcut = false,
   className = '',
   children,
   disabled,
+  title,
   ...rest
 }: ButtonProps) {
+  // Only where the label is plain text: a button with an icon beside its wording would end
+  // up with a tooltip naming half of itself.
+  const hint =
+    title ?? (shortcut && typeof children === 'string'
+      ? submitShortcutTitle(children, onMac())
+      : undefined)
+
   return (
     <motion.button
       whileTap={disabled || busy ? undefined : { scale: 0.985 }}
       transition={{ type: 'spring', stiffness: 600, damping: 30 }}
       disabled={disabled || busy}
       aria-busy={busy}
+      title={hint}
       className={`relative inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-[13px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${block ? 'w-full' : ''} ${className}`}
       {...rest}
     >

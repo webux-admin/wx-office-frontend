@@ -211,6 +211,14 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
         onClose={() => setForm(null)}
         title={locked ? 'Nummernkreis ändern' : 'Neuer Nummernkreis'}
         description="Präfix und Stellenzahl gelten für die Nummern, die ab jetzt gezogen werden."
+        onSubmit={
+          configure.isPending ||
+          form === null ||
+          form.documentTypeCode.trim() === '' ||
+          form.fiscalYear === ''
+            ? undefined
+            : () => configure.mutate(form)
+        }
         footer={
           <>
             <Button variant="secondary" onClick={() => setForm(null)}>
@@ -222,6 +230,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
               disabled={
                 form === null || form.documentTypeCode.trim() === '' || form.fiscalYear === ''
               }
+              shortcut
             >
               Speichern
             </Button>

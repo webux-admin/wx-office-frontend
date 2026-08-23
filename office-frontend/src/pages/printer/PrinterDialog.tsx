@@ -62,12 +62,13 @@ export function PrinterDialog({
       wide
       title={editing ? 'Drucker bearbeiten' : 'Neuer Drucker'}
       description="Bezeichnung und Standort helfen beim Wählen im Druckdialog. Gesteuert wird von hier aus nichts."
+      onSubmit={busy || form.name.trim() === '' ? undefined : onSubmit}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Abbrechen
           </Button>
-          <Button onClick={onSubmit} busy={busy} disabled={form.name.trim() === ''}>
+          <Button onClick={onSubmit} busy={busy} disabled={form.name.trim() === ''} shortcut>
             Speichern
           </Button>
         </>
