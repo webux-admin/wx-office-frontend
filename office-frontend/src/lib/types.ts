@@ -62,6 +62,8 @@ export type CatalogueName =
   | 'document-category'
   | 'document-status'
   | 'line-kind'
+  | 'offer-outcome'
+  | 'offer-decline-reason'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -937,6 +939,66 @@ export type DocumentSummary = {
   currency: string
   totalNet: number
   totalGross: number
+  /** Only on offers: how the issued offer went. An offer without a mark counts as `OPEN`. */
+  offerOutcome?: OfferOutcome
+}
+
+/** How an issued offer went: still waiting, turned into business, or turned down. */
+export type OfferOutcome = 'OPEN' | 'ACCEPTED' | 'DECLINED'
+
+/**
+ * The follow-up state of one offer.
+ *
+ * <p>Answer of `GET /{offers}/{id}/tracking`. An offer nobody has touched yet answers as
+ * `OPEN` with everything else absent — the row is only written when someone marks or
+ * estimates the offer.
+ */
+export type OfferTracking = {
+  outcome: OfferOutcome
+  /** When the outcome was decided; absent while it is `OPEN`. */
+  outcomeAt?: string
+  /** Who decided it; absent while it is `OPEN`. */
+  outcomeBy?: string
+  /** Whole percent 0 to 100; absent while nobody estimated the offer. */
+  winProbability?: number
+  /** Why it was declined, as a code of the `offer-decline-reason` catalogue. */
+  declinedReasonCode?: string
+  declinedNote?: string
+  /**
+   * The gross total weighted by the probability, computed by the backend. Absent while no
+   * probability is set. The browser never multiplies the two itself.
+   */
+  weightedGross?: number
+}
+
+/** One follow-up reminder of an offer, as `GET /{offers}/{id}/reminders` returns it. */
+export type OfferReminder = {
+  id: number
+  /** When it is due, as an ISO instant; shown in the reader time zone. */
+  dueAt: string
+  note?: string
+  done: boolean
+  doneAt?: string
+  doneBy?: string
+  createdAt: string
+  createdBy?: string
+}
+
+/**
+ * One due reminder of the signed-in user, across every offer of the tenant.
+ *
+ * <p>Answer of `GET /{offers}/reminders/due`. It names the offer instead of pointing at one
+ * already loaded, because the overview shows it without having any offer open.
+ */
+export type DueOfferReminder = {
+  reminderId: number
+  documentId: number
+  /** The number of the offer; absent while it is a draft. */
+  documentNumber?: string
+  /** Name of the recipient as it stands on the offer. */
+  partnerName?: string
+  dueAt: string
+  note?: string
 }
 
 /**

@@ -44,6 +44,15 @@ export type SalesDocumentKind = {
   plural: string
   gender: Gender
   rights: SalesDocumentRights
+  /**
+   * Whether the fate of an issued document is followed up: accepted or declined, with a win
+   * probability and reminders.
+   *
+   * <p>Only the Offerte carries it — an issued offer waits for an answer, while the other
+   * three kinds are the answer. The screens ask this flag, never the category, so a second
+   * kind that gains a follow-up names it here and nowhere else.
+   */
+  tracking: boolean
 }
 
 /**
@@ -55,6 +64,7 @@ export type SalesDocumentKind = {
  * @param singular  what one of them is called
  * @param plural    what several of them are called
  * @param gender    gender of the German name
+ * @param tracking  whether the fate of an issued document is followed up
  */
 function kind(
   category: DocumentCategory,
@@ -63,6 +73,7 @@ function kind(
   singular: string,
   plural: string,
   gender: Gender,
+  tracking = false,
 ): SalesDocumentKind {
   return {
     category,
@@ -71,6 +82,7 @@ function kind(
     singular,
     plural,
     gender,
+    tracking,
     rights: {
       read: `${category}_READ`,
       write: `${category}_WRITE`,
@@ -80,6 +92,16 @@ function kind(
     },
   }
 }
+
+/**
+ * The Offerte, named on its own for the screens of the follow-up work: the overview list of
+ * due reminders, and the offer mask handing an accepted offer over to the Auftrag.
+ *
+ * <p>Same reasoning as {@link ORDER_KIND}: those screens mean this kind and no other, and a
+ * lookup by category would hand them a value that may be missing, for a kind that cannot be.
+ */
+export const OFFER_KIND = kind('OFFER', '/offerten', 'offers', 'Offerte', 'Offerten',
+  'feminine', true)
 
 /**
  * The Auftrag, named on its own because two screens mean this one and no other.
@@ -98,7 +120,7 @@ export const ORDER_KIND = kind('ORDER', '/auftraege', 'orders', 'Auftrag', 'Auft
  * its own. It gets a mask when that way exists.
  */
 export const SALES_DOCUMENT_KINDS: SalesDocumentKind[] = [
-  kind('OFFER', '/offerten', 'offers', 'Offerte', 'Offerten', 'feminine'),
+  OFFER_KIND,
   ORDER_KIND,
   kind('DELIVERY_NOTE', '/lieferscheine', 'delivery-notes', 'Lieferschein', 'Lieferscheine',
     'masculine'),
@@ -124,16 +146,30 @@ const DOCUMENT_LIST = 'sales-documents'
 /** The status trail of one document. */
 const DOCUMENT_TRAIL = 'sales-document-trail'
 
+/** The follow-up state of one offer: outcome and win probability. */
+const OFFER_TRACKING = 'offer-tracking'
+
+/** The follow-up reminders of one offer. */
+const OFFER_REMINDERS = 'offer-reminders'
+
+/** The due reminders of the signed-in user, shown on the overview. */
+const DUE_OFFER_REMINDERS = 'due-offer-reminders'
+
 /**
  * Where everything about sales documents is cached, whatever kind and whatever tenant.
  *
  * <p>For a screen that changes something all four kinds depend on and does not know which of
- * them is on the other end — a partner, whose address a draft follows (ADR-0040).
+ * them is on the other end — a partner, whose address a draft follows (ADR-0040). The
+ * follow-up keys stand here for the same reason: the due list names the partner of every
+ * offer it shows.
  */
 export const SALES_DOCUMENT_CACHE_ROOTS: readonly string[] = [
   DOCUMENT,
   DOCUMENT_LIST,
   DOCUMENT_TRAIL,
+  OFFER_TRACKING,
+  OFFER_REMINDERS,
+  DUE_OFFER_REMINDERS,
 ]
 
 /**
@@ -197,6 +233,51 @@ export function salesDocumentTrailKey(
   documentId?: string | number,
 ): unknown[] {
   return cacheKey(DOCUMENT_TRAIL, entry, tenantId, documentId)
+}
+
+/**
+ * Where the follow-up state of one offer is cached.
+ *
+ * <p>No kind in the key: only the Offerte is followed up, so the tenant and the document
+ * name the entry completely.
+ *
+ * @param tenantId   the tenant, null while none is chosen
+ * @param documentId the offer; left out to reach the follow-up state of every offer
+ */
+export function offerTrackingKey(
+  tenantId: number | null,
+  documentId?: string | number,
+): unknown[] {
+  return documentId === undefined
+    ? [OFFER_TRACKING, tenantId]
+    : [OFFER_TRACKING, tenantId, documentId]
+}
+
+/**
+ * Where the reminders of one offer are cached.
+ *
+ * @param tenantId   the tenant, null while none is chosen
+ * @param documentId the offer; left out to reach the reminders of every offer
+ */
+export function offerRemindersKey(
+  tenantId: number | null,
+  documentId?: string | number,
+): unknown[] {
+  return documentId === undefined
+    ? [OFFER_REMINDERS, tenantId]
+    : [OFFER_REMINDERS, tenantId, documentId]
+}
+
+/**
+ * Where the due reminders of the signed-in user are cached.
+ *
+ * <p>The user is not part of the key: the backend answers for whoever asks, and a change of
+ * user empties the whole cache with the session.
+ *
+ * @param tenantId the tenant, null while none is chosen
+ */
+export function dueOfferRemindersKey(tenantId: number | null): unknown[] {
+  return [DUE_OFFER_REMINDERS, tenantId]
 }
 
 /**

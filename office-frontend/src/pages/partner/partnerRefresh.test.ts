@@ -8,8 +8,8 @@ import {
 } from '../../lib/salesDocument'
 import { invalidateAfterPartnerChange } from './partnerRefresh'
 
-/** Partner, partner list, and the three roots the documents are filed under. */
-const STALE_KEY_COUNT = 5
+/** Partner, partner list, and the six roots the documents and their follow-up are filed under. */
+const STALE_KEY_COUNT = 8
 
 /** A cache that only writes down what it was asked to mark stale. */
 function recordingClient(onInvalidate?: () => Promise<void>) {
@@ -43,6 +43,9 @@ describe('invalidateAfterPartnerChange', () => {
       ['sales-document', 7],
       ['sales-documents', 7],
       ['sales-document-trail', 7],
+      ['offer-tracking', 7],
+      ['offer-reminders', 7],
+      ['due-offer-reminders', 7],
     ])
   })
 
@@ -90,6 +93,9 @@ describe('invalidateAfterPartnerChange', () => {
       ['sales-document', 0],
       ['sales-documents', 0],
       ['sales-document-trail', 0],
+      ['offer-tracking', 0],
+      ['offer-reminders', 0],
+      ['due-offer-reminders', 0],
     ])
   })
 

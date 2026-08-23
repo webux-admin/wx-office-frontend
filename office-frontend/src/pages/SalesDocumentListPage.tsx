@@ -24,6 +24,7 @@ import type {
   DocumentStatus,
   DocumentSummary,
   DocumentType,
+  OfferOutcome,
   Page,
   SalesDocument,
 } from '../lib/types'
@@ -38,11 +39,39 @@ const TONES: Record<DocumentStatus, 'muted' | 'accent' | 'danger'> = {
   CANCELLED: 'danger',
 }
 
-const FILTERS: { id: 'alle' | DocumentStatus; label: string }[] = [
+/** Badge tone of each outcome of an issued offer, matching the head of its mask. */
+const OUTCOME_TONES: Record<OfferOutcome, 'accent' | 'success' | 'danger'> = {
+  OPEN: 'accent',
+  ACCEPTED: 'success',
+  DECLINED: 'danger',
+}
+
+/** One filter chip: what it is called, and what it asks the server for. */
+type DocumentFilter = {
+  id: string
+  label: string
+  status?: DocumentStatus
+  outcome?: OfferOutcome
+}
+
+const FILTERS: DocumentFilter[] = [
   { id: 'alle', label: 'Alle' },
-  { id: 'DRAFT', label: 'Entwürfe' },
-  { id: 'FINALISED', label: 'Ausgestellt' },
-  { id: 'CANCELLED', label: 'Storniert' },
+  { id: 'DRAFT', label: 'Entwürfe', status: 'DRAFT' },
+  { id: 'FINALISED', label: 'Ausgestellt', status: 'FINALISED' },
+  { id: 'CANCELLED', label: 'Storniert', status: 'CANCELLED' },
+]
+
+/**
+ * The chips of a kind that is followed up: the issued documents split by their outcome
+ * instead of standing behind one «Ausgestellt».
+ */
+const TRACKING_FILTERS: DocumentFilter[] = [
+  { id: 'alle', label: 'Alle' },
+  { id: 'DRAFT', label: 'Entwürfe', status: 'DRAFT' },
+  { id: 'OPEN', label: 'Offen', status: 'FINALISED', outcome: 'OPEN' },
+  { id: 'ACCEPTED', label: 'Angenommen', status: 'FINALISED', outcome: 'ACCEPTED' },
+  { id: 'DECLINED', label: 'Abgelehnt', status: 'FINALISED', outcome: 'DECLINED' },
+  { id: 'CANCELLED', label: 'Storniert', status: 'CANCELLED' },
 ]
 
 /**
@@ -63,16 +92,22 @@ export function SalesDocumentListPage({ kind }: { kind: SalesDocumentKind }) {
 
 function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumentKind }) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
+  const outcomeLabel = useCatalogueLabel(tenantId, 'offer-outcome')
   const { can } = useAuth()
-  const [filter, setFilter] = useState<'alle' | DocumentStatus>('alle')
+  const filters = kind.tracking ? TRACKING_FILTERS : FILTERS
+  const [filterId, setFilterId] = useState('alle')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('documentDate,desc')
 
   /** What a mask opened from here returns to when it closes. */
   const origin = originState(kind.path, kind.plural)
 
+  const filter = filters.find((entry) => entry.id === filterId) ?? filters[0]
+  // The outcome travels in the query string and with it in the cache key, like every other
+  // filter; the server does the narrowing.
   const query = listQuery({
-    status: filter === 'alle' ? undefined : [filter],
+    status: filter.status === undefined ? undefined : [filter.status],
+    outcome: filter.outcome,
     page,
     size: PAGE_SIZE,
     sort,
@@ -123,7 +158,14 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       key: 'status',
       header: 'Status',
       width: 'w-[130px]',
-      render: (row) => <Badge tone={TONES[row.status]}>{statusLabel(row.status)}</Badge>,
+      // An issued offer wears its outcome, the way the head of its mask does. Drafts and
+      // cancelled documents read as everywhere else, and so does every other kind.
+      render: (row) =>
+        kind.tracking && row.status === 'FINALISED' && row.offerOutcome !== undefined ? (
+          <Badge tone={OUTCOME_TONES[row.offerOutcome]}>{outcomeLabel(row.offerOutcome)}</Badge>
+        ) : (
+          <Badge tone={TONES[row.status]}>{statusLabel(row.status)}</Badge>
+        ),
     },
     {
       key: 'net',
@@ -223,17 +265,17 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       <div className="px-8 pb-12">
         <Panel padded={false}>
           <div className="flex flex-wrap items-center gap-1 border-b border-line-subtle px-5 py-3">
-            {FILTERS.map((entry) => (
+            {filters.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
-                aria-pressed={filter === entry.id}
+                aria-pressed={filter.id === entry.id}
                 onClick={() => {
-                  setFilter(entry.id)
+                  setFilterId(entry.id)
                   setPage(0)
                 }}
                 className={`h-8 rounded-[var(--radius-sm)] px-3 text-[13px] transition-colors ${
-                  filter === entry.id
+                  filter.id === entry.id
                     ? 'bg-sunken text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'
                 }`}
@@ -260,14 +302,16 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
             error={documents.error}
             empty={
               <EmptyState
-                title={filter === 'alle' ? `Noch keine ${kind.plural}` : 'Nichts in diesem Status'}
+                title={
+                  filter.id === 'alle' ? `Noch keine ${kind.plural}` : 'Nichts in diesem Status'
+                }
                 description={
-                  filter === 'alle'
+                  filter.id === 'alle'
                     ? 'Ein Beleg beginnt als Entwurf und bekommt seine Nummer erst beim Ausstellen.'
                     : 'Ein anderer Filter zeigt vielleicht mehr.'
                 }
               >
-                {filter === 'alle' && can(kind.rights.write) && (
+                {filter.id === 'alle' && can(kind.rights.write) && (
                   <LinkButton to={`${kind.path}/neu`} state={origin}>
                     <Plus size={15} aria-hidden />
                     {kind.singular} erfassen

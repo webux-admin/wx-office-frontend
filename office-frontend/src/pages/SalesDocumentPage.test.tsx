@@ -1,0 +1,305 @@
+// @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../auth/authContext'
+import { OFFER_KIND, ORDER_KIND } from '../lib/salesDocument'
+import type { OfferOutcome, OfferTracking, SalesDocument } from '../lib/types'
+import { SalesDocumentPage } from './SalesDocumentPage'
+
+// React refuses to run act() without this flag; jsdom has no bundler that would set it.
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const TENANT = 1
+const OFFER_BASE = `/api/tenants/${TENANT}/offers/42`
+
+/** A session that may work on offers and write orders, which is all the mask asks of it. */
+const PERMISSIONS = [
+  'OFFER_READ',
+  'OFFER_WRITE',
+  'OFFER_FINALISE',
+  'ORDER_READ',
+  'ORDER_WRITE',
+]
+
+const SESSION: AuthState = {
+  user: {
+    userId: 1,
+    username: 'muster',
+    activeTenantId: TENANT,
+    superuser: false,
+    tenants: [],
+    permissions: PERMISSIONS,
+  },
+  loading: false,
+  signIn: () => Promise.reject(new Error('nicht gebraucht')),
+  signOut: () => Promise.resolve(),
+  switchTenant: () => Promise.resolve(),
+  can: (permission: string) => PERMISSIONS.includes(permission),
+}
+
+const CATALOGUES = {
+  'document-status': [
+    { code: 'DRAFT', name: 'Entwurf' },
+    { code: 'FINALISED', name: 'Finalisiert' },
+    { code: 'CANCELLED', name: 'Storniert' },
+  ],
+  'offer-outcome': [
+    { code: 'OPEN', name: 'Offen' },
+    { code: 'ACCEPTED', name: 'Angenommen' },
+    { code: 'DECLINED', name: 'Abgelehnt' },
+  ],
+  'offer-decline-reason': [
+    { code: 'PRICE', name: 'Preis' },
+    { code: 'COMPETITOR', name: 'Konkurrenz' },
+  ],
+}
+
+/** An issued document of the given category, with one charged line. */
+function issued(category: 'OFFER' | 'ORDER'): SalesDocument {
+  return {
+    id: 42,
+    documentTypeId: 1,
+    category,
+    status: 'FINALISED',
+    documentNumber: category === 'OFFER' ? 'OF-2026-0001' : 'AU-2026-0001',
+    documentDate: '2026-08-01',
+    finalisedAt: '2026-08-01T10:00:00Z',
+    partnerId: 3,
+    recipient: { name: 'Muster AG' },
+    currency: 'CHF',
+    totalNet: 1000,
+    totalVat: 81,
+    totalGross: 1081,
+    subtotalsIncludeVat: false,
+    pricesIncludeVat: false,
+    lines: [
+      {
+        lineNumber: 1,
+        kind: 'ITEM',
+        description: 'Wartung',
+        quantity: 1,
+        unitPrice: 1000,
+        priceIncludesVat: false,
+        lineNet: 1000,
+        lineVat: 81,
+        lineGross: 1081,
+      },
+    ],
+  }
+}
+
+let container: HTMLDivElement
+let root: Root
+/** Every request the mask sent, in order. */
+let sent: { url: string; method: string; body: unknown }[]
+/** The follow-up state the stub holds, rewritten by the outcome endpoint like the backend. */
+let trackingState: OfferTracking
+
+function json(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+}
+
+function stubFetch() {
+  sent = []
+  trackingState = { outcome: 'OPEN' }
+  vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
+    const method = options?.method ?? 'GET'
+    const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
+    sent.push({ url, method, body })
+
+    if (url.endsWith('/tracking/outcome') && method === 'PUT') {
+      const asked = body as { outcome: OfferOutcome; reasonCode?: string; note?: string }
+      trackingState =
+        asked.outcome === 'OPEN'
+          ? { outcome: 'OPEN' }
+          : {
+              outcome: asked.outcome,
+              outcomeAt: '2026-08-23T10:00:00Z',
+              outcomeBy: 'muster',
+              winProbability: asked.outcome === 'ACCEPTED' ? 100 : 0,
+              declinedReasonCode: asked.reasonCode,
+              declinedNote: asked.note,
+            }
+      return json(trackingState)
+    }
+    if (url.endsWith('/tracking')) return json(trackingState)
+    if (url.includes('/reminders')) return json([])
+    if (url.includes('/status-trail')) return json([])
+    if (url.includes('/printouts') || url.includes('/printers')) return json([])
+    if (url.includes('/catalogues')) return json(CATALOGUES)
+    if (url.includes('/offers/42')) return json(issued('OFFER'))
+    if (url.includes('/orders/42')) return json(issued('ORDER'))
+    return json([])
+  })
+}
+
+beforeEach(() => {
+  stubFetch()
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  container.remove()
+  vi.unstubAllGlobals()
+})
+
+async function settle() {
+  for (let round = 0; round < 5; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+}
+
+async function render(path: string, state?: unknown): Promise<void> {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  await act(async () => {
+    root.render(
+      <MemoryRouter
+        initialEntries={[state === undefined ? path : { pathname: path, state }]}
+      >
+        <AuthContext.Provider value={SESSION}>
+          <QueryClientProvider client={client}>
+            <Routes>
+              <Route path="/offerten/:id" element={<SalesDocumentPage kind={OFFER_KIND} />} />
+              <Route path="/auftraege/:id" element={<SalesDocumentPage kind={ORDER_KIND} />} />
+            </Routes>
+          </QueryClientProvider>
+        </AuthContext.Provider>
+      </MemoryRouter>,
+    )
+  })
+  await settle()
+}
+
+function text(): string {
+  return document.body.textContent ?? ''
+}
+
+function buttonNamed(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button')].find(
+    (button) => button.textContent?.trim() === label,
+  )
+  if (found === undefined) throw new Error(`no button named ${label}`)
+  return found as HTMLButtonElement
+}
+
+async function press(label: string) {
+  await act(async () => {
+    buttonNamed(label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  await settle()
+}
+
+function byLabel<T extends HTMLElement>(label: string): T {
+  const found = [...document.querySelectorAll('label')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  const control = found?.htmlFor ? document.getElementById(found.htmlFor) : null
+  if (!control) throw new Error(`Kein Feld mit der Beschriftung "${label}"`)
+  return control as T
+}
+
+/** Types into a field the way a browser does: set the value, then fire the native event. */
+function type(control: HTMLInputElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setValue?.call(control, value)
+  act(() => {
+    control.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+function choose(control: HTMLSelectElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+  setValue?.call(control, value)
+  act(() => {
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function outcomeWrites(): { url: string; method: string; body: unknown }[] {
+  return sent.filter(
+    (call) => call.method === 'PUT' && call.url === `${OFFER_BASE}/tracking/outcome`,
+  )
+}
+
+describe('SalesDocumentPage', () => {
+  it('salesDocumentPageMarksAnOfferAcceptedWithOneClickTest', async () => {
+    await render('/offerten/42')
+    expect(text()).toContain('Offen')
+
+    await press('Angenommen')
+
+    expect(outcomeWrites()).toHaveLength(1)
+    expect(outcomeWrites()[0].body).toEqual({ outcome: 'ACCEPTED' })
+    // The mask reads the state again and shows the answer: the badge wears the outcome, the
+    // one-click buttons give way to undoing the mark and writing the order.
+    expect(text()).toContain('Angenommen')
+    expect(buttonNamed('Markierung aufheben')).toBeDefined()
+    expect(buttonNamed('Auftrag erstellen…')).toBeDefined()
+    expect(() => buttonNamed('Angenommen')).toThrow()
+  })
+
+  it('salesDocumentPageDeclinesAnOfferWithReasonAndNoteTest', async () => {
+    await render('/offerten/42')
+
+    await press('Abgelehnt')
+    choose(byLabel<HTMLSelectElement>('Grund'), 'PRICE')
+    type(byLabel<HTMLInputElement>('Notiz'), 'Preis zu hoch')
+    await press('Als abgelehnt markieren')
+
+    expect(outcomeWrites()).toHaveLength(1)
+    expect(outcomeWrites()[0].body).toEqual({
+      outcome: 'DECLINED',
+      reasonCode: 'PRICE',
+      note: 'Preis zu hoch',
+    })
+    expect(text()).toContain('Abgelehnt')
+    expect(buttonNamed('Markierung aufheben')).toBeDefined()
+  })
+
+  it('salesDocumentPageShowsTheFollowUpRegisterForOffersTest', async () => {
+    await render('/offerten/42')
+
+    expect(document.querySelector('[role="tablist"]')).not.toBeNull()
+    expect(text()).toContain('Nachfassen')
+  })
+
+  it('salesDocumentPageShowsNoRegisterOnTheOrderMaskTest', async () => {
+    await render('/auftraege/42')
+
+    expect(document.querySelector('[role="tablist"]')).toBeNull()
+    expect(text()).not.toContain('Nachfassen')
+    // The order mask never asks for a follow-up state that does not exist for it.
+    expect(sent.some((call) => call.url.includes('/orders/42/tracking'))).toBe(false)
+  })
+
+  it('salesDocumentPageOpensTheFollowUpRegisterFromTheLinkStateTest', async () => {
+    await render('/offerten/42', { tab: 'nachfassen' })
+
+    expect(text()).toContain('Verfolgung')
+    expect(text()).toContain('Erinnerungen')
+    expect(text()).toContain('Gewinnwahrscheinlichkeit')
+  })
+
+  it('salesDocumentPageSwitchesToTheFollowUpRegisterTest', async () => {
+    await render('/offerten/42')
+    expect(text()).not.toContain('Verfolgung')
+
+    await press('Nachfassen')
+
+    expect(text()).toContain('Verfolgung')
+    expect(text()).toContain('Erinnerungen')
+  })
+})

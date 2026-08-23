@@ -7,6 +7,7 @@ import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { Tabs } from '../components/Tabs'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
@@ -14,8 +15,10 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
-import { originOf } from '../lib/origin'
+import { originOf, originState } from '../lib/origin'
 import {
+  ORDER_KIND,
+  offerTrackingKey,
   salesDocumentKey,
   salesDocumentListKey,
   salesDocumentTrailKey,
@@ -25,8 +28,12 @@ import type {
   DocumentParty,
   DocumentStatus,
   DocumentStatusEntry,
+  DocumentType,
+  OfferOutcome,
+  OfferTracking,
   SalesDocument,
 } from '../lib/types'
+import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { ChangePartnerDialog } from './document/ChangePartnerDialog'
 import { NewDocumentMask } from './document/NewDocumentMask'
@@ -34,6 +41,9 @@ import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
 import { DocumentLines } from './document/DocumentLines'
 import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
 import { DocumentPrintouts } from './document/DocumentPrintouts'
+import { OfferReminders } from './document/OfferReminders'
+import { OfferTrackingPanel } from './document/OfferTrackingPanel'
+import { TakeoverDialog } from './document/TakeoverDialog'
 import { headerKey, paymentKey } from './document/headerForm'
 import { recipientNote } from './document/recipientNote'
 import {
@@ -43,11 +53,38 @@ import {
   type StructureLine,
 } from './document/lineForm'
 
+/** The two registers of a mask whose kind is followed up (ADR-0010). */
+type DocumentTab = 'beleg' | 'nachfassen'
+
+/**
+ * Reads the register a link asked the mask to open on.
+ *
+ * <p>Same route as the origin: the register is state of the screen, not of the address
+ * (ADR-0005), so a link that means the follow-up names it in the router state. Every field
+ * is checked rather than trusted, because history entries outlive versions of this code.
+ */
+function initialTabOf(state: unknown): DocumentTab {
+  if (typeof state === 'object' && state !== null && 'tab' in state
+    && state.tab === 'nachfassen') {
+    return 'nachfassen'
+  }
+  return 'beleg'
+}
+
+/** Badge tone of each outcome of an issued offer. */
+const OUTCOME_TONES: Record<OfferOutcome, 'accent' | 'success' | 'danger'> = {
+  OPEN: 'accent',
+  ACCEPTED: 'success',
+  DECLINED: 'danger',
+}
+
 /**
  * One sales document: its positions, its texts and the way from draft to issued.
  *
  * <p>Offerte, Auftrag, Lieferschein and Rechnung share this mask. The kind carries what
  * differs between them — resource, rights and wording — so that four screens stay one screen.
+ * A kind that is followed up gains a second register with the outcome, the win probability
+ * and the reminders; the other kinds show no register strip at all.
  */
 export function SalesDocumentPage({ kind }: { kind: SalesDocumentKind }) {
   return (
@@ -107,12 +144,14 @@ function DocumentMask({
   refreshing: boolean
 }) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
+  const outcomeLabel = useCatalogueLabel(tenantId, 'offer-outcome')
   const { can } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const locationState: unknown = useLocation().state
   // Falls back to the list of this kind when the mask was opened without naming a screen to
   // return to.
-  const origin = originOf(useLocation().state, { from: kind.path, label: kind.plural })
+  const origin = originOf(locationState, { from: kind.path, label: kind.plural })
 
   const [cancelling, setCancelling] = useState(false)
   const [reopening, setReopening] = useState(false)
@@ -123,6 +162,13 @@ function DocumentMask({
   // the reason for taking a document back, and a leftover text in the other box invites
   // sending the wrong one.
   const [reopenReason, setReopenReason] = useState('')
+  const [tab, setTab] = useState<DocumentTab>(() =>
+    kind.tracking ? initialTabOf(locationState) : 'beleg',
+  )
+  const [declining, setDeclining] = useState(false)
+  const [declineReason, setDeclineReason] = useState('')
+  const [declineNote, setDeclineNote] = useState('')
+  const [creatingOrder, setCreatingOrder] = useState(false)
 
   const editable = document.status === 'DRAFT' && can(kind.rights.write)
   // Two reasons keep a section read-only, and they are not the same thing. An issued
@@ -140,6 +186,62 @@ function DocumentMask({
     void queryClient.invalidateQueries({ queryKey: salesDocumentKey(kind, tenantId) })
     void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
     void queryClient.invalidateQueries({ queryKey: salesDocumentTrailKey(kind, tenantId) })
+    // The follow-up state hangs on the document: taking it back resets the outcome, and a
+    // changed position moves the weighted amount. Cheaper to mark it stale once here than to
+    // reason about which of the mutations above can touch it.
+    if (kind.tracking) {
+      void queryClient.invalidateQueries({ queryKey: offerTrackingKey(tenantId, document.id) })
+    }
+  }
+
+  // Only a kind that is followed up asks; for the others the query never runs and the mask
+  // stays what it was.
+  const tracking = useQuery({
+    queryKey: offerTrackingKey(tenantId, document.id),
+    queryFn: () => api.get<OfferTracking>(`${base}/tracking`),
+    enabled: kind.tracking,
+  })
+  const outcome = tracking.data?.outcome
+
+  const setOutcome = useMutation({
+    mutationFn: (body: { outcome: OfferOutcome; reasonCode?: string; note?: string }) =>
+      api.put<OfferTracking>(`${base}/tracking/outcome`, body),
+    onSuccess: () => {
+      // The list shows the outcome as well, so the document caches go stale with it.
+      refresh()
+      setDeclining(false)
+      setDeclineReason('')
+      setDeclineNote('')
+    },
+  })
+
+  // The kinds of the Auftrag, for handing an accepted offer over. Asked only while the
+  // button that needs them is on screen, and only with the right the catalogue demands.
+  const orderTypes = useQuery({
+    queryKey: ['document-types', tenantId],
+    queryFn: () => api.get<DocumentType[]>(`/api/tenants/${tenantId}/document-types`),
+    enabled:
+      kind.tracking &&
+      outcome === 'ACCEPTED' &&
+      can(kind.rights.write) &&
+      can(ORDER_KIND.rights.write) &&
+      can('DOCUMENT_TYPE_READ'),
+  })
+  const activeOrderTypes = (orderTypes.data ?? []).filter(
+    (type) => type.category === ORDER_KIND.category && type.active,
+  )
+
+  // The same way the list opens what it wrote: mark the order list stale, then walk into the
+  // new draft. The way back leads to this offer, which is where the order came from.
+  const openCreatedOrder = (created: SalesDocument) => {
+    setCreatingOrder(false)
+    void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(ORDER_KIND, tenantId) })
+    void navigate(`${ORDER_KIND.path}/${created.id}`, {
+      state: originState(
+        `${kind.path}/${document.id}`,
+        document.documentNumber ?? `Entwurf ${document.id}`,
+      ),
+    })
   }
 
   const addProductLine = useMutation({
@@ -269,17 +371,24 @@ function DocumentMask({
         back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <Badge
-              tone={
-                document.status === 'CANCELLED'
-                  ? 'danger'
-                  : document.status === 'FINALISED'
-                    ? 'accent'
-                    : 'muted'
-              }
-            >
-              {statusLabel(document.status)}
-            </Badge>
+            {/* An issued offer wears its outcome instead of the bare status: «Finalisiert»
+                says nothing about the question this mask is opened for. Cancelled and draft
+                read as everywhere else. */}
+            {kind.tracking && document.status === 'FINALISED' && outcome !== undefined ? (
+              <Badge tone={OUTCOME_TONES[outcome]}>{outcomeLabel(outcome)}</Badge>
+            ) : (
+              <Badge
+                tone={
+                  document.status === 'CANCELLED'
+                    ? 'danger'
+                    : document.status === 'FINALISED'
+                      ? 'accent'
+                      : 'muted'
+                }
+              >
+                {statusLabel(document.status)}
+              </Badge>
+            )}
             <span>{formatDate(document.documentDate)}</span>
             <span className="text-text-tertiary">·</span>
             <span>{document.recipient?.name ?? `Kunde ${document.partnerId}`}</span>
@@ -308,6 +417,51 @@ function DocumentMask({
             Stornieren
           </Button>
         )}
+        {/* The mark is undone the way it was set: one click, no dialog. The contract allows
+            it in every status, so a cancelled offer can shed a mark that no longer holds. */}
+        {kind.tracking &&
+          can(kind.rights.write) &&
+          (outcome === 'ACCEPTED' || outcome === 'DECLINED') && (
+            <Button
+              variant="secondary"
+              onClick={() => setOutcome.mutate({ outcome: 'OPEN' })}
+              busy={setOutcome.isPending}
+            >
+              Markierung aufheben
+            </Button>
+          )}
+        {kind.tracking &&
+          outcome === 'ACCEPTED' &&
+          can(kind.rights.write) &&
+          can(ORDER_KIND.rights.write) && (
+            <Button variant="secondary" onClick={() => setCreatingOrder(true)}>
+              Auftrag erstellen…
+            </Button>
+          )}
+        {/* Accepting is the everyday answer and costs one click, like issuing. Declining
+            opens a small dialog, because the reason is worth a moment. */}
+        {kind.tracking &&
+          document.status === 'FINALISED' &&
+          outcome === 'OPEN' &&
+          can(kind.rights.write) && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setOutcome.reset()
+                  setDeclining(true)
+                }}
+              >
+                Abgelehnt
+              </Button>
+              <Button
+                onClick={() => setOutcome.mutate({ outcome: 'ACCEPTED' })}
+                busy={setOutcome.isPending}
+              >
+                Angenommen
+              </Button>
+            </>
+          )}
         {document.status === 'DRAFT' && can(kind.rights.finalise) && (
           <Button
             onClick={() => finalise.mutate()}
@@ -319,10 +473,37 @@ function DocumentMask({
         )}
       </PageHeader>
 
-      <div className="grid gap-6 px-8 pb-12">
-        {finalise.error !== null && <ErrorNotice error={finalise.error} />}
-        {print.error !== null && <ErrorNotice error={print.error} />}
+      <div className="px-8 pb-12">
+        {(finalise.error !== null ||
+          print.error !== null ||
+          (setOutcome.error !== null && !declining)) && (
+          <div className="mb-6 grid gap-4">
+            {finalise.error !== null && <ErrorNotice error={finalise.error} />}
+            {print.error !== null && <ErrorNotice error={print.error} />}
+            {/* While the decline dialog is open it reports the failure itself. */}
+            {setOutcome.error !== null && !declining && (
+              <ErrorNotice error={setOutcome.error} />
+            )}
+          </div>
+        )}
 
+        {kind.tracking && (
+          <Tabs
+            tabs={[
+              { id: 'beleg', label: 'Beleg' },
+              { id: 'nachfassen', label: 'Nachfassen' },
+            ]}
+            active={tab}
+            onChange={setTab}
+            label="Register"
+          />
+        )}
+
+        {/* Without tracking there are no tabs, so the body must not depend on the tab
+            state: the mask instance survives a route change between the categories, and a
+            leftover 'nachfassen' from an offer would blank an order otherwise. */}
+        {(!kind.tracking || tab === 'beleg') && (
+        <div className="grid gap-6">
         <DocumentLines
           tenantId={tenantId}
           kind={kind}
@@ -409,6 +590,55 @@ function DocumentMask({
             <StatusTrail tenantId={tenantId} kind={kind} documentId={document.id} />
           </div>
         </div>
+        </div>
+        )}
+
+        {kind.tracking &&
+          tab === 'nachfassen' &&
+          (tracking.isPending ? (
+            <LoadingBlock label="Nachfassen wird geladen" />
+          ) : tracking.error !== null ? (
+            <ErrorNotice error={tracking.error} />
+          ) : tracking.data !== undefined ? (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="grid gap-6 self-start">
+                {/* Keyed by what is stored, like the header sections: what was typed has to
+                    give way when a save or another user rewrites the state underneath it. */}
+                <OfferTrackingPanel
+                  key={`${tracking.data.outcome}-${tracking.data.winProbability ?? ''}`}
+                  tenantId={tenantId}
+                  base={base}
+                  tracking={tracking.data}
+                  currency={document.currency}
+                  editable={
+                    tracking.data.outcome === 'OPEN' &&
+                    document.status !== 'CANCELLED' &&
+                    can(kind.rights.write)
+                  }
+                  readOnlyNote={
+                    can(kind.rights.write)
+                      ? undefined
+                      : `Zum Ändern fehlt das Recht ${kind.rights.write}.`
+                  }
+                  onChanged={refresh}
+                />
+              </div>
+              <div className="grid gap-6 self-start">
+                <OfferReminders
+                  tenantId={tenantId}
+                  base={base}
+                  documentId={document.id}
+                  mayWrite={can(kind.rights.write)}
+                  cancelled={document.status === 'CANCELLED'}
+                  readOnlyNote={
+                    can(kind.rights.write)
+                      ? undefined
+                      : `Zum Ändern fehlt das Recht ${kind.rights.write}.`
+                  }
+                />
+              </div>
+            </div>
+          ) : null)}
       </div>
 
       <ChangePartnerDialog
@@ -517,6 +747,65 @@ function DocumentMask({
           </div>
         )}
       </Dialog>
+
+      {kind.tracking && (
+        <Dialog
+          open={declining}
+          onClose={() => setDeclining(false)}
+          title={`${kind.singular} als abgelehnt markieren`}
+          description="Grund und Notiz sind freiwillig und bleiben an der Offerte."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeclining(false)}>
+                Abbrechen
+              </Button>
+              <Button
+                onClick={() =>
+                  setOutcome.mutate({
+                    outcome: 'DECLINED',
+                    reasonCode: declineReason === '' ? undefined : declineReason,
+                    note: declineNote.trim() === '' ? undefined : declineNote.trim(),
+                  })
+                }
+                busy={setOutcome.isPending}
+              >
+                Als abgelehnt markieren
+              </Button>
+            </>
+          }
+        >
+          <div className="grid gap-4">
+            <CatalogueSelect
+              tenantId={tenantId}
+              catalogue="offer-decline-reason"
+              label="Grund"
+              value={declineReason}
+              onChange={setDeclineReason}
+              emptyLabel="Ohne Grund"
+            />
+            <TextField
+              label="Notiz"
+              value={declineNote}
+              onChange={(event) => setDeclineNote(event.target.value)}
+              maxLength={255}
+              hint="Bleibt an der Offerte stehen, bis die Markierung aufgehoben wird."
+            />
+            {setOutcome.error !== null && <ErrorNotice error={setOutcome.error} />}
+          </div>
+        </Dialog>
+      )}
+
+      {kind.tracking && (
+        <TakeoverDialog
+          tenantId={tenantId}
+          kind={ORDER_KIND}
+          open={creatingOrder}
+          onClose={() => setCreatingOrder(false)}
+          documentTypes={activeOrderTypes}
+          preselectedSourceId={document.id}
+          onCreated={openCreatedOrder}
+        />
+      )}
     </>
   )
 }

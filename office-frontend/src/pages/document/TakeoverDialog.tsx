@@ -19,6 +19,11 @@ type TakeoverDialogProps = {
   onClose: () => void
   /** The kinds of that document which may be written, in the order the mask offers them. */
   documentTypes: DocumentType[]
+  /**
+   * Document preselected as the source, for a screen that already knows it — the accepted
+   * offer an order is written from. It counts only once the backend lists it as a candidate.
+   */
+  preselectedSourceId?: number
   onCreated: (created: SalesDocument) => void
 }
 
@@ -38,11 +43,12 @@ export function TakeoverDialog({
   open,
   onClose,
   documentTypes,
+  preselectedSourceId,
   onCreated,
 }: TakeoverDialogProps) {
   const { can } = useAuth()
   const [documentTypeId, setDocumentTypeId] = useState('')
-  const [sourceId, setSourceId] = useState<number | null>(null)
+  const [sourceId, setSourceId] = useState<number | null>(preselectedSourceId ?? null)
 
   // The first kind that names a predecessor at all: picking one that cannot be taken over
   // would show an empty list and look broken.
@@ -62,23 +68,27 @@ export function TakeoverDialog({
     enabled: open && chosenType !== undefined,
   })
 
+  const rows = candidates.data ?? []
+  // A preselected document counts only once it stands in the list: the kinds chosen may not
+  // name its type as a predecessor, and creating from a document the backend never offered
+  // would only collect the refusal the list exists to prevent.
+  const selectedId = rows.some((row) => row.id === sourceId) ? sourceId : null
+  const chosen = rows.find((row) => row.id === selectedId)
+
   const create = useMutation({
     mutationFn: () =>
       api.post<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}/from-predecessor`, {
         documentTypeId: chosenType?.id,
-        sourceId,
+        sourceId: selectedId,
       }),
     onSuccess: onCreated,
   })
 
   const close = () => {
-    setSourceId(null)
+    setSourceId(preselectedSourceId ?? null)
     create.reset()
     onClose()
   }
-
-  const rows = candidates.data ?? []
-  const chosen = rows.find((row) => row.id === sourceId)
 
   /** The document being written, named the way a sentence needs it: «ein Auftrag». */
   const followUp = `${indefiniteArticle(kind, 'nominative')} ${kind.singular}`
@@ -98,7 +108,7 @@ export function TakeoverDialog({
           <Button
             onClick={() => create.mutate()}
             busy={create.isPending}
-            disabled={sourceId === null || chosenType === undefined}
+            disabled={selectedId === null || chosenType === undefined}
           >
             Übernehmen
           </Button>
@@ -158,9 +168,9 @@ export function TakeoverDialog({
                       <button
                         type="button"
                         onClick={() => setSourceId(row.id)}
-                        aria-pressed={row.id === sourceId}
+                        aria-pressed={row.id === selectedId}
                         className={`flex w-full items-center gap-3 border-b border-line-subtle px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                          row.id === sourceId ? 'bg-sunken' : 'hover:bg-sunken/60'
+                          row.id === selectedId ? 'bg-sunken' : 'hover:bg-sunken/60'
                         }`}
                       >
                         <span className="w-[110px] shrink-0 font-mono text-[12px]">

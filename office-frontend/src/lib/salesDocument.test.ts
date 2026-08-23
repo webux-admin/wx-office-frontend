@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  OFFER_KIND,
   ORDER_KIND,
   SALES_DOCUMENT_CACHE_ROOTS,
   SALES_DOCUMENT_KINDS,
+  dueOfferRemindersKey,
   indefiniteArticle,
   newDocumentTitle,
+  offerRemindersKey,
+  offerTrackingKey,
   salesDocumentFor,
   salesDocumentKey,
   salesDocumentListKey,
@@ -98,6 +102,13 @@ describe('SALES_DOCUMENT_KINDS', () => {
   it('salesDocumentKindsCarryTheRightsOfTheBackendTest', () => {
     for (const entry of SALES_DOCUMENT_KINDS) {
       expect(entry.rights).toEqual(RIGHTS_OF_THE_BACKEND[entry.category])
+    }
+  })
+
+  /** Only an issued offer waits for an answer; the other three kinds are the answer. */
+  it('salesDocumentKindsTrackOnlyTheOfferTest', () => {
+    for (const entry of SALES_DOCUMENT_KINDS) {
+      expect(entry.tracking).toBe(entry.category === 'OFFER')
     }
   })
 })
@@ -245,6 +256,50 @@ describe('salesDocumentTrailKey', () => {
   })
 })
 
+describe('offerTrackingKey', () => {
+  it('offerTrackingKeyTest', () => {
+    expect(offerTrackingKey(7, 42)).toEqual(['offer-tracking', 7, 42])
+  })
+
+  it('offerTrackingKeyWithoutDocumentTest', () => {
+    expect(offerTrackingKey(7)).toEqual(['offer-tracking', 7])
+  })
+
+  /** What the mask invalidates has to reach what it cached, or nothing is ever refetched. */
+  it('offerTrackingKeyReachesOneDocumentTest', () => {
+    expect(reaches(offerTrackingKey(7), offerTrackingKey(7, 42))).toBe(true)
+  })
+
+  it('offerTrackingKeyStopsAtItsOwnTenantTest', () => {
+    expect(reaches(offerTrackingKey(7), offerTrackingKey(8, 42))).toBe(false)
+  })
+})
+
+describe('offerRemindersKey', () => {
+  it('offerRemindersKeyTest', () => {
+    expect(offerRemindersKey(7, 42)).toEqual(['offer-reminders', 7, 42])
+  })
+
+  it('offerRemindersKeyWithoutDocumentTest', () => {
+    expect(offerRemindersKey(7)).toEqual(['offer-reminders', 7])
+  })
+
+  it('offerRemindersKeyReachesOneDocumentTest', () => {
+    expect(reaches(offerRemindersKey(7), offerRemindersKey(7, 42))).toBe(true)
+  })
+})
+
+describe('dueOfferRemindersKey', () => {
+  it('dueOfferRemindersKeyTest', () => {
+    expect(dueOfferRemindersKey(7)).toEqual(['due-offer-reminders', 7])
+  })
+
+  /** The overview is opened before the tenant is known, and a key has to exist by then. */
+  it('dueOfferRemindersKeyWithoutTenantTest', () => {
+    expect(dueOfferRemindersKey(null)).toEqual(['due-offer-reminders', null])
+  })
+})
+
 describe('SALES_DOCUMENT_CACHE_ROOTS', () => {
   /**
    * The roots are what a screen without a kind of its own invalidates — the partner mask,
@@ -264,6 +319,15 @@ describe('SALES_DOCUMENT_CACHE_ROOTS', () => {
     }
   })
 
+  /** The follow-up caches show the partner as well, so a partner change reaches them too. */
+  it('salesDocumentCacheRootsReachTheFollowUpKeysTest', () => {
+    const cached = [offerTrackingKey(7, 42), offerRemindersKey(7, 42), dueOfferRemindersKey(7)]
+
+    for (const entry of cached) {
+      expect(SALES_DOCUMENT_CACHE_ROOTS.some((root) => reaches([root, 7], entry))).toBe(true)
+    }
+  })
+
   it('salesDocumentCacheRootsAreUniqueTest', () => {
     expect(new Set(SALES_DOCUMENT_CACHE_ROOTS).size).toBe(SALES_DOCUMENT_CACHE_ROOTS.length)
   })
@@ -273,5 +337,12 @@ describe('ORDER_KIND', () => {
   /** It is the entry of the table, not a second copy that could drift from it. */
   it('orderKindIsTheOneFromTheTableTest', () => {
     expect(ORDER_KIND).toBe(salesDocumentFor('ORDER'))
+  })
+})
+
+describe('OFFER_KIND', () => {
+  /** It is the entry of the table, not a second copy that could drift from it. */
+  it('offerKindIsTheOneFromTheTableTest', () => {
+    expect(OFFER_KIND).toBe(salesDocumentFor('OFFER'))
   })
 })

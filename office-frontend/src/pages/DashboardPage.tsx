@@ -19,16 +19,31 @@ import { useAuth } from '../auth/useAuth'
 import { NoTenantNotice } from '../layout/RequireTenant'
 import { useTenantId } from '../layout/useTenantId'
 import { api } from '../lib/api'
-import { formatAmount, formatCount, formatDate, formatLongDate } from '../lib/format'
+import {
+  formatAmount,
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatLongDate,
+} from '../lib/format'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery } from '../lib/paging'
 import {
+  OFFER_KIND,
   ORDER_KIND,
   SALES_DOCUMENT_KINDS,
+  dueOfferRemindersKey,
   salesDocumentListKey,
   type SalesDocumentKind,
 } from '../lib/salesDocument'
-import type { DocumentCategory, DocumentSummary, Page, Partner, PriceGroup } from '../lib/types'
+import type {
+  DocumentCategory,
+  DocumentSummary,
+  DueOfferReminder,
+  Page,
+  Partner,
+  PriceGroup,
+} from '../lib/types'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 
 /**
@@ -195,6 +210,14 @@ export function DashboardPage() {
     enabled: tenantId !== null && can('ORDER_READ'),
   })
 
+  // The due follow-up reminders of the signed-in user; the backend narrows to their own.
+  const dueReminders = useQuery({
+    queryKey: dueOfferRemindersKey(tenantId),
+    queryFn: () =>
+      api.get<DueOfferReminder[]>(`/api/tenants/${tenantId}/offers/reminders/due`),
+    enabled: tenantId !== null && can(OFFER_KIND.rights.read),
+  })
+
   const data: DashboardData = {
     customers: customers.data?.totalElements ?? 0,
     suppliers: suppliers.data?.totalElements ?? 0,
@@ -237,6 +260,10 @@ export function DashboardPage() {
             </div>
 
             <div className="mt-8 grid gap-8 lg:grid-cols-2">
+              <DueReminders
+                reminders={dueReminders.data ?? []}
+                loading={dueReminders.isPending}
+              />
               <RecentPartners
                 partners={(recentPartners.data ?? emptyPage<Partner>()).content}
                 loading={recentPartners.isPending}
@@ -324,6 +351,53 @@ function SalesDocumentTile({
         )
       }
     />
+  )
+}
+
+/**
+ * The follow-up reminders of the signed-in user that are due.
+ *
+ * <p>Only their own: a reminder is a personal note to call, not a work queue of the team.
+ * Every row is already due — that is what the endpoint answers — so the moment stands in the
+ * danger tone. The row leads straight onto the follow-up register of its offer.
+ */
+function DueReminders({
+  reminders,
+  loading,
+}: {
+  reminders: DueOfferReminder[]
+  loading: boolean
+}) {
+  if (loading || reminders.length === 0) return null
+
+  return (
+    <section className="border-t border-line-subtle pt-6">
+      <h2 className="text-overline text-text-tertiary">Nachfassen</h2>
+      <ul className="mt-3 divide-y divide-line-subtle">
+        {reminders.map((reminder) => (
+          <li key={reminder.reminderId}>
+            <Link
+              to={`${OFFER_KIND.path}/${reminder.documentId}`}
+              state={{ ...ORIGIN, tab: 'nachfassen' }}
+              className="flex items-center gap-4 py-2.5 transition-colors hover:text-accent-text"
+            >
+              <span className="w-[104px] shrink-0 font-mono text-[12px] text-text-tertiary">
+                {reminder.documentNumber ?? 'Entwurf'}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px]">
+                {reminder.partnerName ?? '-'}
+                {reminder.note && (
+                  <span className="text-text-secondary"> · {reminder.note}</span>
+                )}
+              </span>
+              <span className="shrink-0 text-[12px] text-danger">
+                {formatDateTime(reminder.dueAt)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
