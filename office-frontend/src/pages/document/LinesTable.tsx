@@ -30,8 +30,33 @@ const COLUMNS: { key: string; header: string; right: boolean; width: string }[] 
   { key: 'net', header: 'Netto', right: true, width: 'w-[120px]' },
 ]
 
-/** How many columns a row spans that has no figures of its own: everything but "Pos". */
-const VALUE_COLUMNS = COLUMNS.length - 1
+/**
+ * The columns this document actually needs.
+ *
+ * <p>A document without a single discount does not get a Rabatt column: an empty column is a
+ * question the reader has to answer for themselves, and the mask should say what the printed
+ * document will say.
+ *
+ * @param lines the lines of the document
+ * @returns the columns to draw, in the order they are printed
+ */
+function columnsFor(lines: readonly DocumentLine[]) {
+  return hasDiscount(lines) ? COLUMNS : COLUMNS.filter((column) => column.key !== 'discount')
+}
+
+/**
+ * Whether any line of the document carries a discount.
+ *
+ * @param lines the lines of the document
+ * @returns true as soon as one line was given one, in either of its two forms
+ */
+function hasDiscount(lines: readonly DocumentLine[]): boolean {
+  return lines.some(
+    (line) =>
+      (line.discountPercent !== undefined && line.discountPercent !== 0) ||
+      (line.discountAmount !== undefined && line.discountAmount !== 0),
+  )
+}
 
 /** How the grip of a line is named, for the reader and for the focus. */
 function handleLabel(position: number): string {
@@ -226,7 +251,10 @@ export function LinesTable({
       </td>
     ) : null
 
-  const totalSpan = VALUE_COLUMNS + (editable ? 1 : 0)
+  const columns = columnsFor(lines)
+  // Everything but "Pos": the span a row uses that has no figures of its own.
+  const valueColumns = columns.length - 1
+  const totalSpan = valueColumns + (editable ? 1 : 0)
 
   return (
     <div className="overflow-x-auto">
@@ -234,7 +262,7 @@ export function LinesTable({
         <thead>
           <tr className="border-b border-line-subtle">
             {editable && <th scope="col" className={`${CELL} ${HANDLE_COLUMN}`} />}
-            {COLUMNS.map((column) => (
+            {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
@@ -282,6 +310,8 @@ export function LinesTable({
                 currency={document.currency}
                 subtotalsIncludeVat={document.subtotalsIncludeVat}
                 kindLabel={kindLabel}
+                valueColumns={valueColumns}
+                showsDiscount={columns.some((column) => column.key === 'discount')}
               />
               {actionsOf(line)}
             </tr>
@@ -350,6 +380,8 @@ function LineCells({
   currency,
   subtotalsIncludeVat,
   kindLabel,
+  valueColumns,
+  showsDiscount,
 }: {
   line: DocumentLine
   units: readonly SelectableEntry[]
@@ -358,10 +390,14 @@ function LineCells({
   /** Which of the two amounts a subtotal leads with, as the document itself is priced. */
   subtotalsIncludeVat: boolean
   kindLabel: (code: string) => string
+  /** How wide a row is that carries no figures, which follows from the columns drawn. */
+  valueColumns: number
+  /** False where no line of this document has a discount, so the column is not drawn. */
+  showsDiscount: boolean
 }) {
   if (line.kind === 'COMMENT') {
     return (
-      <td className={`${CELL} text-text-secondary`} colSpan={VALUE_COLUMNS}>
+      <td className={`${CELL} text-text-secondary`} colSpan={valueColumns}>
         {line.description}
       </td>
     )
@@ -369,7 +405,7 @@ function LineCells({
 
   if (line.kind === 'PAGE_BREAK') {
     return (
-      <td className={`${CELL} py-1.5`} colSpan={VALUE_COLUMNS}>
+      <td className={`${CELL} py-1.5`} colSpan={valueColumns}>
         <span className="flex items-center gap-3 text-[11px] text-text-tertiary">
           <span aria-hidden className="h-px flex-1 border-t border-dashed border-line" />
           {kindLabel('PAGE_BREAK')}
@@ -382,7 +418,7 @@ function LineCells({
   if (line.kind === 'SUBTOTAL') {
     return (
       <>
-        <td className={`${CELL} font-medium`} colSpan={VALUE_COLUMNS - 2}>
+        <td className={`${CELL} font-medium`} colSpan={valueColumns - 2}>
           {line.description ?? kindLabel('SUBTOTAL')}
         </td>
         <td className={NUMBER_CELL}>
@@ -427,9 +463,11 @@ function LineCells({
         <span className="text-text-tertiary">{shortLabelForCode(units, line.unit)}</span>
       </td>
       <td className={NUMBER_CELL}>{formatAmount(line.unitPrice)}</td>
-      <td className={NUMBER_CELL}>
-        <Discount line={line} currency={currency} />
-      </td>
+      {showsDiscount && (
+        <td className={NUMBER_CELL}>
+          <Discount line={line} currency={currency} />
+        </td>
+      )}
       <td className={NUMBER_CELL}>
         {line.vatRate === undefined ? '-' : formatPercent(line.vatRate)}
       </td>

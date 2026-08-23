@@ -169,8 +169,20 @@ describe('LinesTable', () => {
 
     const body = container.querySelector('tbody') as HTMLTableSectionElement
     const foot = container.querySelector('tfoot') as HTMLTableSectionElement
-    // A row carries the grip, the position, the six value columns and the controls; the
-    // amount of the first position and the net total have to end in the same column.
+    // A row carries the grip, the position, the five value columns and the controls; the
+    // amount of the first position and the net total have to end in the same column. Five,
+    // not six: without a discount anywhere the Rabatt column is not drawn.
+    expect(lastColumnOf(body.rows[0])).toBe(8)
+    expect(lastColumnOf(foot.rows[0])).toBe(7)
+    expect(foot.rows[0].cells[0].colSpan).toBe(6)
+  })
+
+  /** With a discount the column is back, and everything still lines up. */
+  it('linesTableTotalsStandUnderTheLineAmountsWithADiscountTest', async () => {
+    await draw(order([{ ...LINES[0], discountPercent: 5 }, LINES[1], LINES[2]]))
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    const foot = container.querySelector('tfoot') as HTMLTableSectionElement
     expect(lastColumnOf(body.rows[0])).toBe(9)
     expect(lastColumnOf(foot.rows[0])).toBe(8)
     expect(foot.rows[0].cells[0].colSpan).toBe(7)
@@ -180,7 +192,20 @@ describe('LinesTable', () => {
     await draw(order(LINES), false)
 
     const foot = container.querySelector('tfoot') as HTMLTableSectionElement
-    expect(lastColumnOf(foot.rows[0])).toBe(7)
+    expect(lastColumnOf(foot.rows[0])).toBe(6)
+  })
+
+  /** The point of it: an empty column is a question the reader has to answer themselves. */
+  it('linesTableHidesTheDiscountColumnWithoutADiscountTest', async () => {
+    await draw(order(LINES))
+
+    expect(text()).not.toContain('Rabatt')
+  })
+
+  it('linesTableShowsTheDiscountColumnWithADiscountTest', async () => {
+    await draw(order([{ ...LINES[0], discountPercent: 5 }, LINES[1], LINES[2]]))
+
+    expect(text()).toContain('Rabatt')
   })
 
   it('linesTableShowsTheCurrencyOnASubtotalTaxTest', async () => {
