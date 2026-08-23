@@ -41,6 +41,7 @@ const ProductPage = lazy(() => import('./pages/ProductPage').then((module) => ({
 const ProductFreeFieldPage = lazy(() => import('./pages/ProductFreeFieldPage').then((module) => ({ default: module.ProductFreeFieldPage })))
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
+const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
 const TenantPage = lazy(() => import('./pages/TenantPage').then((module) => ({ default: module.TenantPage })))
 const UserListPage = lazy(() => import('./pages/UserListPage').then((module) => ({ default: module.UserListPage })))
@@ -94,6 +95,8 @@ export default function App() {
 
                 <Route path="/preisgruppen" element={<PriceGroupPage />} />
                 <Route path="/preise-erfassen" element={<PriceEntryPage />} />
+
+                <Route path="/lagerorte" element={<StockLocationListPage />} />
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 

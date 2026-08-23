@@ -64,6 +64,7 @@ export type CatalogueName =
   | 'line-kind'
   | 'offer-outcome'
   | 'offer-decline-reason'
+  | 'negative-stock-policy'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -157,6 +158,13 @@ export type TenantAccess = {
   name: string
   /** Preselected after login. */
   isDefault: boolean
+  /**
+   * Whether this tenant runs the inventory module.
+   *
+   * <p>Travels with the session so the sidebar can hide the inventory of a tenant that does
+   * not use it, without a request of its own for a single flag.
+   */
+  inventoryEnabled?: boolean
 }
 
 /** Answer of /api/auth/login, /me and the tenant switch. */
@@ -250,6 +258,14 @@ export type Tenant = {
   defaultRevenueAccount?: string
   defaultRevenueAccountLabel?: string
   invoiceFooterText?: string
+  /**
+   * Whether this tenant uses the inventory module.
+   *
+   * <p>Off by default. It decides visibility together with the rights: switched off, the
+   * inventory disappears from the navigation even for somebody holding every inventory
+   * right, and writing endpoints answer 409 rather than 403.
+   */
+  inventoryEnabled?: boolean
   createdAt?: string
   changedAt?: string
 }
@@ -583,6 +599,31 @@ export type VatRatePeriod = {
   validFrom: string
   validTo?: string
   rate: number
+}
+
+// --- inventory ---------------------------------------------------------------
+
+/** What a location does when a booking would take its stock below zero. */
+export type NegativeStockPolicy = 'WARN' | 'BLOCK'
+
+/**
+ * A place a tenant keeps goods in, as `StockLocationDto` sends it.
+ *
+ * <p>Flat on purpose: `binHint` is free text («Regal C3») and takes the place of a hierarchy
+ * warehouse → zone → bin. `code` is read on create and never changes afterwards, and
+ * `defaultLocation` is set through its own endpoint because it takes the mark off another
+ * location.
+ */
+export type StockLocation = {
+  id?: number
+  code: string
+  name: string
+  binHint?: string
+  note?: string
+  active?: boolean
+  defaultLocation?: boolean
+  negativeStockPolicy?: NegativeStockPolicy
+  sortOrder?: number
 }
 
 // --- document ----------------------------------------------------------------

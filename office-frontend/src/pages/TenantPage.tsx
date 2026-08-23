@@ -82,6 +82,7 @@ type TenantForm = {
   cashRoundingIncrement: string
   defaultRevenueAccount: string
   invoiceFooterText: string
+  inventoryEnabled: boolean
 }
 
 function initial(tenant: Tenant | null): TenantForm {
@@ -116,6 +117,7 @@ function initial(tenant: Tenant | null): TenantForm {
     cashRoundingIncrement: tenant?.cashRoundingIncrement?.toString() ?? '0.05',
     defaultRevenueAccount: tenant?.defaultRevenueAccount ?? '',
     invoiceFooterText: tenant?.invoiceFooterText ?? '',
+    inventoryEnabled: tenant?.inventoryEnabled === true,
   }
 }
 
@@ -186,6 +188,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
       : undefined,
     defaultRevenueAccount: form.defaultRevenueAccount || undefined,
     invoiceFooterText: form.invoiceFooterText.trim() || undefined,
+    inventoryEnabled: form.inventoryEnabled,
   })
 
   const save = useMutation({
@@ -542,6 +545,18 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
               disabled={!mayWrite}
               maxLength={500}
               className="mt-4"
+            />
+
+            {/* Which modules this tenant runs. Guarded by TENANT_WRITE like the rest of the
+                settings and not by a right of its own: whoever switches a module on is
+                configuring the tenant, not working in the module (ADR-0060). */}
+            <CheckboxField
+              label="Lager verwenden"
+              hint="Blendet Lagerorte, Bestände und Bewegungen ein. Ohne Haken bleiben sie verborgen, auch für Benutzer mit Lagerrechten."
+              checked={form.inventoryEnabled}
+              onChange={(event) => set('inventoryEnabled', event.target.checked)}
+              disabled={!mayWrite}
+              className="mt-4 items-center"
             />
           </Panel>
         )}

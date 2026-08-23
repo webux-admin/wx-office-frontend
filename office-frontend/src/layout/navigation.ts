@@ -31,11 +31,21 @@ import {
   UserCog,
   UserRound,
   Users,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react'
 import { basicDataFor } from '../lib/basicData'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
+
+/**
+ * A module a tenant can switch off altogether.
+ *
+ * <p>Visibility then has two sources: the permission says **who** may, the switch says
+ * whether the tenant **runs** the module at all. Both have to agree — see ADR-0060 of the
+ * backend.
+ */
+export type NavModule = 'inventory'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -44,6 +54,8 @@ export type NavEntry = {
   href: string
   /** Left out for entries everyone may open, such as the overview. */
   permission?: string
+  /** Set where the entry belongs to a module the tenant may have switched off. */
+  module?: NavModule
 }
 
 /**
@@ -57,6 +69,8 @@ export type NavFolder = {
   label: string
   icon: LucideIcon
   permission?: string
+  /** Set where the whole folder belongs to a module the tenant may have switched off. */
+  module?: NavModule
   /** The screens inside. The folder itself is no route. */
   children: NavEntry[]
 }
@@ -257,6 +271,22 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
+        // What the tenant keeps and where. Only the setup lives here; the working screens
+        // of the inventory get their own group once there is stock to look at.
+        label: 'Lager',
+        icon: Warehouse,
+        module: 'inventory',
+        children: [
+          {
+            label: 'Lagerorte',
+            icon: Warehouse,
+            href: '/lagerorte',
+            permission: 'INVENTORY_READ',
+            module: 'inventory',
+          },
+        ],
+      },
+      {
         label: 'Produkte',
         icon: Package,
         children: [
@@ -274,6 +304,36 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ]
+
+/**
+ * The menu as one session sees it: filtered by permission and by the modules the tenant runs.
+ *
+ * <p>Filtering only tidies the sidebar. The backend refuses the request either way — with
+ * 403 for a missing permission and with 409 for a module that is switched off.
+ *
+ * @param can     answers whether the session holds a permission
+ * @param modules which switchable modules this tenant runs
+ * @returns the groups with something left in them, in the order they stand
+ */
+export function visibleNavGroups(
+  can: (permission: string) => boolean,
+  modules: Record<NavModule, boolean>,
+): NavGroup[] {
+  const allowed = (node: NavNode): NavNode | null => {
+    if (node.module !== undefined && !modules[node.module]) return null
+    if (!isFolder(node)) return !node.permission || can(node.permission) ? node : null
+    const children = node.children.filter(
+      (child) =>
+        (child.module === undefined || modules[child.module]) &&
+        (!child.permission || can(child.permission)),
+    )
+    return children.length === 0 ? null : { ...node, children }
+  }
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    entries: group.entries.map(allowed).filter((entry) => entry !== null),
+  })).filter((group) => group.entries.length > 0)
+}
 
 /**
  * Every entry of the menu, folders resolved.

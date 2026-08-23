@@ -18,10 +18,9 @@ import { initialsOf } from '../lib/format'
 import {
   flattenNav,
   isFolder,
-  NAV_GROUPS,
+  visibleNavGroups,
   type NavEntry,
   type NavFolder,
-  type NavNode,
 } from './navigation'
 import { useSidebarCollapsed } from './useSidebarCollapsed'
 import { useTheme } from './useTheme'
@@ -63,19 +62,15 @@ function Sidebar({
 }) {
   const { user, signOut, can } = useAuth()
 
-  /** A node the signed in user may open at all; a folder survives if anything inside does. */
-  const allowed = (node: NavNode): NavNode | null => {
-    if (!isFolder(node)) return !node.permission || can(node.permission) ? node : null
-    const children = node.children.filter((child) => !child.permission || can(child.permission))
-    return children.length === 0 ? null : { ...node, children }
-  }
+  // Which switchable modules this tenant runs. It travels with the session, so hiding the
+  // inventory of a tenant that does not use it costs no request.
+  const activeTenant = user?.tenants.find((tenant) => tenant.id === user.activeTenantId)
 
   // Groups the user may see at all. Computed up front so the rail knows which one is first
   // and can leave the separator off there.
-  const visibleGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    entries: group.entries.map(allowed).filter((entry) => entry !== null),
-  })).filter((group) => group.entries.length > 0)
+  const visibleGroups = visibleNavGroups(can, {
+    inventory: activeTenant?.inventoryEnabled === true,
+  })
 
   // The aside deliberately does not clip its overflow: folded, the tenant menu has to
   // reach past the rail. The scrolling navigation below clips on its own.

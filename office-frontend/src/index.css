@@ -112,6 +112,7 @@
   --color-module-lieferscheine: #1f5b63;
   --color-module-rechnungen: #3d4247;
   --color-module-produkte: #8a5a18;
+  --color-module-lager: #4a5f6b;
   --color-module-buchhaltung: #6a3b57;
   --color-module-zahlungen: #4a5d2a;
   --color-module-system: #4a3f6b;
@@ -180,6 +181,7 @@
     --color-module-lieferscheine: #2b7d87;
     --color-module-rechnungen: #5b6167;
     --color-module-produkte: #a8722a;
+    --color-module-lager: #6d8794;
     --color-module-buchhaltung: #8b5074;
     --color-module-zahlungen: #64803c;
     --color-module-system: #66599b;

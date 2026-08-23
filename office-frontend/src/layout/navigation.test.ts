@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
-import { flattenNav, isFolder, NAV_GROUPS, type NavEntry } from './navigation'
+import { flattenNav, isFolder, NAV_GROUPS, visibleNavGroups, type NavEntry } from './navigation'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -152,5 +152,57 @@ describe('flattenNav', () => {
 
   it('flattenNavWithEmptyListTest', () => {
     expect(flattenNav([])).toEqual([])
+  })
+})
+
+describe('visibleNavGroups', () => {
+  /** Every permission and every module: the menu stands as it is written. */
+  const all = () => true
+  const none = () => false
+
+  function hrefs(groups: ReturnType<typeof visibleNavGroups>): string[] {
+    return groups.flatMap((group) => flattenNav(group.entries)).map((entry) => entry.href)
+  }
+
+  it('visibleNavGroupsTest', () => {
+    const visible = visibleNavGroups(all, { inventory: true })
+
+    expect(hrefs(visible)).toContain('/lagerorte')
+    expect(hrefs(visible)).toContain('/kunden')
+  })
+
+  /**
+   * Recht UND Schalter: a tenant that does not run the inventory does not see it, however
+   * many inventory rights the session holds (ADR-0060 of the backend).
+   */
+  it('visibleNavGroupsHidesASwitchedOffModuleTest', () => {
+    const visible = visibleNavGroups(all, { inventory: false })
+
+    expect(hrefs(visible)).not.toContain('/lagerorte')
+    expect(hrefs(visible)).toContain('/kunden')
+  })
+
+  it('visibleNavGroupsHidesWhatThePermissionForbidsTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== 'INVENTORY_READ',
+      { inventory: true },
+    )
+
+    expect(hrefs(visible)).not.toContain('/lagerorte')
+  })
+
+  /** A folder whose last child fell away disappears rather than folding open on nothing. */
+  it('visibleNavGroupsDropsAnEmptyFolderTest', () => {
+    const visible = visibleNavGroups(all, { inventory: false })
+    const module = visible.find((group) => group.title === 'Moduleinstellungen')
+
+    expect(module?.entries.some((node) => isFolder(node) && node.label === 'Lager')).toBe(false)
+  })
+
+  it('visibleNavGroupsWithoutAnyPermissionTest', () => {
+    const visible = visibleNavGroups(none, { inventory: true })
+
+    // Only the overview is left: it is the one entry that asks for no permission.
+    expect(hrefs(visible)).toEqual(['/'])
   })
 })
