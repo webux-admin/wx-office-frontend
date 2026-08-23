@@ -97,6 +97,11 @@
   --color-on-accent: #ffffff;
   --color-success: #2f6b4f;
   --color-danger: #8c3023;
+  /* The same pair as `accent`/`accent-text`, for the rare button that carries a refusal:
+     `danger` is the foreground tone, `danger-surface` the fill under `on-accent`. A fill
+     has to stay dark in both appearances, which the foreground tone does not. */
+  --color-danger-surface: #8c3023;
+  --color-danger-surface-hover: #a03829;
 
   /* Behind what a search term matched. Tinted towards the accent, light enough that
      `text-primary` keeps its contrast on top of it. */
@@ -163,6 +168,9 @@
     --color-accent-text: #7cc9aa;
     --color-success: #4fa07c;
     --color-danger: #e08c7e;
+    /* Lifted, but nowhere near the foreground tone above: white has to hold on it. */
+    --color-danger-surface: #a3402f;
+    --color-danger-surface-hover: #b84a37;
 
     --color-highlight: #2c5b4a;
 

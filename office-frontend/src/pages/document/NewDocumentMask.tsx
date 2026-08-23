@@ -10,17 +10,18 @@ import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
 import { originOf } from '../../lib/origin'
-import { listQuery, PICKER_SIZE } from '../../lib/paging'
 import { parseDecimal, toIsoDate } from '../../lib/format'
 import {
   newDocumentTitle,
   salesDocumentListKey,
   type SalesDocumentKind,
 } from '../../lib/salesDocument'
-import type { DocumentDefaults, DocumentType, Page, Partner, SalesDocument } from '../../lib/types'
+import type { DocumentDefaults, DocumentType, SalesDocument } from '../../lib/types'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../../masterdata/PaymentTermSelect'
 import { useCatalogueLabel, usePaymentTerms } from '../../masterdata/useMasterData'
+import { PartnerQuickSearch } from './PartnerQuickSearch'
+import { partnerLabel } from './partnerSearch'
 
 /**
  * Starts a sales document of one kind.
@@ -54,6 +55,9 @@ export function NewDocumentMask({
   const usageLabel = useCatalogueLabel(tenantId, 'address-usage')
   const [documentTypeId, setDocumentTypeId] = useState('')
   const [partnerId, setPartnerId] = useState('')
+  // What stands in the search field: a term while somebody is looking, the name of the
+  // customer once one is taken over.
+  const [partnerTerm, setPartnerTerm] = useState('')
   const [documentDate, setDocumentDate] = useState(toIsoDate())
   const [exchangeRate, setExchangeRate] = useState('')
 
@@ -62,14 +66,6 @@ export function NewDocumentMask({
   const documentTypes = useQuery({
     queryKey: ['document-types', tenantId],
     queryFn: () => api.get<DocumentType[]>(`/api/tenants/${tenantId}/document-types`),
-  })
-
-  // A picker wants every entry, not a page, so it asks for the largest page the server
-  // allows. Beyond that a dropdown is the wrong control anyway and this needs a type-ahead.
-  const partnerQuery = listQuery({ role: 'customer', activeOnly: true, size: PICKER_SIZE })
-  const partners = useQuery({
-    queryKey: ['partners', tenantId, partnerQuery],
-    queryFn: () => api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${partnerQuery}`),
   })
 
   // The customer alone is enough to ask: without a kind of document the backend works out
@@ -170,8 +166,6 @@ export function NewDocumentMask({
   const activeTypes = (documentTypes.data ?? []).filter(
     (type) => type.category === kind.category && type.active,
   )
-  // The server already left the deactivated ones out; nothing is filtered again here.
-  const customers = partners.data?.content ?? []
   const incomplete = !chosen || documentTypeId === '' || documentDate === ''
   const recipient = defaults.data?.recipient
 
@@ -207,34 +201,29 @@ export function NewDocumentMask({
           <Panel title="Beleg">
             <div className="grid gap-4 sm:grid-cols-2">
               {/* First, and across the whole width: the customer decides everything below,
-                  the kind of document included (ADR-0054 of the backend). */}
-              <SelectField
-                label="Kunde"
-                value={partnerId}
-                onChange={(event) => {
-                  setPartnerId(event.target.value)
-                  // The kind belongs to the customer that was picked. Clearing it lets the
-                  // answer for the new customer fill it, instead of carrying the old one over.
-                  setDocumentTypeId('')
-                }}
-                disabled={partners.isPending}
-                className="sm:col-span-2"
-                hint={
-                  partners.isPending
-                    ? 'Kunden werden geladen ...'
-                    : partners.isSuccess && customers.length === 0
-                      ? 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.'
-                      : 'Belegart, Sprache, Währung und Zahlungskondition kommen von diesem Kunden.'
-                }
-              >
-                <option value="">Bitte wählen</option>
-                {customers.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.partnerNumber ? `${partner.partnerNumber} · ` : ''}
-                    {partner.name}
-                  </option>
-                ))}
-              </SelectField>
+                  the kind of document included (ADR-0054 of the backend). A type-ahead rather
+                  than a dropdown, because a tenant may have fifty thousand of them. */}
+              <div className="sm:col-span-2">
+                <PartnerQuickSearch
+                  tenantId={tenantId}
+                  term={partnerTerm}
+                  onTerm={(term) => {
+                    setPartnerTerm(term)
+                    // Typing gives up the customer that was taken over, and with them the
+                    // kind of document that came from them.
+                    setPartnerId('')
+                    setDocumentTypeId('')
+                  }}
+                  chosen={chosen}
+                  onChoose={(partner) => {
+                    setPartnerId(`${partner.id}`)
+                    setPartnerTerm(partnerLabel(partner))
+                    // The kind belongs to the customer that was picked. Clearing it lets the
+                    // answer for the new customer fill it, instead of carrying the old one on.
+                    setDocumentTypeId('')
+                  }}
+                />
+              </div>
 
               <SelectField
                 label="Belegart"
@@ -272,11 +261,6 @@ export function NewDocumentMask({
               />
             </div>
 
-            {partners.error !== null && (
-              <div className="mt-4">
-                <ErrorNotice error={partners.error} />
-              </div>
-            )}
             {documentTypes.error !== null && (
               <div className="mt-4">
                 <ErrorNotice error={documentTypes.error} />

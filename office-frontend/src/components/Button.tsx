@@ -3,12 +3,16 @@ import type { ReactNode } from 'react'
 import { onMac, submitShortcutTitle } from '../lib/shortcuts'
 import { Spinner } from './Spinner'
 
-type Variant = 'primary' | 'secondary' | 'ghost'
+type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-accent text-on-accent hover:bg-accent-hover disabled:hover:bg-accent',
   secondary:
     'bg-surface text-text-primary border border-line hover:bg-sunken disabled:hover:bg-surface',
+  // For the answer that closes something down — declining an offer, and nothing else so far.
+  // Filled like the primary one, because it stands next to it and has to weigh the same.
+  danger:
+    'bg-danger-surface text-on-accent hover:bg-danger-surface-hover disabled:hover:bg-danger-surface',
   ghost: 'text-text-secondary hover:bg-sunken hover:text-text-primary',
 }
 
@@ -33,7 +37,7 @@ type ButtonProps = HTMLMotionProps<'button'> & {
 }
 
 /**
- * The three button variants of the design system.
+ * The button variants of the design system.
  *
  * <p>While `busy` the label stays in the layout as invisible text, so the button keeps its
  * width and the surrounding form does not jump when a request starts.

@@ -451,8 +451,10 @@ function DocumentMask({
           outcome === 'OPEN' &&
           can(kind.rights.write) && (
             <>
+              {/* Filled like «Angenommen» next to it: the two are the same decision with
+                  opposite answers, and one of them looking optional would tilt the choice. */}
               <Button
-                variant="secondary"
+                variant="danger"
                 onClick={() => {
                   setOutcome.reset()
                   setDeclining(true)

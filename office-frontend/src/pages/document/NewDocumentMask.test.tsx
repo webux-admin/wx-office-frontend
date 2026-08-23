@@ -107,6 +107,14 @@ async function settle() {
   }
 }
 
+/** Waits past the debounce of the type-ahead, then lets the answer arrive. */
+async function settleSearch() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 260))
+  })
+  await settle()
+}
+
 async function render(): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -124,13 +132,42 @@ async function render(): Promise<void> {
   await settle()
 }
 
-/** The select a label points at, found the way a user finds it: by its wording. */
-function selectNamed(label: string): HTMLSelectElement {
+/** The control a label points at, found the way a user finds it: by its wording. */
+function fieldNamed<T extends HTMLElement>(label: string): T {
   const found = [...container.querySelectorAll('label')].find(
     (element) => element.textContent?.trim() === label,
   )
   if (found === undefined) throw new Error(`no field labelled ${label}`)
-  return document.getElementById(found.htmlFor) as HTMLSelectElement
+  return document.getElementById(found.htmlFor) as T
+}
+
+function selectNamed(label: string): HTMLSelectElement {
+  return fieldNamed<HTMLSelectElement>(label)
+}
+
+/** Types into a field the way a browser does: set the value, then fire the native event. */
+function type(input: HTMLInputElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setValue?.call(input, value)
+  act(() => {
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+/**
+ * Picks the customer the way a user does: type, wait for the hits, click the first one.
+ */
+async function pickCustomer(term = 'Meier') {
+  const field = fieldNamed<HTMLInputElement>('Kunde')
+  act(() => field.dispatchEvent(new FocusEvent('focus', { bubbles: true })))
+  type(field, term)
+  await settleSearch()
+  const hit = container.querySelector('[role="option"]')
+  if (hit === null) throw new Error('the search found nobody')
+  act(() => {
+    hit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  await settle()
 }
 
 function pick(select: HTMLSelectElement, value: string) {
@@ -167,8 +204,7 @@ describe('NewDocumentMask', () => {
   it('newDocumentMaskFillsTheKindFromTheCustomerTest', async () => {
     await render()
 
-    pick(selectNamed('Kunde'), '77')
-    await settle()
+    await pickCustomer()
 
     expect(selectNamed('Belegart').value).toBe('4')
     expect(text()).toContain('Vorschlag für diesen Kunden')
@@ -178,8 +214,7 @@ describe('NewDocumentMask', () => {
   it('newDocumentMaskAsksTheDefaultsWithoutAKindTest', async () => {
     await render()
 
-    pick(selectNamed('Kunde'), '77')
-    await settle()
+    await pickCustomer()
 
     expect(
       asked.some(
@@ -192,8 +227,7 @@ describe('NewDocumentMask', () => {
     defaults = { ...defaults, documentTypeId: 9, documentTypeCode: 'RE2' }
 
     await render()
-    pick(selectNamed('Kunde'), '77')
-    await settle()
+    await pickCustomer()
 
     expect(selectNamed('Belegart').value).toBe('9')
   })
@@ -201,13 +235,42 @@ describe('NewDocumentMask', () => {
   /** Suggested is not prescribed: another kind may be picked and stays picked. */
   it('newDocumentMaskKeepsAKindThatWasPickedByHandTest', async () => {
     await render()
-    pick(selectNamed('Kunde'), '77')
-    await settle()
+    await pickCustomer()
 
     pick(selectNamed('Belegart'), '9')
     await settle()
 
     expect(selectNamed('Belegart').value).toBe('9')
     expect(text()).toContain('Weicht vom Vorschlag für diesen Kunden ab.')
+  })
+
+  /** The whole point of the type-ahead: nobody is loaded before somebody types. */
+  it('newDocumentMaskLoadsNoCustomersUpFrontTest', async () => {
+    await render()
+
+    expect(asked.some((request) => request.includes('/partners'))).toBe(false)
+  })
+
+  it('newDocumentMaskSearchesTheCustomersOnTheServerTest', async () => {
+    await render()
+    await pickCustomer('Meier')
+
+    // The first call goes out on focus with an empty field; the one that carries the term
+    // is the one this test is about.
+    const search = asked.findLast((request) => request.includes('/partners'))
+    expect(search).toContain('search=Meier')
+    expect(search).toContain('role=customer')
+    expect(search).toContain('activeOnly=true')
+  })
+
+  /** Typing again gives up the customer, so a stale draft cannot be started. */
+  it('newDocumentMaskDropsTheCustomerWhenTheFieldIsTypedInAgainTest', async () => {
+    await render()
+    await pickCustomer()
+
+    type(fieldNamed<HTMLInputElement>('Kunde'), 'Andere')
+    await settle()
+
+    expect(selectNamed('Belegart').disabled).toBe(true)
   })
 })
