@@ -52,6 +52,11 @@ type DocumentFilter = {
   label: string
   status?: DocumentStatus
   outcome?: OfferOutcome
+  /**
+   * Asks the server for offers past their valid-until day. Left undefined rather than false
+   * everywhere else, so the other chips carry no `expired=false` in their query strings.
+   */
+  expired?: boolean
 }
 
 const FILTERS: DocumentFilter[] = [
@@ -69,6 +74,9 @@ const TRACKING_FILTERS: DocumentFilter[] = [
   { id: 'alle', label: 'Alle' },
   { id: 'DRAFT', label: 'Entwürfe', status: 'DRAFT' },
   { id: 'OPEN', label: 'Offen', status: 'FINALISED', outcome: 'OPEN' },
+  // A narrowing of «Offen», not a slice out of it: the open chip keeps showing the expired
+  // ones too — an offer past its day is still waiting for an answer.
+  { id: 'EXPIRED', label: 'Abgelaufen', status: 'FINALISED', outcome: 'OPEN', expired: true },
   { id: 'ACCEPTED', label: 'Angenommen', status: 'FINALISED', outcome: 'ACCEPTED' },
   { id: 'DECLINED', label: 'Abgelehnt', status: 'FINALISED', outcome: 'DECLINED' },
   { id: 'CANCELLED', label: 'Storniert', status: 'CANCELLED' },
@@ -108,6 +116,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
   const query = listQuery({
     status: filter.status === undefined ? undefined : [filter.status],
     outcome: filter.outcome,
+    expired: filter.expired,
     page,
     size: PAGE_SIZE,
     sort,
@@ -159,10 +168,15 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       header: 'Status',
       width: 'w-[130px]',
       // An issued offer wears its outcome, the way the head of its mask does. Drafts and
-      // cancelled documents read as everywhere else, and so does every other kind.
+      // cancelled documents read as everywhere else, and so does every other kind. Only the
+      // open offer can be expired — a mark wins over the calendar.
       render: (row) =>
         kind.tracking && row.status === 'FINALISED' && row.offerOutcome !== undefined ? (
-          <Badge tone={OUTCOME_TONES[row.offerOutcome]}>{outcomeLabel(row.offerOutcome)}</Badge>
+          row.offerOutcome === 'OPEN' && row.offerExpired ? (
+            <Badge tone="danger">{outcomeLabel('EXPIRED')}</Badge>
+          ) : (
+            <Badge tone={OUTCOME_TONES[row.offerOutcome]}>{outcomeLabel(row.offerOutcome)}</Badge>
+          )
         ) : (
           <Badge tone={TONES[row.status]}>{statusLabel(row.status)}</Badge>
         ),

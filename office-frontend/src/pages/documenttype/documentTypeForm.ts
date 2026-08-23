@@ -38,6 +38,8 @@ export type DocumentTypeForm = {
   /** The kinds it may be taken over from, in the order they are offered. */
   predecessorTypeIds: number[]
   copyPriceMode: CopyPriceMode
+  /** How many days a new offer of this kind is valid, as typed; empty means no preset. */
+  offerValidityDays: string
 }
 
 /** How many copies of one document may come out of the printer; the backend agrees. */
@@ -48,6 +50,9 @@ export const MAX_SHEETS = 99
 
 /** How many kinds one kind may be taken over from; the backend agrees. */
 export const MAX_PREDECESSORS = 10
+
+/** How many days an offer may be valid at most; the backend agrees. */
+export const MAX_OFFER_VALIDITY_DAYS = 730
 
 const MAX_CODE_LENGTH = 20
 const MAX_NAME_LENGTH = 60
@@ -75,6 +80,7 @@ export function emptyDocumentType(): DocumentTypeForm {
     copies: [],
     predecessorTypeIds: [],
     copyPriceMode: 'RECALCULATE',
+    offerValidityDays: '',
   }
 }
 
@@ -99,6 +105,7 @@ export function toForm(type: DocumentType): DocumentTypeForm {
     })),
     predecessorTypeIds: type.predecessorTypeIds ?? [],
     copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
+    offerValidityDays: type.offerValidityDays === undefined ? '' : `${type.offerValidityDays}`,
   }
 }
 
@@ -126,6 +133,12 @@ export function toPayload(form: DocumentTypeForm): Record<string, unknown> {
     copies: enteredCopies(form.copies),
     predecessorTypeIds: form.predecessorTypeIds,
     copyPriceMode: form.copyPriceMode,
+    // Read only on the offer: while a new kind is being entered the category can still move
+    // away from OFFER, and days typed before that switch must not land on an order kind.
+    offerValidityDays:
+      form.category === 'OFFER' && form.offerValidityDays.trim() !== ''
+        ? (parseDecimal(form.offerValidityDays) ?? undefined)
+        : undefined,
   }
 }
 
@@ -157,7 +170,26 @@ export function firstComplaint(form: DocumentTypeForm, creating: boolean): strin
     return `Ein Code über ${MAX_PREFIX_LENGTH} Zeichen taugt nicht als Nummernpräfix. `
       + 'Bitte ein eigenes angeben.'
   }
+  const validity = validityComplaint(form)
+  if (validity !== null) return validity
   return copyComplaint(form.copies)
+}
+
+/**
+ * The rules the validity preset has to keep.
+ *
+ * <p>Checked only where the value would be sent: on an offer kind with a filled field. What
+ * {@link toPayload} drops anyway cannot block the save.
+ */
+function validityComplaint(form: DocumentTypeForm): string | null {
+  if (form.category !== 'OFFER' || form.offerValidityDays.trim() === '') return null
+  const days = parseDecimal(form.offerValidityDays)
+  if (days === null) return 'Die Gültigkeit ist keine Zahl.'
+  if (!Number.isInteger(days)) return 'Die Gültigkeit ist eine ganze Zahl von Tagen.'
+  if (days < 1 || days > MAX_OFFER_VALIDITY_DAYS) {
+    return `Die Gültigkeit liegt zwischen 1 und ${MAX_OFFER_VALIDITY_DAYS} Tagen.`
+  }
+  return null
 }
 
 /**

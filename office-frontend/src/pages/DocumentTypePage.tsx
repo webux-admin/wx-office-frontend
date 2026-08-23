@@ -216,6 +216,19 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     maxLength={10}
                     hint="Steht vor der laufenden Nummer, zum Beispiel AU. Leer heisst: der Code."
                   />
+                  {/* Only the offer promises something with an expiry, so only its kinds
+                      carry the preset. */}
+                  {form.category === 'OFFER' && (
+                    <TextField
+                      label="Gültigkeit in Tagen"
+                      value={form.offerValidityDays}
+                      onChange={(event) => change({ offerValidityDays: event.target.value })}
+                      disabled={!mayWrite}
+                      inputMode="numeric"
+                      numeric
+                      hint="Vorbelegt ‹Gültig bis› beim Anlegen: Belegdatum + Tage."
+                    />
+                  )}
                 </div>
               </Panel>
 

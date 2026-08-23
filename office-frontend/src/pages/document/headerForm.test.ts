@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentLine, SalesDocument } from '../../lib/types'
 import {
   currencyChanged,
+  headerFieldsChanged,
   headerKey,
   paymentKey,
   freeLineNumbers,
@@ -10,6 +11,8 @@ import {
   headerUnchanged,
   listNumbers,
   toHeaderForm,
+  validityBeforeHeader,
+  validityChanged,
   type HeaderForm,
 } from './headerForm'
 
@@ -58,7 +61,14 @@ describe('toHeaderForm', () => {
       currency: 'EUR',
       exchangeRate: '0.94',
       exchangeRateDate: '2026-08-21',
+      validUntil: '',
     })
+  })
+
+  it('toHeaderFormWithValidUntilTest', () => {
+    const form = toHeaderForm(draft({ validUntil: '2026-09-20' }))
+
+    expect(form.validUntil).toBe('2026-09-20')
   })
 
   it('toHeaderFormWithoutOptionalFieldsTest', () => {
@@ -69,17 +79,24 @@ describe('toHeaderForm', () => {
     expect(form.language).toBe('')
     expect(form.exchangeRate).toBe('')
     expect(form.exchangeRateDate).toBe('')
+    expect(form.validUntil).toBe('')
   })
 })
 
 describe('headerKey', () => {
   it('headerKeyTest', () => {
-    expect(headerKey(draft())).toBe('2026-08-21|de|EUR|0.94|2026-08-21')
+    expect(headerKey(draft())).toBe('2026-08-21|de|EUR|0.94|2026-08-21|')
   })
 
   it('headerKeyDiffersAfterACustomerChangeTest', () => {
     // What a customer change moves: the language, and with it the whole head.
     expect(headerKey(draft({ language: 'fr' }))).not.toBe(headerKey(draft()))
+  })
+
+  it('headerKeyDiffersAfterTheValidityChangedTest', () => {
+    // Saving through /validity rewrites the stored date, and the section has to remount to
+    // show it — the key is that mechanism.
+    expect(headerKey(draft({ validUntil: '2026-09-20' }))).not.toBe(headerKey(draft()))
   })
 
   it('headerKeyIsStableWhileTheHeadIsTest', () => {
@@ -89,7 +106,7 @@ describe('headerKey', () => {
 
   it('headerKeyWithoutOptionalFieldsTest', () => {
     expect(headerKey(draft({ exchangeRate: undefined, exchangeRateDate: undefined }))).toBe(
-      '2026-08-21|de|EUR||',
+      '2026-08-21|de|EUR|||',
     )
   })
 })
@@ -145,6 +162,117 @@ describe('headerUnchanged', () => {
     const form = { ...toHeaderForm(draft()), exchangeRate: ' 0.94 ' }
 
     expect(headerUnchanged(form, draft())).toBe(true)
+  })
+
+  it('headerUnchangedWithAnotherValidUntilTest', () => {
+    // The date is part of the section, so moving only it has to enable «Übernehmen».
+    const form = { ...toHeaderForm(draft()), validUntil: '2026-09-20' }
+
+    expect(headerUnchanged(form, draft())).toBe(false)
+  })
+})
+
+describe('headerFieldsChanged', () => {
+  it('headerFieldsChangedTest', () => {
+    const form = { ...toHeaderForm(draft()), documentDate: '2026-08-22' }
+
+    expect(headerFieldsChanged(form, draft())).toBe(true)
+  })
+
+  it('headerFieldsChangedWithOnlyTheValidUntilMovedTest', () => {
+    // The date travels through /validity alone: no header write for a date-only save.
+    const form = { ...toHeaderForm(draft()), validUntil: '2026-09-20' }
+
+    expect(headerFieldsChanged(form, draft())).toBe(false)
+  })
+
+  it('headerFieldsChangedWithoutChangeTest', () => {
+    expect(headerFieldsChanged(toHeaderForm(draft()), draft())).toBe(false)
+  })
+})
+
+describe('validityChanged', () => {
+  it('validityChangedTest', () => {
+    const stored = draft({ validUntil: '2026-09-20' })
+    const form = { ...toHeaderForm(stored), validUntil: '2026-09-30' }
+
+    expect(validityChanged(form, stored)).toBe(true)
+  })
+
+  it('validityChangedWhenClearedTest', () => {
+    // Emptying the field is a change: it becomes { validUntil: null } on the way out.
+    const stored = draft({ validUntil: '2026-09-20' })
+    const form = { ...toHeaderForm(stored), validUntil: '' }
+
+    expect(validityChanged(form, stored)).toBe(true)
+  })
+
+  it('validityChangedWithSameDateTest', () => {
+    const stored = draft({ validUntil: '2026-09-20' })
+
+    expect(validityChanged(toHeaderForm(stored), stored)).toBe(false)
+  })
+
+  it('validityChangedWithoutAnyDateTest', () => {
+    // No stored date and an empty field are the same silence, not a change.
+    expect(validityChanged(toHeaderForm(draft()), draft())).toBe(false)
+  })
+
+  it('validityChangedLeavesTheHeaderPayloadAloneTest', () => {
+    // The date never travels with the header request, whose contract keeps a left-out field.
+    const form = { ...toHeaderForm(draft()), validUntil: '2026-09-30' }
+
+    expect(headerPayload(form, draft(), 'COPY')).toEqual({
+      documentDate: undefined,
+      languageCode: undefined,
+      currencyCode: undefined,
+      exchangeRate: undefined,
+      exchangeRateDate: undefined,
+      priceMode: 'COPY',
+    })
+  })
+})
+
+describe('validityBeforeHeader', () => {
+  it('validityBeforeHeaderTest', () => {
+    // Both dates move forward: the header would pass the STORED validity, so it must wait.
+    const stored = draft({ validUntil: '2026-08-31' })
+    const form = { ...toHeaderForm(stored), documentDate: '2026-09-15', validUntil: '2026-10-15' }
+
+    expect(validityBeforeHeader(form, stored)).toBe(true)
+  })
+
+  it('validityBeforeHeaderWithBothDatesMovedBackTest', () => {
+    // Both dates move back: the new validity would fall before the STORED document date,
+    // so the header has to go first and shrink it.
+    const stored = draft({ documentDate: '2026-08-21', validUntil: '2026-08-31' })
+    const form = { ...toHeaderForm(stored), documentDate: '2026-07-01', validUntil: '2026-07-15' }
+
+    expect(validityBeforeHeader(form, stored)).toBe(false)
+  })
+
+  it('validityBeforeHeaderWhenClearedTest', () => {
+    // Clearing the validity can never fail, so it may safely go first when the new document
+    // date passes the stored one.
+    const stored = draft({ validUntil: '2026-08-31' })
+    const form = { ...toHeaderForm(stored), documentDate: '2026-09-15', validUntil: '' }
+
+    expect(validityBeforeHeader(form, stored)).toBe(true)
+  })
+
+  it('validityBeforeHeaderWithoutAStoredDateTest', () => {
+    // Nothing stored means nothing the header could pass.
+    const form = { ...toHeaderForm(draft()), documentDate: '2026-09-15', validUntil: '2026-10-15' }
+
+    expect(validityBeforeHeader(form, draft())).toBe(false)
+  })
+
+  it('validityBeforeHeaderWithUnchangedValidityTest', () => {
+    // Without a validity write there is nothing to order.
+    const stored = draft({ validUntil: '2026-08-31' })
+    const form = { ...toHeaderForm(stored), documentDate: '2026-08-25' }
+
+    expect(validityBeforeHeader(form, stored)).toBe(false)
   })
 })
 

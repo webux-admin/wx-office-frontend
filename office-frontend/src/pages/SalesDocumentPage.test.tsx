@@ -50,6 +50,8 @@ const CATALOGUES = {
     { code: 'OPEN', name: 'Offen' },
     { code: 'ACCEPTED', name: 'Angenommen' },
     { code: 'DECLINED', name: 'Abgelehnt' },
+    // Display only: never stored as an outcome, worn by an open offer past its day.
+    { code: 'EXPIRED', name: 'Abgelaufen' },
   ],
   'offer-decline-reason': [
     { code: 'PRICE', name: 'Preis' },
@@ -109,7 +111,7 @@ function json(body: unknown, status = 200) {
 
 function stubFetch() {
   sent = []
-  trackingState = { outcome: 'OPEN' }
+  trackingState = { outcome: 'OPEN', expired: false }
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     const method = options?.method ?? 'GET'
     const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
@@ -117,11 +119,14 @@ function stubFetch() {
 
     if (url.endsWith('/tracking/outcome') && method === 'PUT') {
       const asked = body as { outcome: OfferOutcome; reasonCode?: string; note?: string }
+      // Only an open offer can be expired, so a mark clears the flag the way the backend
+      // computes it; taking the mark back leaves the calendar where it was.
       trackingState =
         asked.outcome === 'OPEN'
-          ? { outcome: 'OPEN' }
+          ? { outcome: 'OPEN', expired: trackingState.expired }
           : {
               outcome: asked.outcome,
+              expired: false,
               outcomeAt: '2026-08-23T10:00:00Z',
               outcomeBy: 'muster',
               winProbability: asked.outcome === 'ACCEPTED' ? 100 : 0,
@@ -301,5 +306,35 @@ describe('SalesDocumentPage', () => {
 
     expect(text()).toContain('Verfolgung')
     expect(text()).toContain('Erinnerungen')
+  })
+
+  it('salesDocumentPageShowsAnExpiredOpenOfferAsExpiredTest', async () => {
+    trackingState = { outcome: 'OPEN', expired: true }
+
+    await render('/offerten/42')
+
+    // The badge wears «Abgelaufen» instead of «Offen» — the flag comes from the server,
+    // the browser never compares dates itself.
+    expect(text()).toContain('Abgelaufen')
+    expect(text()).not.toContain('Offen')
+    // Expired is information, not a lock: the offer can still be answered.
+    expect(buttonNamed('Angenommen')).toBeDefined()
+    expect(buttonNamed('Abgelehnt')).toBeDefined()
+  })
+
+  it('salesDocumentPageShowsAnAcceptedOfferAsAcceptedEvenWhenExpiredTest', async () => {
+    // The backend never claims this pair, but the mark has to win in the mask regardless.
+    trackingState = {
+      outcome: 'ACCEPTED',
+      expired: true,
+      outcomeAt: '2026-08-23T10:00:00Z',
+      outcomeBy: 'muster',
+      winProbability: 100,
+    }
+
+    await render('/offerten/42')
+
+    expect(text()).toContain('Angenommen')
+    expect(text()).not.toContain('Abgelaufen')
   })
 })

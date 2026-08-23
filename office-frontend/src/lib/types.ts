@@ -560,6 +560,11 @@ export type DocumentType = {
   predecessorTypeIds?: number[]
   /** What a copy of such a document does with the amounts. */
   copyPriceMode?: CopyPriceMode
+  /**
+   * Only on offer kinds: how many days a new offer is valid, counted from its document
+   * date. Absent when a new offer starts without a valid-until date.
+   */
+  offerValidityDays?: number
   active: boolean
 }
 
@@ -902,6 +907,9 @@ export type SalesDocument = {
   discountStages?: DocumentDiscountStage[]
   /** Reference of the customer, printed so they can match the document to their order. */
   reference?: string
+  /** Only on offers: the day up to which the offer stands, as `yyyy-MM-dd`. Absent when no
+   * validity was given. */
+  validUntil?: string
   lines?: DocumentLine[]
 }
 
@@ -941,6 +949,11 @@ export type DocumentSummary = {
   totalGross: number
   /** Only on offers: how the issued offer went. An offer without a mark counts as `OPEN`. */
   offerOutcome?: OfferOutcome
+  /**
+   * Only on offers: whether the open offer outlived its valid-until day. Computed by the
+   * backend against its clock — the browser never compares dates itself.
+   */
+  offerExpired?: boolean
 }
 
 /** How an issued offer went: still waiting, turned into business, or turned down. */
@@ -955,6 +968,11 @@ export type OfferOutcome = 'OPEN' | 'ACCEPTED' | 'DECLINED'
  */
 export type OfferTracking = {
   outcome: OfferOutcome
+  /**
+   * Whether the open offer outlived its valid-until day. Always answered, computed by the
+   * backend against its clock; an accepted or declined offer is never expired.
+   */
+  expired: boolean
   /** When the outcome was decided; absent while it is `OPEN`. */
   outcomeAt?: string
   /** Who decided it; absent while it is `OPEN`. */

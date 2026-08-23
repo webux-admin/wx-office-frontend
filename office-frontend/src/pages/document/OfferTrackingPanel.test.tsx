@@ -13,7 +13,12 @@ const TENANT = 1
 const BASE = `/api/tenants/${TENANT}/offers/42`
 
 /** An open offer whose estimate is already stored — the value a typo must not erase. */
-const ESTIMATED: OfferTracking = { outcome: 'OPEN', winProbability: 60, weightedGross: 600 }
+const ESTIMATED: OfferTracking = {
+  outcome: 'OPEN',
+  expired: false,
+  winProbability: 60,
+  weightedGross: 600,
+}
 
 let container: HTMLDivElement
 let root: Root

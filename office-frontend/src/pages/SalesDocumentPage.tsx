@@ -373,9 +373,15 @@ function DocumentMask({
           <span className="flex flex-wrap items-center gap-2">
             {/* An issued offer wears its outcome instead of the bare status: «Finalisiert»
                 says nothing about the question this mask is opened for. Cancelled and draft
-                read as everywhere else. */}
+                read as everywhere else. Only the open offer can be expired — a mark wins
+                over the calendar, and the backend already answers accepted and declined
+                offers with expired false. */}
             {kind.tracking && document.status === 'FINALISED' && outcome !== undefined ? (
-              <Badge tone={OUTCOME_TONES[outcome]}>{outcomeLabel(outcome)}</Badge>
+              outcome === 'OPEN' && tracking.data?.expired ? (
+                <Badge tone="danger">{outcomeLabel('EXPIRED')}</Badge>
+              ) : (
+                <Badge tone={OUTCOME_TONES[outcome]}>{outcomeLabel(outcome)}</Badge>
+              )
             ) : (
               <Badge
                 tone={
@@ -546,6 +552,7 @@ function DocumentMask({
               base={base}
               document={document}
               editable={editable}
+              validity={kind.tracking}
               readOnlyNote={readOnlyNote}
               onChanged={refresh}
             />

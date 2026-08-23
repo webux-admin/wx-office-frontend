@@ -10,9 +10,12 @@ import type { SalesDocument } from '../../lib/types'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import {
   currencyChanged,
+  headerFieldsChanged,
   headerPayload,
   headerUnchanged,
   toHeaderForm,
+  validityBeforeHeader,
+  validityChanged,
   type HeaderForm,
 } from './headerForm'
 
@@ -34,6 +37,7 @@ export function DocumentHeaderPanel({
   base,
   document,
   editable,
+  validity,
   readOnlyNote,
   onChanged,
 }: {
@@ -43,6 +47,12 @@ export function DocumentHeaderPanel({
   document: SalesDocument
   /** False once the document is issued, and while the write permission is missing. */
   editable: boolean
+  /**
+   * Whether the document carries a valid-until date. The mask passes the tracking flag of
+   * its kind: only the offer promises something with an expiry, and the panel itself stays
+   * free of categories.
+   */
+  validity: boolean
   /** Why nothing can be changed here, where that is not the state of the document itself. */
   readOnlyNote?: string
   /** Called with the document the backend answered with. */
@@ -57,8 +67,31 @@ export function DocumentHeaderPanel({
   const unchanged = headerUnchanged(form, document)
 
   const save = useMutation({
-    mutationFn: () =>
-      api.put<SalesDocument>(`${base}/header`, headerPayload(form, document, 'COPY')),
+    // Two endpoints, because their silences mean opposite things: in the header request a
+    // field that is left out stays as it is stored, so an emptied valid-until date could
+    // never arrive through it. /validity reads null as "clear the date". Only what changed
+    // travels — a save that only moves the date writes no header at all, and the other way
+    // round. The order depends on the direction: the backend checks each request against
+    // what is STORED, so moving both dates forward must extend the validity first, while
+    // moving both back must move the document date first (see validityBeforeHeader).
+    mutationFn: async () => {
+      let saved = document
+      const validityFirst = validityBeforeHeader(form, document)
+      const saveValidity = async () => {
+        saved = await api.put<SalesDocument>(`${base}/validity`, {
+          validUntil: form.validUntil === '' ? null : form.validUntil,
+        })
+      }
+      if (validityFirst) await saveValidity()
+      if (headerFieldsChanged(form, document)) {
+        saved = await api.put<SalesDocument>(
+          `${base}/header`,
+          headerPayload(form, document, 'COPY'),
+        )
+      }
+      if (!validityFirst && validityChanged(form, document)) await saveValidity()
+      return saved
+    },
     onSuccess: onChanged,
   })
 
@@ -100,6 +133,17 @@ export function DocumentHeaderPanel({
           disabled={!editable}
           hint="Zugleich das Leistungsdatum jeder Position, die keines nennt — der MwSt-Satz folgt ihm."
         />
+
+        {validity && (
+          <TextField
+            label="Gültig bis"
+            type="date"
+            value={form.validUntil}
+            onChange={(event) => set('validUntil', event.target.value)}
+            disabled={!editable}
+            hint="Bis zu diesem Tag steht die Offerte. Leer heisst: ohne Befristung."
+          />
+        )}
 
         <MasterDataSelect
           label="Sprache"

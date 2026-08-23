@@ -46,6 +46,14 @@ const COMPLETE: DocumentTypeForm = {
   name: 'Auftrag',
 }
 
+/** An offer kind ready to send, which is the only category the validity preset lives on. */
+const OFFER_FORM: DocumentTypeForm = {
+  ...COMPLETE,
+  category: 'OFFER',
+  code: 'OF',
+  name: 'Offerte',
+}
+
 describe('toForm', () => {
   it('toFormTest', () => {
     const form = toForm(STORED)
@@ -61,6 +69,7 @@ describe('toForm', () => {
     ])
     expect(form.predecessorTypeIds).toEqual([3, 5])
     expect(form.copyPriceMode).toBe('COPY')
+    expect(form.offerValidityDays).toBe('')
   })
 
   it('toFormTurnsMissingValuesIntoEmptyOnesTest', () => {
@@ -71,6 +80,20 @@ describe('toForm', () => {
     expect(form.copies).toEqual([])
     expect(form.predecessorTypeIds).toEqual([])
     expect(form.copyPriceMode).toBe('RECALCULATE')
+    expect(form.offerValidityDays).toBe('')
+  })
+
+  it('toFormWithOfferValidityDaysTest', () => {
+    const form = toForm({
+      id: 2,
+      code: 'OF',
+      category: 'OFFER',
+      name: 'Offerte',
+      offerValidityDays: 30,
+      active: true,
+    })
+
+    expect(form.offerValidityDays).toBe('30')
   })
 })
 
@@ -102,6 +125,7 @@ describe('toPayload', () => {
       ],
       predecessorTypeIds: [3, 5],
       copyPriceMode: 'COPY',
+      offerValidityDays: undefined,
     })
   })
 
@@ -129,6 +153,7 @@ describe('toPayload', () => {
       'documentLayoutId',
       'name',
       'numberPrefix',
+      'offerValidityDays',
       'predecessorTypeIds',
     ])
     expect(payload.copies).toEqual([])
@@ -145,6 +170,26 @@ describe('toPayload', () => {
     const payload = toPayload({ ...COMPLETE, documentLayoutId: '' })
 
     expect(payload.documentLayoutId).toBeUndefined()
+  })
+
+  it('toPayloadWithOfferValidityDaysTest', () => {
+    const payload = toPayload({ ...OFFER_FORM, offerValidityDays: '30' })
+
+    expect(payload.offerValidityDays).toBe(30)
+  })
+
+  it('toPayloadWithoutOfferValidityDaysLeavesItOutTest', () => {
+    const payload = toPayload({ ...OFFER_FORM, offerValidityDays: '' })
+
+    expect(payload.offerValidityDays).toBeUndefined()
+  })
+
+  it('toPayloadDropsTheValidityDaysOnAnotherCategoryTest', () => {
+    // While a new kind is entered the category can still move away from OFFER, and days
+    // typed before that switch must not land on an order kind.
+    const payload = toPayload({ ...COMPLETE, offerValidityDays: '30' })
+
+    expect(payload.offerValidityDays).toBeUndefined()
   })
 })
 
@@ -244,6 +289,40 @@ describe('firstComplaint', () => {
     )
 
     expect(firstComplaint({ ...COMPLETE, copies }, true)).toBeNull()
+  })
+
+  it('firstComplaintWithOfferValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '30' }, true)).toBeNull()
+  })
+
+  it('firstComplaintWithZeroValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '0' }, true))
+      .toBe('Die Gültigkeit liegt zwischen 1 und 730 Tagen.')
+  })
+
+  it('firstComplaintWithTooManyValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '731' }, true))
+      .toBe('Die Gültigkeit liegt zwischen 1 und 730 Tagen.')
+  })
+
+  it('firstComplaintWithTheOutermostValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '1' }, true)).toBeNull()
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '730' }, true)).toBeNull()
+  })
+
+  it('firstComplaintWithBrokenValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '1.5' }, true))
+      .toBe('Die Gültigkeit ist eine ganze Zahl von Tagen.')
+  })
+
+  it('firstComplaintWithUnreadableValidityDaysTest', () => {
+    expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: 'dreissig' }, true))
+      .toBe('Die Gültigkeit ist keine Zahl.')
+  })
+
+  it('firstComplaintIgnoresValidityDaysOnAnotherCategoryTest', () => {
+    // What toPayload drops anyway cannot block the save.
+    expect(firstComplaint({ ...COMPLETE, offerValidityDays: 'dreissig' }, true)).toBeNull()
   })
 })
 

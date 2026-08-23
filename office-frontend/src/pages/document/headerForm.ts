@@ -23,6 +23,11 @@ export type HeaderForm = {
   currency: string
   exchangeRate: string
   exchangeRateDate: string
+  /**
+   * The day up to which an offer stands, empty for no validity. Shown only on the kind that
+   * is followed up; it never travels with {@link headerPayload}, see {@link validityChanged}.
+   */
+  validUntil: string
 }
 
 /**
@@ -57,6 +62,7 @@ export function toHeaderForm(document: SalesDocument): HeaderForm {
     currency: document.currency ?? '',
     exchangeRate: document.exchangeRate?.toString() ?? '',
     exchangeRateDate: document.exchangeRateDate ?? '',
+    validUntil: document.validUntil ?? '',
   }
 }
 
@@ -73,7 +79,14 @@ export function toHeaderForm(document: SalesDocument): HeaderForm {
  */
 export function headerKey(document: SalesDocument): string {
   const form = toHeaderForm(document)
-  return [form.documentDate, form.language, form.currency, form.exchangeRate, form.exchangeRateDate].join('|')
+  return [
+    form.documentDate,
+    form.language,
+    form.currency,
+    form.exchangeRate,
+    form.exchangeRateDate,
+    form.validUntil,
+  ].join('|')
 }
 
 /**
@@ -114,6 +127,56 @@ export function headerUnchanged(form: HeaderForm, document: SalesDocument): bool
   return (Object.keys(stored) as (keyof HeaderForm)[]).every(
     (field) => form[field].trim() === stored[field].trim(),
   )
+}
+
+/**
+ * Whether anything that travels with `PUT /header` differs from what is stored.
+ *
+ * <p>Everything of the section but the valid-until date: that one has its own endpoint, and
+ * a save that only moves the date must not write the header at all.
+ *
+ * @param form the section as it stands
+ * @param document the stored draft
+ */
+export function headerFieldsChanged(form: HeaderForm, document: SalesDocument): boolean {
+  const stored = toHeaderForm(document)
+  return (Object.keys(stored) as (keyof HeaderForm)[]).some(
+    (field) => field !== 'validUntil' && form[field].trim() !== stored[field].trim(),
+  )
+}
+
+/**
+ * Whether the valid-until date in the section differs from the stored one.
+ *
+ * <p>Kept apart from {@link headerPayload} on purpose. In the header request a field that is
+ * left out stays as it is stored, so JSON cannot say "clear it" there — an emptied date
+ * would either not travel or arrive as an empty string. `PUT /validity` reads `null` as
+ * exactly that order, which is why the date goes its own way.
+ *
+ * @param form the section as it stands
+ * @param document the stored draft
+ */
+export function validityChanged(form: HeaderForm, document: SalesDocument): boolean {
+  return form.validUntil.trim() !== (document.validUntil ?? '').trim()
+}
+
+/**
+ * Whether the validity must be saved before the header.
+ *
+ * <p>The backend refuses a document date that passes the STORED valid-until date. When one
+ * save moves both forward, the header must not arrive while the old date still stands — the
+ * validity goes first. In the mirrored case (both moved back) the new valid-until would fall
+ * before the stored document date, so there the header goes first. Both conflicts can never
+ * hold at once: a pair that triggers both is invalid in itself and is refused either way.
+ * Dates compare as ISO strings, which orders them correctly.
+ *
+ * @param form the section as it stands
+ * @param document the stored draft
+ */
+export function validityBeforeHeader(form: HeaderForm, document: SalesDocument): boolean {
+  if (!validityChanged(form, document)) return false
+  if (document.validUntil === undefined) return false
+  return form.documentDate > document.validUntil
 }
 
 /**
