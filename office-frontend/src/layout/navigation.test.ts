@@ -85,6 +85,30 @@ describe('NAV_GROUPS', () => {
       }
     }
   })
+
+  /**
+   * Settings split into two groups: what several modules read, and one folder per module for
+   * what only that module reads. The old collective groups are gone — an entry surviving under
+   * «Basisdaten» would be the state ADR-0011 replaced.
+   */
+  it('navGroupsSplitSettingsIntoSystemAndModuleTest', () => {
+    const titles = NAV_GROUPS.map((group) => group.title)
+
+    expect(titles).toContain('Systemeinstellungen')
+    expect(titles).toContain('Moduleinstellungen')
+    expect(titles).not.toContain('Basisdaten')
+    expect(titles).not.toContain('Einstellungen')
+  })
+
+  /** Module settings come per module, so every top level entry there is a module folder. */
+  it('navGroupsListModuleSettingsPerModuleTest', () => {
+    const module = NAV_GROUPS.find((group) => group.title === 'Moduleinstellungen')
+
+    expect(module).toBeDefined()
+    for (const node of module?.entries ?? []) {
+      expect(isFolder(node)).toBe(true)
+    }
+  })
 })
 
 describe('flattenNav', () => {
@@ -101,18 +125,22 @@ describe('flattenNav', () => {
   })
 
   /**
-   * The three screens of one document belong together, and the order is the order somebody
-   * sets them up in: first the kinds, then what they print on, then their numbers.
+   * The screens of one document belong together, and the order is the order somebody sets
+   * them up in: the kinds, what they print on, their numbers, then billing and dunning.
    */
   it('flattenNavHoldsTheDocumentScreensTogetherTest', () => {
-    const einstellungen = NAV_GROUPS.find((group) => group.title === 'Einstellungen')
-    const belegwesen = einstellungen?.entries.find(
-      (node) => isFolder(node) && node.label === 'Belegwesen',
-    )
+    const module = NAV_GROUPS.find((group) => group.title === 'Moduleinstellungen')
+    const belege = module?.entries.find((node) => isFolder(node) && node.label === 'Belege')
 
-    expect(belegwesen).toBeDefined()
-    expect(flattenNav(belegwesen === undefined ? [] : [belegwesen]).map((entry) => entry.href))
-      .toEqual(['/belegarten', '/druckvorlagen', '/drucker', '/nummernkreise'])
+    expect(belege).toBeDefined()
+    expect(flattenNav(belege === undefined ? [] : [belege]).map((entry) => entry.href)).toEqual([
+      '/belegarten',
+      '/druckvorlagen',
+      '/drucker',
+      '/nummernkreise',
+      '/basisdaten/verrechnungsarten',
+      '/basisdaten/mahnarten',
+    ])
   })
 
   it('flattenNavWithoutFolderTest', () => {

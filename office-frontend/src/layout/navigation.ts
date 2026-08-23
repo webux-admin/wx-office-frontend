@@ -123,11 +123,12 @@ function salesEntry(category: DocumentCategory, icon: LucideIcon): NavEntry {
  * <p>Only what the backend answers is listed. A module without a controller would be an entry
  * leading to an empty screen, which reads as a defect rather than as a promise.
  *
- * <p>Grouped by what somebody is doing, not by which module happens to own the table: the
- * records worked on daily are at the top, the values that steer them below, and what is set
- * up once at the bottom. The maintained lists used to hide behind tabs on one screen called
- * «Auswahllisten» — a word nobody looking for units would guess — so each is its own entry
- * now. `navigation.test.ts` checks that none of them is forgotten.
+ * <p>The records worked on daily are at the top. Everything set up rather than worked on
+ * splits into two groups (see ADR-0011): «Systemeinstellungen» holds the values several
+ * modules read, «Moduleinstellungen» holds one folder per module with what only that module
+ * reads. A folder disappears with the rights to its screens — the stand-in for the licence
+ * switch that will decide module visibility later. `navigation.test.ts` checks that no
+ * maintained list is forgotten.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
@@ -175,15 +176,16 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: 'Basisdaten',
+    // Values more than one module reads. What only one module reads sits one group lower.
+    title: 'Systemeinstellungen',
     entries: [
       listEntry('zahlungsarten', CreditCard),
-      listEntry('mahnarten', BellRing),
       listEntry('einheiten', Ruler),
       listEntry('waehrungen', Coins),
       // Not a maintained list: the rates are federal, carry no tenant and are read only.
       { label: 'MWST-Sätze', icon: Percent, href: '/mehrwertsteuer', permission: 'PRODUCT_READ' },
-      listEntry('verrechnungsarten', Receipt),
+      // The structural values: renamable and hideable, but never added to or deleted.
+      { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: MASTER_DATA },
       {
         // Set up once and then left alone, so they sit one fold deeper than the rest.
         label: 'Weitere Werte',
@@ -194,21 +196,23 @@ export const NAV_GROUPS: NavGroup[] = [
           listEntry('laender', Globe),
           listEntry('rechtsformen', Scale),
           listEntry('anreden', UserRound),
-          listEntry('ertragskonten', BookOpen),
         ],
       },
+      { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
+      { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
+      { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
     ],
   },
   {
-    title: 'Einstellungen',
+    // One folder per module, holding what only that module reads. A folder vanishes with
+    // the rights to its screens; later a licence will make that call (see ADR-0011).
+    title: 'Moduleinstellungen',
     entries: [
       {
-        // The three screens behind one document: what kinds there are, what they print on,
-        // and where their numbers come from. As three entries in a row they read as three
-        // unrelated lists, and the connection between a Belegart and its Druckvorlage was
-        // exactly the thing nobody could see. No permission of its own — each screen has
-        // its own right, and the shell filters the children one by one.
-        label: 'Belegwesen',
+        // The screens behind one document: what kinds there are, what they print on, where
+        // their numbers come from, and how they are billed and dunned. No permission of its
+        // own — each screen has its own right, and the shell filters the children one by one.
+        label: 'Belege',
         icon: FileType2,
         children: [
           {
@@ -239,21 +243,25 @@ export const NAV_GROUPS: NavGroup[] = [
             href: '/nummernkreise',
             permission: 'NUMBER_RANGE_READ',
           },
+          listEntry('verrechnungsarten', Receipt),
+          listEntry('mahnarten', BellRing),
         ],
       },
-      // What the fifteen free places on a product mean. Set up once, then left alone --
-      // which is why it sits here and not next to the articles themselves.
       {
-        label: 'Produkt-Freifelder',
-        icon: SlidersHorizontal,
-        href: '/produkt-freifelder',
-        permission: 'PRODUCT_READ',
+        label: 'Produkte',
+        icon: Package,
+        children: [
+          // What the fifteen free places on a product mean. Set up once, then left alone.
+          {
+            label: 'Produkt-Freifelder',
+            icon: SlidersHorizontal,
+            href: '/produkt-freifelder',
+            permission: 'PRODUCT_READ',
+          },
+          // Assigned on the product; the accounting that reads them comes later.
+          listEntry('ertragskonten', BookOpen),
+        ],
       },
-      // The structural values: renamable and hideable, but never added to or deleted.
-      { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: MASTER_DATA },
-      { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
-      { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
-      { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
     ],
   },
 ]
