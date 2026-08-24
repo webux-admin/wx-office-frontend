@@ -11,10 +11,16 @@ import {
   stockLocationLabel,
   stockLocationsKey,
   stockLocationsUrl,
+  stockListKey,
   stockMovementLatestKey,
   stockMovementListKey,
   stockMovementsUrl,
+  stockShortageListKey,
+  stockShortagesUrl,
   stockTransfersUrl,
+  stockUrl,
+  shortageCauseLabel,
+  shortageCauseTone,
 } from './inventory'
 
 function location(fields: Partial<StockLocation> = {}): StockLocation {
@@ -162,5 +168,57 @@ describe('isReversible', () => {
 
   it('isReversibleWithoutAMovementTest', () => {
     expect(isReversible(undefined)).toBe(false)
+  })
+})
+
+describe('stockUrl', () => {
+  it('stockUrlTest', () => {
+    expect(stockUrl(7)).toBe('/api/tenants/7/inventory/stock')
+  })
+
+  /** The shortfalls hang under the stock, because that is what they are shortfalls of. */
+  it('stockShortagesUrlTest', () => {
+    expect(stockShortagesUrl(7)).toBe('/api/tenants/7/inventory/stock/shortages')
+  })
+})
+
+describe('stockListKey', () => {
+  it('stockListKeyTest', () => {
+    expect(stockListKey(7, 'page=0&size=50')).toEqual(['stock-list', 7, 'page=0&size=50'])
+  })
+
+  it('stockListKeyWithoutAQueryTest', () => {
+    expect(stockListKey(7, '')).toEqual(['stock-list', 7, ''])
+  })
+
+  it('stockShortageListKeyTest', () => {
+    expect(stockShortageListKey(7, 'size=1')).toEqual(['stock-shortages', 7, 'size=1'])
+  })
+
+  /** Two differently filtered lists must not share one cache entry. */
+  it('stockListKeyDiffersPerQueryTest', () => {
+    expect(stockListKey(7, 'a=1')).not.toEqual(stockListKey(7, 'a=2'))
+    expect(stockShortageListKey(7, 'a=1')).not.toEqual(stockShortageListKey(8, 'a=1'))
+  })
+})
+
+describe('shortageCauseLabel', () => {
+  it('shortageCauseLabelTest', () => {
+    expect(shortageCauseLabel('NEGATIVE')).toBe('Negativ')
+    expect(shortageCauseLabel('BELOW_MINIMUM')).toBe('Unter Mindestbestand')
+  })
+
+  /** A stock that is fine says nothing at all rather than «in Ordnung». */
+  it('shortageCauseLabelWithoutACauseTest', () => {
+    expect(shortageCauseLabel(undefined)).toBe('')
+  })
+
+  it('shortageCauseToneTest', () => {
+    expect(shortageCauseTone('NEGATIVE')).toBe('danger')
+    expect(shortageCauseTone('BELOW_MINIMUM')).toBe('accent')
+  })
+
+  it('shortageCauseToneWithoutACauseTest', () => {
+    expect(shortageCauseTone(undefined)).toBeUndefined()
   })
 })

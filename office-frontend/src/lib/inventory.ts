@@ -1,4 +1,9 @@
-import type { MovementDirection, MovementReason, StockLocation } from './types'
+import type {
+  MovementDirection,
+  MovementReason,
+  ShortageCause,
+  StockLocation,
+} from './types'
 
 /**
  * The rights that guard the inventory, as
@@ -21,6 +26,12 @@ export const STOCK_LOCATION_PATH = '/lagerorte'
 
 /** Path of the movement journal within the application. */
 export const STOCK_MOVEMENT_PATH = '/lagerbewegungen'
+
+/** Path of the stock list within the application. */
+export const STOCK_PATH = '/bestand'
+
+/** Path of the shortfall list within the application. */
+export const STOCK_SHORTAGE_PATH = '/unterdeckung'
 
 /**
  * The common prefix of every inventory resource.
@@ -73,6 +84,29 @@ export function stockTransfersUrl(tenantId: number): string {
  */
 export function stockBalancesUrl(tenantId: number): string {
   return `${inventoryUrl(tenantId)}/balances`
+}
+
+/**
+ * The REST resource of the stock list, one row per product and location.
+ *
+ * <p>Not the same as {@link stockBalancesUrl}: that one answers the locations of a single
+ * product as an array, this one is the paged list with sorting and quick search.
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stockUrl(tenantId: number): string {
+  return `${inventoryUrl(tenantId)}/stock`
+}
+
+/**
+ * The REST resource of the shortfall list.
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stockShortagesUrl(tenantId: number): string {
+  return `${stockUrl(tenantId)}/shortages`
 }
 
 /**
@@ -153,6 +187,31 @@ export function stockBalanceKey(tenantId: number, productId: number): (string | 
 }
 
 /**
+ * Query key of the stock list.
+ *
+ * <p>The filters are part of the key, so two differently filtered lists do not share one
+ * cache entry.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stockListKey(tenantId: number, query: string): (string | number)[] {
+  return ['stock-list', tenantId, query]
+}
+
+/**
+ * Query key of the shortfall list.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stockShortageListKey(tenantId: number, query: string): (string | number)[] {
+  return ['stock-shortages', tenantId, query]
+}
+
+/**
  * The reasons the booking dialog offers, per direction.
  *
  * <p>Four of the eleven reasons are missing on purpose: the two halves of a transfer, the
@@ -173,6 +232,39 @@ const MANUAL_REASONS: Record<MovementDirection, MovementReason[]> = {
  */
 export function manualReasonsFor(direction: MovementDirection): MovementReason[] {
   return MANUAL_REASONS[direction]
+}
+
+/**
+ * What a shortfall is called on screen.
+ *
+ * <p>A word, not only a colour: whoever cannot tell red from amber has to be able to read
+ * what is wrong with a row. Not a maintained catalogue either — the two causes are computed
+ * by the query and cannot be renamed without changing what they mean.
+ *
+ * @param cause the cause, absent for a stock that is fine
+ * @returns the wording, empty where there is nothing to say
+ */
+export function shortageCauseLabel(cause: ShortageCause | undefined): string {
+  if (cause === 'NEGATIVE') return 'Negativ'
+  if (cause === 'BELOW_MINIMUM') return 'Unter Mindestbestand'
+  return ''
+}
+
+/**
+ * Which badge tone a shortfall wears.
+ *
+ * <p>A booking mistake is the harder problem and wears the danger tone; a buying job is a
+ * note and wears the accent.
+ *
+ * @param cause the cause, absent for a stock that is fine
+ * @returns the tone of the badge, `undefined` where no badge is shown
+ */
+export function shortageCauseTone(
+  cause: ShortageCause | undefined,
+): 'danger' | 'accent' | undefined {
+  if (cause === 'NEGATIVE') return 'danger'
+  if (cause === 'BELOW_MINIMUM') return 'accent'
+  return undefined
 }
 
 /**

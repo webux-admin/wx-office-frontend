@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   BellRing,
   BookOpen,
+  Boxes,
   Building2,
   ClipboardList,
   Coins,
@@ -28,6 +29,7 @@ import {
   SlidersHorizontal,
   TableProperties,
   Tags,
+  TriangleAlert,
   Truck,
   UserCog,
   UserRound,
@@ -165,10 +167,26 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     // The working screens of the inventory, as opposed to its setup one group further down.
-    // The group appears with this issue and grows with the stock list, the reservations, the
-    // stocktake and the as-of report; it disappears with the module switch of the tenant.
+    // The group grows with the reservations, the stocktake and the as-of report; it
+    // disappears with the module switch of the tenant.
     title: 'Lager',
     entries: [
+      // «Wieviel habe ich wovon, und wo?» is the question somebody opens the inventory with,
+      // so the stock stands first and the journal explaining it second.
+      {
+        label: 'Bestand',
+        icon: Boxes,
+        href: '/bestand',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
+      {
+        label: 'Unterdeckung',
+        icon: TriangleAlert,
+        href: '/unterdeckung',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
       {
         label: 'Bewegungen',
         icon: ArrowLeftRight,

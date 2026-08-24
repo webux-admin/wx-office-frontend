@@ -49,6 +49,8 @@ const DUE: DueOfferReminder[] = [
 let container: HTMLDivElement
 let root: Root
 let due: DueOfferReminder[]
+/** How many shortfalls the inventory tile counts. */
+let shortages: number
 
 function json(body: unknown) {
   return Promise.resolve(
@@ -62,6 +64,16 @@ function json(body: unknown) {
 function stubFetch() {
   vi.stubGlobal('fetch', (url: string) => {
     if (url.includes('/offers/reminders/due')) return json(due)
+    if (url.includes('/inventory/stock/shortages')) {
+      return json({
+        content: [],
+        page: 0,
+        size: 1,
+        totalElements: shortages,
+        totalPages: shortages,
+        sort: '',
+      })
+    }
     if (url.includes('/offers?')) {
       return json({ content: [], page: 0, size: 1, totalElements: 3, totalPages: 3, sort: '' })
     }
@@ -70,8 +82,28 @@ function stubFetch() {
   })
 }
 
+/**
+ * A session of a tenant that runs the inventory and may read it.
+ *
+ * @param inventoryEnabled whether that tenant has the module switched on
+ */
+function inventorySession(inventoryEnabled: boolean): AuthState {
+  return {
+    ...SESSION,
+    user: {
+      ...SESSION.user!,
+      tenants: [
+        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled },
+      ],
+      permissions: ['INVENTORY_READ'],
+    },
+    can: (permission: string) => permission === 'INVENTORY_READ',
+  }
+}
+
 beforeEach(() => {
   due = DUE
+  shortages = 3
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -105,12 +137,12 @@ function OfferMaskProbe() {
   )
 }
 
-async function render(): Promise<void> {
+async function render(session: AuthState = SESSION): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={['/']}>
-        <AuthContext.Provider value={SESSION}>
+        <AuthContext.Provider value={session}>
           <QueryClientProvider client={client}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
@@ -159,5 +191,39 @@ describe('DashboardPage', () => {
     await render()
 
     expect(text()).not.toContain('Nachfassen')
+  })
+
+  /**
+   * The tile names the module and leads to its entrance; the number is a signal. Warning
+   * instead of blocking only works while somebody looks at it, and this is where they look.
+   */
+  it('dashboardPageShowsTheInventoryTileTest', async () => {
+    await render(inventorySession(true))
+
+    expect(text()).toContain('Lager')
+    expect(text()).toContain('3 in Unterdeckung')
+    expect(document.querySelector('a[href="/bestand"]')).not.toBeNull()
+  })
+
+  /** Nothing short is worth saying so, rather than a bare zero. */
+  it('dashboardPageShowsTheInventoryTileWithoutAnyShortageTest', async () => {
+    shortages = 0
+    await render(inventorySession(true))
+
+    expect(text()).toContain('Bestand gedeckt')
+  })
+
+  /** Without the right there is no tile — the sidebar entry is gone with it. */
+  it('dashboardPageHidesTheInventoryTileWithoutThePermissionTest', async () => {
+    await render()
+
+    expect(document.querySelector('a[href="/bestand"]')).toBeNull()
+  })
+
+  /** Right and switch: a tenant that does not run the inventory sees no inventory. */
+  it('dashboardPageHidesTheInventoryTileWithoutTheModuleTest', async () => {
+    await render(inventorySession(false))
+
+    expect(document.querySelector('a[href="/bestand"]')).toBeNull()
   })
 })

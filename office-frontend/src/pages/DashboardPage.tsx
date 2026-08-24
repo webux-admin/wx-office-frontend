@@ -11,11 +11,13 @@ import {
   Tags,
   Truck,
   Users,
+  Warehouse,
 } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Spinner } from '../components/Spinner'
 import { PageHeader } from '../components/PageHeader'
 import { useAuth } from '../auth/useAuth'
+import type { NavModule } from '../layout/navigation'
 import { NoTenantNotice } from '../layout/RequireTenant'
 import { useTenantId } from '../layout/useTenantId'
 import { api } from '../lib/api'
@@ -26,6 +28,7 @@ import {
   formatDateTime,
   formatLongDate,
 } from '../lib/format'
+import { INVENTORY_RIGHTS } from '../lib/inventory'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery } from '../lib/paging'
 import {
@@ -83,6 +86,13 @@ type ModuleTile = {
   tone: string
   permission: string
   href: string
+  /**
+   * Set where the tile belongs to a module the tenant may have switched off.
+   *
+   * <p>Two sources, as in the sidebar: the permission says who may, the switch says whether
+   * the tenant runs the module at all (backend ADR-0060).
+   */
+  module?: NavModule
 }
 
 /** A tile whose number comes out of the counts the overview fetches for all of them at once. */
@@ -96,6 +106,7 @@ type DashboardData = {
   suppliers: number
   products: number
   priceGroups: number
+  shortages: number
 }
 
 const TILES: CountedTile[] = [
@@ -133,6 +144,21 @@ const TILES: CountedTile[] = [
     href: '/preisgruppen',
     detail: (data) => `${formatCount(data.priceGroups)} Gruppen`,
   },
+  {
+    // The tile names the module and leads to its entrance; the number is a signal, not the
+    // destination. Warning instead of blocking only works while somebody looks at it, and
+    // this is where they look.
+    label: 'Lager',
+    icon: Warehouse,
+    tone: 'bg-module-lager',
+    permission: INVENTORY_RIGHTS.read,
+    href: '/bestand',
+    module: 'inventory',
+    detail: (data) =>
+      data.shortages === 0
+        ? 'Bestand gedeckt'
+        : `${formatCount(data.shortages)} in Unterdeckung`,
+  },
 ]
 
 /**
@@ -165,6 +191,14 @@ const SALES_TILES: SalesTile[] = SALES_DOCUMENT_KINDS.map((kind) => ({
 /** What a document tile counts: one row, to read the number of drafts off the page. */
 const DRAFTS = listQuery({ status: ['DRAFT'], size: 1 })
 
+/**
+ * What the inventory tile counts: one row of the shortfall list.
+ *
+ * <p>No figure endpoint of its own — the number is the total of a page, and a second way of
+ * counting would be a second answer (backend ADR-0063).
+ */
+const SHORTAGES = listQuery({ size: 1 })
+
 
 /**
  * The overview after signing in.
@@ -173,23 +207,35 @@ const DRAFTS = listQuery({ status: ['DRAFT'], size: 1 })
  * without a controller has no tile: a number nobody computed is worse than no tile at all.
  */
 export function DashboardPage() {
-  const { can } = useAuth()
+  const { user, can } = useAuth()
   const tenantId = useTenantId()
+
+  // Which switchable modules this tenant runs. It travels with the session, exactly as the
+  // sidebar reads it, so a tenant without an inventory gets no inventory tile.
+  const activeTenant = user?.tenants.find((tenant) => tenant.id === user.activeTenantId)
+  const modules: Record<NavModule, boolean> = {
+    inventory: activeTenant?.inventoryEnabled === true,
+  }
+  const readsPartners = can('PARTNER_READ')
+  const readsProducts = can('PRODUCT_READ')
+  const countsShortages = modules.inventory && can(INVENTORY_RIGHTS.read)
 
   // A tile shows one number, so it asks for one row and reads the total off the page. The
   // unpaged version loaded every partner, product and document of the tenant to count them,
   // and the page grew with the data.
-  const customers = useCount(tenantId, can('PARTNER_READ'), 'partners',
+  const customers = useCount(tenantId, readsPartners, 'partners',
     listQuery({ role: 'customer', activeOnly: true, size: 1 }))
-  const suppliers = useCount(tenantId, can('PARTNER_READ'), 'partners',
+  const suppliers = useCount(tenantId, readsPartners, 'partners',
     listQuery({ role: 'supplier', activeOnly: true, size: 1 }))
-  const productCount = useCount(tenantId, can('PRODUCT_READ'), 'products',
+  const productCount = useCount(tenantId, readsProducts, 'products',
     listQuery({ activeOnly: true, size: 1 }))
+
+  const shortages = useCount(tenantId, countsShortages, 'inventory/stock/shortages', SHORTAGES)
 
   const priceGroups = useQuery({
     queryKey: ['price-groups', tenantId],
     queryFn: () => api.get<PriceGroup[]>(`/api/tenants/${tenantId}/price-groups`),
-    enabled: tenantId !== null && can('PRODUCT_READ'),
+    enabled: tenantId !== null && readsProducts,
   })
 
   // "Last entered" is now asked for rather than guessed from the order rows happened to
@@ -223,11 +269,20 @@ export function DashboardPage() {
     suppliers: suppliers.data?.totalElements ?? 0,
     products: productCount.data?.totalElements ?? 0,
     priceGroups: priceGroups.data?.length ?? 0,
+    shortages: shortages.data?.totalElements ?? 0,
   }
 
+  // A disabled query stays pending for good, so a count only weighs on the loading state
+  // while it is actually being asked for. Without that, the tile of one module would spin
+  // for ever because the counts of another module are switched off.
   const loading =
-    customers.isPending || suppliers.isPending || productCount.isPending || priceGroups.isPending
-  const tiles = TILES.filter((tile) => can(tile.permission))
+    (readsPartners && (customers.isPending || suppliers.isPending)) ||
+    (readsProducts && (productCount.isPending || priceGroups.isPending)) ||
+    (countsShortages && shortages.isPending)
+  const tiles = TILES.filter(
+    (tile) =>
+      can(tile.permission) && (tile.module === undefined || modules[tile.module]),
+  )
   const salesTiles = SALES_TILES.filter((tile) => can(tile.permission))
 
   return (

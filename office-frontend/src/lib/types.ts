@@ -763,6 +763,58 @@ export type TransferStockRequest = {
   note?: string
 }
 
+/** Why a stock needs attention, as `ShortageCause` spells it. */
+export type ShortageCause = 'NEGATIVE' | 'BELOW_MINIMUM'
+
+/**
+ * One line of the stock list, as `StockRowDto` sends it.
+ *
+ * <p>One row per product and location; lots sit a level below and do not lengthen this list.
+ * Number, name, bar code and unit are the copies frozen at the last booking, not today's
+ * values — this is the view of what was booked.
+ */
+export type StockRow = {
+  productId: number
+  productNumber?: string
+  productName: string
+  productEan?: string
+  unitShortName?: string
+  locationId: number
+  locationName: string
+  quantity: number
+  /** Free to be given away. Equal to `quantity` until reservations are built. */
+  availableQuantity: number
+  /** The level warned below. Absent means «do not watch at all»; 0 is not the same thing. */
+  minimumQuantity?: number
+  /** What is wrong with this stock. Absent while all is well. */
+  shortage?: ShortageCause
+}
+
+/**
+ * One line of the shortfall list, as `ShortageRowDto` sends it: one job somebody has to do.
+ *
+ * <p>Number, name, bar code and unit are today's values — the list is driven by the product
+ * list, and a product without a single booking has no frozen copy anywhere.
+ *
+ * <p>`locationId` and `locationName` are absent for `BELOW_MINIMUM`: the minimum belongs to
+ * the product and is counted over every location.
+ */
+export type ShortageRow = {
+  productId: number
+  productNumber?: string
+  productName: string
+  productEan?: string
+  unitShortName?: string
+  locationId?: number
+  locationName?: string
+  quantity: number
+  availableQuantity: number
+  minimumQuantity?: number
+  /** How much is missing, always positive. */
+  missingQuantity: number
+  cause: ShortageCause
+}
+
 // --- document ----------------------------------------------------------------
 
 export type DocumentCategory = 'OFFER' | 'ORDER' | 'DELIVERY_NOTE' | 'INVOICE' | 'CREDIT_NOTE'
