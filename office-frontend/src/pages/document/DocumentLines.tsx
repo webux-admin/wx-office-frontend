@@ -6,7 +6,7 @@ import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { originState } from '../../lib/origin'
 import type { SalesDocumentKind } from '../../lib/salesDocument'
-import type { DocumentLine, SalesDocument } from '../../lib/types'
+import type { DocumentLine, OpenLineQuantity, SalesDocument } from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
 import { LinesTable } from './LinesTable'
 import { ProductLineDialog } from './ProductLineDialog'
@@ -45,6 +45,8 @@ export function DocumentLines({
   busy,
   error,
   readOnlyNote,
+  openOfOwnLines,
+  openOfPredecessorLines,
 }: {
   tenantId: number
   /** Which of the four kinds of document this is, so that a way back leads to this one. */
@@ -70,6 +72,10 @@ export function DocumentLines({
   error: unknown
   /** Why nothing can be changed here, where that is not the state of the document itself. */
   readOnlyNote?: string
+  /** What is still open on this document's own positions, by printed position. */
+  openOfOwnLines?: ReadonlyMap<number, OpenLineQuantity>
+  /** What is still open on the lines this document was taken over from, by their line id. */
+  openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
 }) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null)
   const [open, setOpen] = useState(false)
@@ -175,6 +181,8 @@ export function DocumentLines({
           onEdit={(line) => show(editorOf(line), line)}
           onMove={(line, position) => onMoveLine(line.lineNumber, position)}
           onRemove={askRemoval}
+          openOfOwnLines={openOfOwnLines}
+          openOfPredecessorLines={openOfPredecessorLines}
         />
 
         {error !== null && error !== undefined && (

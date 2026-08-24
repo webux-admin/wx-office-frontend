@@ -3,7 +3,12 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentLine, DocumentStatus, SalesDocument } from '../../lib/types'
+import type {
+  DocumentLine,
+  DocumentStatus,
+  OpenLineQuantity,
+  SalesDocument,
+} from '../../lib/types'
 import { LinesTable } from './LinesTable'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -93,8 +98,19 @@ afterEach(() => {
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
+/** What is still open, in the two shapes the table takes it in. */
+type OpenProps = {
+  openOfOwnLines?: ReadonlyMap<number, OpenLineQuantity>
+  openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
+}
+
 /** Draws the table, and draws it again when a test needs a second state. */
-async function draw(document: SalesDocument, editable = true, busy = false) {
+async function draw(
+  document: SalesDocument,
+  editable = true,
+  busy = false,
+  open: OpenProps = {},
+) {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
@@ -106,6 +122,8 @@ async function draw(document: SalesDocument, editable = true, busy = false) {
           onEdit={(one) => edited.push(one.lineNumber)}
           onMove={(one, position) => moved.push({ lineNumber: one.lineNumber, position })}
           onRemove={(one) => removed.push(one.lineNumber)}
+          openOfOwnLines={open.openOfOwnLines}
+          openOfPredecessorLines={open.openOfPredecessorLines}
         />
       </QueryClientProvider>,
     )
@@ -119,6 +137,26 @@ async function draw(document: SalesDocument, editable = true, busy = false) {
 
 function text(): string {
   return container.textContent ?? ''
+}
+
+/** One answer of the open-quantity endpoint, with only the numbers spelled out. */
+function openLine(
+  lineNumber: number,
+  lineId: number,
+  ordered: number,
+  delivered: number,
+  open: number,
+): OpenLineQuantity {
+  return {
+    lineId,
+    lineNumber,
+    productNumber: 'P-100',
+    description: 'Wartung',
+    unit: 'Stk',
+    orderedQuantity: ordered,
+    deliveredQuantity: delivered,
+    openQuantity: open,
+  }
 }
 
 function byLabel(label: string): HTMLButtonElement {
@@ -206,6 +244,55 @@ describe('LinesTable', () => {
     await draw(order([{ ...LINES[0], discountPercent: 5 }, LINES[1], LINES[2]]))
 
     expect(text()).toContain('Rabatt')
+  })
+
+  /** Same rule as the Rabatt column: it appears where there is something to say. */
+  it('linesTableHidesTheOpenColumnWithoutOpenQuantitiesTest', async () => {
+    await draw(order(LINES))
+
+    expect(text()).not.toContain('Offen')
+  })
+
+  it('linesTableShowsWhatIsStillOpenPerPositionTest', async () => {
+    await draw(order(LINES, 'FINALISED'), false, false, {
+      openOfOwnLines: new Map([[1, openLine(1, 101, 3, 2, 1)]]),
+    })
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    expect(text()).toContain('Offen')
+    // The position with an answer shows it; the one without shows a dash rather than a zero,
+    // which would read as "nothing left".
+    expect(body.rows[0].textContent).toContain('1')
+    expect(body.rows[2].textContent).toContain('-')
+  })
+
+  it('linesTableMarksAPositionEnteredAboveWhatIsOpenTest', async () => {
+    const taken = [{ ...LINES[0], predecessorLineId: 101, quantity: 6 }]
+
+    await draw(order(taken), true, false, {
+      openOfPredecessorLines: new Map([[101, openLine(1, 101, 10, 6, 4)]]),
+    })
+
+    // Never refused — a subsequent delivery beyond the ordered quantity happens.
+    expect(text()).toContain('mehr als offen')
+  })
+
+  it('linesTableMarksNoPositionWithinWhatIsOpenTest', async () => {
+    const taken = [{ ...LINES[0], predecessorLineId: 101, quantity: 4 }]
+
+    await draw(order(taken), true, false, {
+      openOfPredecessorLines: new Map([[101, openLine(1, 101, 10, 6, 4)]]),
+    })
+
+    expect(text()).not.toContain('mehr als offen')
+  })
+
+  it('linesTableMarksNoPositionWrittenFromScratchTest', async () => {
+    await draw(order([{ ...LINES[0], quantity: 99 }]), true, false, {
+      openOfPredecessorLines: new Map([[101, openLine(1, 101, 10, 6, 4)]]),
+    })
+
+    expect(text()).not.toContain('mehr als offen')
   })
 
   it('linesTableShowsTheCurrencyOnASubtotalTaxTest', async () => {

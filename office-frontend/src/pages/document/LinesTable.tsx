@@ -11,7 +11,8 @@ import {
 import { EmptyState } from '../../components/Notice'
 import { formatAmount, formatPercent, formatQuantity } from '../../lib/format'
 import { shortLabelForCode, type SelectableEntry } from '../../lib/masterData'
-import type { DocumentLine, SalesDocument } from '../../lib/types'
+import { exceedsOpenQuantity } from '../../lib/openQuantity'
+import type { DocumentLine, OpenLineQuantity, SalesDocument } from '../../lib/types'
 import { useCatalogueLabel, useMasterDataEntries } from '../../masterdata/useMasterData'
 
 /**
@@ -24,6 +25,7 @@ const COLUMNS: { key: string; header: string; right: boolean; width: string }[] 
   { key: 'position', header: 'Pos', right: false, width: 'w-[60px]' },
   { key: 'description', header: 'Bezeichnung', right: false, width: '' },
   { key: 'quantity', header: 'Menge', right: true, width: 'w-[110px]' },
+  { key: 'open', header: 'Offen', right: true, width: 'w-[90px]' },
   { key: 'unitPrice', header: 'Einzelpreis', right: true, width: 'w-[120px]' },
   { key: 'discount', header: 'Rabatt', right: true, width: 'w-[110px]' },
   { key: 'vat', header: 'MwSt', right: true, width: 'w-[90px]' },
@@ -35,13 +37,19 @@ const COLUMNS: { key: string; header: string; right: boolean; width: string }[] 
  *
  * <p>A document without a single discount does not get a Rabatt column: an empty column is a
  * question the reader has to answer for themselves, and the mask should say what the printed
- * document will say.
+ * document will say. The Offen column follows the same rule — it appears only where the
+ * caller handed the open quantities in.
  *
- * @param lines the lines of the document
+ * @param lines    the lines of the document
+ * @param showsOpen whether what is still open on each position is known
  * @returns the columns to draw, in the order they are printed
  */
-function columnsFor(lines: readonly DocumentLine[]) {
-  return hasDiscount(lines) ? COLUMNS : COLUMNS.filter((column) => column.key !== 'discount')
+function columnsFor(lines: readonly DocumentLine[], showsOpen: boolean) {
+  return COLUMNS.filter(
+    (column) =>
+      (column.key !== 'discount' || hasDiscount(lines)) &&
+      (column.key !== 'open' || showsOpen),
+  )
 }
 
 /**
@@ -83,7 +91,7 @@ type LineAction = (line: DocumentLine) => void
  * grip with the keyboard and pressing an arrow key.
  *
  * <p>No amount is worked out here, the subtotals included. What the backend answers is what
- * is shown.
+ * is shown — the open quantities included.
  */
 export function LinesTable({
   tenantId,
@@ -93,6 +101,8 @@ export function LinesTable({
   onEdit,
   onMove,
   onRemove,
+  openOfOwnLines,
+  openOfPredecessorLines,
 }: {
   tenantId: number
   document: SalesDocument
@@ -104,6 +114,16 @@ export function LinesTable({
   /** Moves a line to another position, counted the way the lines are numbered. */
   onMove: (line: DocumentLine, position: number) => void
   onRemove: LineAction
+  /**
+   * What is still open on this document's own positions, by printed position. Draws the
+   * Offen column, which answers what the customer is still waiting for.
+   */
+  openOfOwnLines?: ReadonlyMap<number, OpenLineQuantity>
+  /**
+   * What is still open on the lines this document was taken over from, by their line id.
+   * Marks a position entered for more than the predecessor has left.
+   */
+  openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
 }) {
   const units = useMasterDataEntries(tenantId, 'units')
   const kindLabel = useCatalogueLabel(tenantId, 'line-kind')
@@ -251,7 +271,7 @@ export function LinesTable({
       </td>
     ) : null
 
-  const columns = columnsFor(lines)
+  const columns = columnsFor(lines, openOfOwnLines !== undefined)
   // Everything but "Pos": the span a row uses that has no figures of its own.
   const valueColumns = columns.length - 1
   const totalSpan = valueColumns + (editable ? 1 : 0)
@@ -312,6 +332,13 @@ export function LinesTable({
                 kindLabel={kindLabel}
                 valueColumns={valueColumns}
                 showsDiscount={columns.some((column) => column.key === 'discount')}
+                showsOpen={openOfOwnLines !== undefined}
+                open={openOfOwnLines?.get(line.lineNumber)}
+                openOfPredecessor={
+                  line.predecessorLineId === undefined
+                    ? undefined
+                    : openOfPredecessorLines?.get(line.predecessorLineId)
+                }
               />
               {actionsOf(line)}
             </tr>
@@ -406,6 +433,9 @@ function LineCells({
   kindLabel,
   valueColumns,
   showsDiscount,
+  showsOpen,
+  open,
+  openOfPredecessor,
 }: {
   line: DocumentLine
   units: readonly SelectableEntry[]
@@ -418,6 +448,12 @@ function LineCells({
   valueColumns: number
   /** False where no line of this document has a discount, so the column is not drawn. */
   showsDiscount: boolean
+  /** False where the open quantities of this document are unknown, so no column is drawn. */
+  showsOpen: boolean
+  /** What is still open on this very position, when it is known. */
+  open?: OpenLineQuantity
+  /** What is still open on the line this position was taken over from, when there is one. */
+  openOfPredecessor?: OpenLineQuantity
 }) {
   if (line.kind === 'COMMENT') {
     return (
@@ -485,7 +521,23 @@ function LineCells({
       <td className={NUMBER_CELL}>
         {formatQuantity(line.quantity)}{' '}
         <span className="text-text-tertiary">{shortLabelForCode(units, line.unit)}</span>
+        {/* Named, never refused: a subsequent delivery beyond the ordered quantity happens.
+            The usual reason is a proposed quantity that was overwritten by accident. */}
+        {exceedsOpenQuantity(line.quantity, openOfPredecessor?.openQuantity) && (
+          <span className="block text-[11px] font-normal text-warning">
+            mehr als offen ({formatQuantity(openOfPredecessor?.openQuantity)})
+          </span>
+        )}
       </td>
+      {showsOpen && (
+        <td className={NUMBER_CELL}>
+          {open === undefined ? (
+            <span className="text-text-tertiary">-</span>
+          ) : (
+            formatQuantity(open.openQuantity)
+          )}
+        </td>
+      )}
       <td className={NUMBER_CELL}>{formatAmount(line.unitPrice)}</td>
       {showsDiscount && (
         <td className={NUMBER_CELL}>

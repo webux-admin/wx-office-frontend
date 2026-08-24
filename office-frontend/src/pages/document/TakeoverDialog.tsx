@@ -7,9 +7,16 @@ import { ErrorNotice, LoadingBlock } from '../../components/Notice'
 import { SelectField } from '../../components/SelectField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
-import { formatAmount, formatDate } from '../../lib/format'
+import { formatAmount, formatDate, formatQuantity } from '../../lib/format'
+import { openLinesOf } from '../../lib/openQuantity'
 import { indefiniteArticle, type SalesDocumentKind } from '../../lib/salesDocument'
-import type { DocumentType, PredecessorCandidate, SalesDocument } from '../../lib/types'
+import type {
+  DocumentType,
+  OpenLineQuantity,
+  PredecessorCandidate,
+  SalesDocument,
+} from '../../lib/types'
+import { useOpenQuantities } from './useOpenQuantities'
 
 type TakeoverDialogProps = {
   tenantId: number
@@ -32,8 +39,13 @@ type TakeoverDialogProps = {
  *
  * <p>Which documents come into question is not decided here: the kind of document names the
  * kinds it may be taken over from, and the backend answers with the issued documents of those
- * kinds. A document that already has a follow-up is shown with a warning rather than left out
- * — a partial delivery out of one offer is the normal case, not a mistake.
+ * kinds. A document that was partly taken over stays in the list — a partial delivery out of
+ * one offer is the normal case, not a mistake — and one that has nothing left is shown as
+ * done and sorted last.
+ *
+ * <p>Once a document is picked, its positions are shown with three numbers each: what was
+ * ordered, what already went out, and what is left. The last of them is what the new document
+ * will carry.
  *
  * @param kind which kind of document is being written
  */
@@ -74,6 +86,10 @@ export function TakeoverDialog({
   // would only collect the refusal the list exists to prevent.
   const selectedId = rows.some((row) => row.id === sourceId) ? sourceId : null
   const chosen = rows.find((row) => row.id === selectedId)
+  const completed = chosen !== undefined && chosen.openLineCount === 0
+
+  const openQuantities = useOpenQuantities(tenantId, kind.resource, selectedId, open)
+  const openLines = openLinesOf(openQuantities.data ?? [])
 
   const create = useMutation({
     mutationFn: () =>
@@ -90,6 +106,8 @@ export function TakeoverDialog({
     onClose()
   }
 
+  const blocked = selectedId === null || chosenType === undefined || completed
+
   /** The document being written, named the way a sentence needs it: «ein Auftrag». */
   const followUp = `${indefiniteArticle(kind, 'nominative')} ${kind.singular}`
 
@@ -99,10 +117,8 @@ export function TakeoverDialog({
       onClose={close}
       wide
       title="Aus Vorgängerbeleg übernehmen"
-      description="Positionen und Beträge werden übernommen. Der MwSt-Satz richtet sich nach dem Leistungsdatum des neuen Belegs."
-      onSubmit={create.isPending || selectedId === null || chosenType === undefined
-            ? undefined
-            : () => create.mutate()}
+      description="Übernommen wird, was noch offen ist. Der MwSt-Satz richtet sich nach dem Leistungsdatum des neuen Belegs."
+      onSubmit={create.isPending || blocked ? undefined : () => create.mutate()}
       footer={
         <>
           <Button variant="secondary" onClick={close}>
@@ -111,7 +127,7 @@ export function TakeoverDialog({
           <Button
             onClick={() => create.mutate()}
             busy={create.isPending}
-            disabled={selectedId === null || chosenType === undefined}
+            disabled={blocked}
             shortcut
           >
             Übernehmen
@@ -165,7 +181,7 @@ export function TakeoverDialog({
             )}
 
             {rows.length > 0 && (
-              <div className="max-h-[320px] overflow-y-auto rounded-[var(--radius-md)] border border-line">
+              <div className="max-h-[260px] overflow-y-auto rounded-[var(--radius-md)] border border-line">
                 <ul>
                   {rows.map((row) => (
                     <li key={row.id}>
@@ -190,13 +206,9 @@ export function TakeoverDialog({
                           {formatAmount(row.totalGross)}{' '}
                           <span className="text-text-tertiary">{row.currency}</span>
                         </span>
-                        {row.alreadyTakenOver && (
-                          <AlertTriangle
-                            size={15}
-                            className="shrink-0 text-text-tertiary"
-                            aria-label={`Aus diesem Beleg wurde bereits ${followUp} erstellt`}
-                          />
-                        )}
+                        <span className="w-[92px] shrink-0 text-right text-[12px] text-text-secondary">
+                          {openLabel(row)}
+                        </span>
                       </button>
                     </li>
                   ))}
@@ -204,12 +216,24 @@ export function TakeoverDialog({
               </div>
             )}
 
-            {chosen?.alreadyTakenOver && (
-              <p className="flex items-start gap-2 text-[12px] text-text-secondary">
-                <AlertTriangle size={14} className="mt-px shrink-0 text-text-tertiary" aria-hidden />
-                Aus {chosen.documentNumber} wurde bereits {followUp} erstellt. Ein zweiter Beleg
-                ist erlaubt — etwa für eine Teillieferung oder eine Teilrechnung.
-              </p>
+            {selectedId !== null && (
+              <div aria-live="polite">
+                {openQuantities.isPending && <LoadingBlock label="Positionen werden geladen" />}
+                {openQuantities.error !== null && <ErrorNotice error={openQuantities.error} />}
+                {completed ? (
+                  <p className="flex items-start gap-2 text-[12px] text-text-secondary">
+                    <AlertTriangle
+                      size={14}
+                      className="mt-px shrink-0 text-text-tertiary"
+                      aria-hidden
+                    />
+                    Aus {chosen?.documentNumber} ist nichts mehr offen — jede Position wurde
+                    bereits übernommen. Für eine Nachlieferung wird {followUp} von Hand erfasst.
+                  </p>
+                ) : (
+                  openLines.length > 0 && <OpenLinesPreview lines={openLines} />
+                )}
+              </div>
             )}
 
             {create.error !== null && <ErrorNotice error={create.error} />}
@@ -217,5 +241,74 @@ export function TakeoverDialog({
         )}
       </div>
     </Dialog>
+  )
+}
+
+/**
+ * How much of a candidate is left, in the two words the picker has room for.
+ *
+ * @param candidate the row
+ * @returns «erledigt», «3 offen», or nothing at all for a document without positions
+ */
+function openLabel(candidate: PredecessorCandidate): string {
+  if (candidate.itemLineCount === 0) {
+    return ''
+  }
+  return candidate.openLineCount === 0 ? 'erledigt' : `${candidate.openLineCount} offen`
+}
+
+/**
+ * The positions the new document would carry, with what stands behind each quantity.
+ *
+ * <p>Bestellt, geliefert and offen next to each other, because the proposed quantity is only
+ * believable with the two numbers it comes from. Positions that are fully taken over are not
+ * listed: the new document will not carry them either.
+ *
+ * @param lines the positions with something left, in printed order
+ */
+function OpenLinesPreview({ lines }: { lines: readonly OpenLineQuantity[] }) {
+  return (
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-line">
+      <table className="w-full min-w-[420px] border-collapse text-[12px]">
+        <thead>
+          <tr className="border-b border-line text-text-secondary">
+            <th scope="col" className="px-3 py-2 text-left font-medium">
+              Position
+            </th>
+            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+              Bestellt
+            </th>
+            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+              Geliefert
+            </th>
+            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+              Offen
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line) => (
+            <tr key={line.lineId} className="border-b border-line-subtle last:border-b-0">
+              <td className="px-3 py-1.5">
+                <span className="text-text-tertiary">{line.lineNumber}</span>{' '}
+                {line.description}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-text-secondary">
+                {formatQuantity(line.orderedQuantity)}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-text-secondary">
+                {formatQuantity(line.deliveredQuantity)}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono tabular-nums font-medium">
+                {formatQuantity(line.openQuantity)}
+                {line.unit !== undefined && (
+                  <span className="text-text-tertiary"> {line.unit}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

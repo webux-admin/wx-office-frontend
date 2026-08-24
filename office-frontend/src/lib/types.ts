@@ -898,8 +898,9 @@ export type CopyPriceMode = 'COPY' | 'RECALCULATE'
 /**
  * A document offered for takeover.
  *
- * <p>`alreadyTakenOver` is a hint, not a refusal: a partial delivery out of one offer is the
- * normal case.
+ * <p>`openLineCount` is a hint, not a refusal: a partial delivery out of one offer is the
+ * normal case. It counts only issued follow-ups of the kind being written, so a draft takes
+ * nothing away and a delivered Auftrag is still fully open for the Rechnung.
  */
 export type PredecessorCandidate = {
   id: number
@@ -909,7 +910,31 @@ export type PredecessorCandidate = {
   partnerName: string
   totalGross: number
   currency: string
-  alreadyTakenOver: boolean
+  /** How many charged positions it carries. */
+  itemLineCount: number
+  /** How many of them still have something open; zero means the document is done. */
+  openLineCount: number
+}
+
+/**
+ * What is still open on one position of a document, for a kind of follow-up to take over.
+ *
+ * <p>Three numbers where a mask used to show one. The backend works them out from the lines
+ * pointing at that position; nothing here is added up in the browser.
+ */
+export type OpenLineQuantity = {
+  /** Database id of the line, which a taken-over line names as its `predecessorLineId`. */
+  lineId: number
+  /** Its printed position on the source document. */
+  lineNumber: number
+  productId?: number
+  productNumber?: string
+  description?: string
+  /** The unit in its short form, for example `Std.`. */
+  unit?: string
+  orderedQuantity: number
+  deliveredQuantity: number
+  openQuantity: number
 }
 
 // --- print layouts -----------------------------------------------------------
@@ -1142,6 +1167,12 @@ export type DocumentLine = {
   /** Position as it is printed: the rank of the line, without gaps. */
   lineNumber: number
   kind: DocumentLineKind
+  /**
+   * The line of the predecessor document this one was taken over from; absent when it was
+   * written from scratch. Lets the mask hold the quantity entered here against what is still
+   * open on that line.
+   */
+  predecessorLineId?: number
   productId?: number
   productNumber?: string
   /** Absent on a page break, and on a subtotal that carries no caption. */

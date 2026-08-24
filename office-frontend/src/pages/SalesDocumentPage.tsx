@@ -17,10 +17,12 @@ import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
 import { booksStock, stockReversalLabel } from '../lib/inventory'
+import { openByLineId, openByLineNumber } from '../lib/openQuantity'
 import { originOf, originState } from '../lib/origin'
 import {
   ORDER_KIND,
   offerTrackingKey,
+  salesDocumentFor,
   salesDocumentKey,
   salesDocumentListKey,
   salesDocumentTrailKey,
@@ -50,6 +52,7 @@ import { DocumentPrintouts } from './document/DocumentPrintouts'
 import { OfferReminders } from './document/OfferReminders'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
+import { useOpenQuantities } from './document/useOpenQuantities'
 import { headerKey, paymentKey } from './document/headerForm'
 import { successorNotice } from './document/documentChain'
 import { recipientNote } from './document/recipientNote'
@@ -200,6 +203,31 @@ function DocumentMask({
     queryFn: () => api.get<DocumentChainEntry[]>(`${base}/related`),
   })
   const successors = successorNotice(chain.data)
+
+  // What the document it was taken over from still has open, so a position entered for more
+  // than that can be pointed out. Only while it is a draft: on an issued document nothing can
+  // be corrected any more, and the hint would be a reproach without a way out.
+  const openOfPredecessor = useOpenQuantities(
+    tenantId,
+    kind.resource,
+    document.predecessorDocumentId,
+    document.status === 'DRAFT',
+  )
+  // And what this document itself still has open, which is the question the sale asks of an
+  // issued Auftrag: what is the customer still waiting for? The answer is about deliveries,
+  // so it is the right to read Lieferscheine that decides whether the column appears.
+  const deliveryNotes = salesDocumentFor('DELIVERY_NOTE')
+  const showsOpenColumn =
+    kind.category === 'ORDER' &&
+    document.status === 'FINALISED' &&
+    deliveryNotes !== undefined &&
+    can(deliveryNotes.rights.read)
+  const openOfOwnLines = useOpenQuantities(
+    tenantId,
+    deliveryNotes?.resource ?? '',
+    document.id,
+    showsOpenColumn,
+  )
 
   const refresh = () => {
     // Scoped by the kind, so that a saved invoice does not throw away the orders that were
@@ -589,6 +617,16 @@ function DocumentMask({
           }
           onRemoveLine={(lineNumber) =>
             startLine(() => removeLine.mutateAsync(lineNumber)).catch(() => undefined)
+          }
+          openOfOwnLines={
+            openOfOwnLines.data === undefined
+              ? undefined
+              : openByLineNumber(openOfOwnLines.data)
+          }
+          openOfPredecessorLines={
+            openOfPredecessor.data === undefined
+              ? undefined
+              : openByLineId(openOfPredecessor.data)
           }
           busy={lineBusy}
           error={lineError}
