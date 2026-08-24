@@ -21,6 +21,7 @@ import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { CopyEditor } from './documenttype/CopyEditor'
 import { PredecessorEditor } from './documenttype/PredecessorEditor'
 import { PrintPanel } from './documenttype/PrintPanel'
+import { StockPanel } from './documenttype/StockPanel'
 import {
   COPY_PRICE_MODES,
   emptyDocumentType,
@@ -270,6 +271,13 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                   </div>
                 </dl>
               </Panel>
+
+              <StockPanel
+                tenantId={tenantId}
+                form={form}
+                mayWrite={mayWrite}
+                onChange={change}
+              />
 
               {type !== null && (
                 <Panel

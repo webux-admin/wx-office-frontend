@@ -16,6 +16,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
+import { booksStock, stockReversalLabel } from '../lib/inventory'
 import { originOf, originState } from '../lib/origin'
 import {
   ORDER_KIND,
@@ -34,6 +35,7 @@ import type {
   OfferOutcome,
   OfferTracking,
   SalesDocument,
+  StockReversalLine,
 } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
@@ -323,6 +325,15 @@ function DocumentMask({
     },
   })
 
+  // What taking the document back would put into stock again. A read that books nothing, and
+  // only while the dialog is open: automatic is not the same as silent, and the goods may have
+  // left the building long ago (ADR-0064 of the backend).
+  const stockReversal = useQuery({
+    queryKey: [...salesDocumentKey(kind, tenantId, document.id), 'stock-reversal'],
+    queryFn: () => api.get<StockReversalLine[]>(`${base}/stock-reversal`),
+    enabled: reopening && booksStock(document.stockEffect),
+  })
+
   // Takes the document back to a draft. It keeps its number and is issued under the same one
   // again, so nothing is lost and no gap is torn (ADR-0046).
   const reopen = useMutation({
@@ -514,6 +525,20 @@ function DocumentMask({
       </PageHeader>
 
       <div className="px-8 pb-12">
+        {/* Only where the button really moves stock. A permanent hint without content is the
+            second worst mistake such a mask can make; the invisible rule is the worst. */}
+        {document.status === 'DRAFT'
+          && can(kind.rights.finalise)
+          && booksStock(document.stockEffect) && (
+            <p className="mb-6 text-[13px] text-text-secondary">
+              Ausstellen bucht den Bestand
+              {document.stockLocationName === undefined
+                ? ''
+                : ` im ${document.stockLocationName}`}{' '}
+              ab.
+            </p>
+          )}
+
         {(finalise.error !== null ||
           print.error !== null ||
           (setOutcome.error !== null && !declining)) && (
@@ -734,6 +759,24 @@ function DocumentMask({
           Die Belegnummer {document.documentNumber} bleibt auf dem Beleg und wird beim erneuten
           Ausstellen wieder verwendet. Das bisher ausgestellte PDF bleibt im Archiv.
         </p>
+        {booksStock(document.stockEffect) && (stockReversal.data ?? []).length > 0 && (
+          <div className="mb-4 text-[13px] text-text-secondary">
+            <p>
+              Dieser Beleg hat Bestand abgebucht. Beim Zurückstellen wird zurückgebucht:
+            </p>
+            <ul className="mt-2 grid gap-1">
+              {(stockReversal.data ?? []).map((line, index) => (
+                <li key={index} className="font-mono text-[12px] text-text-primary">
+                  {stockReversalLabel(line)}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Hat die Ware das Haus bereits verlassen, zeigt das Lager bis zum erneuten
+              Ausstellen mehr Bestand, als im Regal liegt.
+            </p>
+          </div>
+        )}
         <TextField
           label="Grund"
           value={reopenReason}
@@ -768,6 +811,12 @@ function DocumentMask({
           </>
         }
       >
+        {booksStock(document.stockEffect) && (
+          <p className="mb-4 text-[13px] text-text-secondary">
+            Der Storno bucht den Bestand zurück. Er tut das über den Gegenbeleg, also genau
+            einmal.
+          </p>
+        )}
         <TextField
           label="Grund"
           value={reason}

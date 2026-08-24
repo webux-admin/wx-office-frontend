@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   COPY_PRICE_MODES,
   MAX_COPIES,
+  STOCK_EFFECTS,
   describeCopies,
   emptyDocumentType,
   firstComplaint,
@@ -61,6 +62,68 @@ const OFFER_FORM: DocumentTypeForm = {
   code: 'OF',
   name: 'Offerte',
 }
+
+describe('stock effect', () => {
+  it('toFormReadsTheStockEffectTest', () => {
+    const form = toForm({ ...STORED, stockEffect: 'ISSUE', stockLocationId: 33 })
+
+    expect(form.stockEffect).toBe('ISSUE')
+    // Ids live in the mask as strings, because that is what a `<select>` holds.
+    expect(form.stockLocationId).toBe('33')
+  })
+
+  it('toFormWithoutAStockEffectTest', () => {
+    // A kind stored before this setting existed says nothing about stock, and that means none.
+    const form = toForm(STORED)
+
+    expect(form.stockEffect).toBe('NONE')
+    expect(form.stockLocationId).toBe('')
+  })
+
+  it('toPayloadSendsTheStockEffectTest', () => {
+    const payload = toPayload({ ...COMPLETE, stockEffect: 'ISSUE', stockLocationId: '33' })
+
+    expect(payload.stockEffect).toBe('ISSUE')
+    expect(payload.stockLocationId).toBe(33)
+  })
+
+  it('toPayloadWithoutALocationTest', () => {
+    // No location means the tenant's default one, and the server is the only place that knows
+    // which that is.
+    const payload = toPayload({ ...COMPLETE, stockEffect: 'ISSUE', stockLocationId: '' })
+
+    expect(payload.stockEffect).toBe('ISSUE')
+    expect(payload.stockLocationId).toBeUndefined()
+  })
+
+  it('toPayloadDropsTheStockEffectOnACreditNoteTest', () => {
+    const payload = toPayload({
+      ...COMPLETE,
+      category: 'CREDIT_NOTE',
+      stockEffect: 'ISSUE',
+      stockLocationId: '33',
+    })
+
+    expect(payload.stockEffect).toBe('NONE')
+    expect(payload.stockLocationId).toBeUndefined()
+  })
+
+  it('emptyDocumentTypeHasNoStockEffectTest', () => {
+    expect(emptyDocumentType().stockEffect).toBe('NONE')
+    expect(emptyDocumentType().stockLocationId).toBe('')
+  })
+
+  it('STOCK_EFFECTSTest', () => {
+    // RESERVE is a legal value in the backend but nothing evaluates it yet, so it is not
+    // offered: a setting that does nothing is a support case in waiting.
+    expect(STOCK_EFFECTS.map((effect) => effect.value)).toEqual([
+      'NONE',
+      'ISSUE',
+      'ISSUE_IF_NOT_BOOKED',
+    ])
+    expect(STOCK_EFFECTS.every((effect) => effect.label !== '' && effect.hint !== '')).toBe(true)
+  })
+})
 
 describe('toForm', () => {
   it('toFormTest', () => {
@@ -152,6 +215,8 @@ describe('toPayload', () => {
       predecessorTypeIds: [3, 5],
       copyPriceMode: 'COPY',
       offerValidityDays: undefined,
+      stockEffect: 'NONE',
+      stockLocationId: undefined,
     })
   })
 
@@ -181,6 +246,8 @@ describe('toPayload', () => {
       'numberPrefix',
       'offerValidityDays',
       'predecessorTypeIds',
+      'stockEffect',
+      'stockLocationId',
     ])
     // One copy, because a new kind starts with an Original: without one it would print
     // nothing at all (ADR-0053 of the backend).

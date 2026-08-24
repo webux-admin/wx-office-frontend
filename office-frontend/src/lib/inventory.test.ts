@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StockLocation } from './types'
 import {
   INVENTORY_RIGHTS,
+  booksStock,
   inventoryUrl,
   isReversible,
   manualReasonsFor,
@@ -16,6 +17,7 @@ import {
   stockMovementListKey,
   stockMovementsUrl,
   stockShortageListKey,
+  stockReversalLabel,
   stockShortagesUrl,
   stockTransfersUrl,
   stockUrl,
@@ -220,5 +222,57 @@ describe('shortageCauseLabel', () => {
 
   it('shortageCauseToneWithoutACauseTest', () => {
     expect(shortageCauseTone(undefined)).toBeUndefined()
+  })
+})
+
+
+describe('booksStock', () => {
+  it('booksStockTest', () => {
+    expect(booksStock('ISSUE')).toBe(true)
+    expect(booksStock('ISSUE_IF_NOT_BOOKED')).toBe(true)
+  })
+
+  /** RESERVE earmarks rather than moves, and nothing evaluates it yet. */
+  it('booksStockWithoutAnEffectTest', () => {
+    expect(booksStock('NONE')).toBe(false)
+    expect(booksStock('RESERVE')).toBe(false)
+    expect(booksStock(undefined)).toBe(false)
+  })
+})
+
+describe('stockReversalLabel', () => {
+  it('stockReversalLabelTest', () => {
+    const label = stockReversalLabel({
+      productNumber: 'P-100',
+      productName: 'Schraube M4',
+      quantity: 12,
+      unitShortName: 'Stk',
+      locationName: 'Hauptlager',
+    })
+
+    expect(label).toBe('12 Stk P-100 Schraube M4 \u00b7 Hauptlager')
+  })
+
+  /** A product without a number and a unit without a short name leave no double spaces. */
+  it('stockReversalLabelWithoutNumberAndUnitTest', () => {
+    const label = stockReversalLabel({
+      productName: 'Winkel 40',
+      quantity: 3,
+      locationName: 'Aussenlager',
+    })
+
+    expect(label).toBe('3 Winkel 40 \u00b7 Aussenlager')
+  })
+
+  /** A quarter keeps its decimals; the reopen dialog must not round goods away. */
+  it('stockReversalLabelWithAFractionTest', () => {
+    const label = stockReversalLabel({
+      productName: 'Kabel',
+      quantity: 2.5,
+      unitShortName: 'm',
+      locationName: 'Hauptlager',
+    })
+
+    expect(label).toContain('2.5 m Kabel')
   })
 })

@@ -4,6 +4,7 @@ import type {
   DocumentCategory,
   DocumentType,
   DocumentTypeCopy,
+  StockEffect,
 } from '../../lib/types'
 
 /**
@@ -47,6 +48,10 @@ export type DocumentTypeForm = {
   copyPriceMode: CopyPriceMode
   /** How many days a new offer of this kind is valid, as typed; empty means no preset. */
   offerValidityDays: string
+  /** What issuing such a document does to the stock. */
+  stockEffect: StockEffect
+  /** Id of the location it books at, as a string; empty means the tenant's default one. */
+  stockLocationId: string
 }
 
 /** How many copies of one document may come out of the printer; the backend agrees. */
@@ -92,6 +97,8 @@ export function emptyDocumentType(): DocumentTypeForm {
     predecessorTypeIds: [],
     copyPriceMode: 'RECALCULATE',
     offerValidityDays: '',
+    stockEffect: 'NONE',
+    stockLocationId: '',
   }
 }
 
@@ -120,6 +127,8 @@ export function toForm(type: DocumentType): DocumentTypeForm {
     predecessorTypeIds: type.predecessorTypeIds ?? [],
     copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
     offerValidityDays: type.offerValidityDays === undefined ? '' : `${type.offerValidityDays}`,
+    stockEffect: type.stockEffect ?? 'NONE',
+    stockLocationId: type.stockLocationId === undefined ? '' : `${type.stockLocationId}`,
   }
 }
 
@@ -153,6 +162,14 @@ export function toPayload(form: DocumentTypeForm): Record<string, unknown> {
       form.category === 'OFFER' && form.offerValidityDays.trim() !== ''
         ? (parseDecimal(form.offerValidityDays) ?? undefined)
         : undefined,
+    // A Gutschrift is never stock-effective: it corrects money, and where it corrects goods it
+    // does so as the counter document of a Storno, which books back on its own. The mask hides
+    // the field there, so what may have been typed before the category moved is dropped here.
+    stockEffect: form.category === 'CREDIT_NOTE' ? 'NONE' : form.stockEffect,
+    stockLocationId:
+      form.category === 'CREDIT_NOTE' || form.stockLocationId === ''
+        ? undefined
+        : Number(form.stockLocationId),
   }
 }
 
@@ -296,6 +313,30 @@ export const COPY_PRICE_MODES: { value: CopyPriceMode; label: string; hint: stri
     value: 'COPY',
     label: 'Beträge des Originals behalten',
     hint: 'Die Kopie trägt dieselben Beträge wie der Beleg, aus dem sie stammt.',
+  },
+]
+
+/**
+ * What issuing a document can do to the stock, in German.
+ *
+ * <p>`RESERVE` is missing on purpose: the backend accepts the value from the first migration
+ * on, but nothing evaluates it yet. A setting that does nothing is a support case in waiting.
+ */
+export const STOCK_EFFECTS: { value: StockEffect; label: string; hint: string }[] = [
+  {
+    value: 'NONE',
+    label: 'Keine Wirkung',
+    hint: 'Das Ausstellen bewegt keinen Bestand.',
+  },
+  {
+    value: 'ISSUE',
+    label: 'Bucht beim Ausstellen ab',
+    hint: 'Beim Ausstellen verlässt die Ware das Lager. Der Storno bucht sie zurück.',
+  },
+  {
+    value: 'ISSUE_IF_NOT_BOOKED',
+    label: 'Bucht ab, wenn der Vorgang es noch nicht getan hat',
+    hint: 'Für die Rechnung: sie bucht ab, wenn kein Lieferschein des Vorgangs es schon tat.',
   },
 ]
 

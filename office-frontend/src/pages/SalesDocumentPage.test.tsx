@@ -11,6 +11,7 @@ import type {
   OfferOutcome,
   OfferTracking,
   SalesDocument,
+  StockReversalLine,
 } from '../lib/types'
 import { SalesDocumentPage } from './SalesDocumentPage'
 
@@ -27,6 +28,11 @@ const PERMISSIONS = [
   'OFFER_FINALISE',
   'ORDER_READ',
   'ORDER_WRITE',
+  // The stock sentences hang on these three: issuing books, reopening books back, the Storno
+  // books back through its counter document.
+  'ORDER_FINALISE',
+  'ORDER_REOPEN',
+  'ORDER_CANCEL',
 ]
 
 const SESSION: AuthState = {
@@ -98,6 +104,12 @@ function issued(category: 'OFFER' | 'ORDER'): SalesDocument {
   }
 }
 
+/** What the order endpoint answers; a test that cares about stock sets its own. */
+let orderState: SalesDocument | null = null
+
+/** What the reopen preview answers. */
+let reversalState: StockReversalLine[] = []
+
 let container: HTMLDivElement
 let root: Root
 /** Every request the mask sent, in order. */
@@ -136,6 +148,8 @@ function stubFetch() {
   sent = []
   trackingState = { outcome: 'OPEN', expired: false }
   chainState = [SELF_ENTRY]
+  orderState = null
+  reversalState = []
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     const method = options?.method ?? 'GET'
     const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
@@ -165,8 +179,10 @@ function stubFetch() {
     if (url.includes('/related')) return json(chainState)
     if (url.includes('/printouts') || url.includes('/printers')) return json([])
     if (url.includes('/catalogues')) return json(CATALOGUES)
+    if (url.includes('/stock-reversal')) return json(reversalState)
+    if (url.includes('/finalise')) return json(orderState ?? issued('ORDER'))
     if (url.includes('/offers/42')) return json(issued('OFFER'))
-    if (url.includes('/orders/42')) return json(issued('ORDER'))
+    if (url.includes('/orders/42')) return json(orderState ?? issued('ORDER'))
     return json([])
   })
 }
@@ -411,5 +427,93 @@ describe('SalesDocumentPage', () => {
 
     expect(text()).toContain('Nachfolgebeleg')
     expect(text()).toContain('AU-2026-0007')
+  })
+
+  // --- what the mask says about stock (ADR-0064 of the backend) --------------
+
+  it('salesDocumentPageNamesTheStockEffectOfIssuingTest', async () => {
+    orderState = {
+      ...issued('ORDER'),
+      status: 'DRAFT',
+      documentNumber: undefined,
+      finalisedAt: undefined,
+      stockEffect: 'ISSUE',
+      stockLocationName: 'Hauptlager',
+    }
+
+    await render('/auftraege/42')
+
+    expect(text()).toContain('Ausstellen bucht den Bestand im Hauptlager ab.')
+  })
+
+  it('salesDocumentPageSaysNothingAboutStockWithoutAnEffectTest', async () => {
+    // The invisible rule is the biggest mistake such a mask can make; a permanent hint with
+    // no content is the second biggest.
+    orderState = {
+      ...issued('ORDER'),
+      status: 'DRAFT',
+      documentNumber: undefined,
+      finalisedAt: undefined,
+    }
+
+    await render('/auftraege/42')
+
+    expect(text()).not.toContain('bucht den Bestand')
+  })
+
+  it('salesDocumentPageShowsTheStockConflictOfIssuingTest', async () => {
+    orderState = {
+      ...issued('ORDER'),
+      status: 'DRAFT',
+      documentNumber: undefined,
+      finalisedAt: undefined,
+      stockEffect: 'ISSUE',
+      stockLocationName: 'Hauptlager',
+    }
+    await render('/auftraege/42')
+    // The location blocks a stock below zero, so the backend refuses with 409 and the plain
+    // sentence in `detail`. No new error path in the mask reads it.
+    vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
+      const method = options?.method ?? 'GET'
+      sent.push({ url, method, body: undefined })
+      if (url.includes('/finalise')) {
+        return json({ detail: 'Hauptlager: 2 verfügbar, 5 gebucht' }, 409)
+      }
+      return json(orderState)
+    })
+
+    await press('Ausstellen')
+
+    expect(text()).toContain('Hauptlager: 2 verfügbar, 5 gebucht')
+  })
+
+  it('salesDocumentPageShowsWhatComesBackWhenReopeningTest', async () => {
+    orderState = { ...issued('ORDER'), stockEffect: 'ISSUE', stockLocationName: 'Hauptlager' }
+    reversalState = [
+      {
+        productNumber: 'P-100',
+        productName: 'Schraube M4',
+        quantity: 12,
+        unitShortName: 'Stk',
+        locationName: 'Hauptlager',
+      },
+    ]
+    await render('/auftraege/42')
+
+    await press('Zurückstellen')
+
+    // Numbers, not a general warning: quantity, unit, product and location.
+    expect(text()).toContain('12 Stk P-100 Schraube M4')
+    expect(text()).toContain('Hauptlager')
+    expect(text()).toContain('mehr Bestand, als im Regal liegt')
+  })
+
+  it('salesDocumentPageSaysTheStornoBooksStockBackTest', async () => {
+    orderState = { ...issued('ORDER'), stockEffect: 'ISSUE', stockLocationName: 'Hauptlager' }
+    await render('/auftraege/42')
+
+    await press('Stornieren')
+
+    expect(text()).toContain('Der Storno bucht den Bestand zurück')
   })
 })

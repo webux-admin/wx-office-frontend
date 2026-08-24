@@ -635,6 +635,33 @@ export type VatRatePeriod = {
 export type NegativeStockPolicy = 'WARN' | 'BLOCK'
 
 /**
+ * What issuing a document does to the stock.
+ *
+ * <p>A setting of the kind of document, not of its category: a business that never writes a
+ * delivery note still has to move stock when it invoices (ADR-0064 of the backend).
+ * `ISSUE_IF_NOT_BOOKED` books unless the same operation already did, which is what lets a
+ * direct invoice book while an invoice after a delivery note does not. `RESERVE` is a legal
+ * value from the first migration on but is not evaluated yet.
+ */
+export type StockEffect = 'NONE' | 'RESERVE' | 'ISSUE' | 'ISSUE_IF_NOT_BOOKED'
+
+/**
+ * One quantity that taking a document back would put into stock again, as
+ * `StockReversalLineDto` sends it.
+ *
+ * <p>Read only, and nothing is booked to answer it. The reopen dialog names these before the
+ * user confirms: taking a delivery note back is automatic, but the goods may already have left
+ * the building.
+ */
+export type StockReversalLine = {
+  productNumber?: string
+  productName: string
+  quantity: number
+  unitShortName?: string
+  locationName: string
+}
+
+/**
  * A place a tenant keeps goods in, as `StockLocationDto` sends it.
  *
  * <p>Flat on purpose: `binHint` is free text («Regal C3») and takes the place of a hierarchy
@@ -844,6 +871,15 @@ export type DocumentType = {
    * date. Absent when a new offer starts without a valid-until date.
    */
   offerValidityDays?: number
+  /** What issuing a document of this kind does to the stock (ADR-0064 of the backend). */
+  stockEffect?: StockEffect
+  /** The location it books at; absent means the tenant's default one. */
+  stockLocationId?: number
+  /**
+   * What that location is called. Worked out on the server, because only it knows which one it
+   * is: the one this kind names, or the tenant's default. Absent when the kind moves no stock.
+   */
+  stockLocationName?: string
   active: boolean
   /**
    * True for the kind its step of a sale starts with. Exactly one per tenant and category,
@@ -1224,6 +1260,16 @@ export type SalesDocument = {
   /** Only on offers: the day up to which the offer stands, as `yyyy-MM-dd`. Absent when no
    * validity was given. */
   validUntil?: string
+  /**
+   * What issuing this document does to the stock. Comes from its kind of document, so the mask
+   * can say what the Ausstellen button will do before it is pressed.
+   */
+  stockEffect?: StockEffect
+  /**
+   * What the location it books at is called. Absent when it moves no stock. Worked out on the
+   * server: only it knows whether the kind names a location or the tenant's default applies.
+   */
+  stockLocationName?: string
   lines?: DocumentLine[]
 }
 

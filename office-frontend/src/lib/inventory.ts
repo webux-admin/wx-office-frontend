@@ -1,8 +1,11 @@
+import { formatQuantity } from './format'
 import type {
   MovementDirection,
   MovementReason,
   ShortageCause,
+  StockEffect,
   StockLocation,
+  StockReversalLine,
 } from './types'
 
 /**
@@ -280,4 +283,38 @@ export function shortageCauseTone(
 export function isReversible(movement: { sourceKind: string; reason: string } | undefined): boolean {
   if (movement === undefined) return false
   return movement.sourceKind === 'MANUAL' && movement.reason !== 'REVERSAL'
+}
+
+/**
+ * Whether issuing a document of this kind moves stock at all.
+ *
+ * <p>The one question every sentence about stock on a document mask hangs on. `RESERVE`
+ * earmarks rather than moves and is not evaluated yet, so it answers false here too.
+ *
+ * @param stockEffect what the kind of document says, absent on a document that carries none
+ * @returns true where the Ausstellen button will write a movement
+ */
+export function booksStock(stockEffect: StockEffect | undefined): boolean {
+  return stockEffect === 'ISSUE' || stockEffect === 'ISSUE_IF_NOT_BOOKED'
+}
+
+/**
+ * One line of the warning the reopen dialog shows: «12 Stk P-100 Schraube M4 · Hauptlager».
+ *
+ * <p>Quantity, unit, product and location, not a count of rows. Whoever takes a delivery note
+ * back has to see what goes where — the goods may have left the building, and until the note is
+ * issued again the stock shows more than the shelf holds.
+ *
+ * @param line one quantity that would come back
+ * @returns the sentence for that row
+ */
+export function stockReversalLabel(line: StockReversalLine): string {
+  const unit = line.unitShortName === undefined || line.unitShortName === ''
+    ? ''
+    : ` ${line.unitShortName}`
+  const number = line.productNumber === undefined || line.productNumber === ''
+    ? ''
+    : `${line.productNumber} `
+  return `${formatQuantity(line.quantity)}${unit} ${number}${line.productName}`
+    + ` \u00b7 ${line.locationName}`
 }
