@@ -4,8 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
 import { ORDER_KIND } from '../../lib/salesDocument'
-import type { DocumentLine, SalesDocument } from '../../lib/types'
+import type { DocumentLine, SalesDocument, StockShortfall } from '../../lib/types'
 import { DocumentLines } from './DocumentLines'
 import type { FreeLine, ProductLine, StructureLine } from './lineForm'
 
@@ -141,6 +142,13 @@ function stubFetch() {
 
 /** What each of the endpoints the mask reads answers with. */
 function answer(url: string): unknown {
+  // Matched before "/products": the fact box of the position dialog asks for it, and the
+  // list of hits behind it does too.
+  if (url.includes('/inventory/availability')) {
+    return url.includes('productIds=')
+      ? []
+      : { productId: 7, stockManaged: true, onHand: 12, reserved: 0, availableQuantity: 12 }
+  }
   if (url.includes('/catalogues')) return CATALOGUES
   if (url.includes('/units')) return UNITS
   if (url.includes('/vat-rates')) return { STANDARD: 8.1 }
@@ -149,6 +157,23 @@ function answer(url: string): unknown {
   if (single) return PRODUCTS.content.find((product) => String(product.id) === single[1])
   if (url.includes('/products')) return PRODUCTS
   return {}
+}
+
+/**
+ * A session that may read the inventory, which is what the stock figures hang on.
+ *
+ * <p>The real application always has one; the components ask it before they fire a request
+ * that would come back 403 for a user without the right.
+ */
+function auth(): AuthState {
+  return {
+    user: null,
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    can: () => true,
+  }
 }
 
 beforeEach(() => {
@@ -191,6 +216,8 @@ type Setup = {
   subtotalsIncludeVat?: boolean
   /** True where every charged line is priced gross, the way a gross price group prices it. */
   pricesIncludeVat?: boolean
+  /** What the stock check reported for this draft, left out where it reported nothing. */
+  shortfalls?: StockShortfall[]
 }
 
 async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> {
@@ -202,6 +229,7 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
     error = null,
     subtotalsIncludeVat = false,
     pricesIncludeVat = false,
+    shortfalls,
   } = setup
   const calls: Calls = {
     added: [],
@@ -221,43 +249,46 @@ async function render(lines: DocumentLine[], setup: Setup = {}): Promise<Calls> 
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <DocumentLines
-          tenantId={TENANT}
-          kind={ORDER_KIND}
-          document={salesDocument(lines, subtotalsIncludeVat, pricesIncludeVat)}
-          editable={editable}
-          onAddProductLine={(payload) => {
-            calls.added.push(payload)
-            return answer()
-          }}
-          onUpdateProductLine={(lineNumber, payload) => {
-            calls.updatedProduct.push({ lineNumber, line: payload })
-            return answer()
-          }}
-          onAddFreeLine={(payload) => {
-            calls.addedFree.push(payload)
-            return answer()
-          }}
-          onUpdateFreeLine={(lineNumber, payload) => {
-            calls.updatedFree.push({ lineNumber, line: payload })
-            return answer()
-          }}
-          onAddStructureLine={(payload) => {
-            calls.addedStructure.push(payload)
-            return answer()
-          }}
-          onUpdateStructureLine={(lineNumber, payload) => {
-            calls.updatedStructure.push({ lineNumber, line: payload })
-            return answer()
-          }}
-          onMoveLine={(lineNumber, position) => calls.moved.push({ lineNumber, position })}
-          onRemoveLine={(lineNumber) => calls.removed.push(lineNumber)}
-          busy={busy}
-          error={error}
-            readOnlyNote={readOnlyNote}
-          />
-        </QueryClientProvider>
+        <AuthContext.Provider value={auth()}>
+          <QueryClientProvider client={client}>
+            <DocumentLines
+            tenantId={TENANT}
+            kind={ORDER_KIND}
+            document={salesDocument(lines, subtotalsIncludeVat, pricesIncludeVat)}
+            editable={editable}
+            onAddProductLine={(payload) => {
+              calls.added.push(payload)
+              return answer()
+            }}
+            onUpdateProductLine={(lineNumber, payload) => {
+              calls.updatedProduct.push({ lineNumber, line: payload })
+              return answer()
+            }}
+            onAddFreeLine={(payload) => {
+              calls.addedFree.push(payload)
+              return answer()
+            }}
+            onUpdateFreeLine={(lineNumber, payload) => {
+              calls.updatedFree.push({ lineNumber, line: payload })
+              return answer()
+            }}
+            onAddStructureLine={(payload) => {
+              calls.addedStructure.push(payload)
+              return answer()
+            }}
+            onUpdateStructureLine={(lineNumber, payload) => {
+              calls.updatedStructure.push({ lineNumber, line: payload })
+              return answer()
+            }}
+            onMoveLine={(lineNumber, position) => calls.moved.push({ lineNumber, position })}
+            onRemoveLine={(lineNumber) => calls.removed.push(lineNumber)}
+            busy={busy}
+            error={error}
+              readOnlyNote={readOnlyNote}
+              shortfalls={shortfalls}
+            />
+          </QueryClientProvider>
+        </AuthContext.Provider>
       </MemoryRouter>,
     )
   })
@@ -352,6 +383,60 @@ describe('DocumentLines', () => {
     expect(text()).toContain('Zwischentotal')
     expect(text()).toContain('675.00')
     expect(text()).toContain('Seitenwechsel')
+  })
+
+  /** The one shortfall of this document, on the position that carries the product. */
+  const SHORTFALL: StockShortfall = {
+    lineNumbers: [5],
+    productId: 7,
+    locationName: 'Hauptlager',
+    required: 5,
+    onHand: 7,
+    reserved: 4,
+    available: 3,
+    heldBy: [{ documentNumber: 'AU-2026-0142', quantity: 4 }],
+    blocking: false,
+  }
+
+  it('documentLinesShowsTheShortfallStripTest', async () => {
+    await render(LINES, { shortfalls: [SHORTFALL] })
+
+    // The strip counts positions, because that is what the table underneath shows.
+    expect(text()).toContain('1 von 2 Positionen ist nicht gedeckt')
+
+    // Folded up until somebody asks: the sentence with the figures is the second step.
+    const details = [...container.querySelectorAll('button')].find(
+      (button) => button.getAttribute('aria-expanded') !== null,
+    )
+    expect(details?.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => {
+      details?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(details?.getAttribute('aria-expanded')).toBe('true')
+    expect(text()).toContain(
+      'Hauptlager: 3 verfügbar, 5 gebraucht — 4 sind für AU-2026-0142 reserviert',
+    )
+    // And the position itself is marked, without a column of its own.
+    expect(container.querySelector('[title^="Hauptlager: 3 verfügbar"]')).not.toBeNull()
+  })
+
+  it('documentLinesWithoutShortfallShowsNoStripTest', async () => {
+    await render(LINES)
+
+    expect(text()).not.toContain('nicht gedeckt')
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (button) => button.getAttribute('aria-expanded') !== null,
+      ),
+    ).toBe(false)
+  })
+
+  /** A location that refuses says so, rather than letting somebody find out by pressing. */
+  it('documentLinesSaysWhenAShortfallBlocksTest', async () => {
+    await render(LINES, { shortfalls: [{ ...SHORTFALL, blocking: true }] })
+
+    expect(text()).toContain('und lassen sich nicht ausstellen')
   })
 
   it('documentLinesShowsBothKindsOfDiscountTest', async () => {

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { StockLocation } from './types'
+import type { ProductAvailability, StockLocation, StockShortfall } from './types'
 import {
   INVENTORY_RIGHTS,
+  availabilityHint,
+  availabilityKey,
+  availabilityUrl,
   booksStock,
+  reservedForText,
+  shortfallText,
   inventoryUrl,
   isReversible,
   manualReasonsFor,
@@ -425,5 +430,200 @@ describe('reservation constants', () => {
   it('stockReservationPathTest', () => {
     expect(STOCK_RESERVATION_PATH).toBe('/reservierungen')
     expect(STALE_RESERVATION_DAYS).toBe(30)
+  })
+})
+
+describe('availabilityUrl', () => {
+  it('availabilityUrlTest', () => {
+    expect(availabilityUrl(7, 42)).toBe('/api/tenants/7/inventory/availability/42')
+  })
+
+  /** One request for the whole hit list, which is the reason this shape exists at all. */
+  it('availabilityUrlForAListTest', () => {
+    expect(availabilityUrl(7, [1, 2, 3])).toBe(
+      '/api/tenants/7/inventory/availability?productIds=1,2,3',
+    )
+  })
+
+  it('availabilityUrlForAnEmptyListTest', () => {
+    expect(availabilityUrl(7, [])).toBe('/api/tenants/7/inventory/availability?productIds=')
+  })
+})
+
+describe('availabilityKey', () => {
+  it('availabilityKeyTest', () => {
+    expect(availabilityKey(7, 42)).toEqual(['stock-availability', 7, 42])
+    expect(availabilityKey(7, [1, 2])).toEqual(['stock-availability', 7, 'batch', '1,2'])
+  })
+
+  /** The batch answer carries no split and no holders, so it must not fill the fact box. */
+  it('availabilityKeyKeepsTheTwoShapesApartTest', () => {
+    expect(availabilityKey(7, 42)).not.toEqual(availabilityKey(7, [42]))
+  })
+
+  it('availabilityKeyPerTenantTest', () => {
+    expect(availabilityKey(7, 42)).not.toEqual(availabilityKey(8, 42))
+  })
+})
+
+describe('shortfallText', () => {
+  function shortfall(fields: Partial<StockShortfall> = {}): StockShortfall {
+    return {
+      lineNumbers: [1],
+      productId: 42,
+      locationName: 'Hauptlager',
+      required: 5,
+      onHand: 7,
+      reserved: 4,
+      available: 3,
+      heldBy: [{ documentNumber: 'AU-2026-0142', quantity: 4 }],
+      blocking: false,
+      ...fields,
+    }
+  }
+
+  it('shortfallTextTest', () => {
+    expect(shortfallText(shortfall())).toBe(
+      'Hauptlager: 3 verfügbar, 5 gebraucht — 4 sind für AU-2026-0142 reserviert',
+    )
+  })
+
+  /** Nobody to name, so the sentence ends where it has said everything. */
+  it('shortfallTextWithoutReservationTest', () => {
+    expect(shortfallText(shortfall({ reserved: 0, available: 7, heldBy: [] }))).toBe(
+      'Hauptlager: 7 verfügbar, 5 gebraucht',
+    )
+  })
+
+  it('shortfallTextWithSeveralHoldersTest', () => {
+    const held = shortfall({
+      reserved: 9,
+      available: -2,
+      heldBy: [
+        { documentNumber: 'AU-2026-0142', quantity: 4 },
+        { documentNumber: 'AU-2026-0143', quantity: 3 },
+        { documentNumber: 'AU-2026-0144', quantity: 1 },
+        { documentNumber: 'AU-2026-0145', quantity: 1 },
+      ],
+    })
+
+    expect(shortfallText(held)).toBe(
+      'Hauptlager: -2 verfügbar, 5 gebraucht'
+        + ' — 9 sind für AU-2026-0142 und AU-2026-0143 und 2 weitere reserviert',
+    )
+  })
+
+  it('shortfallTextWithThreeHoldersTest', () => {
+    const held = shortfall({
+      heldBy: [
+        { documentNumber: 'AU-1', quantity: 2 },
+        { documentNumber: 'AU-2', quantity: 1 },
+        { documentNumber: 'AU-3', quantity: 1 },
+      ],
+    })
+
+    expect(shortfallText(held)).toContain('AU-1 und AU-2 und einen weiteren')
+  })
+})
+
+describe('reservedForText', () => {
+  it('reservedForTextTest', () => {
+    expect(reservedForText([{ documentNumber: 'AU-2026-0142', quantity: 4 }])).toBe(
+      'reserviert für AU-2026-0142',
+    )
+  })
+
+  it('reservedForTextWithoutHoldersTest', () => {
+    expect(reservedForText([])).toBe('')
+    expect(reservedForText(undefined)).toBe('')
+  })
+})
+
+describe('availabilityHint', () => {
+  function availability(fields: Partial<ProductAvailability> = {}): ProductAvailability {
+    return {
+      productId: 42,
+      stockManaged: true,
+      onHand: 12,
+      reserved: 4,
+      availableQuantity: 8,
+      locations: [
+        {
+          locationId: 1,
+          locationName: 'Hauptlager',
+          onHand: 12,
+          reserved: 4,
+          availableQuantity: 8,
+        },
+      ],
+      heldBy: [],
+      ...fields,
+    }
+  }
+
+  it('availabilityHintTest', () => {
+    expect(availabilityHint(availability())).toBe('Bestand 12 · 4 reserviert')
+  })
+
+  it('availabilityHintWithSeveralLocationsTest', () => {
+    const split = availability({
+      locations: [
+        {
+          locationId: 1,
+          locationName: 'Hauptlager',
+          onHand: 3,
+          reserved: 4,
+          availableQuantity: -1,
+        },
+        {
+          locationId: 2,
+          locationName: 'Aussenlager',
+          onHand: 9,
+          reserved: 0,
+          availableQuantity: 9,
+        },
+      ],
+    })
+
+    expect(availabilityHint(split)).toBe(
+      'Bestand 12 · 4 reserviert · Hauptlager 3 · Aussenlager 9',
+    )
+  })
+
+  /** Nothing spoken for: the line says the stock and stops. */
+  it('availabilityHintWithoutReservationTest', () => {
+    expect(availabilityHint(availability({ reserved: 0, availableQuantity: 12 }))).toBe(
+      'Bestand 12',
+    )
+  })
+
+  it('availabilityHintWithoutStockManagementTest', () => {
+    expect(availabilityHint({ productId: 42, stockManaged: false })).toBe('')
+    expect(availabilityHint(undefined)).toBe('')
+  })
+
+  /** A location that holds nothing is not named: an empty shelf is not a place to look. */
+  it('availabilityHintSkipsEmptyLocationsTest', () => {
+    const split = availability({
+      onHand: 9,
+      locations: [
+        {
+          locationId: 1,
+          locationName: 'Hauptlager',
+          onHand: 0,
+          reserved: 4,
+          availableQuantity: -4,
+        },
+        {
+          locationId: 2,
+          locationName: 'Aussenlager',
+          onHand: 9,
+          reserved: 0,
+          availableQuantity: 9,
+        },
+      ],
+    })
+
+    expect(availabilityHint(split)).toBe('Bestand 9 · 4 reserviert')
   })
 })

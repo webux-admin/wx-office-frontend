@@ -896,6 +896,92 @@ export type ReleaseReservationRequest = {
   reason: string
 }
 
+/**
+ * One document holding part of a quantity back, as `ReservationHolderDto` sends it.
+ *
+ * <p>The answer to the only question a seller asks after «why can I not deliver this»: who is
+ * it promised to.
+ */
+export type ReservationHolder = {
+  documentNumber?: string
+  /** How much of the product that document still holds, always above zero. */
+  quantity: number
+}
+
+/** What one location holds of one product, as `LocationAvailabilityDto` sends it. */
+export type LocationAvailability = {
+  locationId: number
+  locationName: string
+  onHand: number
+  reserved: number
+  availableQuantity: number
+}
+
+/**
+ * What is free of one product, as `ProductAvailabilityDto` sends it.
+ *
+ * <p>One figure carries the answer: `availableQuantity` is stock less what issued orders have
+ * spoken for. Stock and reserved quantity stand next to it so it can be checked.
+ *
+ * <p><b>The three quantities are absent when no stock is kept of this product</b>, and that is
+ * not the same as zero — a 0 next to a service reads as «sold out» and is a false statement.
+ * Read `stockManaged`, never the figures.
+ *
+ * <p>`locations` and `heldBy` are empty on the batch answer: a hit list has no room for them,
+ * and reading them per row would cost one request per hit.
+ */
+export type ProductAvailability = {
+  productId: number
+  stockManaged: boolean
+  onHand?: number
+  reserved?: number
+  /** Stock less what is spoken for. Negative means more is promised than is there. */
+  availableQuantity?: number
+  locations?: LocationAvailability[]
+  heldBy?: ReservationHolder[]
+}
+
+/** One document holding part of a quantity back, as `StockHolderDto` sends it. */
+export type StockHolder = {
+  documentNumber?: string
+  quantity: number
+}
+
+/**
+ * One product a document asks for more of than its location has free, as `StockShortfallDto`
+ * sends it.
+ *
+ * <p>One entry per product, not per position — two positions over the same article are one
+ * shortfall. Which positions they were travels in `lineNumbers`.
+ *
+ * <p>No product name: the description stands on the document line the mask already holds.
+ */
+export type StockShortfall = {
+  /** The printed positions this demand comes from, in printing order. */
+  lineNumbers: number[]
+  productId: number
+  locationName: string
+  /** What the document asks for, added up over its positions. */
+  required: number
+  onHand: number
+  reserved: number
+  /** Stock less what is spoken for, may be negative. */
+  available: number
+  heldBy: StockHolder[]
+  /** True where issuing would be refused rather than only warned about. */
+  blocking: boolean
+}
+
+/**
+ * What a document would be short of if it were issued now, as `StockCheckDto` sends it.
+ *
+ * <p>A reading: asking books nothing, holds nothing and changes nothing. An empty list means
+ * covered — and so does the answer for a kind of document that moves no stock at all.
+ */
+export type StockCheck = {
+  shortfalls: StockShortfall[]
+}
+
 // --- document ----------------------------------------------------------------
 
 export type DocumentCategory = 'OFFER' | 'ORDER' | 'DELIVERY_NOTE' | 'INVOICE' | 'CREDIT_NOTE'

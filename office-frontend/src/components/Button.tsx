@@ -1,5 +1,5 @@
 import { motion, type HTMLMotionProps } from 'motion/react'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { onMac, submitShortcutTitle } from '../lib/shortcuts'
 import { Spinner } from './Spinner'
 
@@ -33,6 +33,11 @@ type ButtonProps = HTMLMotionProps<'button'> & {
    * finishes a mask — the shortcut is bound by the mask or by the dialog, never here.
    */
   shortcut?: boolean
+  /**
+   * Reaches the button itself, for a dialog that says where the focus lands when it opens.
+   * Passed straight through to the element; React 19 hands it over as an ordinary prop.
+   */
+  ref?: Ref<HTMLButtonElement>
   children: ReactNode
 }
 

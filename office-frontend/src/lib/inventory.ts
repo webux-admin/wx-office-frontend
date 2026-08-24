@@ -2,11 +2,14 @@ import { formatQuantity } from './format'
 import type {
   MovementDirection,
   MovementReason,
+  ProductAvailability,
+  ReservationHolder,
   ShortageCause,
   StockEffect,
   StockLocation,
   StockReservationStatus,
   StockReversalLine,
+  StockShortfall,
 } from './types'
 
 /**
@@ -144,6 +147,133 @@ export function stockReservationsUrl(tenantId: number): string {
  */
 export function releaseReservationUrl(tenantId: number, reservationId: number): string {
   return `${stockReservationsUrl(tenantId)}/${reservationId}/release`
+}
+
+/**
+ * The REST resource that answers what is free of a product.
+ *
+ * <p>Two shapes, one address. A single product gets its own path and answers with the split by
+ * location and the documents holding it; a list of products answers with bare sums and is what
+ * the hit list of the product search asks — one request for twenty rows, because a request per
+ * row would be twenty round trips per keystroke.
+ *
+ * @param tenantId the tenant
+ * @param productIds one product, or the products of a hit list
+ * @returns the address, with the query string where a list was asked for
+ */
+export function availabilityUrl(
+  tenantId: number,
+  productIds: number | readonly number[],
+): string {
+  const base = `${inventoryUrl(tenantId)}/availability`
+  if (typeof productIds === 'number') return `${base}/${productIds}`
+  return `${base}?productIds=${productIds.join(',')}`
+}
+
+/**
+ * Query key of what is free of a product.
+ *
+ * <p>The two shapes are kept apart on purpose: a batch over one single id is a different answer
+ * than the single one — it carries no split and no holders — and letting them share a cache
+ * entry would empty the fact box the moment a hit list is drawn.
+ *
+ * @param tenantId the tenant
+ * @param productIds one product, or the products of a hit list
+ * @returns the key TanStack Query caches that answer under
+ */
+export function availabilityKey(
+  tenantId: number,
+  productIds: number | readonly number[],
+): (string | number)[] {
+  return typeof productIds === 'number'
+    ? ['stock-availability', tenantId, productIds]
+    : ['stock-availability', tenantId, 'batch', productIds.join(',')]
+}
+
+/**
+ * One shortfall as a sentence: «Hauptlager: 3 verfügbar, 5 gebraucht — 4 sind für AU-2026-0142
+ * reserviert».
+ *
+ * <p>The location comes first because it is what makes the figure checkable: a tenant with two
+ * stores has stock somewhere else, and a bare «3 verfügbar» would look like a lie. The holding
+ * documents come last because they are the answer to the follow-up question, not to the first
+ * one.
+ *
+ * <p>Without a reservation the sentence ends after «gebraucht»: there is nobody to name, and
+ * «0 sind für niemanden reserviert» is noise.
+ *
+ * @param shortfall what the stock check reported for one product
+ * @returns the sentence for that product
+ */
+export function shortfallText(shortfall: StockShortfall): string {
+  const head =
+    `${shortfall.locationName}: ${formatQuantity(shortfall.available)} verfügbar,` +
+    ` ${formatQuantity(shortfall.required)} gebraucht`
+  const names = (shortfall.heldBy ?? [])
+    .map((holder) => holder.documentNumber)
+    .filter((number): number is string => number !== undefined && number !== '')
+  if (shortfall.reserved === 0 || names.length === 0) return head
+  return `${head} — ${formatQuantity(shortfall.reserved)} sind für ${holderNames(names)}`
+    + ' reserviert'
+}
+
+/**
+ * Who holds a quantity back, as a half sentence: «reserviert für AU-2026-0142».
+ *
+ * <p>For the hint under a fact, where {@link shortfallText} would be a sentence too many. Empty
+ * where nobody holds anything — «reserviert für niemanden» is noise.
+ *
+ * @param holders the documents holding it, biggest share first
+ * @returns the half sentence, empty where there is nothing to name
+ */
+export function reservedForText(holders: readonly ReservationHolder[] | undefined): string {
+  const names = (holders ?? [])
+    .map((holder) => holder.documentNumber)
+    .filter((number): number is string => number !== undefined && number !== '')
+  return names.length === 0 ? '' : `reserviert für ${holderNames(names)}`
+}
+
+/**
+ * Names the documents holding a quantity, at most two of them.
+ *
+ * <p>A product spoken for by nine orders would otherwise turn one sentence into a list nobody
+ * reads. Two names and a count carry the same message: it is not one forgotten order.
+ *
+ * @param names the document numbers, biggest share first
+ * @returns for example «AU-2026-0142 und AU-2026-0143 und 2 weitere»
+ */
+function holderNames(names: readonly string[]): string {
+  if (names.length === 1) return names[0]
+  const shown = names.slice(0, 2).join(' und ')
+  const rest = names.length - 2
+  if (rest <= 0) return shown
+  return `${shown} und ${rest === 1 ? 'einen weiteren' : `${rest} weitere`}`
+}
+
+/**
+ * The line under the «Verfügbar» fact: «Bestand 12 · 4 reserviert».
+ *
+ * <p>The fact itself carries one number, because three numbers side by side make every reader
+ * do the subtraction. Stock and reserved quantity stand underneath so the one number can still
+ * be checked, and a tenant with goods in two stores also reads where they lie — a shortfall in
+ * the main store while the outer one is full is a transport job, not a purchase.
+ *
+ * @param availability what is free of the product, absent while it is on its way
+ * @returns the line, empty where no stock is kept of that product
+ */
+export function availabilityHint(availability: ProductAvailability | undefined): string {
+  if (availability === undefined || !availability.stockManaged) return ''
+  const parts = [`Bestand ${formatQuantity(availability.onHand ?? 0)}`]
+  if ((availability.reserved ?? 0) !== 0) {
+    parts.push(`${formatQuantity(availability.reserved)} reserviert`)
+  }
+  const holding = (availability.locations ?? []).filter((location) => location.onHand !== 0)
+  if (holding.length > 1) {
+    holding.forEach((location) =>
+      parts.push(`${location.locationName} ${formatQuantity(location.onHand)}`),
+    )
+  }
+  return parts.join(' · ')
 }
 
 /**

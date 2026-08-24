@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { GripVertical, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, TriangleAlert, Trash2 } from 'lucide-react'
 import {
   useEffect,
   useRef,
@@ -103,6 +103,7 @@ export function LinesTable({
   onRemove,
   openOfOwnLines,
   openOfPredecessorLines,
+  shortfalls,
 }: {
   tenantId: number
   document: SalesDocument
@@ -124,6 +125,16 @@ export function LinesTable({
    * Marks a position entered for more than the predecessor has left.
    */
   openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
+  /**
+   * Which positions are not covered by the stock, by printed position, each with the sentence
+   * that says why.
+   *
+   * <p>Deliberately not a column of its own. A stock column would be noise in most rows of
+   * most documents — services, comments, subtotals — and `COLUMNS`, the value span and every
+   * `colSpan` of the comment, subtotal and page-break rows would have to be pulled along for
+   * a figure that matters on two lines out of twenty.
+   */
+  shortfalls?: ReadonlyMap<number, string>
 }) {
   const units = useMasterDataEntries(tenantId, 'units')
   const kindLabel = useCatalogueLabel(tenantId, 'line-kind')
@@ -339,6 +350,7 @@ export function LinesTable({
                     ? undefined
                     : openOfPredecessorLines?.get(line.predecessorLineId)
                 }
+                shortfall={shortfalls?.get(line.lineNumber)}
               />
               {actionsOf(line)}
             </tr>
@@ -436,6 +448,7 @@ function LineCells({
   showsOpen,
   open,
   openOfPredecessor,
+  shortfall,
 }: {
   line: DocumentLine
   units: readonly SelectableEntry[]
@@ -454,6 +467,8 @@ function LineCells({
   open?: OpenLineQuantity
   /** What is still open on the line this position was taken over from, when there is one. */
   openOfPredecessor?: OpenLineQuantity
+  /** Why this position is not covered by the stock, when it is not. */
+  shortfall?: string
 }) {
   if (line.kind === 'COMMENT') {
     return (
@@ -505,7 +520,17 @@ function LineCells({
       {/* The three texts stand in the order they are printed in, so the mask says what the
           document will say. `whitespace-pre-line` keeps the line breaks of the comment. */}
       <td className={CELL}>
-        <span className="block">{line.description}</span>
+        <span className="block">
+          {line.description}
+          {/* A sign, not a column. The sentence is the title for a pointer and `sr-only` text
+              for a reader, so neither of them has to guess what the triangle means. */}
+          {shortfall !== undefined && (
+            <span className="ml-1.5 inline-flex items-baseline text-warning" title={shortfall}>
+              <TriangleAlert size={13} aria-hidden />
+              <span className="sr-only">{shortfall}</span>
+            </span>
+          )}
+        </span>
         {line.subtitle && <span className="block text-text-secondary">{line.subtitle}</span>}
         {line.note && (
           <span className="block whitespace-pre-line text-[12px] text-text-secondary">

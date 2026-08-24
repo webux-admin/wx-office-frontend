@@ -13,6 +13,7 @@ import {
   salesDocumentKey,
   salesDocumentListKey,
   salesDocumentTrailKey,
+  stockCheckKey,
   type SalesDocumentKind,
   type SalesDocumentRights,
 } from './salesDocument'
@@ -300,6 +301,35 @@ describe('dueOfferRemindersKey', () => {
   })
 })
 
+describe('stockCheckKey', () => {
+  it('stockCheckKeyTest', () => {
+    expect(stockCheckKey(OFFER_KIND, 7, 42)).toEqual([
+      'sales-document-stock-check',
+      7,
+      'offers',
+      42,
+    ])
+  })
+
+  it('stockCheckKeyWithoutDocumentTest', () => {
+    expect(stockCheckKey(OFFER_KIND, 7)).toEqual(['sales-document-stock-check', 7, 'offers'])
+  })
+
+  /** Every change to the positions throws the check away, so the shorter key has to reach it. */
+  it('stockCheckKeyReachesOneDocumentTest', () => {
+    expect(reaches(stockCheckKey(OFFER_KIND, 7), stockCheckKey(OFFER_KIND, 7, 42))).toBe(true)
+  })
+
+  /** The invoice mask and the order mask both ask under the same number. */
+  it('stockCheckKeyKeepsTheKindsApartTest', () => {
+    expect(stockCheckKey(OFFER_KIND, 7, 42)).not.toEqual(stockCheckKey(ORDER_KIND, 7, 42))
+  })
+
+  it('stockCheckKeyStopsAtItsOwnTenantTest', () => {
+    expect(reaches(stockCheckKey(OFFER_KIND, 7), stockCheckKey(OFFER_KIND, 8, 42))).toBe(false)
+  })
+})
+
 describe('SALES_DOCUMENT_CACHE_ROOTS', () => {
   /**
    * The roots are what a screen without a kind of its own invalidates — the partner mask,
@@ -324,6 +354,14 @@ describe('SALES_DOCUMENT_CACHE_ROOTS', () => {
     const cached = [offerTrackingKey(7, 42), offerRemindersKey(7, 42), dueOfferRemindersKey(7)]
 
     for (const entry of cached) {
+      expect(SALES_DOCUMENT_CACHE_ROOTS.some((root) => reaches([root, 7], entry))).toBe(true)
+    }
+  })
+
+  /** The stock check hangs on the document as well, so a partner change reaches it too. */
+  it('salesDocumentCacheRootsReachTheStockCheckTest', () => {
+    for (const kind of SALES_DOCUMENT_KINDS) {
+      const entry = stockCheckKey(kind, 7, 42)
       expect(SALES_DOCUMENT_CACHE_ROOTS.some((root) => reaches([root, 7], entry))).toBe(true)
     }
   })

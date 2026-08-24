@@ -12,6 +12,7 @@ import type { OriginState } from '../../lib/origin'
 import { listQuery } from '../../lib/paging'
 import type { Page, Product, VatCategory } from '../../lib/types'
 import { productMeta } from './productInfo'
+import { useAvailabilities } from './stockInfo'
 
 /**
  * Hits shown at a time.
@@ -93,6 +94,15 @@ export function ProductQuickSearch({
   // A failed refetch keeps the rows of the last answer in the cache. They must not be offered
   // any more: the box then shows an error, and a hit taken out of it belongs to nothing.
   const found = hits.isError ? [] : (hits.data?.content ?? [])
+
+  // One request for the whole list, keyed by the ids on screen. A request per row would be
+  // twenty round trips per keystroke; a join of the product query onto the stock table would
+  // be a cross-module table read the backend forbids, so the sum comes from the inventory
+  // itself — once.
+  const availabilities = useAvailabilities(tenantId, found.map((product) => product.id))
+  const freeOf = new Map(
+    (availabilities.data ?? []).map((entry) => [entry.productId, entry]),
+  )
   // The list can grow shorter between two answers while the mark stays where it was.
   const active = Math.min(marked, found.length - 1)
   const optionId = (index: number) => `${listId}-${index}`
@@ -237,7 +247,15 @@ export function ProductQuickSearch({
                     </span>
                   </span>
                   <span className="shrink-0 text-[11px] text-text-tertiary">
-                    {productMeta(product, vatOf(product.vatCategory)).join(' · ')}
+                    {productMeta(product, vatOf(product.vatCategory), freeOf.get(product.id))
+                      .map((entry, position) => (
+                        <span key={entry.text}>
+                          {position > 0 && <span aria-hidden>{' · '}</span>}
+                          <span className={entry.low ? 'text-warning' : undefined}>
+                            {entry.text}
+                          </span>
+                        </span>
+                      ))}
                   </span>
                 </li>
               ))}

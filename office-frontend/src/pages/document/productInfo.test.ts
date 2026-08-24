@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Product, VatRates } from '../../lib/types'
+import type { Product, ProductAvailability, VatRates } from '../../lib/types'
 import { priceOriginText, productMeta, vatText } from './productInfo'
 
 const RATES: VatRates = { STANDARD: 8.1, REDUCED: 2.6, ACCOMMODATION: 3.8 }
@@ -52,21 +52,54 @@ describe('vatText', () => {
 })
 
 describe('productMeta', () => {
+  /** What is free of a product, as the batch endpoint answers it. */
+  function free(availableQuantity: number): ProductAvailability {
+    return { productId: 1, stockManaged: true, onHand: 12, reserved: 0, availableQuantity }
+  }
+
   it('productMetaTest', () => {
     const entries = productMeta(
       product({ unitLabel: 'Stk', revenueAccount: '3000' }),
       '8.1 %',
     )
 
-    expect(entries).toEqual(['Stk', '3000', '8.1 %'])
+    expect(entries).toEqual([{ text: 'Stk' }, { text: '3000' }, { text: '8.1 %' }])
   })
 
   it('productMetaFallsBackToTheUnitCodeTest', () => {
-    expect(productMeta(product({ unit: 'HOUR' }), undefined)).toEqual(['HOUR'])
+    expect(productMeta(product({ unit: 'HOUR' }), undefined)).toEqual([{ text: 'HOUR' }])
   })
 
   it('productMetaWithoutAnyDetailTest', () => {
     expect(productMeta(product({ unit: '' }), undefined)).toEqual([])
+  })
+
+  it('productMetaWithTheFreeQuantityTest', () => {
+    const entries = productMeta(product({ unitLabel: 'Stk' }), undefined, free(12))
+
+    expect(entries).toEqual([{ text: 'Stk' }, { text: '12 verfügbar', low: false }])
+  })
+
+  it('productMetaWarnsWhenNothingIsFreeTest', () => {
+    expect(productMeta(product({ unitLabel: 'Stk' }), undefined, free(0))[1]).toEqual({
+      text: '0 verfügbar',
+      low: true,
+    })
+    expect(productMeta(product({ unitLabel: 'Stk' }), undefined, free(-3))[1]).toEqual({
+      text: '-3 verfügbar',
+      low: true,
+    })
+  })
+
+  it('productMetaWithoutStockManagementTest', () => {
+    // No entry at all, and above all no «0 verfügbar»: that reads as «sold out» next to a
+    // service nobody ever counted.
+    const entries = productMeta(product({ unitLabel: 'Stk' }), undefined, {
+      productId: 1,
+      stockManaged: false,
+    })
+
+    expect(entries).toEqual([{ text: 'Stk' }])
   })
 })
 

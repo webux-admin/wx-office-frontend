@@ -4,9 +4,15 @@ import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
+import { shortfallText } from '../../lib/inventory'
 import { originState } from '../../lib/origin'
 import type { SalesDocumentKind } from '../../lib/salesDocument'
-import type { DocumentLine, OpenLineQuantity, SalesDocument } from '../../lib/types'
+import type {
+  DocumentLine,
+  OpenLineQuantity,
+  SalesDocument,
+  StockShortfall,
+} from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
 import { LinesTable } from './LinesTable'
 import { ProductLineDialog } from './ProductLineDialog'
@@ -20,6 +26,28 @@ type OpenDialog = {
   line?: DocumentLine
   /** Bumped on every opening, so the dialog is mounted afresh and reads its fields again. */
   id: number
+}
+
+/**
+ * What the strip over the positions says.
+ *
+ * <p>Counts positions and not products: the reader is looking at a table of positions, and «2
+ * Produkte» would leave them counting rows to find out which ones.
+ *
+ * @param shortfalls what the stock check reported
+ * @param itemLines how many charged positions the document has
+ * @returns the sentence, for example «2 von 5 Positionen sind nicht gedeckt»
+ */
+function stripText(shortfalls: readonly StockShortfall[], itemLines: number): string {
+  const affected = new Set(shortfalls.flatMap((shortfall) => shortfall.lineNumbers)).size
+  const head = affected === 1
+    ? `1 von ${itemLines} Positionen ist nicht gedeckt`
+    : `${affected} von ${itemLines} Positionen sind nicht gedeckt`
+  // A location set to block refuses the issuing outright, so the strip says so rather than
+  // letting somebody find out by pressing the button.
+  return shortfalls.some((shortfall) => shortfall.blocking)
+    ? `${head} und lassen sich nicht ausstellen`
+    : head
 }
 
 /**
@@ -47,6 +75,7 @@ export function DocumentLines({
   readOnlyNote,
   openOfOwnLines,
   openOfPredecessorLines,
+  shortfalls,
 }: {
   tenantId: number
   /** Which of the four kinds of document this is, so that a way back leads to this one. */
@@ -76,10 +105,17 @@ export function DocumentLines({
   openOfOwnLines?: ReadonlyMap<number, OpenLineQuantity>
   /** What is still open on the lines this document was taken over from, by their line id. */
   openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
+  /**
+   * What this draft is short of, as the stock check reported it. Left out on an issued
+   * document and wherever the check could not be read — a reading that failed says nothing,
+   * and saying nothing is better than saying the wrong thing.
+   */
+  shortfalls?: readonly StockShortfall[]
 }) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null)
   const [open, setOpen] = useState(false)
   const [removing, setRemoving] = useState<DocumentLine | null>(null)
+  const [shortfallsOpen, setShortfallsOpen] = useState(false)
   const opened = useRef(0)
 
   /**
@@ -138,6 +174,16 @@ export function DocumentLines({
   }
 
   const edited = dialog?.line
+  const short = shortfalls ?? []
+  const itemLines = (document.lines ?? []).filter((line) => line.kind === 'ITEM')
+  // One sentence per position, so the table can mark the rows without knowing what a
+  // shortfall is.
+  const byLineNumber = new Map<number, string>()
+  short.forEach((shortfall) =>
+    shortfall.lineNumbers.forEach((lineNumber) =>
+      byLineNumber.set(lineNumber, shortfallText(shortfall)),
+    ),
+  )
   // Where the way into the product mask leads back to. The catalogue is looked up in its own
   // screen now and then, and the document has to be one click away afterwards.
   const back = originState(
@@ -173,6 +219,34 @@ export function DocumentLines({
           <p className="px-5 pt-4 text-[13px] text-text-secondary">{readOnlyNote}</p>
         )}
 
+        {/* Only where there is something to report. A strip that is always there is read as
+            decoration within a day, and then the one day it matters it is not read either. */}
+        {short.length > 0 && (
+          <div className="mx-5 mt-4 rounded-[var(--radius-md)] bg-warning/12 px-3.5 py-3">
+            <button
+              type="button"
+              onClick={() => setShortfallsOpen((wasOpen) => !wasOpen)}
+              aria-expanded={shortfallsOpen}
+              className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left text-[13px] text-text-primary"
+            >
+              <span className="font-medium">Lager:</span>
+              <span>{stripText(short, itemLines.length)}</span>
+              <span className="text-[12px] text-text-secondary underline-offset-2">
+                {shortfallsOpen ? 'weniger' : 'Details'}
+              </span>
+            </button>
+            {shortfallsOpen && (
+              <ul className="mt-2 grid gap-1">
+                {short.map((shortfall) => (
+                  <li key={shortfall.productId} className="text-[12px] text-text-secondary">
+                    {shortfallText(shortfall)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <LinesTable
           tenantId={tenantId}
           document={document}
@@ -183,6 +257,7 @@ export function DocumentLines({
           onRemove={askRemoval}
           openOfOwnLines={openOfOwnLines}
           openOfPredecessorLines={openOfPredecessorLines}
+          shortfalls={byLineNumber}
         />
 
         {error !== null && error !== undefined && (

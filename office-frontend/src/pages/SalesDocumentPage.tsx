@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { GitBranch } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -19,6 +19,7 @@ import { formatDate, formatDateTime } from '../lib/format'
 import {
   booksStock,
   reservationReturnNotice,
+  shortfallText,
   stockIssueNotice,
   stockReversalLabel,
 } from '../lib/inventory'
@@ -31,6 +32,7 @@ import {
   salesDocumentKey,
   salesDocumentListKey,
   salesDocumentTrailKey,
+  stockCheckKey,
   type SalesDocumentKind,
 } from '../lib/salesDocument'
 import type {
@@ -58,6 +60,7 @@ import { OfferReminders } from './document/OfferReminders'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
 import { useOpenQuantities } from './document/useOpenQuantities'
+import { useStockCheck } from './document/stockInfo'
 import { headerKey, paymentKey } from './document/headerForm'
 import { successorNotice } from './document/documentChain'
 import { recipientNote } from './document/recipientNote'
@@ -180,6 +183,10 @@ function DocumentMask({
   const [tab, setTab] = useState<DocumentTab>(() =>
     kind.tracking ? initialTabOf(locationState) : 'beleg',
   )
+  const [askingToIssue, setAskingToIssue] = useState(false)
+  // The way back holds the focus, not the way on: a dialog that asks «trotzdem?» must not be
+  // answered with a stray Enter.
+  const backToMask = useRef<HTMLButtonElement>(null)
   const [declining, setDeclining] = useState(false)
   const [declineReason, setDeclineReason] = useState('')
   const [declineNote, setDeclineNote] = useState('')
@@ -234,12 +241,35 @@ function DocumentMask({
     showsOpenColumn,
   )
 
+  // What issuing would be short of. A reading that books nothing, and only for a draft that
+  // has something to issue — an issued document has already moved what it moves.
+  const stockCheck = useStockCheck(
+    tenantId,
+    kind,
+    document.id,
+    document.status === 'DRAFT' && itemLineCount(document.lines) > 0,
+  )
+  // Read off the status and not off the query: react-query keeps the answer of a query that
+  // has since been switched off, and the strip must never stand over an issued document — it
+  // moved its stock already, and there is nothing left to warn about.
+  const shortfalls =
+    document.status === 'DRAFT' ? (stockCheck.data?.shortfalls ?? []) : []
+  // What only warns. A shortfall the location refuses is not asked about: the backend turns
+  // the issuing down, and its message is the honest one — the mask does not decide whether a
+  // document may be issued.
+  const warnings = shortfalls.filter((shortfall) => !shortfall.blocking)
+
   const refresh = () => {
     // Scoped by the kind, so that a saved invoice does not throw away the orders that were
     // loaded next to it.
     void queryClient.invalidateQueries({ queryKey: salesDocumentKey(kind, tenantId) })
     void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
     void queryClient.invalidateQueries({ queryKey: salesDocumentTrailKey(kind, tenantId) })
+    // The figures behind the stock check are only true for the positions that were on screen
+    // when they were read, so every change to them throws the check away.
+    void queryClient.invalidateQueries({
+      queryKey: stockCheckKey(kind, tenantId, document.id),
+    })
     // The follow-up state hangs on the document: taking it back resets the outcome, and a
     // changed position moves the weighted amount. Cheaper to mark it stale once here than to
     // reason about which of the mutations above can touch it.
@@ -347,8 +377,37 @@ function DocumentMask({
 
   const finalise = useMutation({
     mutationFn: () => api.post<SalesDocument>(`${base}/finalise`),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh()
+      setAskingToIssue(false)
+    },
   })
+
+  /**
+   * Issues the document, asking first where positions are not covered.
+   *
+   * <p>The check is read afresh on the click: somebody else may have delivered in the meantime,
+   * and a question asked over figures from five minutes ago is worse than no question.
+   *
+   * <p><b>A failed check holds nobody up.</b> No permission to read the inventory, a refusal, a
+   * broken connection — all of them issue without a second step. Binding is the check the
+   * backend runs while issuing; this one is the warning in front of it, not its replacement.
+   */
+  const issue = async () => {
+    if (!stockCheck.isEnabled) {
+      finalise.mutate()
+      return
+    }
+    const fresh = await stockCheck.refetch()
+    const found = fresh.data?.shortfalls ?? []
+    // Only what warns. A blocking shortfall goes to the backend, which refuses it with the
+    // sentence that says what is really there.
+    if (fresh.isError || found.every((shortfall) => shortfall.blocking)) {
+      finalise.mutate()
+      return
+    }
+    setAskingToIssue(true)
+  }
 
   const cancel = useMutation({
     mutationFn: () => api.post<SalesDocument>(`${base}/cancel`, { reason: reason.trim() }),
@@ -548,8 +607,8 @@ function DocumentMask({
           )}
         {document.status === 'DRAFT' && can(kind.rights.finalise) && (
           <Button
-            onClick={() => finalise.mutate()}
-            busy={finalise.isPending}
+            onClick={() => void issue()}
+            busy={finalise.isPending || stockCheck.isRefetching}
             disabled={itemLineCount(document.lines) === 0}
           >
             Ausstellen
@@ -568,11 +627,14 @@ function DocumentMask({
             </p>
           )}
 
-        {(finalise.error !== null ||
+        {((finalise.error !== null && !askingToIssue) ||
           print.error !== null ||
           (setOutcome.error !== null && !declining)) && (
           <div className="mb-6 grid gap-4">
-            {finalise.error !== null && <ErrorNotice error={finalise.error} />}
+            {/* While the question about the stock is open it reports the refusal itself. */}
+            {finalise.error !== null && !askingToIssue && (
+              <ErrorNotice error={finalise.error} />
+            )}
             {print.error !== null && <ErrorNotice error={print.error} />}
             {/* While the decline dialog is open it reports the failure itself. */}
             {setOutcome.error !== null && !declining && (
@@ -629,6 +691,7 @@ function DocumentMask({
               ? undefined
               : openByLineId(openOfPredecessor.data)
           }
+          shortfalls={shortfalls}
           busy={lineBusy}
           error={lineError}
           readOnlyNote={
@@ -773,6 +836,48 @@ function DocumentMask({
         document={document}
         onChanged={refresh}
       />
+
+      {/* The question, not the decision. Whoever confirms issues, and the backend still has the
+          last word — there is no flag anywhere that skips its check. */}
+      <Dialog
+        open={askingToIssue}
+        onClose={() => setAskingToIssue(false)}
+        title={`${kind.singular} ausstellen`}
+        description="Der Bestand reicht für einzelne Positionen nicht."
+        initialFocus={backToMask}
+        footer={
+          <>
+            <Button
+              ref={backToMask}
+              variant="secondary"
+              onClick={() => setAskingToIssue(false)}
+            >
+              Zurück zur Maske
+            </Button>
+            <Button onClick={() => finalise.mutate()} busy={finalise.isPending}>
+              Trotzdem ausstellen
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-[13px] text-text-secondary">
+          {warnings.length === 1
+            ? '1 Position ist nicht gedeckt. Trotzdem ausstellen?'
+            : `${warnings.length} Positionen sind nicht gedeckt. Trotzdem ausstellen?`}
+        </p>
+        <ul className="grid gap-1">
+          {warnings.map((shortfall) => (
+            <li key={shortfall.productId} className="text-[13px] text-text-primary">
+              {shortfallText(shortfall)}
+            </li>
+          ))}
+        </ul>
+        {finalise.error !== null && (
+          <div className="mt-4">
+            <ErrorNotice error={finalise.error} />
+          </div>
+        )}
+      </Dialog>
 
       <Dialog
         open={reopening}

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
 import { originState } from '../../lib/origin'
 import type { DocumentLine, Product } from '../../lib/types'
 import { ProductLineDialog } from './ProductLineDialog'
@@ -50,12 +51,31 @@ let sendLatency = 0
 /** True where the VAT rates of the day are refused, the way an unseeded day refuses them. */
 let ratesRefused = false
 
+/** What the inventory answers about the product the dialog works with. */
+const AVAILABILITY = {
+  productId: 7,
+  stockManaged: true,
+  onHand: 12,
+  reserved: 4,
+  availableQuantity: 8,
+  locations: [
+    { locationId: 1, locationName: 'Hauptlager', onHand: 12, reserved: 4, availableQuantity: 8 },
+  ],
+  heldBy: [{ documentNumber: 'AU-2026-0142', quantity: 4 }],
+}
+
 /** Answers every endpoint the dialog reads, caught at `fetch` rather than at `lib/api`. */
 function stubFetch() {
   priceRefused = false
   sendLatency = 0
   ratesRefused = false
   vi.stubGlobal('fetch', (url: string) => {
+    // The stock figures. Matched before "/products", which the path of the catalogue also
+    // carries. The hit list asks for a whole list and gets an array; the fact box asks about
+    // the one product it shows.
+    if (url.includes('/inventory/availability')) {
+      return json(url.includes('productIds=') ? [] : AVAILABILITY)
+    }
     // Matched on the customer's price list, not on "/price": the route is
     // /partners/{id}/prices/{productId}, and "/products/" below would swallow it otherwise.
     if (url.includes('/prices/')) {
@@ -93,6 +113,23 @@ function json(body: unknown, status = 200) {
       headers: { 'Content-Type': 'application/json' },
     }),
   )
+}
+
+/**
+ * A session that may read the inventory, which is what the stock figures hang on.
+ *
+ * <p>The real application always has one; the components ask it before they fire a request
+ * that would come back 403 for a user without the right.
+ */
+function auth(): AuthState {
+  return {
+    user: null,
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    can: () => true,
+  }
 }
 
 beforeEach(() => {
@@ -160,9 +197,11 @@ async function render(line?: DocumentLine, refused = false): Promise<Calls> {
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <Harness line={line} refused={refused} />
-        </QueryClientProvider>
+        <AuthContext.Provider value={auth()}>
+          <QueryClientProvider client={client}>
+            <Harness line={line} refused={refused} />
+          </QueryClientProvider>
+        </AuthContext.Provider>
       </MemoryRouter>,
     )
   })

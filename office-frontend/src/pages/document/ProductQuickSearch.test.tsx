@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
 import { originState } from '../../lib/origin'
 import type { Product } from '../../lib/types'
 import { ProductQuickSearch } from './ProductQuickSearch'
@@ -51,6 +52,8 @@ let container: HTMLDivElement
 let root: Root
 /** Every product request the field sent, in order, so a test can read the search term off it. */
 let asked: string[]
+/** Every availability request, so a test can count them against the number of hits. */
+let availabilityAsked: string[]
 /** How long an answer takes, so a test can look at the field while one is on its way. */
 let latency = 0
 /** Set to refuse every further answer, the way an expired session refuses a refetch. */
@@ -59,14 +62,46 @@ let refuseFromNowOn = false
 let scrolledTo: string[]
 
 /**
+ * What is free of one product. The two services keep no stock, the cable does — so the hit
+ * list shows a figure for one of the three and none for the other two.
+ */
+function availabilityOf(productId: number) {
+  if (productId !== 9) return { productId, stockManaged: false }
+  return {
+    productId,
+    stockManaged: true,
+    onHand: 12,
+    reserved: 0,
+    availableQuantity: 12,
+  }
+}
+
+/**
  * Answers the catalogue with whatever matches the term, the way the backend does over number
  * and name at once. Caught at `fetch`, not by mocking `lib/api`.
  */
 function stubFetch(status = 200) {
   asked = []
+  availabilityAsked = []
   latency = 0
   refuseFromNowOn = false
   vi.stubGlobal('fetch', (url: string) => {
+    // What is free of the hits on screen. One answer for the whole list, the way the backend
+    // reads it: one statement with an IN list. Counted apart from the catalogue requests, so
+    // a test can hold the two against each other.
+    if (url.includes('/inventory/availability')) {
+      availabilityAsked.push(url)
+      const ids = (/productIds=([^&]*)/.exec(url)?.[1] ?? '')
+        .split(',')
+        .filter((id) => id !== '')
+        .map(Number)
+      return Promise.resolve(
+        new Response(JSON.stringify(ids.map(availabilityOf)), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
     asked.push(url)
     if (refuseFromNowOn) {
       return Promise.resolve(
@@ -94,6 +129,23 @@ function stubFetch(status = 200) {
     if (latency === 0) return Promise.resolve(response)
     return new Promise((resolve) => setTimeout(() => resolve(response), latency))
   })
+}
+
+/**
+ * A session that may read the inventory, which is what the stock figures hang on.
+ *
+ * <p>The real application always has one; the components ask it before they fire a request
+ * that would come back 403 for a user without the right.
+ */
+function auth(): AuthState {
+  return {
+    user: null,
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    can: () => true,
+  }
 }
 
 beforeEach(() => {
@@ -152,9 +204,11 @@ async function render(chosen = false): Promise<Calls> {
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <Harness calls={calls} chosen={chosen} />
-        </QueryClientProvider>
+        <AuthContext.Provider value={auth()}>
+          <QueryClientProvider client={client}>
+            <Harness calls={calls} chosen={chosen} />
+          </QueryClientProvider>
+        </AuthContext.Provider>
       </MemoryRouter>,
     )
   })
@@ -212,6 +266,29 @@ describe('ProductQuickSearch', () => {
     expect(text()).toContain('Wartung')
     // Unit, revenue account and VAT rate stand next to every hit.
     expect(text()).toContain('Std · 3400 · 8.1 %')
+  })
+
+  /**
+   * The reason the batch endpoint exists. Twenty hits and a search that fires every 200 ms
+   * would be twenty round trips per keystroke if every row asked for itself.
+   */
+  it('productQuickSearchAsksAvailabilityOnceForAllHitsTest', async () => {
+    await render()
+
+    expect(options()).toHaveLength(3)
+    expect(availabilityAsked).toHaveLength(1)
+    expect(availabilityAsked[0]).toContain('productIds=7,8,9')
+  })
+
+  it('productQuickSearchShowsNoQuantityForUnmanagedProductsTest', async () => {
+    await render()
+
+    // The cable keeps a stock and says so; the two services keep none and say nothing — a
+    // «0 verfügbar» next to a service reads as «sold out».
+    const rows = options().map((option) => option.textContent ?? '')
+    expect(rows[2]).toContain('12 verfügbar')
+    expect(rows[0]).not.toContain('verfügbar')
+    expect(rows[1]).not.toContain('verfügbar')
   })
 
   it('productQuickSearchAsksTheServerForTheTermTest', async () => {

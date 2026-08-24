@@ -155,6 +155,9 @@ const OFFER_REMINDERS = 'offer-reminders'
 /** The due reminders of the signed-in user, shown on the overview. */
 const DUE_OFFER_REMINDERS = 'due-offer-reminders'
 
+/** What one draft would be short of if it were issued now. */
+const STOCK_CHECK = 'sales-document-stock-check'
+
 /**
  * Where everything about sales documents is cached, whatever kind and whatever tenant.
  *
@@ -170,6 +173,7 @@ export const SALES_DOCUMENT_CACHE_ROOTS: readonly string[] = [
   OFFER_TRACKING,
   OFFER_REMINDERS,
   DUE_OFFER_REMINDERS,
+  STOCK_CHECK,
 ]
 
 /**
@@ -233,6 +237,25 @@ export function salesDocumentTrailKey(
   documentId?: string | number,
 ): unknown[] {
   return cacheKey(DOCUMENT_TRAIL, entry, tenantId, documentId)
+}
+
+/**
+ * Where the stock check of one draft is cached.
+ *
+ * <p>Its own root rather than a tail on {@link salesDocumentKey}, so that every change to the
+ * positions can throw it away without emptying the document next to it — the figures behind it
+ * are only true for the positions that were on screen when they were read.
+ *
+ * @param entry      the kind of document
+ * @param tenantId   the tenant, null while none is chosen
+ * @param documentId the document; left out to reach every check of that kind
+ */
+export function stockCheckKey(
+  entry: SalesDocumentKind,
+  tenantId: number | null,
+  documentId?: string | number,
+): unknown[] {
+  return cacheKey(STOCK_CHECK, entry, tenantId, documentId)
 }
 
 /**

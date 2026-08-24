@@ -8,8 +8,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { api } from '../../lib/api'
-import { formatPercent } from '../../lib/format'
-import type { PriceOrigin, Product, ResolvedPrice, VatCategory, VatRates } from '../../lib/types'
+import { formatPercent, formatQuantity } from '../../lib/format'
+import type {
+  PriceOrigin,
+  Product,
+  ProductAvailability,
+  ResolvedPrice,
+  VatCategory,
+  VatRates,
+} from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 
 /**
@@ -60,17 +67,50 @@ export function vatText(
 }
 
 /**
- * What a hit of the quick search says about itself besides its name: unit, revenue account
- * and VAT rate, in that order.
+ * One entry of the line a hit says about itself.
+ *
+ * <p>Not a bare string, because one of them can be a warning: a product nothing is free of has
+ * to stand out in a list somebody picks from without reading it twice.
+ */
+export type ProductMetaEntry = {
+  text: string
+  /** True where nothing is free of the product any more, so the entry wears the warning tone. */
+  low?: boolean
+}
+
+/**
+ * What a hit of the quick search says about itself besides its name: unit, revenue account,
+ * VAT rate and what is free of it, in that order.
+ *
+ * <p>The free quantity comes last because it is the one figure that changes by the minute; the
+ * three in front of it describe the product itself.
+ *
+ * <p><b>A product nobody keeps a stock of gets no entry at all</b> — not a «0 verfügbar». A
+ * zero next to a service reads as «sold out», and that is a false statement. The same rule the
+ * price in the fact box follows.
  *
  * @param product the product as the search returned it
  * @param vat what {@link vatText} made of its VAT treatment
+ * @param availability what is free of it, undefined while the figures are on their way
  * @returns the entries to show, empty where the product says nothing about itself
  */
-export function productMeta(product: Product, vat: string | undefined): string[] {
-  return [product.unitLabel ?? product.unit, product.revenueAccount, vat].filter(
-    (entry): entry is string => entry !== undefined && entry !== '',
-  )
+export function productMeta(
+  product: Product,
+  vat: string | undefined,
+  availability?: ProductAvailability,
+): ProductMetaEntry[] {
+  const entries: ProductMetaEntry[] = [
+    product.unitLabel ?? product.unit,
+    product.revenueAccount,
+    vat,
+  ]
+    .filter((entry): entry is string => entry !== undefined && entry !== '')
+    .map((text) => ({ text }))
+  const free = availability?.stockManaged === true ? availability.availableQuantity : undefined
+  if (free !== undefined) {
+    entries.push({ text: `${formatQuantity(free)} verfügbar`, low: free <= 0 })
+  }
+  return entries
 }
 
 /**

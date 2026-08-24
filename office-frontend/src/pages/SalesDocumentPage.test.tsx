@@ -11,6 +11,7 @@ import type {
   OfferOutcome,
   OfferTracking,
   SalesDocument,
+  StockCheck,
   StockReversalLine,
 } from '../lib/types'
 import { SalesDocumentPage } from './SalesDocumentPage'
@@ -33,6 +34,8 @@ const PERMISSIONS = [
   'ORDER_FINALISE',
   'ORDER_REOPEN',
   'ORDER_CANCEL',
+  // The stock check answers with document data and stock data, so it takes both rights.
+  'INVENTORY_READ',
 ]
 
 const SESSION: AuthState = {
@@ -110,6 +113,11 @@ let orderState: SalesDocument | null = null
 /** What the reopen preview answers. */
 let reversalState: StockReversalLine[] = []
 
+/** What the stock check answers; a test that cares about it sets its own. */
+let stockCheckState: StockCheck
+/** The status the stock check answers with, for the test where it fails. */
+let stockCheckStatus: number
+
 let container: HTMLDivElement
 let root: Root
 /** Every request the mask sent, in order. */
@@ -150,6 +158,8 @@ function stubFetch() {
   chainState = [SELF_ENTRY]
   orderState = null
   reversalState = []
+  stockCheckState = { shortfalls: [] }
+  stockCheckStatus = 200
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     const method = options?.method ?? 'GET'
     const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
@@ -180,6 +190,12 @@ function stubFetch() {
     if (url.includes('/printouts') || url.includes('/printers')) return json([])
     if (url.includes('/catalogues')) return json(CATALOGUES)
     if (url.includes('/stock-reversal')) return json(reversalState)
+    if (url.includes('/stock-check')) {
+      return json(
+        stockCheckStatus === 200 ? stockCheckState : { detail: 'Kein Zugriff' },
+        stockCheckStatus,
+      )
+    }
     if (url.includes('/finalise')) return json(orderState ?? issued('ORDER'))
     if (url.includes('/offers/42')) return json(issued('OFFER'))
     if (url.includes('/orders/42')) return json(orderState ?? issued('ORDER'))
@@ -485,6 +501,125 @@ describe('SalesDocumentPage', () => {
     await press('Ausstellen')
 
     expect(text()).toContain('Hauptlager: 2 verfügbar, 5 gebucht')
+  })
+
+  // --- the check before issuing (Issue wx-office#19) -------------------------
+
+  /** A draft that books stock when it is issued, which is what the check is asked about. */
+  function draftOrder(): SalesDocument {
+    return {
+      ...issued('ORDER'),
+      status: 'DRAFT',
+      documentNumber: undefined,
+      finalisedAt: undefined,
+      stockEffect: 'ISSUE',
+      stockLocationName: 'Hauptlager',
+    }
+  }
+
+  /** One product that is not covered, and warns rather than blocking. */
+  const SHORTFALL = {
+    lineNumbers: [1],
+    productId: 7,
+    locationName: 'Hauptlager',
+    required: 5,
+    onHand: 7,
+    reserved: 4,
+    available: 3,
+    heldBy: [{ documentNumber: 'AU-2026-0142', quantity: 4 }],
+    blocking: false,
+  }
+
+  function finaliseCalls() {
+    return sent.filter((call) => call.method === 'POST' && call.url.includes('/finalise'))
+  }
+
+  function stockCheckCalls() {
+    return sent.filter((call) => call.url.includes('/stock-check'))
+  }
+
+  it('salesDocumentPageAsksBeforeIssuingWithAShortfallTest', async () => {
+    orderState = draftOrder()
+    stockCheckState = { shortfalls: [SHORTFALL] }
+    await render('/auftraege/42')
+
+    await press('Ausstellen')
+
+    // Asked, not issued: the question carries the sentence with the figures in it.
+    expect(finaliseCalls()).toHaveLength(0)
+    expect(text()).toContain('1 Position ist nicht gedeckt. Trotzdem ausstellen?')
+    expect(text()).toContain(
+      'Hauptlager: 3 verfügbar, 5 gebraucht — 4 sind für AU-2026-0142 reserviert',
+    )
+
+    await press('Trotzdem ausstellen')
+    expect(finaliseCalls()).toHaveLength(1)
+  })
+
+  it('salesDocumentPageIssuesWithoutADialogWhenCoveredTest', async () => {
+    orderState = draftOrder()
+    await render('/auftraege/42')
+
+    await press('Ausstellen')
+
+    expect(finaliseCalls()).toHaveLength(1)
+    expect(text()).not.toContain('Trotzdem ausstellen?')
+  })
+
+  /**
+   * The rule the whole flow rests on: a failed pre-check holds nobody up. Binding is the
+   * check the backend runs while issuing, and there is no flag anywhere that skips it.
+   */
+  it('salesDocumentPageIssuesWhenTheStockCheckFailsTest', async () => {
+    orderState = draftOrder()
+    stockCheckStatus = 403
+    await render('/auftraege/42')
+
+    await press('Ausstellen')
+
+    expect(finaliseCalls()).toHaveLength(1)
+    expect(text()).not.toContain('Trotzdem ausstellen?')
+  })
+
+  /** Somebody else may have delivered in the meantime, so the figures are read afresh. */
+  it('salesDocumentPageRereadsTheStockCheckOnIssueTest', async () => {
+    orderState = draftOrder()
+    await render('/auftraege/42')
+    const before = stockCheckCalls().length
+
+    await press('Ausstellen')
+
+    // Read again before the document goes out, not after: what counts is that the figures the
+    // decision rests on are the ones of this moment.
+    const issuedAt = sent.findIndex(
+      (call) => call.method === 'POST' && call.url.includes('/finalise'),
+    )
+    const readBeforeIssuing = sent
+      .slice(0, issuedAt)
+      .filter((call) => call.url.includes('/stock-check'))
+    expect(readBeforeIssuing).toHaveLength(before + 1)
+  })
+
+  /** A blocking shortfall is not asked about: the backend refuses, and its message is shown. */
+  it('salesDocumentPageIssuesBlockingShortfallsWithoutADialogTest', async () => {
+    orderState = draftOrder()
+    stockCheckState = { shortfalls: [{ ...SHORTFALL, blocking: true }] }
+    await render('/auftraege/42')
+
+    await press('Ausstellen')
+
+    expect(finaliseCalls()).toHaveLength(1)
+    expect(text()).not.toContain('Trotzdem ausstellen?')
+  })
+
+  /** react-query keeps the answer of a query it has switched off; the strip must not. */
+  it('salesDocumentPageShowsNoShortfallStripOnAnIssuedDocumentTest', async () => {
+    orderState = { ...issued('ORDER'), stockEffect: 'ISSUE' }
+    stockCheckState = { shortfalls: [SHORTFALL] }
+
+    await render('/auftraege/42')
+
+    expect(text()).not.toContain('nicht gedeckt')
   })
 
   it('salesDocumentPageShowsWhatComesBackWhenReopeningTest', async () => {
