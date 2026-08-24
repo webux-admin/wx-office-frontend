@@ -91,7 +91,7 @@ export function StockPanel({
               value={form.stockLocationId}
               disabled={!mayWrite || form.stockEffect === 'NONE'}
               onChange={(event) => onChange({ stockLocationId: event.target.value })}
-              hint="Ohne Wahl bucht der Beleg im Vorgabe-Lagerort des Mandanten."
+              hint="Ohne Wahl wirkt der Beleg im Vorgabe-Lagerort des Mandanten."
             >
               <option value="">Vorgabe-Lagerort</option>
               {active.map((location) => (

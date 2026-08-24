@@ -26,7 +26,8 @@ const ROWS: StockRow[] = [
     locationId: 7,
     locationName: 'Hauptlager',
     quantity: 8,
-    availableQuantity: 8,
+    reservedQuantity: 3,
+    availableQuantity: 5,
     minimumQuantity: 10,
     shortage: 'BELOW_MINIMUM',
   },
@@ -38,6 +39,7 @@ const ROWS: StockRow[] = [
     locationId: 7,
     locationName: 'Hauptlager',
     quantity: -3,
+    reservedQuantity: 0,
     availableQuantity: -3,
     shortage: 'NEGATIVE',
   },
@@ -49,7 +51,8 @@ const ROWS: StockRow[] = [
     locationId: 7,
     locationName: 'Hauptlager',
     quantity: 40,
-    availableQuantity: 40,
+    reservedQuantity: 28,
+    availableQuantity: 12,
     minimumQuantity: 10,
   },
 ]
@@ -201,13 +204,43 @@ describe('StockListPage', () => {
   it('stockListPageLinksEveryQuantityToTheJournalTest', async () => {
     await render()
 
-    const hrefs = [...container.querySelectorAll('tbody a')].map((link) =>
-      link.getAttribute('href'),
-    )
+    const hrefs = [...container.querySelectorAll('tbody a')]
+      .map((link) => link.getAttribute('href'))
+      .filter((href) => href?.startsWith('/lagerbewegungen'))
 
+    // Two per row: the free quantity and the stock behind it both lead into the journal.
     expect(hrefs).toEqual(
-      ROWS.map((row) => `/lagerbewegungen?produkt=${row.productId}&lagerort=${row.locationId}`),
+      ROWS.flatMap((row) => {
+        const journal = `/lagerbewegungen?produkt=${row.productId}&lagerort=${row.locationId}`
+        return [journal, journal]
+      }),
     )
+  })
+
+  /**
+   * The free quantity is what somebody may promise a customer, so it leads and the stock
+   * stands beside it as the explanation (backend ADR-0066).
+   */
+  it('stockListPageShowsAvailableBeforeStockTest', async () => {
+    await render()
+
+    const headers = [...container.querySelectorAll('thead th')].map((cell) => cell.textContent)
+
+    expect(headers.indexOf('Verfügbar')).toBeGreaterThanOrEqual(0)
+    expect(headers.indexOf('Verfügbar')).toBeLessThan(headers.indexOf('Bestand'))
+    expect(headers).toContain('Reserviert')
+  })
+
+  /** A reserved quantity is checkable too: it links into the rows that took it away. */
+  it('stockListPageLinksTheReservedQuantityTest', async () => {
+    await render()
+
+    const hrefs = [...container.querySelectorAll('tbody a')]
+      .map((link) => link.getAttribute('href'))
+      .filter((href) => href?.startsWith('/reservierungen'))
+
+    // Only the two rows that actually hold a reservation; a zero stays a dash.
+    expect(hrefs).toEqual(['/reservierungen?produkt=42', '/reservierungen?produkt=44'])
   })
 
   /** The state has to be readable as a word, not only as a colour. */

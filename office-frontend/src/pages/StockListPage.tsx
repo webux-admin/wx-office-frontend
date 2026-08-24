@@ -23,6 +23,7 @@ import {
   shortageCauseTone,
   showsLocationChoice,
   STOCK_MOVEMENT_PATH,
+  STOCK_RESERVATION_PATH,
   stockListKey,
   stockLocationsKey,
   stockLocationsUrl,
@@ -134,6 +135,27 @@ function StockList({ tenantId }: { tenantId: number }) {
           },
         ]
       : []),
+    // Available first, stock beside it: what somebody may promise a customer is the number
+    // that decides, and the stock is the explanation behind it (backend ADR-0066).
+    {
+      key: 'availableQuantity',
+      header: 'Verfügbar',
+      align: 'right',
+      sortKey: 'availableQuantity',
+      width: 'w-[120px]',
+      render: (row) => (
+        <Link
+          to={journalOf(row)}
+          state={ORIGIN}
+          className={`font-medium transition-colors hover:text-accent-text ${
+            row.availableQuantity < 0 ? 'text-danger' : ''
+          }`}
+          title="Bewegungen dieser Zeile"
+        >
+          {formatQuantity(row.availableQuantity)}
+        </Link>
+      ),
+    },
     {
       key: 'quantity',
       header: 'Bestand',
@@ -144,7 +166,7 @@ function StockList({ tenantId }: { tenantId: number }) {
         <Link
           to={journalOf(row)}
           state={ORIGIN}
-          className={`transition-colors hover:text-accent-text ${
+          className={`text-text-secondary transition-colors hover:text-accent-text ${
             row.quantity < 0 ? 'text-danger' : ''
           }`}
           title="Bewegungen dieser Zeile"
@@ -152,6 +174,28 @@ function StockList({ tenantId }: { tenantId: number }) {
           {formatQuantity(row.quantity)}
         </Link>
       ),
+    },
+    {
+      key: 'reservedQuantity',
+      header: 'Reserviert',
+      align: 'right',
+      sortKey: 'reservedQuantity',
+      width: 'w-[120px]',
+      // A link into the reservations, for the same reason every other number links: a figure
+      // nobody can check is a figure nobody believes.
+      render: (row) =>
+        row.reservedQuantity === 0 ? (
+          <span className="text-text-tertiary">-</span>
+        ) : (
+          <Link
+            to={`${STOCK_RESERVATION_PATH}?produkt=${row.productId}`}
+            state={ORIGIN}
+            className="text-text-secondary transition-colors hover:text-accent-text"
+            title="Reservierungen dieser Zeile"
+          >
+            {formatQuantity(row.reservedQuantity)}
+          </Link>
+        ),
     },
     {
       key: 'minimumQuantity',

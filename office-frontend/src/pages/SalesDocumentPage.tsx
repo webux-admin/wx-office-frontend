@@ -16,7 +16,12 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
 import { formatDate, formatDateTime } from '../lib/format'
-import { booksStock, stockReversalLabel } from '../lib/inventory'
+import {
+  booksStock,
+  reservationReturnNotice,
+  stockIssueNotice,
+  stockReversalLabel,
+} from '../lib/inventory'
 import { openByLineId, openByLineNumber } from '../lib/openQuantity'
 import { originOf, originState } from '../lib/origin'
 import {
@@ -557,13 +562,9 @@ function DocumentMask({
             second worst mistake such a mask can make; the invisible rule is the worst. */}
         {document.status === 'DRAFT'
           && can(kind.rights.finalise)
-          && booksStock(document.stockEffect) && (
+          && stockIssueNotice(document.stockEffect, document.stockLocationName) !== '' && (
             <p className="mb-6 text-[13px] text-text-secondary">
-              Ausstellen bucht den Bestand
-              {document.stockLocationName === undefined
-                ? ''
-                : ` im ${document.stockLocationName}`}{' '}
-              ab.
+              {stockIssueNotice(document.stockEffect, document.stockLocationName)}
             </p>
           )}
 
@@ -815,6 +816,13 @@ function DocumentMask({
             </p>
           </div>
         )}
+        {/* The half nobody expects: the goods coming back is obvious, the reservation of the
+            order behind it going back to open is not. */}
+        {reservationReturnNotice(document.stockEffect) !== '' && (
+          <p className="mb-4 text-[13px] text-text-secondary">
+            {reservationReturnNotice(document.stockEffect)}
+          </p>
+        )}
         <TextField
           label="Grund"
           value={reopenReason}
@@ -853,6 +861,11 @@ function DocumentMask({
           <p className="mb-4 text-[13px] text-text-secondary">
             Der Storno bucht den Bestand zurück. Er tut das über den Gegenbeleg, also genau
             einmal.
+          </p>
+        )}
+        {reservationReturnNotice(document.stockEffect) !== '' && (
+          <p className="mb-4 text-[13px] text-text-secondary">
+            {reservationReturnNotice(document.stockEffect)}
           </p>
         )}
         <TextField

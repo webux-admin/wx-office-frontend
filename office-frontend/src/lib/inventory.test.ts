@@ -23,6 +23,17 @@ import {
   stockUrl,
   shortageCauseLabel,
   shortageCauseTone,
+  affectsStock,
+  releaseReservationUrl,
+  reservationReturnNotice,
+  reservationStatusLabel,
+  reservationStatusTone,
+  reservesStock,
+  stockIssueNotice,
+  stockReservationListKey,
+  stockReservationsUrl,
+  STALE_RESERVATION_DAYS,
+  STOCK_RESERVATION_PATH,
 } from './inventory'
 
 function location(fields: Partial<StockLocation> = {}): StockLocation {
@@ -232,7 +243,7 @@ describe('booksStock', () => {
     expect(booksStock('ISSUE_IF_NOT_BOOKED')).toBe(true)
   })
 
-  /** RESERVE earmarks rather than moves, and nothing evaluates it yet. */
+  /** RESERVE speaks a quantity for rather than moving it, so it writes no movement. */
   it('booksStockWithoutAnEffectTest', () => {
     expect(booksStock('NONE')).toBe(false)
     expect(booksStock('RESERVE')).toBe(false)
@@ -274,5 +285,145 @@ describe('stockReversalLabel', () => {
     })
 
     expect(label).toContain('2.5 m Kabel')
+  })
+})
+
+describe('reservesStock', () => {
+  it('reservesStockTest', () => {
+    expect(reservesStock('RESERVE')).toBe(true)
+  })
+
+  /** Everything that books, and the document that does nothing at all, answer false. */
+  it('reservesStockWithoutAReservingEffectTest', () => {
+    expect(reservesStock('ISSUE')).toBe(false)
+    expect(reservesStock('ISSUE_IF_NOT_BOOKED')).toBe(false)
+    expect(reservesStock('NONE')).toBe(false)
+    expect(reservesStock(undefined)).toBe(false)
+  })
+})
+
+describe('affectsStock', () => {
+  it('affectsStockTest', () => {
+    expect(affectsStock('ISSUE')).toBe(true)
+    expect(affectsStock('ISSUE_IF_NOT_BOOKED')).toBe(true)
+  })
+
+  /** The one case that separates it from booksStock: the order reaches the inventory too. */
+  it('affectsStockWithAReservingEffectTest', () => {
+    expect(affectsStock('RESERVE')).toBe(true)
+  })
+
+  it('affectsStockWithoutAnEffectTest', () => {
+    expect(affectsStock('NONE')).toBe(false)
+    expect(affectsStock(undefined)).toBe(false)
+  })
+})
+
+describe('reservationStatusLabel', () => {
+  it('reservationStatusLabelTest', () => {
+    expect(reservationStatusLabel('OPEN')).toBe('Offen')
+    expect(reservationStatusLabel('CONSUMED')).toBe('Verbraucht')
+    expect(reservationStatusLabel('RELEASED')).toBe('Freigegeben')
+  })
+
+  it('reservationStatusLabelWithoutAStatusTest', () => {
+    expect(reservationStatusLabel(undefined)).toBe('')
+  })
+})
+
+describe('reservationStatusTone', () => {
+  /** Only what still takes stock away from somebody wears a colour. */
+  it('reservationStatusToneTest', () => {
+    expect(reservationStatusTone('OPEN')).toBe('accent')
+  })
+
+  it('reservationStatusToneWhenClosedTest', () => {
+    expect(reservationStatusTone('CONSUMED')).toBeUndefined()
+    expect(reservationStatusTone('RELEASED')).toBeUndefined()
+    expect(reservationStatusTone(undefined)).toBeUndefined()
+  })
+})
+
+describe('stockIssueNotice', () => {
+  it('stockIssueNoticeTest', () => {
+    expect(stockIssueNotice('ISSUE', 'Hauptlager')).toBe(
+      'Ausstellen bucht den Bestand im Hauptlager ab.',
+    )
+  })
+
+  /** The sentence an order gets: the stock stays, the free quantity does not. */
+  it('stockIssueNoticeWhenReservingTest', () => {
+    const notice = stockIssueNotice('RESERVE', 'Hauptlager')
+
+    expect(notice).toContain('reserviert den Bestand im Hauptlager')
+    expect(notice).toContain('verfügbare Menge sinkt')
+  })
+
+  /** No location known yet: the sentence still reads, without a dangling «im».  */
+  it('stockIssueNoticeWithoutALocationTest', () => {
+    expect(stockIssueNotice('ISSUE')).toBe('Ausstellen bucht den Bestand ab.')
+    expect(stockIssueNotice('RESERVE', '')).toContain('Ausstellen reserviert den Bestand.')
+  })
+
+  it('stockIssueNoticeWithoutAnEffectTest', () => {
+    expect(stockIssueNotice('NONE', 'Hauptlager')).toBe('')
+    expect(stockIssueNotice(undefined)).toBe('')
+  })
+})
+
+describe('reservationReturnNotice', () => {
+  it('reservationReturnNoticeTest', () => {
+    expect(reservationReturnNotice('RESERVE')).toBe(
+      'Die offenen Reservierungen dieses Belegs werden freigegeben.',
+    )
+  })
+
+  /** The invisible half: what the delivery note drew out of the order comes back. */
+  it('reservationReturnNoticeWhenBookingTest', () => {
+    expect(reservationReturnNotice('ISSUE')).toBe(
+      'Die dafür verbrauchten Reservierungen des Auftrags werden wiederhergestellt.',
+    )
+    expect(reservationReturnNotice('ISSUE_IF_NOT_BOOKED')).toContain('wiederhergestellt')
+  })
+
+  it('reservationReturnNoticeWithoutAnEffectTest', () => {
+    expect(reservationReturnNotice('NONE')).toBe('')
+    expect(reservationReturnNotice(undefined)).toBe('')
+  })
+})
+
+describe('stockReservationsUrl', () => {
+  it('stockReservationsUrlTest', () => {
+    expect(stockReservationsUrl(7)).toBe('/api/tenants/7/inventory/reservations')
+  })
+})
+
+describe('releaseReservationUrl', () => {
+  it('releaseReservationUrlTest', () => {
+    expect(releaseReservationUrl(7, 42)).toBe(
+      '/api/tenants/7/inventory/reservations/42/release',
+    )
+  })
+})
+
+describe('stockReservationListKey', () => {
+  it('stockReservationListKeyTest', () => {
+    expect(stockReservationListKey(7, 'status=OPEN')).toEqual([
+      'stock-reservations',
+      7,
+      'status=OPEN',
+    ])
+  })
+
+  /** Two differently filtered lists must not share one cache entry. */
+  it('stockReservationListKeyWithoutAQueryTest', () => {
+    expect(stockReservationListKey(7, '')).not.toEqual(stockReservationListKey(7, 'sourceId=1'))
+  })
+})
+
+describe('reservation constants', () => {
+  it('stockReservationPathTest', () => {
+    expect(STOCK_RESERVATION_PATH).toBe('/reservierungen')
+    expect(STALE_RESERVATION_DAYS).toBe(30)
   })
 })

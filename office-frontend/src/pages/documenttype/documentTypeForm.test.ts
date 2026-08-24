@@ -114,10 +114,11 @@ describe('stock effect', () => {
   })
 
   it('STOCK_EFFECTSTest', () => {
-    // RESERVE is a legal value in the backend but nothing evaluates it yet, so it is not
-    // offered: a setting that does nothing is a support case in waiting.
+    // In the order of how deeply they reach into the stock, RESERVE included: the order that
+    // speaks a quantity for is evaluated since backend ADR-0066.
     expect(STOCK_EFFECTS.map((effect) => effect.value)).toEqual([
       'NONE',
+      'RESERVE',
       'ISSUE',
       'ISSUE_IF_NOT_BOOKED',
     ])

@@ -5,6 +5,7 @@ import type {
   ShortageCause,
   StockEffect,
   StockLocation,
+  StockReservationStatus,
   StockReversalLine,
 } from './types'
 
@@ -35,6 +36,18 @@ export const STOCK_PATH = '/bestand'
 
 /** Path of the shortfall list within the application. */
 export const STOCK_SHORTAGE_PATH = '/unterdeckung'
+
+/** Path of the reservation list within the application. */
+export const STOCK_RESERVATION_PATH = '/reservierungen'
+
+/**
+ * How old a reservation has to be for the tidy-up chip to keep it.
+ *
+ * <p>A reservation has no expiry date and no nightly job clears it out (backend ADR-0066), so
+ * this list is the only tool there is. The threshold sits in the open, as a chip next to the
+ * search — not hidden in a column setting.
+ */
+export const STALE_RESERVATION_DAYS = 30
 
 /**
  * The common prefix of every inventory resource.
@@ -110,6 +123,27 @@ export function stockUrl(tenantId: number): string {
  */
 export function stockShortagesUrl(tenantId: number): string {
   return `${stockUrl(tenantId)}/shortages`
+}
+
+/**
+ * The REST resource of the reservations.
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stockReservationsUrl(tenantId: number): string {
+  return `${inventoryUrl(tenantId)}/reservations`
+}
+
+/**
+ * The endpoint that ends one reservation, with a reason.
+ *
+ * @param tenantId the tenant
+ * @param reservationId the reservation
+ * @returns the address
+ */
+export function releaseReservationUrl(tenantId: number, reservationId: number): string {
+  return `${stockReservationsUrl(tenantId)}/${reservationId}/release`
 }
 
 /**
@@ -215,6 +249,20 @@ export function stockShortageListKey(tenantId: number, query: string): (string |
 }
 
 /**
+ * Query key of the reservation list.
+ *
+ * <p>The filters are part of the key, so the list on the reservation screen and the panel in
+ * the product mask do not share one cache entry.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stockReservationListKey(tenantId: number, query: string): (string | number)[] {
+  return ['stock-reservations', tenantId, query]
+}
+
+/**
  * The reasons the booking dialog offers, per direction.
  *
  * <p>Four of the eleven reasons are missing on purpose: the two halves of a transfer, the
@@ -288,14 +336,69 @@ export function isReversible(movement: { sourceKind: string; reason: string } | 
 /**
  * Whether issuing a document of this kind moves stock at all.
  *
- * <p>The one question every sentence about stock on a document mask hangs on. `RESERVE`
- * earmarks rather than moves and is not evaluated yet, so it answers false here too.
+ * <p>`RESERVE` speaks a quantity for rather than moving it and writes no movement, so it
+ * answers false here — the sentence about goods coming back does not apply to it.
  *
  * @param stockEffect what the kind of document says, absent on a document that carries none
  * @returns true where the Ausstellen button will write a movement
  */
 export function booksStock(stockEffect: StockEffect | undefined): boolean {
   return stockEffect === 'ISSUE' || stockEffect === 'ISSUE_IF_NOT_BOOKED'
+}
+
+/**
+ * Whether issuing a document of this kind speaks a quantity for instead of moving it.
+ *
+ * @param stockEffect what the kind of document says, absent on a document that carries none
+ * @returns true for an order that reserves
+ */
+export function reservesStock(stockEffect: StockEffect | undefined): boolean {
+  return stockEffect === 'RESERVE'
+}
+
+/**
+ * Whether the inventory hears about this document at all.
+ *
+ * <p>Wider than {@link booksStock}: a mask that only asked «does it book» would show no
+ * sentence at all on an order, which is exactly the document whose stock effect surprises
+ * people.
+ *
+ * @param stockEffect what the kind of document says, absent on a document that carries none
+ * @returns true for anything but `NONE`
+ */
+export function affectsStock(stockEffect: StockEffect | undefined): boolean {
+  return booksStock(stockEffect) || reservesStock(stockEffect)
+}
+
+/**
+ * What a reservation state is called on screen.
+ *
+ * <p>A word, not only a colour. Not a maintained catalogue either — the three states are the
+ * life of a reservation and cannot be renamed without changing what they mean.
+ *
+ * @param status the state, absent while none is known
+ * @returns the wording, empty where there is nothing to say
+ */
+export function reservationStatusLabel(status: StockReservationStatus | undefined): string {
+  if (status === 'OPEN') return 'Offen'
+  if (status === 'CONSUMED') return 'Verbraucht'
+  if (status === 'RELEASED') return 'Freigegeben'
+  return ''
+}
+
+/**
+ * Which badge tone a reservation state wears.
+ *
+ * <p>Only what is still open wears a colour: it is the row that takes stock away from
+ * somebody. What is done is done and reads as plain text.
+ *
+ * @param status the state, absent while none is known
+ * @returns the tone, `undefined` for a plain badge
+ */
+export function reservationStatusTone(
+  status: StockReservationStatus | undefined,
+): 'accent' | undefined {
+  return status === 'OPEN' ? 'accent' : undefined
 }
 
 /**
@@ -317,4 +420,49 @@ export function stockReversalLabel(line: StockReversalLine): string {
     : `${line.productNumber} `
   return `${formatQuantity(line.quantity)}${unit} ${number}${line.productName}`
     + ` \u00b7 ${line.locationName}`
+}
+
+/**
+ * What the Ausstellen button will do to the stock, as one sentence.
+ *
+ * <p>An order surprises people: it changes the free quantity without moving a thing, and
+ * nobody expects that from a document that prints no delivery. So it gets a sentence of its
+ * own rather than being folded into «bucht ab» or, worse, staying silent.
+ *
+ * @param stockEffect what the kind of document says, absent on a document that carries none
+ * @param locationName what the location is called, absent while the mask does not know it
+ * @returns the sentence, empty where issuing does nothing to the stock
+ */
+export function stockIssueNotice(
+  stockEffect: StockEffect | undefined,
+  locationName?: string,
+): string {
+  const where = locationName === undefined || locationName === '' ? '' : ` im ${locationName}`
+  if (reservesStock(stockEffect)) {
+    return `Ausstellen reserviert den Bestand${where}. Gebucht wird nichts —`
+      + ' der Bestand bleibt, die verfügbare Menge sinkt.'
+  }
+  if (booksStock(stockEffect)) return `Ausstellen bucht den Bestand${where} ab.`
+  return ''
+}
+
+/**
+ * What taking a document back does to the reservations, as one sentence.
+ *
+ * <p>Two different events wearing the same button. An order gives up what it spoke for; a
+ * delivery note hands back what it drew out of somebody else's reservation — and the second
+ * one is the invisible half, because the goods coming back into stock is the part people
+ * already expect (backend ADR-0066).
+ *
+ * @param stockEffect what the kind of document says, absent on a document that carries none
+ * @returns the sentence, empty where the document holds no reservation either way
+ */
+export function reservationReturnNotice(stockEffect: StockEffect | undefined): string {
+  if (reservesStock(stockEffect)) {
+    return 'Die offenen Reservierungen dieses Belegs werden freigegeben.'
+  }
+  if (booksStock(stockEffect)) {
+    return 'Die dafür verbrauchten Reservierungen des Auftrags werden wiederhergestellt.'
+  }
+  return ''
 }

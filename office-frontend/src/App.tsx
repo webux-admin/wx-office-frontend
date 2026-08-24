@@ -43,6 +43,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
 const StockListPage = lazy(() => import('./pages/StockListPage').then((module) => ({ default: module.StockListPage })))
 const StockShortageListPage = lazy(() => import('./pages/StockShortageListPage').then((module) => ({ default: module.StockShortageListPage })))
+const StockReservationListPage = lazy(() => import('./pages/StockReservationListPage').then((module) => ({ default: module.StockReservationListPage })))
 const StockMovementListPage = lazy(() => import('./pages/StockMovementListPage').then((module) => ({ default: module.StockMovementListPage })))
 const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
@@ -101,6 +102,7 @@ export default function App() {
 
                 <Route path="/bestand" element={<StockListPage />} />
                 <Route path="/unterdeckung" element={<StockShortageListPage />} />
+                <Route path="/reservierungen" element={<StockReservationListPage />} />
                 <Route path="/lagerbewegungen" element={<StockMovementListPage />} />
                 <Route path="/lagerorte" element={<StockLocationListPage />} />
 

@@ -640,8 +640,9 @@ export type NegativeStockPolicy = 'WARN' | 'BLOCK'
  * <p>A setting of the kind of document, not of its category: a business that never writes a
  * delivery note still has to move stock when it invoices (ADR-0064 of the backend).
  * `ISSUE_IF_NOT_BOOKED` books unless the same operation already did, which is what lets a
- * direct invoice book while an invoice after a delivery note does not. `RESERVE` is a legal
- * value from the first migration on but is not evaluated yet.
+ * direct invoice book while an invoice after a delivery note does not. `RESERVE` speaks a
+ * quantity for without moving it: the free quantity drops, the stock does not, and no movement
+ * is written (ADR-0066 of the backend).
  */
 export type StockEffect = 'NONE' | 'RESERVE' | 'ISSUE' | 'ISSUE_IF_NOT_BOOKED'
 
@@ -748,7 +749,7 @@ export type StockBalance = {
   productId: number
   locationId: number
   quantity: number
-  /** What is spoken for. Stays 0 until reservations are built. */
+  /** What an issued order has spoken for. */
   reservedQuantity: number
   availableQuantity: number
   productNumber?: string
@@ -809,7 +810,9 @@ export type StockRow = {
   locationId: number
   locationName: string
   quantity: number
-  /** Free to be given away. Equal to `quantity` until reservations are built. */
+  /** What an issued order has spoken for. */
+  reservedQuantity: number
+  /** Free to be given away: stock less what is spoken for. */
   availableQuantity: number
   /** The level warned below. Absent means «do not watch at all»; 0 is not the same thing. */
   minimumQuantity?: number
@@ -840,6 +843,57 @@ export type ShortageRow = {
   /** How much is missing, always positive. */
   missingQuantity: number
   cause: ShortageCause
+}
+
+/**
+ * Where a reservation stands in its life.
+ *
+ * <p>Three states and two ways out. `OPEN` counts against the free quantity, `CONSUMED` was
+ * delivered in full, `RELEASED` was given back — by a Storno, by a reopen, or by hand.
+ */
+export type StockReservationStatus = 'OPEN' | 'CONSUMED' | 'RELEASED'
+
+/**
+ * A quantity one document has spoken for, as `ReservationDto` sends it.
+ *
+ * <p>Read only, except for the one endpoint that releases it. Nothing sets a reserved
+ * quantity: it is written when an order is issued and used up when a delivery note goes out
+ * (ADR-0066 of the backend).
+ *
+ * <p>Product number, name and unit are the copies frozen when the order was issued, not
+ * today's values — the same rule the movement journal follows.
+ */
+export type StockReservation = {
+  id: number
+  productId: number
+  productNumber?: string
+  productName: string
+  unitShortName?: string
+  locationId: number
+  locationName: string
+  /** How much was spoken for, always above zero. */
+  quantity: number
+  /** How much of it deliveries have used up. */
+  quantityReleased: number
+  /** What is still spoken for; this is what the free stock is short of. */
+  openQuantity: number
+  status: StockReservationStatus
+  /** The document that reserved. */
+  sourceId?: number
+  /** The line of that document that reserved. */
+  sourceLineId?: number
+  sourceNumber?: string
+  /** The day it was reserved on, as `YYYY-MM-DD`. */
+  reservedOn: string
+  releasedAt?: string
+  releasedBy?: string
+  releasedReason?: string
+}
+
+/** What the release dialog sends to end one reservation by hand. */
+export type ReleaseReservationRequest = {
+  /** Required, at most 60 characters. */
+  reason: string
 }
 
 // --- document ----------------------------------------------------------------

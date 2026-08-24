@@ -23,6 +23,7 @@ import { listQuery } from '../../lib/paging'
 import type { Product, StockBalance, StockLocation, StockMovement } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { BookStockDialog } from '../inventory/BookStockDialog'
+import { StockReservations } from './StockReservations'
 
 /**
  * The stock of one product: how much lies where, and what happened last.
@@ -139,6 +140,10 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
           </div>
         )}
       </Panel>
+
+      {/* Directly under the numbers it explains: «Bestand 40, verfügbar 12» is unreadable
+          without the rows that took the 28 away. */}
+      <StockReservations tenantId={tenantId} product={product} />
 
       <Panel title="Letzte Bewegungen" description="Die zehn jüngsten Buchungen dieses Produkts.">
         {latest.isPending ? (

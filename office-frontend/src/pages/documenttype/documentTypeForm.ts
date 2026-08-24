@@ -319,14 +319,19 @@ export const COPY_PRICE_MODES: { value: CopyPriceMode; label: string; hint: stri
 /**
  * What issuing a document can do to the stock, in German.
  *
- * <p>`RESERVE` is missing on purpose: the backend accepts the value from the first migration
- * on, but nothing evaluates it yet. A setting that does nothing is a support case in waiting.
+ * <p>All four values, in the order of how deeply they reach into the stock: nothing, spoken
+ * for, booked out, booked out unless the operation already did.
  */
 export const STOCK_EFFECTS: { value: StockEffect; label: string; hint: string }[] = [
   {
     value: 'NONE',
     label: 'Keine Wirkung',
     hint: 'Das Ausstellen bewegt keinen Bestand.',
+  },
+  {
+    value: 'RESERVE',
+    label: 'Reserviert beim Ausstellen',
+    hint: 'Für den Auftrag: der Bestand bleibt liegen, die verfügbare Menge sinkt. Der Lieferschein verbraucht die Reservierung.',
   },
   {
     value: 'ISSUE',

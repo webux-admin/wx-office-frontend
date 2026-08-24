@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BellRing,
+  BookmarkCheck,
   BookOpen,
   Boxes,
   Building2,
@@ -184,6 +185,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Unterdeckung',
         icon: TriangleAlert,
         href: '/unterdeckung',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
+      // Between the shortfalls and the journal: it answers «why is verfügbar lower than
+      // Bestand», which is the question the two screens above provoke.
+      {
+        label: 'Reservierungen',
+        icon: BookmarkCheck,
+        href: '/reservierungen',
         permission: 'INVENTORY_READ',
         module: 'inventory',
       },
