@@ -96,6 +96,9 @@
      on ink. Pure white in both appearances: those fills stay dark either way. */
   --color-on-accent: #ffffff;
   --color-success: #2f6b4f;
+  /* Between success and danger: something is odd but nothing is refused. Used for the
+     shortfall line on a booking that a location lets through. */
+  --color-warning: #8a5a18;
   --color-danger: #8c3023;
   /* The same pair as `accent`/`accent-text`, for the rare button that carries a refusal:
      `danger` is the foreground tone, `danger-surface` the fill under `on-accent`. A fill
@@ -168,6 +171,8 @@
     --color-accent-hover: #3f8a6e;
     --color-accent-text: #7cc9aa;
     --color-success: #4fa07c;
+    /* Lightened like the rest: the daylight amber falls under 4.5:1 on a dark card. */
+    --color-warning: #d9a441;
     --color-danger: #e08c7e;
     /* Lifted, but nowhere near the foreground tone above: white has to hold on it. */
     --color-danger-surface: #a3402f;

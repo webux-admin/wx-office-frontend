@@ -1,7 +1,9 @@
-import { useId, useState, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { useId, useState, type ReactNode, type Ref, type TextareaHTMLAttributes } from 'react'
 import { Field } from './Field'
 
 type TextAreaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> & {
+  /** React 19 passes a ref through as a plain prop; it lands on the textarea, not the wrapper. */
+  ref?: Ref<HTMLTextAreaElement>
   label: string
   invalid?: boolean
   hint?: ReactNode

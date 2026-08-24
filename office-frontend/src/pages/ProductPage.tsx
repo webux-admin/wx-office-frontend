@@ -28,6 +28,7 @@ import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { ProductFreeFields } from './product/ProductFreeFields'
 import { ProductPrices } from './product/ProductPrices'
+import { ProductStock } from './product/ProductStock'
 import {
   firstPriceComplaint,
   pricesChanged,
@@ -395,6 +396,14 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
               )}
             </div>
           </Panel>
+        )}
+
+        {/* Only for an article that is saved and followed: a new one has no stock, and one
+            without the flag has none by definition. */}
+        {tab === 'lager' && product !== null && form.stockManaged && (
+          <div className="mt-6">
+            <ProductStock tenantId={tenantId} product={product} />
+          </div>
         )}
 
         {tab === 'buchhaltung' && (

@@ -72,6 +72,8 @@ export type CatalogueName =
   | 'offer-outcome'
   | 'offer-decline-reason'
   | 'negative-stock-policy'
+  | 'movement-reason'
+  | 'movement-source-kind'
   | 'product-tracking'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
@@ -650,6 +652,115 @@ export type StockLocation = {
   defaultLocation?: boolean
   negativeStockPolicy?: NegativeStockPolicy
   sortOrder?: number
+}
+
+/** Which way a booked quantity goes. The API takes a positive quantity plus this. */
+export type MovementDirection = 'IN' | 'OUT'
+
+/** Why a quantity moved, as the catalogue `movement-reason` spells it. */
+export type MovementReason =
+  | 'OPENING'
+  | 'RECEIPT'
+  | 'CUSTOMER_RETURN'
+  | 'ISSUE'
+  | 'SCRAP'
+  | 'OWN_USE'
+  | 'LOSS'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  | 'REVERSAL'
+  | 'COUNT_ADJUSTMENT'
+
+/** What made a movement happen, as the catalogue `movement-source-kind` spells it. */
+export type SourceKind = 'MANUAL' | 'DOCUMENT' | 'STOCKTAKE'
+
+/**
+ * One line of the movement journal, as `StockMovementDto` sends it.
+ *
+ * <p>Read only from end to end: there is no endpoint that changes a movement and none that
+ * deletes one. A mistake is corrected with a counter booking, which is another row of this
+ * shape. Product number, name and unit are copies taken when it was booked, so a renamed
+ * product leaves an old row exactly as it stands.
+ */
+export type StockMovement = {
+  id: number
+  productId: number
+  productNumber?: string
+  productName: string
+  unitCode?: string
+  unitShortName?: string
+  locationId: number
+  /** Signed: a receipt is positive, an issue negative. Never zero. */
+  quantity: number
+  reason: MovementReason
+  /** The booking day as `YYYY-MM-DD`; may be earlier than today, never later. */
+  bookedOn: string
+  sourceKind: SourceKind
+  sourceId?: number
+  sourceNumber?: string
+  /** Ties the two lines of a transfer together. */
+  transferGroupId?: number
+  /** The movement this one takes back. */
+  reversesMovementId?: number
+  unitCost?: number
+  unitCostCurrency?: string
+  exchangeRate?: number
+  exchangeRateDate?: string
+  note?: string
+  createdAt?: string
+  createdBy?: string
+}
+
+/**
+ * How much of one product lies at one location, as `StockBalanceDto` sends it.
+ *
+ * <p>A cache of the journal, and read only. There is no field here and no endpoint anywhere
+ * that sets a stock.
+ */
+export type StockBalance = {
+  productId: number
+  locationId: number
+  quantity: number
+  /** What is spoken for. Stays 0 until reservations are built. */
+  reservedQuantity: number
+  availableQuantity: number
+  productNumber?: string
+  productName: string
+  productEan?: string
+  unitShortName?: string
+}
+
+/** What a booking wrote, and what the stock looks like afterwards. */
+export type StockBooking = {
+  movements: StockMovement[]
+  balances: StockBalance[]
+}
+
+/** What the booking dialog sends to book a quantity in or out. */
+export type BookStockRequest = {
+  productId: number
+  locationId: number
+  direction: MovementDirection
+  reason: MovementReason
+  /** Always above zero; the direction makes the sign. */
+  quantity: number
+  /** `YYYY-MM-DD`, absent means today. */
+  bookedOn?: string
+  unitCost?: number
+  unitCostCurrency?: string
+  exchangeRate?: number
+  exchangeRateDate?: string
+  note?: string
+}
+
+/** What the booking dialog sends to move goods from one location to another. */
+export type TransferStockRequest = {
+  productId: number
+  fromLocationId: number
+  toLocationId: number
+  quantity: number
+  bookedOn?: string
+  note?: string
 }
 
 // --- document ----------------------------------------------------------------

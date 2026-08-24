@@ -69,6 +69,26 @@ export function ErrorNotice({ error, children }: { error: unknown; children?: Re
 }
 
 /**
+ * Something is odd, and nothing is refused.
+ *
+ * <p>Deliberately not an {@link ErrorNotice}: red says «this did not happen», and a warning
+ * says «this will happen, and you should know». Where both look the same, people stop reading
+ * either.
+ */
+export function WarningNotice({ children }: { children: ReactNode }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-warning/40 bg-warning/10 px-4 py-3"
+    >
+      <AlertTriangle size={16} className="mt-px shrink-0 text-warning" aria-hidden />
+      <p className="min-w-0 flex-1 text-[13px] text-text-primary">{children}</p>
+    </div>
+  )
+}
+
+/**
  * Shown instead of a screen the user holds no permission for.
  *
  * <p>Hiding it would leave them wondering why a menu entry led nowhere. The backend refuses

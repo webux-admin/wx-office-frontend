@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   BellRing,
   BookOpen,
   Building2,
@@ -163,6 +164,21 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // The working screens of the inventory, as opposed to its setup one group further down.
+    // The group appears with this issue and grows with the stock list, the reservations, the
+    // stocktake and the as-of report; it disappears with the module switch of the tenant.
+    title: 'Lager',
+    entries: [
+      {
+        label: 'Bewegungen',
+        icon: ArrowLeftRight,
+        href: '/lagerbewegungen',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
+    ],
+  },
+  {
     title: 'Stammdaten',
     entries: [
       { label: 'Kunden', icon: Users, href: '/kunden', permission: 'PARTNER_READ' },
@@ -271,8 +287,8 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
-        // What the tenant keeps and where. Only the setup lives here; the working screens
-        // of the inventory get their own group once there is stock to look at.
+        // What the tenant keeps and where. Only the setup lives here; the screens worked on
+        // daily stand in the group «Lager» above.
         label: 'Lager',
         icon: Warehouse,
         module: 'inventory',
