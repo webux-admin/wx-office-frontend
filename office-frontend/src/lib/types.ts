@@ -43,6 +43,13 @@ export type MasterDataEntry = {
   system?: boolean
   /** Only on languages: whether documents may be issued in it. */
   documentLanguage?: boolean
+  /**
+   * Only on units: how many decimal places a quantity in this unit may carry.
+   *
+   * <p>Absent means no rule at all, 0 means whole numbers only. Read when a quantity is
+   * entered, never frozen onto a document — it is an input rule, not a document value.
+   */
+  decimalPlaces?: number
 }
 
 /**
@@ -65,6 +72,7 @@ export type CatalogueName =
   | 'offer-outcome'
   | 'offer-decline-reason'
   | 'negative-stock-policy'
+  | 'product-tracking'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -418,6 +426,16 @@ export type Product = {
   eanCode?: string
   /** False when a document line with this product must not carry a discount. */
   discountable?: boolean
+  /** Whether the stock of this product is followed at all. Only goods may. */
+  stockManaged?: boolean
+  tracking?: ProductTracking
+  /**
+   * The level a shortfall list warns below.
+   *
+   * <p>Absent means «do not watch at all»; 0 is a level and means «warn as soon as nothing
+   * is left». The two are not the same thing.
+   */
+  minimumQuantity?: number
   unitId?: number
   unit: string
   unitLabel?: string
@@ -487,6 +505,14 @@ export type ProductFreeFieldDefinition = {
   /** Whether the value may go onto a document. */
   printable?: boolean
 }
+
+/**
+ * How closely the stock of a product is followed.
+ *
+ * <p>A lot names a batch produced or delivered together; a serial number names exactly one
+ * piece. Switching this over is only harmless while nothing is in stock.
+ */
+export type ProductTracking = 'NONE' | 'LOT' | 'SERIAL'
 
 /**
  * One price of a product: for one price group or for none, from a quantity upwards, for a

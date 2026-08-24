@@ -13,6 +13,13 @@ export type EntryForm = {
   shortName: string
   description: string
   documentLanguage: boolean
+  /**
+   * Only on units: how many decimal places a quantity may carry, as text.
+   *
+   * <p>Empty means «no rule», which is not the same as «0». Zero says whole numbers only,
+   * and a booking of 0.5 is then refused.
+   */
+  decimalPlaces: string
   /** The name in the other document languages, by language code. */
   translations: Record<string, string>
 }
@@ -24,6 +31,7 @@ export const EMPTY_ENTRY: EntryForm = {
   shortName: '',
   description: '',
   documentLanguage: false,
+  decimalPlaces: '',
   translations: {},
 }
 
@@ -45,6 +53,7 @@ export function toEntryForm(entry: MasterDataEntry, defaultLanguage: string): En
     shortName: entry.shortName ?? '',
     description: entry.description ?? '',
     documentLanguage: entry.documentLanguage === true,
+    decimalPlaces: entry.decimalPlaces?.toString() ?? '',
     translations: labelForm(entry.labels, defaultLanguage),
   }
 }
@@ -92,5 +101,27 @@ export function entryComplaint(form: EntryForm, list: MasterDataList): string | 
   if (list === 'currencies' && !/^[A-Z]{3}$/.test(code)) {
     return 'Ein Währungscode besteht aus drei Grossbuchstaben, zum Beispiel CHF.'
   }
+  if (list === 'units' && form.decimalPlaces.trim() !== '') {
+    const places = Number(form.decimalPlaces.trim())
+    if (!Number.isInteger(places) || places < 0 || places > 4) {
+      return 'Die Nachkommastellen sind eine ganze Zahl von 0 bis 4.'
+    }
+  }
   return null
+}
+
+/**
+ * The decimal place rule as the API wants it.
+ *
+ * <p>An empty field is left out rather than sent as 0: «no rule» and «whole numbers only»
+ * are different answers, and 0 would refuse every fractional quantity from then on.
+ *
+ * @param form the filled in form
+ * @param list the list the value belongs to
+ * @returns the number of places, or `undefined` where the list has no such rule
+ */
+export function decimalPlacesOf(form: EntryForm, list: MasterDataList): number | undefined {
+  if (list !== 'units' || form.decimalPlaces.trim() === '') return undefined
+  const places = Number(form.decimalPlaces.trim())
+  return Number.isInteger(places) ? places : undefined
 }

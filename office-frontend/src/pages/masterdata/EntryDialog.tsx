@@ -100,6 +100,18 @@ export function EntryDialog({
           onChange={(event) => set('description', event.target.value)}
           maxLength={200}
         />
+        {/* Like the language flag below: the create endpoint does not take the rule, so the
+            field appears only where a typed value actually reaches the record. */}
+        {list === 'units' && editing !== null && (
+          <TextField
+            label="Nachkommastellen"
+            value={form.decimalPlaces}
+            onChange={(event) => set('decimalPlaces', event.target.value)}
+            inputMode="numeric"
+            maxLength={1}
+            hint="Leer heisst: beliebig viele. 0 heisst: nur ganze Zahlen, zum Beispiel Stück."
+          />
+        )}
         {list === 'languages' && editing !== null && (
           <CheckboxField
             label="Belege in dieser Sprache"

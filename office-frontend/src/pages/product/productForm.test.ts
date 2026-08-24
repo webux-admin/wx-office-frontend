@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeChanged,
+  applyProductType,
+  applyStockManaged,
   emptyProduct,
   firstComplaint,
   toForm,
@@ -277,6 +279,160 @@ describe('toPayload with free fields', () => {
   it('toPayloadWithoutFreeFieldsTest', () => {
     // A tenant that defined none: the key stays out of the payload altogether.
     expect(toPayload(COMPLETE).freeFields).toBeUndefined()
+  })
+})
+
+// A goods form with the stock switched on, the way the Lager register fills it.
+const STOCKED = {
+  ...COMPLETE,
+  productType: 'GOODS' as const,
+  stockManaged: true,
+  tracking: 'LOT' as const,
+  minimumQuantity: '25',
+}
+
+describe('toForm with stock fields', () => {
+  it('toFormWithStockFieldsTest', () => {
+    const form = toForm({
+      ...STORED,
+      productType: 'GOODS',
+      stockManaged: true,
+      tracking: 'LOT',
+      minimumQuantity: 25,
+    })
+
+    expect(form.stockManaged).toBe(true)
+    expect(form.tracking).toBe('LOT')
+    expect(form.minimumQuantity).toBe('25')
+  })
+
+  it('toFormWithoutStockFieldsTest', () => {
+    // An older record answered without the fields: not followed, nothing tracked, no level.
+    const form = toForm(STORED)
+
+    expect(form.stockManaged).toBe(false)
+    expect(form.tracking).toBe('NONE')
+    expect(form.minimumQuantity).toBe('')
+  })
+
+  it('toFormKeepsAZeroMinimumQuantityTest', () => {
+    // 0 is a level and means «warn as soon as nothing is left», not «no watching».
+    const form = toForm({ ...STORED, stockManaged: true, minimumQuantity: 0 })
+
+    expect(form.minimumQuantity).toBe('0')
+  })
+})
+
+describe('toPayload with stock fields', () => {
+  it('toPayloadWithStockFieldsTest', () => {
+    const payload = toPayload(STOCKED)
+
+    expect(payload.stockManaged).toBe(true)
+    expect(payload.tracking).toBe('LOT')
+    expect(payload.minimumQuantity).toBe(25)
+  })
+
+  it('toPayloadWithEmptyMinimumQuantityTest', () => {
+    // Empty means «do not watch», so the payload must not carry a number.
+    const payload = toPayload({ ...STOCKED, minimumQuantity: '' })
+
+    expect(payload.minimumQuantity).toBeUndefined()
+  })
+
+  it('toPayloadSendsTheStockFlagEvenSwitchedOffTest', () => {
+    // The flag tells the backend this mask knows the stock fields; left out, an update
+    // would keep whatever is stored.
+    const payload = toPayload(COMPLETE)
+
+    expect(payload.stockManaged).toBe(false)
+    expect(payload.tracking).toBe('NONE')
+  })
+})
+
+describe('applyProductType', () => {
+  it('applyProductTypeTest', () => {
+    const form = applyProductType({ ...COMPLETE, productType: 'SERVICE' }, 'GOODS')
+
+    expect(form.productType).toBe('GOODS')
+    expect(form.stockManaged).toBe(false)
+  })
+
+  it('applyProductTypeToServiceClearsStockTest', () => {
+    const form = applyProductType(STOCKED, 'SERVICE')
+
+    expect(form.productType).toBe('SERVICE')
+    expect(form.stockManaged).toBe(false)
+    expect(form.tracking).toBe('NONE')
+    expect(form.minimumQuantity).toBe('')
+  })
+
+  it('applyProductTypeToGoodsKeepsTheStockFieldsTest', () => {
+    const form = applyProductType(STOCKED, 'GOODS')
+
+    expect(form.stockManaged).toBe(true)
+    expect(form.tracking).toBe('LOT')
+    expect(form.minimumQuantity).toBe('25')
+  })
+})
+
+describe('applyStockManaged', () => {
+  it('applyStockManagedTest', () => {
+    const form = applyStockManaged({ ...COMPLETE, productType: 'GOODS' }, true)
+
+    expect(form.stockManaged).toBe(true)
+    expect(form.tracking).toBe('NONE')
+  })
+
+  it('applyStockManagedOffClearsTrackingTest', () => {
+    const form = applyStockManaged(STOCKED, false)
+
+    expect(form.stockManaged).toBe(false)
+    expect(form.tracking).toBe('NONE')
+    expect(form.minimumQuantity).toBe('')
+  })
+
+  it('applyStockManagedOnKeepsWhatIsFilledInTest', () => {
+    // Ticking the box again must not wipe what somebody typed before unticking it briefly
+    // in the same edit would have cleared it.
+    const form = applyStockManaged({ ...STOCKED, stockManaged: false }, true)
+
+    expect(form.tracking).toBe('LOT')
+    expect(form.minimumQuantity).toBe('25')
+  })
+})
+
+describe('firstComplaint with stock fields', () => {
+  it('firstComplaintWithStockFieldsTest', () => {
+    expect(firstComplaint(STOCKED)).toBeNull()
+  })
+
+  it('firstComplaintWithStockManagedServiceTest', () => {
+    expect(
+      firstComplaint({ ...COMPLETE, productType: 'SERVICE', stockManaged: true }),
+    ).toContain('Dienstleistungen')
+  })
+
+  it('firstComplaintWithTrackingButNoStockTest', () => {
+    expect(firstComplaint({ ...COMPLETE, tracking: 'SERIAL' })).toContain('Nachverfolgung')
+  })
+
+  it('firstComplaintWithNegativeMinimumQuantityTest', () => {
+    expect(firstComplaint({ ...STOCKED, minimumQuantity: '-1' })).toContain('negativ')
+  })
+
+  it('firstComplaintWithAMinimumQuantityThatIsNoNumberTest', () => {
+    expect(firstComplaint({ ...STOCKED, minimumQuantity: 'viel' })).toContain('Zahl')
+  })
+
+  it('firstComplaintWithMinimumQuantityButNoStockTest', () => {
+    expect(
+      firstComplaint({ ...COMPLETE, productType: 'GOODS', minimumQuantity: '10' }),
+    ).toContain('Mindestbestand')
+  })
+
+  it('firstComplaintWithZeroMinimumQuantityTest', () => {
+    // 0 is a valid level; only negative numbers are refused.
+    expect(firstComplaint({ ...STOCKED, minimumQuantity: '0' })).toBeNull()
   })
 })
 

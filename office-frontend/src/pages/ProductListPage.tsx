@@ -124,9 +124,15 @@ function ProductList({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: '',
-      width: 'w-[110px]',
-      render: (product) =>
-        product.active === false ? <Badge tone="muted">Deaktiviert</Badge> : null,
+      width: 'w-[150px]',
+      render: (product) => (
+        <span className="flex flex-wrap items-center gap-1">
+          {/* No permission check: whoever does not use the inventory has the flag set
+              nowhere, so the badge appears exactly where it means something. */}
+          {product.stockManaged === true && <Badge tone="neutral">Lager</Badge>}
+          {product.active === false && <Badge tone="muted">Deaktiviert</Badge>}
+        </span>
+      ),
     },
   ]
 

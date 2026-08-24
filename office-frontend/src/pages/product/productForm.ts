@@ -3,6 +3,7 @@ import type {
   FreeFieldType,
   Product,
   ProductFreeFieldValue,
+  ProductTracking,
   ProductType,
   VatCategory,
 } from '../../lib/types'
@@ -35,6 +36,11 @@ export type ProductForm = {
   active: boolean
   revenueAccount: string
   vatCategory: VatCategory
+  /** Whether the stock of this product is followed at all. Only goods may. */
+  stockManaged: boolean
+  tracking: ProductTracking
+  /** Text, because that is what an input holds. Empty means «do not watch at all». */
+  minimumQuantity: string
   /**
    * The free fields as the mask holds them: by place, and as text, because that is what an
    * input carries. What each place means is not kept here — it comes with the product.
@@ -56,6 +62,9 @@ const EMPTY: ProductForm = {
   active: true,
   revenueAccount: '',
   vatCategory: 'STANDARD',
+  stockManaged: false,
+  tracking: 'NONE',
+  minimumQuantity: '',
   freeFields: {},
 }
 
@@ -88,6 +97,9 @@ export function toForm(product: Product): ProductForm {
     active: product.active !== false,
     revenueAccount: product.revenueAccount ?? '',
     vatCategory: product.vatCategory ?? 'STANDARD',
+    stockManaged: product.stockManaged === true,
+    tracking: product.tracking ?? 'NONE',
+    minimumQuantity: product.minimumQuantity?.toString() ?? '',
     freeFields: toFreeFieldForm(product.freeFields),
   }
 }
@@ -173,6 +185,11 @@ export function toPayload(form: ProductForm, defined?: FreeFieldSlot[]): Partial
     unit: form.unit,
     revenueAccount: blankToUndefined(form.revenueAccount),
     vatCategory: form.vatCategory,
+    // Always sent, even switched off: the flag is what tells the backend that this mask
+    // knows the stock fields and that an empty minimum quantity really means «none».
+    stockManaged: form.stockManaged,
+    tracking: form.tracking,
+    minimumQuantity: parseDecimal(form.minimumQuantity) ?? undefined,
     freeFields: toFreeFieldPayload(form, defined),
   }
 }
@@ -190,7 +207,52 @@ export function toPayload(form: ProductForm, defined?: FreeFieldSlot[]): Partial
 export function firstComplaint(form: ProductForm): string | null {
   if (form.name.trim() === '') return 'Ohne Bezeichnung lässt sich nichts speichern.'
   if (form.unit === '') return 'Ein Produkt braucht eine Einheit.'
+  if (form.stockManaged && form.productType === 'SERVICE') {
+    return 'Dienstleistungen werden nicht im Lager geführt.'
+  }
+  if (form.tracking !== 'NONE' && !form.stockManaged) {
+    return 'Eine Nachverfolgung braucht ein Produkt, das im Lager geführt wird.'
+  }
+  if (form.minimumQuantity.trim() !== '') {
+    const minimum = parseDecimal(form.minimumQuantity)
+    if (minimum === null) return 'Der Mindestbestand muss eine Zahl sein, zum Beispiel 25.'
+    if (minimum < 0) return 'Der Mindestbestand darf nicht negativ sein.'
+    if (!form.stockManaged) {
+      return 'Ein Mindestbestand braucht ein Produkt, das im Lager geführt wird.'
+    }
+  }
   return null
+}
+
+/**
+ * Changes the kind of product, and clears what that kind cannot carry.
+ *
+ * <p>A service is never in a warehouse, so switching to one takes the stock fields with it.
+ * Done here rather than in the mask so no state can survive that the server refuses
+ * afterwards.
+ *
+ * @param form        the filled in mask
+ * @param productType the kind that was chosen
+ * @returns the mask with the new kind
+ */
+export function applyProductType(form: ProductForm, productType: ProductType): ProductForm {
+  if (productType !== 'SERVICE') return { ...form, productType }
+  return { ...form, productType, stockManaged: false, tracking: 'NONE', minimumQuantity: '' }
+}
+
+/**
+ * Switches the stock management of a product on or off.
+ *
+ * <p>Switching it off takes the tracking and the minimum quantity with it: both mean nothing
+ * without it, and left standing they would look set while nothing reads them.
+ *
+ * @param form the filled in mask
+ * @param on   whether the stock is followed from now on
+ * @returns the mask with the flag set
+ */
+export function applyStockManaged(form: ProductForm, on: boolean): ProductForm {
+  if (on) return { ...form, stockManaged: true }
+  return { ...form, stockManaged: false, tracking: 'NONE', minimumQuantity: '' }
 }
 
 /**

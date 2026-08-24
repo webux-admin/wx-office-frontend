@@ -18,7 +18,13 @@ import { defaultCodeOf, labelPayload } from '../lib/masterData'
 import type { MasterDataEntry } from '../lib/types'
 import { useMasterDataEntries, useMasterDataList } from '../masterdata/useMasterData'
 import { EntryDialog } from './masterdata/EntryDialog'
-import { EMPTY_ENTRY, entryComplaint, toEntryForm, type EntryForm } from './masterdata/entryForm'
+import {
+  EMPTY_ENTRY,
+  decimalPlacesOf,
+  entryComplaint,
+  toEntryForm,
+  type EntryForm,
+} from './masterdata/entryForm'
 
 /**
  * One maintained selection list of the tenant.
@@ -79,6 +85,7 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
         shortName: form.shortName.trim() || undefined,
         description: form.description.trim() || undefined,
         documentLanguage: list === 'languages' ? form.documentLanguage : undefined,
+        decimalPlaces: decimalPlacesOf(form, list),
       }
       return editing
         ? api.put<MasterDataEntry>(`${base}/${editing.id}`, payload)

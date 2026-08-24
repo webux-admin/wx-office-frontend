@@ -19,6 +19,7 @@ import { originOf, type Origin } from '../lib/origin'
 import type {
   Product,
   ProductFreeFieldDefinition,
+  ProductTracking,
   ProductType,
   VatCategory,
   VatRates,
@@ -40,13 +41,15 @@ import {
   firstComplaint,
   toForm,
   toPayload,
+  applyProductType,
+  applyStockManaged,
   type ProductForm,
 } from './product/productForm'
 
 /** Where a product mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/produkte', label: 'Produkte' }
 
-type Register = 'hauptdaten' | 'preise' | 'buchhaltung' | 'freifelder'
+type Register = 'hauptdaten' | 'preise' | 'buchhaltung' | 'lager' | 'freifelder'
 
 const REGISTERS: { id: Register; label: string }[] = [
   { id: 'hauptdaten', label: 'Hauptdaten' },
@@ -124,10 +127,14 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   // Only the ones the tenant shows. A field switched off keeps its value but leaves the mask.
   const freeFields = (freeFieldDefinitions.data ?? []).filter((field) => field.active !== false)
 
-  // The register appears only where there is something in it: a tenant that defined no free
-  // field should not be offered an empty tab.
-  const registers =
-    freeFields.length === 0 ? REGISTERS : [...REGISTERS, { id: 'freifelder' as const, label: 'Freifelder' }]
+  // Two registers appear only where there is something in them: the stock, which a session
+  // without INVENTORY_READ has no business seeing, and the free fields of a tenant that
+  // defined none.
+  const registers = [
+    ...REGISTERS,
+    ...(can('INVENTORY_READ') ? [{ id: 'lager' as const, label: 'Lager' }] : []),
+    ...(freeFields.length === 0 ? [] : [{ id: 'freifelder' as const, label: 'Freifelder' }]),
+  ]
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['product', tenantId] })
@@ -230,7 +237,10 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                 tenantId={tenantId}
                 catalogue="product-type"
                 value={form.productType}
-                onChange={(code) => set('productType', code as ProductType)}
+                // Through applyProductType, because a service carries no stock: the mask
+                // must not hold a state the server refuses afterwards.
+                onChange={(code) => setForm((current) =>
+                  applyProductType(current, code as ProductType))}
                 disabled={!mayWrite}
               />
 
@@ -336,6 +346,55 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
             }
             disabled={!mayWrite}
           />
+        )}
+
+        {tab === 'lager' && (
+          <Panel
+            title="Einrichtung"
+            description="Ob und wie genau der Bestand dieses Produkts geführt wird."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <CheckboxField
+                label="Im Lager führen"
+                checked={form.stockManaged}
+                onChange={(event) =>
+                  setForm((current) => applyStockManaged(current, event.target.checked))}
+                disabled={!mayWrite || form.productType === 'SERVICE'}
+                hint={
+                  form.productType === 'SERVICE'
+                    ? 'Dienstleistungen werden nicht im Lager geführt.'
+                    : 'Ohne Haken entsteht für dieses Produkt keine Bewegung und kein Bestand.'
+                }
+                className="items-center"
+              />
+
+              {/* Both only once the flag is set: they mean nothing without it, and an empty
+                  field that does nothing is worse than a field that is not there. */}
+              {form.stockManaged && (
+                <CatalogueSelect
+                  label="Nachverfolgung"
+                  tenantId={tenantId}
+                  catalogue="product-tracking"
+                  value={form.tracking}
+                  onChange={(code) => set('tracking', code as ProductTracking)}
+                  disabled={!mayWrite}
+                  hint="Chargen führen Lose, Seriennummern eine Zeile je Stück."
+                />
+              )}
+
+              {form.stockManaged && (
+                <TextField
+                  label="Mindestbestand"
+                  value={form.minimumQuantity}
+                  onChange={(event) => set('minimumQuantity', event.target.value)}
+                  disabled={!mayWrite}
+                  inputMode="decimal"
+                  numeric
+                  hint="Leer heisst: keine Überwachung."
+                />
+              )}
+            </div>
+          </Panel>
         )}
 
         {tab === 'buchhaltung' && (

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { MasterDataEntry } from '../../lib/types'
-import { EMPTY_ENTRY, codeHintFor, entryComplaint, toEntryForm } from './entryForm'
+import {
+  EMPTY_ENTRY,
+  codeHintFor,
+  decimalPlacesOf,
+  entryComplaint,
+  toEntryForm,
+} from './entryForm'
 
 const STORED: MasterDataEntry = {
   id: 4,
@@ -131,6 +137,75 @@ describe('entryComplaint', () => {
 
   it('entryComplaintIgnoresSurroundingSpaceInTheCodeTest', () => {
     expect(entryComplaint({ ...filled, code: '  de  ' }, 'languages')).toBeNull()
+  })
+})
+
+describe('toEntryForm with decimal places', () => {
+  it('toEntryFormReadsTheDecimalPlacesTest', () => {
+    expect(toEntryForm({ ...STORED, decimalPlaces: 2 }, 'de').decimalPlaces).toBe('2')
+  })
+
+  it('toEntryFormKeepsAZeroRuleTest', () => {
+    // 0 is a rule («whole numbers only»), not the absence of one.
+    expect(toEntryForm({ ...STORED, decimalPlaces: 0 }, 'de').decimalPlaces).toBe('0')
+  })
+
+  it('toEntryFormWithoutARuleTest', () => {
+    expect(toEntryForm(STORED, 'de').decimalPlaces).toBe('')
+  })
+})
+
+describe('entryComplaint about decimal places', () => {
+  const unit = { ...EMPTY_ENTRY, code: 'PIECE', name: 'Stück' }
+
+  it('entryComplaintWithDecimalPlacesTest', () => {
+    expect(entryComplaint({ ...unit, decimalPlaces: '2' }, 'units')).toBeNull()
+  })
+
+  it('entryComplaintWithDecimalPlacesAtTheEdgesTest', () => {
+    // 0 and 4 are the ends of what NUMERIC(19,4) can carry; both are valid.
+    expect(entryComplaint({ ...unit, decimalPlaces: '0' }, 'units')).toBeNull()
+    expect(entryComplaint({ ...unit, decimalPlaces: '4' }, 'units')).toBeNull()
+  })
+
+  it('entryComplaintWithTooManyDecimalPlacesTest', () => {
+    expect(entryComplaint({ ...unit, decimalPlaces: '5' }, 'units')).toMatch(/0 bis 4/)
+  })
+
+  it('entryComplaintWithNegativeDecimalPlacesTest', () => {
+    expect(entryComplaint({ ...unit, decimalPlaces: '-1' }, 'units')).toMatch(/0 bis 4/)
+  })
+
+  it('entryComplaintWithFractionalDecimalPlacesTest', () => {
+    expect(entryComplaint({ ...unit, decimalPlaces: '1.5' }, 'units')).toMatch(/ganze Zahl/)
+  })
+
+  it('entryComplaintIgnoresDecimalPlacesOnOtherListsTest', () => {
+    // The field is only shown on units; a stray value elsewhere must not block the save.
+    expect(entryComplaint({ ...unit, decimalPlaces: '9' }, 'salutations')).toBeNull()
+  })
+})
+
+describe('decimalPlacesOf', () => {
+  const unit = { ...EMPTY_ENTRY, code: 'PIECE', name: 'Stück' }
+
+  it('decimalPlacesOfTest', () => {
+    expect(decimalPlacesOf({ ...unit, decimalPlaces: '2' }, 'units')).toBe(2)
+  })
+
+  it('decimalPlacesOfWithZeroTest', () => {
+    // «Whole numbers only» has to reach the API as 0, not vanish as falsy.
+    expect(decimalPlacesOf({ ...unit, decimalPlaces: '0' }, 'units')).toBe(0)
+  })
+
+  it('decimalPlacesOfWithAnEmptyFieldTest', () => {
+    // Empty means «no rule», which is a different answer than 0 and must stay out of the
+    // payload altogether.
+    expect(decimalPlacesOf(unit, 'units')).toBeUndefined()
+  })
+
+  it('decimalPlacesOfOnAnotherListTest', () => {
+    expect(decimalPlacesOf({ ...unit, decimalPlaces: '2' }, 'languages')).toBeUndefined()
   })
 })
 
