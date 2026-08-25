@@ -19,6 +19,16 @@ type BarcodeDetectorConstructor = new (options?: {
 const INTERVAL = 250
 
 /**
+ * How many looks the same code is ignored for after it was read.
+ *
+ * <p>Only for an overlay that stays open: a label held in front of the camera is read four
+ * times a second, and without this every piece would arrive a dozen times. Two seconds is
+ * long enough to move the next label into the picture and short enough to read the same
+ * number twice on purpose.
+ */
+const REPEAT_AFTER = 8
+
+/**
  * Reads a bar code with the camera and hands the string to the caller.
  *
  * <p>Knows no domain: it delivers what it read and leaves the reading of it to whoever asked.
@@ -31,15 +41,27 @@ const INTERVAL = 250
  *
  * <p>The camera is asked for on the click, never on load. A refusal takes the button away for
  * this session and says once how it comes back.
+ *
+ * <p>With `continuous` the overlay stays open and reads one label after the other. That is for
+ * the serial numbers of a receipt, where opening the camera again for every piece costs a grab
+ * each time and typing them is what one is trying to avoid.
  */
 export function BarcodeScanner({
   label = 'Mit der Kamera scannen',
+  continuous = false,
   onScan,
   onClose,
 }: {
   /** What the button says to a screen reader. */
   label?: string
-  /** Called once with the string that was read; the overlay closes first. */
+  /**
+   * Keeps the overlay open after a code was read, for capturing one number after the other.
+   *
+   * <p>The same code is then ignored for about two seconds, so a label left in the picture
+   * arrives once rather than four times a second.
+   */
+  continuous?: boolean
+  /** Called with the string that was read; without `continuous` the overlay closes first. */
   onScan: (code: string) => void
   /** Called after the overlay closed, so the caller can put the focus back. */
   onClose?: () => void
@@ -48,6 +70,13 @@ export function BarcodeScanner({
   const [open, setOpen] = useState(false)
   const [refused, setRefused] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [read, setRead] = useState(0)
+  // Read from the reading loop, which is built once per opening: a state value would be the
+  // one captured when the loop started.
+  const keepsOpen = useRef(continuous)
+  useEffect(() => {
+    keepsOpen.current = continuous
+  }, [continuous])
   const video = useRef<HTMLVideoElement>(null)
   // Held in a ref so the reading loop below does not have to be torn down and rebuilt every
   // time the caller renders with a new inline handler.
@@ -69,6 +98,8 @@ export function BarcodeScanner({
     let stream: MediaStream | null = null
     let timer: number | undefined
     let stopped = false
+    let looks = 0
+    let last: { code: string; at: number } | null = null
     const reader = new Detector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] })
 
     const stop = () => {
@@ -96,16 +127,24 @@ export function BarcodeScanner({
           }
         }
         timer = window.setInterval(() => {
+          looks += 1
           if (!video.current) return
           void reader
             .detect(video.current)
             .then((codes) => {
               const found = codes[0]?.rawValue
               if (found === undefined || found === '') return
-              stop()
-              setOpen(false)
+              if (!keepsOpen.current) {
+                stop()
+                setOpen(false)
+                deliver.current(found)
+                onClose?.()
+                return
+              }
+              if (last !== null && last.code === found && looks - last.at < REPEAT_AFTER) return
+              last = { code: found, at: looks }
+              setRead((counted) => counted + 1)
               deliver.current(found)
-              onClose?.()
             })
             .catch(() => undefined)
         }, INTERVAL)
@@ -155,7 +194,10 @@ export function BarcodeScanner({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setRead(0)
+          setOpen(true)
+        }}
         aria-label={label}
         title={label}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-line text-text-secondary transition-colors hover:bg-sunken hover:text-text-primary"
@@ -173,12 +215,19 @@ export function BarcodeScanner({
             className="max-h-[60vh] w-full max-w-[480px] rounded-[var(--radius-md)] border border-line bg-ink object-cover"
           />
           <p className="text-[13px] text-inverse">Strichcode vor die Kamera halten.</p>
+          {continuous && (
+            <p aria-live="polite" className="text-[13px] text-inverse">
+              {read === 0
+                ? 'Eine Nummer nach der anderen. Das Fenster bleibt offen.'
+                : `${read} ${read === 1 ? 'Nummer' : 'Nummern'} erfasst.`}
+            </p>
+          )}
           <button
             type="button"
             onClick={close}
             className="rounded-[var(--radius-sm)] border border-line bg-surface px-3 py-1.5 text-[13px] text-text-primary"
           >
-            Abbrechen
+            {continuous && read > 0 ? 'Fertig' : 'Abbrechen'}
           </button>
         </div>
       )}

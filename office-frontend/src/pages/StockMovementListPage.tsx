@@ -56,6 +56,9 @@ function StockMovements({ tenantId }: { tenantId: number }) {
   const [params] = useSearchParams()
   const search = useQuickSearch('')
   const [productId] = useState(params.get('produkt') ?? '')
+  // Narrowed to one lot by the product mask: that link is the whole of the traceability, so
+  // it arrives filtered rather than expecting somebody to type the number in.
+  const [lotId] = useState(params.get('charge') ?? '')
   const [locationId, setLocationId] = useState(params.get('lagerort') ?? '')
   const [reason, setReason] = useState('')
   const [from, setFrom] = useState('')
@@ -72,6 +75,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
 
   const query = listQuery({
     productId: productId === '' ? undefined : productId,
+    lotId: lotId === '' ? undefined : lotId,
     locationId: locationId === '' ? undefined : locationId,
     reason: reason === '' ? undefined : reason,
     from: from === '' ? undefined : from,
@@ -129,6 +133,19 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       render: (movement) => (
         <span className="text-text-secondary">{nameOf(active, movement.locationId)}</span>
       ),
+    },
+    {
+      key: 'lot',
+      header: 'Charge/Serie',
+      width: 'w-[150px]',
+      render: (movement) =>
+        movement.lotNumber === undefined || movement.lotNumber === '' ? (
+          <span className="text-text-tertiary">-</span>
+        ) : (
+          <span className="truncate font-mono text-[12px] text-text-secondary">
+            {movement.lotNumber}
+          </span>
+        ),
     },
     {
       key: 'quantity',
@@ -212,7 +229,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
                 search.setValue(next)
                 setPage(0)
               }}
-              placeholder="Produkt oder Belegnummer"
+              placeholder="Produkt, Belegnummer oder Charge"
               maxLength={140}
             />
             {active.length >= 2 && (

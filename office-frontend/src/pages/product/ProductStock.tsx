@@ -23,6 +23,7 @@ import { listQuery } from '../../lib/paging'
 import type { Product, StockBalance, StockLocation, StockMovement } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { BookStockDialog } from '../inventory/BookStockDialog'
+import { ProductLots } from './ProductLots'
 import { StockReservations } from './StockReservations'
 
 /**
@@ -144,6 +145,9 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
       {/* Directly under the numbers it explains: «Bestand 40, verfügbar 12» is unreadable
           without the rows that took the 28 away. */}
       <StockReservations tenantId={tenantId} product={product} />
+
+      {/* Drawn only for a product that is tracked; the panel answers with nothing otherwise. */}
+      <ProductLots tenantId={tenantId} product={product} onBook={() => setBooking(true)} />
 
       <Panel title="Letzte Bewegungen" description="Die zehn jüngsten Buchungen dieses Produkts.">
         {latest.isPending ? (

@@ -7,7 +7,7 @@ import { TextField } from '../../components/TextField'
 import { SelectField } from '../../components/SelectField'
 import { useCatalogue } from '../../masterdata/useMasterData'
 import { api } from '../../lib/api'
-import { toIsoDate } from '../../lib/format'
+import { parseDecimal, toIsoDate } from '../../lib/format'
 import { labelForCode } from '../../lib/masterData'
 import {
   manualReasonsFor,
@@ -31,6 +31,9 @@ import {
   canSubmit,
   emptyBookStockForm,
   firstBookingComplaint,
+  lotDirectionOf,
+  lotsComplaint,
+  needsLots,
   previewLines,
   productLabel,
   shortfallWarning,
@@ -41,6 +44,7 @@ import {
   type BookingKind,
   type BookStockForm,
 } from './bookStockForm'
+import { LotAllocationField } from './LotAllocationField'
 import { StockProductSearch } from './StockProductSearch'
 
 /** What the three buttons at the top of the dialog say. */
@@ -192,6 +196,9 @@ export function BookStockDialog({
   const withLocations = showsLocationFields(locations) || form.kind === 'TRANSFER'
   const message = complaint ?? (book.error instanceof Error ? book.error.message : null)
   const label = warning !== null && confirmedShortfall ? 'Trotzdem buchen' : 'Buchen'
+  // Shown next to the button rather than after the click: the button is dark for a reason,
+  // and the reason belongs where the eye already is.
+  const missingLots = lotsComplaint(form)
 
   return (
     <Dialog
@@ -204,6 +211,9 @@ export function BookStockDialog({
       onSubmit={book.isPending ? undefined : submit}
       footer={
         <>
+          {missingLots !== null && (
+            <p className="mr-auto max-w-[40ch] text-[12px] text-warning">{missingLots}</p>
+          )}
           <Button variant="secondary" onClick={onClose}>
             Abbrechen
           </Button>
@@ -348,6 +358,20 @@ export function BookStockDialog({
             maxLength={200}
           />
         </div>
+
+        {needsLots(form) && form.product !== null && (
+          <LotAllocationField
+            // A new product, another operation or another location is another field: the
+            // numbers of the one before mean nothing for this booking.
+            key={`${form.product.id}|${form.kind}|${form.locationId}`}
+            tenantId={tenantId}
+            product={form.product}
+            locationId={form.locationId}
+            direction={lotDirectionOf(form)}
+            quantity={parseDecimal(form.quantity)}
+            onChange={(lots) => change({ lots })}
+          />
+        )}
 
         {preview.length > 0 && (
           <div

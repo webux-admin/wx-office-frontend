@@ -1,8 +1,10 @@
-import { formatQuantity } from './format'
+import { formatDate, formatQuantity } from './format'
 import type {
+  LotKind,
   MovementDirection,
   MovementReason,
   ProductAvailability,
+  ProductTracking,
   ReservationHolder,
   ShortageCause,
   StockEffect,
@@ -595,4 +597,171 @@ export function reservationReturnNotice(stockEffect: StockEffect | undefined): s
     return 'Die dafür verbrauchten Reservierungen des Auftrags werden wiederhergestellt.'
   }
   return ''
+}
+
+// --- lots and serial numbers -------------------------------------------------
+
+/**
+ * Which kind of number a product is followed by, if any.
+ *
+ * <p>Derived from the product rather than chosen: a lot and a serial number are one model,
+ * and which of the two a product uses is a decision of the product master
+ * (backend ADR-0067).
+ *
+ * @param tracking how closely the product is followed
+ * @returns the kind, or `undefined` for a product nobody tracks
+ */
+export function lotKindOf(tracking: ProductTracking | undefined): LotKind | undefined {
+  return tracking === 'LOT' || tracking === 'SERIAL' ? tracking : undefined
+}
+
+/**
+ * Whether a booking of this product has to name numbers at all.
+ *
+ * @param product the product, absent while none is chosen
+ * @returns true where every booked quantity has to be split into lots
+ */
+export function tracksLots(product: { tracking?: ProductTracking } | null | undefined): boolean {
+  return lotKindOf(product?.tracking) !== undefined
+}
+
+/** What one number is called on screen. */
+export function lotKindLabel(kind: LotKind | undefined): string {
+  if (kind === 'LOT') return 'Charge'
+  if (kind === 'SERIAL') return 'Seriennummer'
+  return ''
+}
+
+/** What several of them are called, for a panel heading or a column. */
+export function lotKindLabelPlural(kind: LotKind | undefined): string {
+  if (kind === 'LOT') return 'Chargen'
+  if (kind === 'SERIAL') return 'Seriennummern'
+  return ''
+}
+
+/**
+ * What an expiry date says about a lot, in words.
+ *
+ * <p>A word, not only a colour: whoever cannot tell red from grey still has to read that this
+ * batch is past its date. It warns and sorts — it never refuses (backend ADR-0067).
+ *
+ * @param lot the expiry date and whether it has passed
+ * @returns for example «abgelaufen am 12.03.2026», empty on goods that do not expire
+ */
+export function expiryLabel(lot: {
+  expiryDate?: string | null
+  expired?: boolean
+}): string {
+  if (lot.expiryDate === undefined || lot.expiryDate === null || lot.expiryDate === '') return ''
+  const date = formatDate(lot.expiryDate)
+  return lot.expired === true ? `abgelaufen am ${date}` : `haltbar bis ${date}`
+}
+
+/**
+ * The REST resource of the lots of one product.
+ *
+ * <p>Under the product, not under the inventory: a lot only ever exists for one product, and
+ * a flat list of every lot a tenant holds has no screen that would open it.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @returns the address, without a trailing slash
+ */
+export function productLotsUrl(tenantId: number, productId: number): string {
+  return `/api/tenants/${tenantId}/products/${productId}/lots`
+}
+
+/**
+ * The endpoint that suggests which lots to take out, earliest expiry first.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @returns the address, without a query string
+ */
+export function lotProposalUrl(tenantId: number, productId: number): string {
+  return `/api/tenants/${tenantId}/products/${productId}/lot-proposal`
+}
+
+/**
+ * The endpoint that computes running serial numbers without saving any of them.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @returns the address
+ */
+export function serialNumberProposalUrl(tenantId: number, productId: number): string {
+  return `/api/tenants/${tenantId}/products/${productId}/serial-number-proposal`
+}
+
+/**
+ * The REST resource of one lot, for changing or freezing it.
+ *
+ * @param tenantId the tenant
+ * @param lotId the lot
+ * @returns the address
+ */
+export function lotUrl(tenantId: number, lotId: number): string {
+  return `${inventoryUrl(tenantId)}/lots/${lotId}`
+}
+
+/**
+ * The endpoint that freezes one lot, with a reason.
+ *
+ * @param tenantId the tenant
+ * @param lotId the lot
+ * @returns the address
+ */
+export function blockLotUrl(tenantId: number, lotId: number): string {
+  return `${lotUrl(tenantId, lotId)}/block`
+}
+
+/**
+ * The endpoint that lets a frozen lot be given out again.
+ *
+ * @param tenantId the tenant
+ * @param lotId the lot
+ * @returns the address
+ */
+export function unblockLotUrl(tenantId: number, lotId: number): string {
+  return `${lotUrl(tenantId, lotId)}/unblock`
+}
+
+/**
+ * Query key of the lots of one product.
+ *
+ * <p>The filters are part of the key, so the panel in the product mask and the picker in the
+ * booking dialog do not share one cache entry.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function productLotsKey(
+  tenantId: number,
+  productId: number,
+  query: string,
+): (string | number)[] {
+  return ['product-lots', tenantId, productId, query]
+}
+
+/**
+ * Query key of a take-out proposal.
+ *
+ * <p>Quantity and location are part of the key: the same product asked for eight pieces gets
+ * a different answer than asked for two.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @param locationId the location taken from, as the field holds it
+ * @param quantity how much is being booked
+ * @returns the key TanStack Query caches that proposal under
+ */
+export function lotProposalKey(
+  tenantId: number,
+  productId: number,
+  locationId: string,
+  quantity: number,
+): (string | number)[] {
+  return ['lot-proposal', tenantId, productId, locationId, quantity]
 }

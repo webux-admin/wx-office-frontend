@@ -726,6 +726,15 @@ export type StockMovement = {
   sourceKind: SourceKind
   sourceId?: number
   sourceNumber?: string
+  /** The lot or serial number this row moved. Absent on a product nobody tracks. */
+  lotId?: number
+  /**
+   * The number as it was written, frozen like the product name next to it.
+   *
+   * <p>A copy rather than a join: the journal, the search and the booking answer all need the
+   * number, and it can never drift — a lot cannot be renamed once a movement points at it.
+   */
+  lotNumber?: string
   /** Ties the two lines of a transfer together. */
   transferGroupId?: number
   /** The movement this one takes back. */
@@ -779,6 +788,13 @@ export type BookStockRequest = {
   exchangeRate?: number
   exchangeRateDate?: string
   note?: string
+  /**
+   * Which numbers the quantity is made of, for a product that is tracked.
+   *
+   * <p>One entry per lot or serial number; their quantities add up to {@link quantity}. Left
+   * out for a product nobody tracks, where any entry would be refused.
+   */
+  lots?: LotAllocation[]
 }
 
 /** What the booking dialog sends to move goods from one location to another. */
@@ -789,6 +805,117 @@ export type TransferStockRequest = {
   quantity: number
   bookedOn?: string
   note?: string
+  /** Which numbers are moved; both halves of the transfer carry the same split. */
+  lots?: LotAllocation[]
+}
+
+// --- lots and serial numbers -------------------------------------------------
+
+/**
+ * How a number stands for goods.
+ *
+ * <p>One model for both, not two: a serial number is a lot of exactly one piece. It follows
+ * from {@link ProductTracking} and is never chosen by hand.
+ */
+export type LotKind = 'LOT' | 'SERIAL'
+
+/**
+ * A batch or a single piece under its number, as `LotDto` sends it.
+ *
+ * <p>Where the goods came from is not here and is not meant to be: that is what the journal
+ * answers, filtered by this lot (backend ADR-0067).
+ */
+export type Lot = {
+  id: number
+  productId: number
+  kind: LotKind
+  lotNumber: string
+  /** Warns and sorts, it never blocks. Absent on goods that do not expire. */
+  expiryDate?: string | null
+  /** True once the expiry date has passed. Such a lot stays choosable. */
+  expired: boolean
+  blocked: boolean
+  blockedReason?: string | null
+  note?: string | null
+  /** What lies under this number over all locations. */
+  quantity: number
+  locations: LotLocationQuantity[]
+  createdAt?: string
+  changedAt?: string | null
+}
+
+/** How much of one lot lies at one location, as `LotLocationQuantityDto` sends it. */
+export type LotLocationQuantity = {
+  locationId: number
+  locationName: string
+  quantity: number
+}
+
+/**
+ * One line of what the server suggests taking, as `LotProposalLineDto` sends it.
+ *
+ * <p>A line with no number is the stock that was there before the product was tracked. It can
+ * be used up but never added to.
+ */
+export type LotProposalLine = {
+  lotId: number | null
+  lotNumber: string | null
+  expiryDate: string | null
+  expired: boolean
+  /** What lies at the asked location under this number. */
+  available: number
+  /** What the server would take from it. Zero on an expired lot: choosable, never chosen. */
+  proposed: number
+}
+
+/**
+ * What to take out, earliest expiry first, as `LotProposalDto` sends it.
+ *
+ * <p>Suggests and books nothing. `uncovered` is what the location cannot cover at all — the
+ * booking may still go through where the location only warns.
+ */
+export type LotProposal = {
+  lines: LotProposalLine[]
+  /** The stock without a number, as one line. Zero available where there is none. */
+  withoutNumber: LotProposalLine
+  uncovered: number
+}
+
+/**
+ * One number and what of the booked quantity falls on it, as `LotAllocationRequest` takes it.
+ *
+ * <p>`lotNumber: null` means the stock without a number and is only allowed on the way out.
+ * The quantity is always positive — the direction of the booking makes the sign.
+ */
+export type LotAllocation = {
+  lotNumber: string | null
+  quantity: number
+}
+
+/** What the generator is asked for; it computes numbers and saves nothing. */
+export type SerialNumberProposalRequest = {
+  prefix?: string
+  start: number
+  count: number
+  /** How many digits the running number is padded to. */
+  padding?: number
+}
+
+/** The computed numbers, as `SerialNumbersDto` sends them. */
+export type SerialNumbers = {
+  numbers: string[]
+}
+
+/** What the lot dialog sends when a lot is created or changed. */
+export type LotRequest = {
+  lotNumber: string
+  expiryDate?: string
+  note?: string
+}
+
+/** What the lot dialog sends to freeze a lot. The reason is shown wherever it is refused. */
+export type BlockLotRequest = {
+  reason: string
 }
 
 /** Why a stock needs attention, as `ShortageCause` spells it. */

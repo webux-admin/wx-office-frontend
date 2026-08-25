@@ -1,7 +1,8 @@
 import { formatQuantity, parseDecimal, toIsoDate } from '../../lib/format'
-import { manualReasonsFor } from '../../lib/inventory'
+import { lotKindOf, manualReasonsFor, tracksLots } from '../../lib/inventory'
 import type {
   BookStockRequest,
+  LotAllocation,
   MovementDirection,
   MovementReason,
   Product,
@@ -32,6 +33,8 @@ export type BookStockForm = {
   unitCost: string
   unitCostCurrency: string
   note: string
+  /** Which numbers the quantity is made of. Always empty for a product nobody tracks. */
+  lots: LotAllocation[]
 }
 
 /**
@@ -54,6 +57,7 @@ export function emptyBookStockForm(today = toIsoDate(), currency = 'CHF'): BookS
     unitCost: '',
     unitCostCurrency: currency,
     note: '',
+    lots: [],
   }
 }
 
@@ -77,7 +81,53 @@ export function applyKind(form: BookStockForm, kind: BookingKind): BookStockForm
     reason,
     toLocationId: kind === 'TRANSFER' ? form.toLocationId : '',
     unitCost: kind === 'IN' ? form.unitCost : '',
+    // A receipt names numbers that do not exist yet, an issue picks numbers that lie
+    // somewhere. Carrying one over into the other would send numbers nobody chose.
+    lots: [],
   }
+}
+
+/**
+ * Whether the booking has to name lot or serial numbers.
+ *
+ * @param form the dialog
+ * @returns true where the chosen product is tracked
+ */
+export function needsLots(form: BookStockForm): boolean {
+  return tracksLots(form.product)
+}
+
+/**
+ * Which way the lot field is asked in: a transfer takes numbers out of its source.
+ *
+ * @param form the dialog
+ * @returns the direction the numbers are chosen for
+ */
+export function lotDirectionOf(form: BookStockForm): MovementDirection {
+  return form.kind === 'IN' ? 'IN' : 'OUT'
+}
+
+/**
+ * What is still without a number, as a sentence for the foot of the dialog.
+ *
+ * <p>Stands next to the disabled button rather than appearing after the click: whoever has to
+ * press to find out what is missing learns to guess instead of to read.
+ *
+ * @param form the dialog
+ * @returns the German sentence, or `null` when every piece carries a number
+ */
+export function lotsComplaint(form: BookStockForm): string | null {
+  if (!needsLots(form)) return null
+  const quantity = parseDecimal(form.quantity)
+  if (quantity === null || quantity <= 0) return null
+  const allocated = form.lots.reduce((sum, lot) => sum + lot.quantity, 0)
+  const open = Math.round((quantity - allocated) * 10_000) / 10_000
+  if (open === 0) return null
+  const kind = lotKindOf(form.product?.tracking)
+  if (open < 0) return `Es sind ${formatQuantity(-open)} zu viel zugeordnet.`
+  return kind === 'SERIAL'
+    ? `Es fehlen noch ${formatQuantity(open)} Seriennummern.`
+    : `${formatQuantity(open)} sind noch keiner Charge zugeordnet.`
 }
 
 /**
@@ -232,7 +282,7 @@ export function firstBookingComplaint(form: BookStockForm): string | null {
   if (form.unitCost.trim() !== '' && parseDecimal(form.unitCost) === null) {
     return 'Der Einstandspreis ist keine Zahl.'
   }
-  return null
+  return lotsComplaint(form)
 }
 
 /**
@@ -269,6 +319,9 @@ export function toBookPayload(form: BookStockForm): BookStockRequest {
     unitCostCurrency:
       form.kind === 'IN' && cost !== null ? form.unitCostCurrency.toUpperCase() : undefined,
     note: form.note.trim() === '' ? undefined : form.note.trim(),
+    // Left out rather than sent empty: the server refuses any entry on a product nobody
+    // tracks, and an empty array would be one.
+    lots: form.lots.length === 0 ? undefined : form.lots,
   }
 }
 
@@ -286,6 +339,7 @@ export function toTransferPayload(form: BookStockForm): TransferStockRequest {
     quantity: parseDecimal(form.quantity) ?? 0,
     bookedOn: form.bookedOn === '' ? undefined : form.bookedOn,
     note: form.note.trim() === '' ? undefined : form.note.trim(),
+    lots: form.lots.length === 0 ? undefined : form.lots,
   }
 }
 
