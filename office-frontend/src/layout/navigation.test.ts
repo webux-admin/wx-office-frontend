@@ -68,6 +68,7 @@ describe('NAV_GROUPS', () => {
       '/unterdeckung',
       '/reservierungen',
       '/lagerbewegungen',
+      '/inventuren',
     ])
     for (const entry of entries) {
       expect(entry.permission).toBe('INVENTORY_READ')

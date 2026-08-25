@@ -44,6 +44,8 @@ const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ defau
 const StockListPage = lazy(() => import('./pages/StockListPage').then((module) => ({ default: module.StockListPage })))
 const StockShortageListPage = lazy(() => import('./pages/StockShortageListPage').then((module) => ({ default: module.StockShortageListPage })))
 const StockReservationListPage = lazy(() => import('./pages/StockReservationListPage').then((module) => ({ default: module.StockReservationListPage })))
+const StocktakeListPage = lazy(() => import('./pages/StocktakeListPage').then((module) => ({ default: module.StocktakeListPage })))
+const StocktakePage = lazy(() => import('./pages/StocktakePage').then((module) => ({ default: module.StocktakePage })))
 const StockMovementListPage = lazy(() => import('./pages/StockMovementListPage').then((module) => ({ default: module.StockMovementListPage })))
 const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
@@ -105,6 +107,8 @@ export default function App() {
                 <Route path="/reservierungen" element={<StockReservationListPage />} />
                 <Route path="/lagerbewegungen" element={<StockMovementListPage />} />
                 <Route path="/lagerorte" element={<StockLocationListPage />} />
+                <Route path="/inventuren" element={<StocktakeListPage />} />
+                <Route path="/inventuren/:id" element={<StocktakePage />} />
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 

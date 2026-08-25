@@ -10,6 +10,7 @@ import type {
   StockEffect,
   StockLocation,
   StockReservationStatus,
+  StocktakeStatus,
   StockReversalLine,
   StockShortfall,
 } from './types'
@@ -796,4 +797,168 @@ export function lotProposalKey(
   quantity: number,
 ): (string | number)[] {
   return ['lot-proposal', tenantId, productId, locationId, quantity]
+}
+
+// --- inventory counts (backend ADR-0070) -------------------------------------
+
+/** Path of the list of count lists within the application. */
+export const STOCKTAKE_PATH = '/inventuren'
+
+/**
+ * The REST resource of the count lists.
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stocktakesUrl(tenantId: number): string {
+  return `${inventoryUrl(tenantId)}/stocktakes`
+}
+
+/**
+ * The REST resource of one count list.
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @returns the address, without a trailing slash
+ */
+export function stocktakeUrl(tenantId: number, stocktakeId: number): string {
+  return `${stocktakesUrl(tenantId)}/${stocktakeId}`
+}
+
+/**
+ * The endpoint that records what somebody counted on one line.
+ *
+ * <p>One request per line on purpose: a count takes hours, often on a phone in the aisle, and
+ * a dropped connection must not lose a recorded value (Frontend-ADR-0016).
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @param lineId the line
+ * @returns the address
+ */
+export function countLineUrl(tenantId: number, stocktakeId: number, lineId: number): string {
+  return `${stocktakeUrl(tenantId, stocktakeId)}/lines/${lineId}/count`
+}
+
+/**
+ * The endpoint that writes why one line differs.
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @param lineId the line
+ * @returns the address
+ */
+export function lineReasonUrl(tenantId: number, stocktakeId: number, lineId: number): string {
+  return `${stocktakeUrl(tenantId, stocktakeId)}/lines/${lineId}/reason`
+}
+
+/**
+ * Query key of the list of count lists.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stocktakeListKey(tenantId: number, query: string): (string | number)[] {
+  return ['stocktakes', tenantId, query]
+}
+
+/**
+ * Query key of one count list.
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @returns the key TanStack Query caches it under
+ */
+export function stocktakeKey(tenantId: number, stocktakeId: number): (string | number)[] {
+  return ['stocktake', tenantId, stocktakeId]
+}
+
+/**
+ * Query key of the lines of one count list.
+ *
+ * <p>The filters are part of the key: «Offen» and «Alle» are two answers, and letting them
+ * share a cache entry would make a counted line vanish from the list somebody is reading.
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @param query the query string the list asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stocktakeLinesKey(
+  tenantId: number,
+  stocktakeId: number,
+  query: string,
+): (string | number)[] {
+  return ['stocktake-lines', tenantId, stocktakeId, query]
+}
+
+/**
+ * Query key of what booking a count list would change.
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @returns the key TanStack Query caches it under
+ */
+export function stocktakeDifferencesKey(
+  tenantId: number,
+  stocktakeId: number,
+): (string | number)[] {
+  return ['stocktake-differences', tenantId, stocktakeId]
+}
+
+/**
+ * Whether a count list may still be counted or changed.
+ *
+ * @param status where it stands
+ * @returns true before it is booked
+ */
+export function stocktakeOpen(status: StocktakeStatus | undefined): boolean {
+  return status === 'DRAFT' || status === 'COUNTING'
+}
+
+/**
+ * How far a count has got, as one line.
+ *
+ * @param counted how many lines somebody has counted
+ * @param total how many there are
+ * @returns for example «34/51», empty where the list has no lines yet
+ */
+export function countProgress(counted: number, total: number): string {
+  return total === 0 ? '' : `${counted}/${total}`
+}
+
+/**
+ * What a screen reader hears after a line was counted.
+ *
+ * <p>Announced rather than only drawn: whoever counts with the keyboard never looks at the
+ * progress in the corner.
+ *
+ * @param counted how many lines somebody has counted
+ * @param total how many there are
+ * @returns for example «34 von 51 gezählt», empty where the list has no lines yet
+ */
+export function countProgressText(counted: number, total: number): string {
+  return total === 0 ? '' : `${counted} von ${total} gezählt`
+}
+
+/**
+ * What the mask says before a counted line is overwritten.
+ *
+ * @param by who counted it, absent where nobody has
+ * @param at when they did, as an ISO timestamp
+ * @returns the question, empty where the line was never counted
+ */
+export function overwriteQuestion(by: string | undefined, at: string | undefined): string {
+  if (by === undefined || by === '') return ''
+  const when = at === undefined || at === '' ? '' : ` um ${formatTime(at)}`
+  return `Gezählt von ${by}${when} — überschreiben?`
+}
+
+/** The time of an ISO timestamp, in the Swiss way: «10:14». */
+function formatTime(value: string): string {
+  const at = new Date(value)
+  return Number.isNaN(at.getTime())
+    ? ''
+    : `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
 }

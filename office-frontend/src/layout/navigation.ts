@@ -5,6 +5,7 @@ import {
   BookOpen,
   Boxes,
   Building2,
+  ClipboardCheck,
   ClipboardList,
   Coins,
   CreditCard,
@@ -201,6 +202,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Bewegungen',
         icon: ArrowLeftRight,
         href: '/lagerbewegungen',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
+      // Last of the group: an inventory is a thing one does now and then, while the four
+      // above answer questions that come up every day.
+      {
+        label: 'Inventuren',
+        icon: ClipboardCheck,
+        href: '/inventuren',
         permission: 'INVENTORY_READ',
         module: 'inventory',
       },

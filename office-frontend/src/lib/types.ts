@@ -75,6 +75,7 @@ export type CatalogueName =
   | 'movement-reason'
   | 'movement-source-kind'
   | 'product-tracking'
+  | 'stocktake-status'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -1863,4 +1864,112 @@ export type NumberRange = {
   nextNumber?: number
   /** What the next issued document will be called, for example `RE-2026-0042`. */
   nextDocumentNumber?: string
+}
+
+// --- inventory counts (backend ADR-0070) -------------------------------------
+
+/** Where a count list stands. It never goes back. */
+export type StocktakeStatus = 'DRAFT' | 'COUNTING' | 'POSTED'
+
+/** What a count list covers: the whole location, or the chosen products. */
+export type StocktakeScope = 'ALL' | 'SELECTION'
+
+/**
+ * What happens to the lines nobody counted.
+ *
+ * <p>Never decided silently: the posting dialog offers both without a preselection, and the
+ * answer stays on the record — an incomplete count must never look like a complete one.
+ */
+export type UncountedHandling = 'KEEP' | 'SKIP'
+
+/**
+ * One count list, as `StocktakeDto` sends it.
+ *
+ * @see StocktakeLine for what it is counted from
+ */
+export type Stocktake = {
+  id: number
+  /** Drawn when it is booked; a list that was never booked has none. */
+  stocktakeNumber?: string
+  fiscalYear?: number
+  locationId: number
+  locationName?: string
+  status: StocktakeStatus
+  scope: StocktakeScope
+  /** True while the expected quantity stays hidden from whoever counts. */
+  blindCount: boolean
+  countingDate: string
+  note?: string
+  /** What was chosen for the uncounted lines; absent until it is booked. */
+  uncountedHandling?: UncountedHandling
+  lineCount: number
+  countedCount: number
+  differenceSum?: number
+  openedAt?: string
+  postedAt?: string
+  createdBy?: string
+  changedBy?: string
+}
+
+/**
+ * One line of a count list, as `StocktakeLineDto` sends it.
+ *
+ * <p>On a blind count `expectedQuantity` is absent while it is being counted — the server does
+ * not send it at all, so it is not one request away either.
+ */
+export type StocktakeLine = {
+  id: number
+  productId: number
+  productNumber?: string
+  productName: string
+  productEan?: string
+  unitShortName?: string
+  lotId?: number
+  lotNumber?: string
+  expectedQuantity?: number
+  /** What somebody counted, absent while nobody has. Zero is a count, absent is not. */
+  countedQuantity?: number
+  countedAt?: string
+  countedBy?: string
+  stockAtPosting?: number
+  differenceQuantity?: number
+  differenceReason?: string
+  movementId?: number
+  /** True where a movement ran on this product between the start of the count and the booking. */
+  movedSinceCounting: boolean
+  /** True for goods that turned up and stood in no stock row. */
+  addedDuringCounting: boolean
+  sortOrder: number
+}
+
+/**
+ * One line of the difference list, as `StocktakeDifferenceDto` sends it.
+ *
+ * <p>Only the lines that differ: what matches needs no decision.
+ */
+export type StocktakeDifference = {
+  lineId: number
+  productId: number
+  productNumber?: string
+  productName: string
+  unitShortName?: string
+  lotNumber?: string
+  expectedQuantity: number
+  /** What lies there now. Differs from the expected quantity where stock moved during the count. */
+  stockNow: number
+  countedQuantity?: number
+  /** Counted minus stockNow, which is what would be booked. */
+  difference: number
+  movedSinceCounting: boolean
+  /** True where this difference is above the tenant's threshold and has to be explained. */
+  needsReason: boolean
+  differenceReason?: string
+}
+
+/** One step of a count list through its states, as `StocktakeStatusEntryDto` sends it. */
+export type StocktakeStatusEntry = {
+  status: StocktakeStatus
+  changedAt: string
+  changedBy: string
+  note?: string
 }
