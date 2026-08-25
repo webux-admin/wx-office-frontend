@@ -305,7 +305,7 @@ export function LotAllocationField({
  * <p>On the way out the numbers are read only — they are what lies at the location, and typing
  * one that is not there would only earn a refusal. On the way in they are typed, with the
  * numbers of the same product offered as a list: batch numbers come off the supplier's label
- * and are not ours to invent (backend ADR-0067).
+ * and are not ours to invent (backend ADR-0068).
  */
 function BatchRows({
   tenantId,
@@ -715,7 +715,7 @@ function SerialPicker({
  * The stock that was there before the product was tracked, as its own line.
  *
  * <p>It can be used up and never added to. Without a line of its own it would be invisible,
- * and the field would ask for numbers that nobody can give it (backend ADR-0067).
+ * and the field would ask for numbers that nobody can give it (backend ADR-0068).
  */
 function LotFreeRow({
   rows,

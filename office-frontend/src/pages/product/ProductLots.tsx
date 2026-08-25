@@ -31,7 +31,7 @@ import { LotDialog } from '../inventory/LotDialog'
  * <p>Every quantity is a link into the journal, narrowed to that lot: that is the whole of the
  * traceability. Where a batch came from is deliberately not a field here — supplier and
  * receipt date are not kept on the lot, and the movements answer the question instead
- * (backend ADR-0067).
+ * (backend ADR-0068).
  *
  * <p>Blocked lots are asked for on purpose. The list endpoint hides them by default, which is
  * right for a picker and wrong here: a frozen batch that no screen shows could never be

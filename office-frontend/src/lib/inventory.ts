@@ -638,7 +638,7 @@ export function reservationReturnNotice(stockEffect: StockEffect | undefined): s
  *
  * <p>Derived from the product rather than chosen: a lot and a serial number are one model,
  * and which of the two a product uses is a decision of the product master
- * (backend ADR-0067).
+ * (backend ADR-0068).
  *
  * @param tracking how closely the product is followed
  * @returns the kind, or `undefined` for a product nobody tracks
@@ -675,7 +675,7 @@ export function lotKindLabelPlural(kind: LotKind | undefined): string {
  * What an expiry date says about a lot, in words.
  *
  * <p>A word, not only a colour: whoever cannot tell red from grey still has to read that this
- * batch is past its date. It warns and sorts — it never refuses (backend ADR-0067).
+ * batch is past its date. It warns and sorts — it never refuses (backend ADR-0068).
  *
  * @param lot the expiry date and whether it has passed
  * @returns for example «abgelaufen am 12.03.2026», empty on goods that do not expire

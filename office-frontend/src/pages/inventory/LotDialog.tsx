@@ -26,7 +26,7 @@ const MAX_NOTE = 500
  *
  * <p>Freezing is the answer to «this batch is not to leave the house» — a recall, a complaint,
  * quarantine. It refuses the way out and leaves the way in open, because taking the goods back
- * into quarantine is exactly what the block is for (backend ADR-0067).
+ * into quarantine is exactly what the block is for (backend ADR-0068).
  *
  * <p>The number itself can only be corrected while no movement points at the lot. The server
  * decides that and says so; this dialog does not guess.

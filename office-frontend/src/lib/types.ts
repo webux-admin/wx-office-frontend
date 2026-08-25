@@ -823,7 +823,7 @@ export type LotKind = 'LOT' | 'SERIAL'
  * A batch or a single piece under its number, as `LotDto` sends it.
  *
  * <p>Where the goods came from is not here and is not meant to be: that is what the journal
- * answers, filtered by this lot (backend ADR-0067).
+ * answers, filtered by this lot (backend ADR-0068).
  */
 export type Lot = {
   id: number
