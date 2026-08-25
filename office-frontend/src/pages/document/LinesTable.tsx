@@ -14,6 +14,7 @@ import { shortLabelForCode, type SelectableEntry } from '../../lib/masterData'
 import { exceedsOpenQuantity } from '../../lib/openQuantity'
 import type { DocumentLine, OpenLineQuantity, SalesDocument } from '../../lib/types'
 import { useCatalogueLabel, useMasterDataEntries } from '../../masterdata/useMasterData'
+import { lotSummary } from './lineForm'
 
 /**
  * The columns of the position table, in the order they are printed.
@@ -535,6 +536,15 @@ function LineCells({
         {line.note && (
           <span className="block whitespace-pre-line text-[12px] text-text-secondary">
             {line.note}
+          </span>
+        )}
+        {/* In the description cell and not in a column of its own: a column would have to be
+            added to COLUMNS, to VALUE_COLUMNS and to the colSpan of every summary row, and it
+            would stay empty on every document that follows no numbers. Shortened after three —
+            the printed document carries all of them (backend ADR-0069). */}
+        {lotSummary(line.lots) !== '' && (
+          <span className="block font-mono text-[11px] text-text-tertiary">
+            {lotSummary(line.lots)}
           </span>
         )}
         {line.productNumber && (

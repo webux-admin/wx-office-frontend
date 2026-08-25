@@ -6,20 +6,26 @@ import { ErrorNotice } from '../../components/Notice'
 import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
 import { api } from '../../lib/api'
-import { parseDecimal } from '../../lib/format'
+import { formatQuantity, parseDecimal } from '../../lib/format'
+import { booksStock, tracksLots } from '../../lib/inventory'
 import type { OriginState } from '../../lib/origin'
-import type { DocumentLine, Product } from '../../lib/types'
+import type { DocumentLine, Product, StockEffect } from '../../lib/types'
 import { DiscountPair, MoreDetails, ServiceDateFields } from './LineDialogParts'
 import { ProductFacts } from './ProductFacts'
 import { ProductQuickSearch } from './ProductQuickSearch'
+import { LotAllocationField } from '../inventory/LotAllocationField'
 import {
   discountFieldsOf,
   discountPayload,
   dropsDiscount,
   hasProblem,
   lineProblems,
+  allocatedQuantity,
+  lotProblems,
   moreDetailsSummary,
   NO_DISCOUNT,
+  openQuantity,
+  type LineLotEntry,
   type ProductLine,
 } from './lineForm'
 import { useVatText } from './productInfo'
@@ -53,6 +59,7 @@ export function ProductLineDialog({
   busy,
   error,
   stockLocationId,
+  stockEffect,
 }: {
   tenantId: number
   /** The customer of the document, whose price list decides what a product costs. */
@@ -81,6 +88,12 @@ export function ProductLineDialog({
    * report what lies in the main one (ADR-0067 of the backend).
    */
   stockLocationId?: number
+  /**
+   * What issuing this document does to the stock. The block for batches and serial numbers
+   * appears only where it books them out — an Offerte moves nothing and asks for none
+   * (backend ADR-0069).
+   */
+  stockEffect?: StockEffect
 }) {
   const [picked, setPicked] = useState<Product | undefined>(undefined)
   // True while the field names a product rather than a search term. A line being edited opens
@@ -91,6 +104,11 @@ export function ProductLineDialog({
   const [discount, setDiscount] = useState(discountFieldsOf(line))
   const [from, setFrom] = useState(line?.serviceDateFrom ?? '')
   const [to, setTo] = useState(line?.serviceDateTo ?? '')
+  // The numbers this position moves, signed like the quantity. Held here because the field
+  // that collects them is the inventory's and knows nothing about a document line.
+  const [lots, setLots] = useState<LineLotEntry[]>(
+    (line?.lots ?? []).map((lot) => ({ lotNumber: lot.lotNumber, quantity: lot.quantity })),
+  )
   const search = useRef<HTMLInputElement>(null)
   const count = useRef<HTMLInputElement>(null)
   /**
@@ -118,13 +136,19 @@ export function ProductLineDialog({
   const product = picked ?? (taken ? stored.data : undefined)
 
   const amount = parseDecimal(quantity)
-  const problems = lineProblems({ quantity, discount })
+  // The numbers are checked together with the rest, so the existing lock on «Übernehmen»
+  // covers them without a second mechanism (backend ADR-0069).
+  const problems = { ...lineProblems({ quantity, discount }),
+    lots: lotProblems(amount, product?.tracking, lots) }
   // The catalogue decides whether a line may be discounted at all. The backend refuses the
   // line either way; hiding the field here only spares the user a rejected dialog.
   const discountable = product === undefined || product.discountable !== false
   // A line written before the product lost its discount keeps the figure in the field. It is
   // not sent any more, so the amount of the line rises — and that has to be said out loud.
   const dropping = dropsDiscount(discountable, discount)
+  // Only where the kind of document books stock out and the product is followed. Anywhere
+  // else the dialog looks exactly as it did.
+  const showsLots = booksStock(stockEffect) && tracksLots(product)
   const ready = productId !== undefined && !hasProblem(problems)
 
   // Held back for as long as the field is being typed in, so the price is asked for once per
@@ -164,6 +188,9 @@ export function ProductLineDialog({
       ...(allowsDiscount ? discountPayload(discount) : {}),
       serviceDateFrom: from || undefined,
       serviceDateTo: to || undefined,
+      // Left out rather than sent empty: the server refuses any entry on a product nobody
+      // follows, and an empty array would be one.
+      ...(lots.length === 0 ? {} : { lots }),
     }
     // Set before the line goes out, not in the answer: the second click is there long before
     // the backend is.
@@ -314,6 +341,46 @@ export function ProductLineDialog({
             hint={problems.quantity}
             className="sm:max-w-[200px]"
           />
+
+          {/* Right under the quantity and not in «Weitere Angaben»: on a tracked product the
+              number is compulsory and no aside, and it has to add up against the quantity
+              standing next to it (backend ADR-0069). */}
+          {showsLots && product !== undefined && (
+            <div className="grid gap-2 sm:col-span-2">
+              <p aria-live="polite" className="text-[12px] text-text-secondary">
+                {`Menge ${formatQuantity(Math.abs(amount ?? 0))} · zugeordnet `
+                  + `${formatQuantity(Math.abs(allocatedQuantity(lots)))} · offen `
+                  + `${formatQuantity(Math.abs(openQuantity(amount, lots)))}`}
+              </p>
+              <LotAllocationField
+                tenantId={tenantId}
+                product={product}
+                locationId={stockLocationId === undefined ? '' : String(stockLocationId)}
+                // A return is a receipt: it names numbers that come back rather than ones
+                // that leave, and the field offers accordingly.
+                direction={(amount ?? 0) < 0 ? 'IN' : 'OUT'}
+                quantity={amount === null ? null : Math.abs(amount)}
+                // The stock without a number cannot travel on a document line: the line
+                // freezes a number, and that stock has none.
+                allowWithoutNumber={false}
+                onChange={(allocations) =>
+                  setLots(
+                    allocations
+                      .filter((allocation) => allocation.lotNumber !== null)
+                      .map((allocation) => ({
+                        lotNumber: allocation.lotNumber as string,
+                        // Signed like the line, which is what the API takes.
+                        quantity:
+                          (amount ?? 0) < 0 ? -allocation.quantity : allocation.quantity,
+                      })),
+                  )
+                }
+              />
+              {problems.lots !== undefined && (
+                <p className="text-[12px] text-warning">{problems.lots}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <MoreDetails defaultOpen={summary !== undefined} summary={summary}>

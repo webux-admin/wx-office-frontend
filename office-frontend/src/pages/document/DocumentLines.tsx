@@ -284,6 +284,7 @@ export function DocumentLines({
           busy={busy}
           error={error}
           stockLocationId={document.effectiveStockLocationId}
+          stockEffect={document.stockEffect}
         />
       )}
 

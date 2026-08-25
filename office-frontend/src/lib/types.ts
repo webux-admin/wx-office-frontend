@@ -1475,6 +1475,25 @@ export type DocumentLine = {
   subtotalNet?: number
   subtotalVat?: number
   subtotalGross?: number
+  /**
+   * The batches or serial numbers this position moves, frozen onto the line. Empty where it
+   * moves none (backend ADR-0069).
+   */
+  lots?: DocumentLineLot[]
+}
+
+/**
+ * One batch or serial number of a document line, as `DocumentLineLotDto` sends it.
+ *
+ * <p>A frozen copy, not a reference: a reprint in ten years shows what the document said, even
+ * after the lot was corrected in the inventory.
+ */
+export type DocumentLineLot = {
+  lotNumber: string
+  tracking: LotKind
+  /** Signed like the line: a return carries negative entries. */
+  quantity: number
+  expiryDate?: string
 }
 
 export type SalesDocument = {

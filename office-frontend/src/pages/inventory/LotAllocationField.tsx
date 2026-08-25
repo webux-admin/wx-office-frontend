@@ -77,6 +77,7 @@ export function LotAllocationField({
   direction,
   quantity,
   onChange,
+  allowWithoutNumber = true,
 }: {
   tenantId: number
   /** The product being booked. Drawn only where it is tracked at all. */
@@ -89,6 +90,12 @@ export function LotAllocationField({
   quantity: number | null
   /** Called whenever the split changes, with what the booking should send. */
   onChange: (allocations: LotAllocation[]) => void
+  /**
+   * False where the caller cannot carry the stock without a number — a document position
+   * freezes a number, and that stock has none. The row is then left out of the proposal
+   * rather than offered and refused later (backend ADR-0069).
+   */
+  allowWithoutNumber?: boolean
 }) {
   const kind = lotKindOf(product.tracking)
   const issuing = direction === 'OUT'
@@ -124,7 +131,7 @@ export function LotAllocationField({
   // filled in. The same pattern the booking dialog uses for its own reset.
   if (issuing && proposalQuery.data !== undefined && seeded !== signature) {
     setSeeded(signature)
-    setRows(proposalRows(proposalQuery.data))
+    setRows(proposalRows(proposalQuery.data, allowWithoutNumber))
   }
   if (!issuing && kind === 'LOT' && seeded !== signature) {
     setSeeded(signature)

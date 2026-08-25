@@ -38,11 +38,18 @@ export const SERIAL_PROPOSAL_MAX = 500
  * first booking.
  *
  * @param proposal what the server suggests taking
+ * @param allowWithoutNumber false drops the row without a number, for callers that cannot
+ *                           carry it — a document position freezes a number, and the stock
+ *                           without one has none to freeze (backend ADR-0069)
  * @returns the rows, prefilled with the suggested quantities
  */
-export function proposalRows(proposal: LotProposal | undefined): LotRow[] {
+export function proposalRows(
+  proposal: LotProposal | undefined,
+  allowWithoutNumber = true,
+): LotRow[] {
   if (proposal === undefined) return []
   const rows = proposal.lines.map(lineRow)
+  if (!allowWithoutNumber) return rows
   const free = proposal.withoutNumber
   if (free !== undefined && free !== null && free.available > 0) rows.push(lineRow(free))
   return rows

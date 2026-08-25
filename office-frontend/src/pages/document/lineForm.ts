@@ -5,9 +5,15 @@
  * the form: a line carries either a percentage or an amount as its discount, never both. The
  * backend refuses the other case, and the mask has to say so before the request goes out.
  */
-import { formatAmount, formatDate, formatPercent, parseDecimal } from '../../lib/format'
+import { formatAmount, formatDate, formatPercent, formatQuantity, parseDecimal } from '../../lib/format'
 import type { SelectableEntry } from '../../lib/masterData'
-import type { DocumentLine, DocumentLineKind, VatCategory } from '../../lib/types'
+import type {
+  DocumentLine,
+  DocumentLineKind,
+  DocumentLineLot,
+  ProductTracking,
+  VatCategory,
+} from '../../lib/types'
 
 /** What a line looks like when it comes from the catalogue. */
 export type ProductLine = {
@@ -20,6 +26,22 @@ export type ProductLine = {
   serviceDateTo?: string
   /** Where the line goes; left out it is appended. Never sent when a line is edited. */
   position?: number
+  /**
+   * The batches or serial numbers this position moves, signed like the quantity. Left out on
+   * a product nobody follows (backend ADR-0069).
+   */
+  lots?: LineLotEntry[]
+}
+
+/**
+ * One number and what of the position falls on it, as the API takes it.
+ *
+ * <p>Signed like the line: a return of two pieces names two numbers with minus one each. That
+ * is what makes the counter document of a Storno a plain negation.
+ */
+export type LineLotEntry = {
+  lotNumber: string
+  quantity: number
 }
 
 /** What a line looks like when it is written by hand. */
@@ -142,6 +164,8 @@ export type LineProblems = {
   unitPrice?: string
   percent?: string
   amount?: string
+  /** What is still open between the quantity and the numbers named for it. */
+  lots?: string
 }
 
 /**
@@ -234,6 +258,7 @@ export const EVERYTHING_TOUCHED: Required<TouchedFields> = {
   unitPrice: true,
   percent: true,
   amount: true,
+  lots: true,
 }
 
 /**
@@ -388,4 +413,91 @@ export function editorOf(line: DocumentLine): 'product' | 'free' | 'structure' {
  */
 export function itemLineCount(lines: readonly DocumentLine[] | undefined): number {
   return (lines ?? []).filter((line) => line.kind === 'ITEM').length
+}
+
+
+// --- batches and serial numbers at the position (backend ADR-0069) -----------
+
+/**
+ * How much of a position the numbers already cover.
+ *
+ * <p>Signed, like the line itself: a return of two pieces is covered by two entries of minus
+ * one. Working with absolute values here would let a return be «covered» by two positive
+ * entries, which is exactly the mistake the sign rule exists to prevent.
+ *
+ * @param lots the numbers named so far, undefined for none
+ * @returns the sum, zero where nothing is named
+ */
+export function allocatedQuantity(lots: readonly LineLotEntry[] | undefined): number {
+  return (lots ?? []).reduce((sum, lot) => sum + lot.quantity, 0)
+}
+
+/**
+ * How much of a position still carries no number.
+ *
+ * <p>The figure the mask shows live as «Menge 5 · zugeordnet 3 · offen 2», and the one the
+ * backend refuses the issuing over. Signed, so a return counts down the same way.
+ *
+ * @param quantity what the position sells, may be negative on a return
+ * @param lots the numbers named so far, undefined for none
+ * @returns what is still open; zero when the two match exactly
+ */
+export function openQuantity(
+  quantity: number | null,
+  lots: readonly LineLotEntry[] | undefined,
+): number {
+  return (quantity ?? 0) - allocatedQuantity(lots)
+}
+
+/**
+ * What keeps the numbers of a position from being sent.
+ *
+ * <p>Every rule here is one the backend enforces as well. It is repeated in the mask because
+ * a refusal that arrives after the click is a refusal the user cannot read — and because the
+ * open quantity is what they need in order to fix it.
+ *
+ * @param quantity what the position sells
+ * @param tracking how closely the product is followed, undefined for one nobody follows
+ * @param lots the numbers named so far
+ * @returns the sentence, or undefined where nothing is wrong
+ */
+export function lotProblems(
+  quantity: number | null,
+  tracking: ProductTracking | undefined,
+  lots: readonly LineLotEntry[] | undefined,
+): string | undefined {
+  if (tracking === undefined || tracking === 'NONE') return undefined
+  const named = lots ?? []
+  const seen = new Set<string>()
+  for (const lot of named) {
+    if (lot.quantity === 0) return 'Eine Nummer ohne Menge sagt nichts aus.'
+    if (tracking === 'SERIAL' && Math.abs(lot.quantity) !== 1) {
+      return `${lot.lotNumber} ist eine Seriennummer und bewegt genau ein Stück.`
+    }
+    const key = lot.lotNumber.trim().toLowerCase()
+    if (seen.has(key)) return `${lot.lotNumber} steht zweimal auf dieser Position.`
+    seen.add(key)
+  }
+  const open = openQuantity(quantity, named)
+  if (open === 0) return undefined
+  return `Noch ${formatQuantity(Math.abs(open))} ohne Nummer.`
+}
+
+/**
+ * The numbers of a position as one line, for the positions table.
+ *
+ * <p>Shortened after three, because a table row is one line and forty serial numbers would
+ * push every other column off the screen. The printed document shows all of them — that is
+ * where the proof is needed, and there it may run over several lines (backend ADR-0069).
+ *
+ * @param lots the numbers of the line, undefined for none
+ * @returns for example «Serien: SN-4711, SN-4712, +3», empty where the line carries none
+ */
+export function lotSummary(lots: readonly DocumentLineLot[] | undefined): string {
+  const named = lots ?? []
+  if (named.length === 0) return ''
+  const head = named[0].tracking === 'SERIAL' ? 'Serien' : 'Chargen'
+  const shown = named.slice(0, 3).map((lot) => lot.lotNumber)
+  const rest = named.length - shown.length
+  return `${head}: ${shown.join(', ')}${rest > 0 ? `, +${rest}` : ''}`
 }

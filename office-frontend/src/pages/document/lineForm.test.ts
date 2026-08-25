@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentLine } from '../../lib/types'
 import {
+  allocatedQuantity,
   carriesText,
   discountFieldsOf,
   discountPayload,
@@ -9,10 +10,13 @@ import {
   hasProblem,
   itemLineCount,
   lineProblems,
+  lotProblems,
+  lotSummary,
   moreDetailsSummary,
   lockedDiscount,
   NO_DISCOUNT,
   NOTHING_TOUCHED,
+  openQuantity,
   structureKindOptions,
   structureLineProblem,
   visibleProblems,
@@ -454,5 +458,138 @@ describe('visibleProblems', () => {
     // What the press on the send button does: every field counts as dealt with, so the
     // dialog names all four at once instead of one per visit.
     expect(visibleProblems(problems, EVERYTHING_TOUCHED)).toEqual(problems)
+  })
+})
+
+describe('allocatedQuantity', () => {
+  it('allocatedQuantityTest', () => {
+    expect(
+      allocatedQuantity([
+        { lotNumber: 'L-2604', quantity: 3 },
+        { lotNumber: 'L-2605', quantity: 2 },
+      ]),
+    ).toBe(5)
+  })
+
+  it('allocatedQuantityWithNoLotsTest', () => {
+    expect(allocatedQuantity([])).toBe(0)
+    expect(allocatedQuantity(undefined)).toBe(0)
+  })
+
+  it('allocatedQuantityOnAReturnTest', () => {
+    // Signed, like the line: two negative entries cover a return of two.
+    expect(
+      allocatedQuantity([
+        { lotNumber: 'SN-4711', quantity: -1 },
+        { lotNumber: 'SN-4712', quantity: -1 },
+      ]),
+    ).toBe(-2)
+  })
+})
+
+describe('openQuantity', () => {
+  it('openQuantityTest', () => {
+    expect(openQuantity(5, [{ lotNumber: 'L-2604', quantity: 3 }])).toBe(2)
+  })
+
+  it('openQuantityWhenCoveredTest', () => {
+    expect(openQuantity(5, [{ lotNumber: 'L-2604', quantity: 5 }])).toBe(0)
+  })
+
+  it('openQuantityOnReturnLineTest', () => {
+    expect(openQuantity(-2, [{ lotNumber: 'SN-4711', quantity: -1 }])).toBe(-1)
+  })
+
+  it('openQuantityWithoutAQuantityTest', () => {
+    expect(openQuantity(null, [])).toBe(0)
+  })
+})
+
+describe('lotProblems', () => {
+  it('lotProblemsTest', () => {
+    expect(lotProblems(5, 'LOT', [{ lotNumber: 'L-2604', quantity: 3 }])).toBe(
+      'Noch 2 ohne Nummer.',
+    )
+  })
+
+  it('lotProblemsWhenCoveredTest', () => {
+    expect(
+      lotProblems(5, 'LOT', [
+        { lotNumber: 'L-2604', quantity: 3 },
+        { lotNumber: 'L-2605', quantity: 2 },
+      ]),
+    ).toBeUndefined()
+  })
+
+  it('lotProblemsOnAnUntrackedProductTest', () => {
+    // A product nobody follows never has an open quantity of numbers.
+    expect(lotProblems(5, 'NONE', [])).toBeUndefined()
+    expect(lotProblems(5, undefined, [])).toBeUndefined()
+  })
+
+  it('lotProblemsWithDuplicateNumberTest', () => {
+    expect(
+      lotProblems(2, 'SERIAL', [
+        { lotNumber: 'SN-4711', quantity: 1 },
+        { lotNumber: 'sn-4711', quantity: 1 },
+      ]),
+    ).toBe('sn-4711 steht zweimal auf dieser Position.')
+  })
+
+  it('lotProblemsWithSerialQuantityTest', () => {
+    expect(lotProblems(2, 'SERIAL', [{ lotNumber: 'SN-4711', quantity: 2 }])).toBe(
+      'SN-4711 ist eine Seriennummer und bewegt genau ein Stück.',
+    )
+  })
+
+  it('lotProblemsWithAZeroEntryTest', () => {
+    expect(lotProblems(2, 'LOT', [{ lotNumber: 'L-2604', quantity: 0 }])).toBe(
+      'Eine Nummer ohne Menge sagt nichts aus.',
+    )
+  })
+
+  it('lotProblemsOnAReturnTest', () => {
+    expect(lotProblems(-2, 'SERIAL', [{ lotNumber: 'SN-4711', quantity: -1 }])).toBe(
+      'Noch 1 ohne Nummer.',
+    )
+    expect(
+      lotProblems(-2, 'SERIAL', [
+        { lotNumber: 'SN-4711', quantity: -1 },
+        { lotNumber: 'SN-4712', quantity: -1 },
+      ]),
+    ).toBeUndefined()
+  })
+})
+
+describe('lotSummary', () => {
+  it('lotSummaryTest', () => {
+    expect(
+      lotSummary([
+        { lotNumber: 'L-2604', tracking: 'LOT', quantity: 3 },
+        { lotNumber: 'L-2605', tracking: 'LOT', quantity: 2 },
+      ]),
+    ).toBe('Chargen: L-2604, L-2605')
+  })
+
+  it('lotSummaryOfSerialsTest', () => {
+    expect(lotSummary([{ lotNumber: 'SN-4711', tracking: 'SERIAL', quantity: 1 }])).toBe(
+      'Serien: SN-4711',
+    )
+  })
+
+  it('lotSummaryWithManyLotsTest', () => {
+    // A table row is one line; the printed document carries all of them.
+    const many = ['A', 'B', 'C', 'D', 'E'].map((suffix) => ({
+      lotNumber: `SN-${suffix}`,
+      tracking: 'SERIAL' as const,
+      quantity: 1,
+    }))
+
+    expect(lotSummary(many)).toBe('Serien: SN-A, SN-B, SN-C, +2')
+  })
+
+  it('lotSummaryWithoutLotsTest', () => {
+    expect(lotSummary([])).toBe('')
+    expect(lotSummary(undefined)).toBe('')
   })
 })
