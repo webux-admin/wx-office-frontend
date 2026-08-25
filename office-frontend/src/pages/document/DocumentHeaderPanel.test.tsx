@@ -3,7 +3,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentLine, SalesDocument } from '../../lib/types'
+import { AuthContext, type AuthState } from '../../auth/authContext'
+import type { DocumentLine, SalesDocument, StockLocation } from '../../lib/types'
 import { DocumentHeaderPanel } from './DocumentHeaderPanel'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -61,10 +62,35 @@ const MIXED_LINES = [
 let container: HTMLDivElement
 let root: Root
 let sent: { url: string; method: string; body: unknown }[]
+/** What the inventory answers for this test; empty unless a test says otherwise. */
+let locations: StockLocation[]
+
+/** A store, with only what the panel reads spelled out. */
+function store(fields: Partial<StockLocation> & { id: number }): StockLocation {
+  return { code: `L${fields.id}`, name: `Lager ${fields.id}`, active: true, ...fields }
+}
+
+const TWO_STORES = [
+  store({ id: 1, code: 'HAUPT', name: 'Hauptlager' }),
+  store({ id: 2, code: 'AUSSEN', name: 'Aussenlager' }),
+]
+
+/** Everyone may read everything; the panel only asks about the inventory right. */
+function auth(): AuthState {
+  return {
+    user: null,
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    can: () => true,
+  }
+}
 
 /** Answers the two selection lists and records what the section writes. */
 function stubFetch() {
   sent = []
+  locations = []
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     sent.push({
       url,
@@ -75,7 +101,9 @@ function stubFetch() {
       ? LANGUAGES
       : url.includes('/currencies')
         ? CURRENCIES
-        : draft()
+        : url.includes('/inventory/locations')
+          ? locations
+          : draft()
     return Promise.resolve(
       new Response(JSON.stringify(body), {
         status: 200,
@@ -137,15 +165,17 @@ async function mount({
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <DocumentHeaderPanel
-          tenantId={TENANT}
-          base={base}
-          document={document}
-          editable={editable}
-          validity={validity}
-          readOnlyNote={readOnlyNote}
-          onChanged={() => undefined}
-        />
+        <AuthContext.Provider value={auth()}>
+          <DocumentHeaderPanel
+            tenantId={TENANT}
+            base={base}
+            document={document}
+            editable={editable}
+            validity={validity}
+            readOnlyNote={readOnlyNote}
+            onChanged={() => undefined}
+          />
+        </AuthContext.Provider>
       </QueryClientProvider>,
     )
   })
@@ -372,5 +402,92 @@ describe('DocumentHeaderPanel', () => {
     ])
     expect(writes()[0].body).toEqual({ validUntil: '2026-10-15' })
     expect(writes()[1].body).toEqual({ documentDate: '2026-09-15', priceMode: 'COPY' })
+  })
+})
+
+describe('Lagerort', () => {
+  /** A draft whose kind of document books stock out — the only one that shows the field. */
+  function delivering(fields: Partial<SalesDocument> = {}): SalesDocument {
+    return { ...draft(), stockEffect: 'ISSUE', stockLocationName: 'Hauptlager', ...fields }
+  }
+
+  it('stockLocationFieldHiddenWithSingleLocationTest', async () => {
+    // The rule of ADR-0014, read off the data: with one store there is nothing to choose.
+    locations = [store({ id: 1, code: 'HAUPT', name: 'Hauptlager' })]
+
+    await render(delivering())
+
+    expect(() => byLabel('Lagerort')).toThrow()
+  })
+
+  it('stockLocationFieldShownWithTwoLocationsTest', async () => {
+    locations = TWO_STORES
+
+    await render(delivering())
+
+    expect(byLabel<HTMLSelectElement>('Lagerort').value).toBe('')
+  })
+
+  it('stockLocationFieldHiddenWithoutAStockEffectTest', async () => {
+    // An Offerte that books nothing has no store to choose.
+    locations = TWO_STORES
+
+    await render(draft())
+
+    expect(() => byLabel('Lagerort')).toThrow()
+  })
+
+  it('stockLocationEmptyOptionNamesTheFallbackTest', async () => {
+    // The empty value is not "no store" but "Vorgabe der Belegart" — and while the document
+    // names none of its own, the name the server sent IS that fallback.
+    locations = TWO_STORES
+
+    await render(delivering())
+
+    expect(text()).toContain('Vorgabe der Belegart (Hauptlager)')
+  })
+
+  it('stockLocationEmptyOptionWithoutAFallbackNameTest', async () => {
+    // Once the document names a store, the server's name is that one — so no bracket is
+    // filled in rather than a wrong one.
+    locations = TWO_STORES
+
+    await render(delivering({ stockLocationId: 2, stockLocationName: 'Aussenlager' }))
+
+    expect(text()).toContain('Vorgabe der Belegart')
+    expect(text()).not.toContain('Vorgabe der Belegart (')
+  })
+
+  it('stockLocationOnAnIssuedDocumentIsTextTest', async () => {
+    locations = TWO_STORES
+
+    await render(delivering({ status: 'FINALISED', stockLocationName: 'Aussenlager' }), false)
+
+    expect(() => byLabel('Lagerort')).toThrow()
+    expect(text()).toContain('Aussenlager')
+  })
+
+  it('stockLocationIsSentToItsOwnEndpointTest', async () => {
+    locations = TWO_STORES
+    await render(delivering())
+
+    choose(byLabel<HTMLSelectElement>('Lagerort'), '2')
+    act(() => apply().click())
+    await settle()
+
+    expect(writes()).toHaveLength(1)
+    expect(writes()[0].url).toBe(`${BASE}/stock-location`)
+    expect(writes()[0].body).toEqual({ locationId: 2 })
+  })
+
+  it('stockLocationBackToTheDocumentTypeSendsNullTest', async () => {
+    locations = TWO_STORES
+    await render(delivering({ stockLocationId: 2, stockLocationName: 'Aussenlager' }))
+
+    choose(byLabel<HTMLSelectElement>('Lagerort'), '')
+    act(() => apply().click())
+    await settle()
+
+    expect(writes()[0].body).toEqual({ locationId: null })
   })
 })

@@ -1564,8 +1564,20 @@ export type SalesDocument = {
    */
   stockEffect?: StockEffect
   /**
+   * The store this document itself names. Absent while it follows its kind of document — an
+   * empty picker is not "no store" but "Vorgabe der Belegart" (ADR-0067 of the backend).
+   */
+  stockLocationId?: number
+  /**
+   * The store it really books at, already worked out over document, kind of document and
+   * tenant default. What the mask picks out of the per-store breakdown of the inventory, so it
+   * never holds that precedence rule a second time. Absent when it moves no stock.
+   */
+  effectiveStockLocationId?: number
+  /**
    * What the location it books at is called. Absent when it moves no stock. Worked out on the
-   * server: only it knows whether the kind names a location or the tenant's default applies.
+   * server: only it knows whether the document names a store, its kind names one, or the
+   * tenant's default applies.
    */
   stockLocationName?: string
   lines?: DocumentLine[]

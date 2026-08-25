@@ -1,18 +1,29 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowRightLeft } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
+import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
-import type { SalesDocument } from '../../lib/types'
+import {
+  INVENTORY_RIGHTS,
+  showsLocationChoice,
+  stockLocationLabel,
+  stockLocationsKey,
+  stockLocationsUrl,
+} from '../../lib/inventory'
+import type { SalesDocument, StockLocation } from '../../lib/types'
+import { useAuth } from '../../auth/useAuth'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import {
   currencyChanged,
   headerFieldsChanged,
   headerPayload,
   headerUnchanged,
+  stockLocationChanged,
+  stockLocationPayload,
   toHeaderForm,
   validityBeforeHeader,
   validityChanged,
@@ -66,6 +77,25 @@ export function DocumentHeaderPanel({
   const converting = currencyChanged(form, document)
   const unchanged = headerUnchanged(form, document)
 
+  const { can } = useAuth()
+  // Only where the document moves stock at all, and only with the right to read the inventory.
+  // A kind of document that books nothing has no store to choose, and asking without the right
+  // would fire a 403 on every draft that opens.
+  const movesStock = document.stockEffect !== undefined && document.stockEffect !== 'NONE'
+  const locations = useQuery({
+    queryKey: stockLocationsKey(tenantId),
+    queryFn: () => api.get<StockLocation[]>(`${stockLocationsUrl(tenantId)}?activeOnly=true`),
+    enabled: movesStock && can(INVENTORY_RIGHTS.read),
+  })
+  const active = locations.data ?? []
+  // The rule of Frontend-ADR-0014, read off the data and not off a switch: with one store
+  // there is nothing to choose, and the default applies silently.
+  const showsStore = movesStock && showsLocationChoice(active)
+  // While the document names no store of its own, the name the server worked out IS the
+  // fallback — so it can be put in brackets truthfully. Once the document names one, the name
+  // is that one, and the bracket is left off rather than filled with something wrong.
+  const fallbackName = document.stockLocationId === undefined ? document.stockLocationName : undefined
+
   const save = useMutation({
     // Two endpoints, because their silences mean opposite things: in the header request a
     // field that is left out stays as it is stored, so an emptied valid-until date could
@@ -90,6 +120,15 @@ export function DocumentHeaderPanel({
         )
       }
       if (!validityFirst && validityChanged(form, document)) await saveValidity()
+      // A third endpoint, for the same reason as /validity: only there does null mean "follow
+      // the kind of document again" (ADR-0067). The order does not matter — the store is
+      // checked against the inventory and against nothing else on the document.
+      if (stockLocationChanged(form, document)) {
+        saved = await api.put<SalesDocument>(
+          `${base}/stock-location`,
+          stockLocationPayload(form),
+        )
+      }
       return saved
     },
     onSuccess: onChanged,
@@ -190,6 +229,32 @@ export function DocumentHeaderPanel({
           disabled={!editable}
           hint="Der Tag, von dem der Kurs stammt."
         />
+
+        {showsStore &&
+          (editable ? (
+            <SelectField
+              label="Lagerort"
+              value={form.stockLocation}
+              onChange={(event) => set('stockLocation', event.target.value)}
+              hint="Wirkt erst beim Ausstellen. Preise und Mengen bleiben unberührt."
+            >
+              <option value="">
+                {fallbackName === undefined
+                  ? 'Vorgabe der Belegart'
+                  : `Vorgabe der Belegart (${fallbackName})`}
+              </option>
+              {active.map((location) => (
+                <option key={location.id} value={`${location.id}`}>
+                  {stockLocationLabel(location)}
+                </option>
+              ))}
+            </SelectField>
+          ) : (
+            <div className="grid gap-0.5 text-[13px]">
+              <span className="text-[12px] text-text-tertiary">Lagerort</span>
+              <span>{document.stockLocationName ?? '—'}</span>
+            </div>
+          ))}
       </div>
 
       {/* Always in the document, never only when it has something to say: a live region that

@@ -283,6 +283,7 @@ export function DocumentLines({
           line={edited}
           busy={busy}
           error={error}
+          stockLocationId={document.effectiveStockLocationId}
         />
       )}
 

@@ -12,6 +12,8 @@ import {
   listNumbers,
   toHeaderForm,
   validityBeforeHeader,
+  stockLocationChanged,
+  stockLocationPayload,
   validityChanged,
   type HeaderForm,
 } from './headerForm'
@@ -62,6 +64,7 @@ describe('toHeaderForm', () => {
       exchangeRate: '0.94',
       exchangeRateDate: '2026-08-21',
       validUntil: '',
+      stockLocation: '',
     })
   })
 
@@ -85,7 +88,7 @@ describe('toHeaderForm', () => {
 
 describe('headerKey', () => {
   it('headerKeyTest', () => {
-    expect(headerKey(draft())).toBe('2026-08-21|de|EUR|0.94|2026-08-21|')
+    expect(headerKey(draft())).toBe('2026-08-21|de|EUR|0.94|2026-08-21||')
   })
 
   it('headerKeyDiffersAfterACustomerChangeTest', () => {
@@ -99,6 +102,11 @@ describe('headerKey', () => {
     expect(headerKey(draft({ validUntil: '2026-09-20' }))).not.toBe(headerKey(draft()))
   })
 
+  it('headerKeyDiffersAfterTheStoreChangedTest', () => {
+    // Saving through /stock-location rewrites the stored store, same mechanism as the validity.
+    expect(headerKey(draft({ stockLocationId: 3 }))).not.toBe(headerKey(draft()))
+  })
+
   it('headerKeyIsStableWhileTheHeadIsTest', () => {
     // The lines change constantly; the section that edits the head must not remount for that.
     expect(headerKey(draft({ totalNet: 99 }))).toBe(headerKey(draft()))
@@ -106,7 +114,7 @@ describe('headerKey', () => {
 
   it('headerKeyWithoutOptionalFieldsTest', () => {
     expect(headerKey(draft({ exchangeRate: undefined, exchangeRateDate: undefined }))).toBe(
-      '2026-08-21|de|EUR|||',
+      '2026-08-21|de|EUR||||',
     )
   })
 })
@@ -184,6 +192,14 @@ describe('headerFieldsChanged', () => {
     const form = { ...toHeaderForm(draft()), validUntil: '2026-09-20' }
 
     expect(headerFieldsChanged(form, draft())).toBe(false)
+  })
+
+  it('headerFieldsChangedWithOnlyTheStoreMovedTest', () => {
+    // The store travels through /stock-location alone, for the same reason the date does.
+    const form = { ...toHeaderForm(draft()), stockLocation: '3' }
+
+    expect(headerFieldsChanged(form, draft())).toBe(false)
+    expect(headerUnchanged(form, draft())).toBe(false)
   })
 
   it('headerFieldsChangedWithoutChangeTest', () => {
@@ -382,5 +398,52 @@ describe('freeLineWarning', () => {
 
   it('freeLineWarningWithoutFreeLinesTest', () => {
     expect(freeLineWarning([line({ lineNumber: 1, productId: 7 })], 'RECALCULATE')).toBeUndefined()
+  })
+})
+
+describe('stockLocationChanged', () => {
+  it('stockLocationChangedTest', () => {
+    const form: HeaderForm = { ...toHeaderForm(draft()), stockLocation: '3' }
+
+    expect(stockLocationChanged(form, draft())).toBe(true)
+  })
+
+  it('stockLocationChangedWhileUnchangedTest', () => {
+    const stored = draft({ stockLocationId: 3 })
+
+    expect(stockLocationChanged(toHeaderForm(stored), stored)).toBe(false)
+  })
+
+  it('stockLocationChangedBackToTheDocumentTypeTest', () => {
+    // The case the endpoint exists for: an emptied picker is an order, not a silence.
+    const stored = draft({ stockLocationId: 3 })
+    const form: HeaderForm = { ...toHeaderForm(stored), stockLocation: '' }
+
+    expect(stockLocationChanged(form, stored)).toBe(true)
+  })
+
+  it('stockLocationChangedOnADocumentWithoutOneTest', () => {
+    expect(stockLocationChanged(toHeaderForm(draft()), draft())).toBe(false)
+  })
+})
+
+describe('stockLocationPayload', () => {
+  it('stockLocationPayloadTest', () => {
+    const form: HeaderForm = { ...toHeaderForm(draft()), stockLocation: '3' }
+
+    expect(stockLocationPayload(form)).toEqual({ locationId: 3 })
+  })
+
+  it('stockLocationPayloadOfAnEmptyPickerTest', () => {
+    // null and not an omitted field: that is the order to follow the kind of document again.
+    const form: HeaderForm = { ...toHeaderForm(draft()), stockLocation: '' }
+
+    expect(stockLocationPayload(form)).toEqual({ locationId: null })
+  })
+
+  it('stockLocationPayloadIgnoresSurroundingSpaceTest', () => {
+    const form: HeaderForm = { ...toHeaderForm(draft()), stockLocation: ' 3 ' }
+
+    expect(stockLocationPayload(form)).toEqual({ locationId: 3 })
   })
 })

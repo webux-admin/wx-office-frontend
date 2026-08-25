@@ -1,5 +1,5 @@
 import { formatAmount, formatQuantity } from '../../lib/format'
-import { availabilityHint, reservedForText } from '../../lib/inventory'
+import { availabilityAt, availabilityHint, reservedForText } from '../../lib/inventory'
 import type { Product, ProductAvailability, VatCategory } from '../../lib/types'
 import { priceOriginText, useResolvedPrice } from './productInfo'
 import { useAvailability } from './stockInfo'
@@ -38,6 +38,7 @@ export function ProductFacts({
   currency,
   vatOf,
   vatFailed = false,
+  stockLocationId,
 }: {
   tenantId: number
   /** The customer of the document, whose price list decides. */
@@ -53,10 +54,19 @@ export function ProductFacts({
   vatOf: (category: VatCategory | undefined) => string | undefined
   /** True where the VAT rates of the day could not be read at all. */
   vatFailed?: boolean
+  /**
+   * The store the document delivers from, as the server worked it out. Undefined where the
+   * document moves no stock or the tenant keeps one store — then the whole-tenant figure is
+   * the same number anyway (ADR-0067 of the backend).
+   */
+  stockLocationId?: number
 }) {
   const resolved = useResolvedPrice(tenantId, partnerId, product?.id, quantity)
   const price = resolved.data
   const stock = useAvailability(tenantId, product?.id)
+  // Narrowed to the store this document books at. Asking the whole tenant would report a
+  // quantity that lies somewhere the Lieferschein never touches.
+  const free = availabilityAt(stock.data, stockLocationId)
 
   const facts: Fact[] = []
   if (product !== undefined) {
@@ -92,8 +102,8 @@ export function ProductFacts({
           .join(', '),
       })
     }
-    const free = availabilityFact(stock.data, product, quantity)
-    if (free !== undefined) facts.push(free)
+    const availableFact = availabilityFact(free, product, quantity)
+    if (availableFact !== undefined) facts.push(availableFact)
   }
 
   return (

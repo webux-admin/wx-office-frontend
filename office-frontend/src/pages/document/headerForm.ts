@@ -28,6 +28,12 @@ export type HeaderForm = {
    * is followed up; it never travels with {@link headerPayload}, see {@link validityChanged}.
    */
   validUntil: string
+  /**
+   * The store the document delivers from, as its id in a string; empty means it follows its
+   * kind of document. Like the validity it has an endpoint of its own and never travels with
+   * {@link headerPayload}, see {@link stockLocationChanged}.
+   */
+  stockLocation: string
 }
 
 /**
@@ -63,6 +69,7 @@ export function toHeaderForm(document: SalesDocument): HeaderForm {
     exchangeRate: document.exchangeRate?.toString() ?? '',
     exchangeRateDate: document.exchangeRateDate ?? '',
     validUntil: document.validUntil ?? '',
+    stockLocation: document.stockLocationId?.toString() ?? '',
   }
 }
 
@@ -86,6 +93,7 @@ export function headerKey(document: SalesDocument): string {
     form.exchangeRate,
     form.exchangeRateDate,
     form.validUntil,
+    form.stockLocation,
   ].join('|')
 }
 
@@ -141,8 +149,39 @@ export function headerUnchanged(form: HeaderForm, document: SalesDocument): bool
 export function headerFieldsChanged(form: HeaderForm, document: SalesDocument): boolean {
   const stored = toHeaderForm(document)
   return (Object.keys(stored) as (keyof HeaderForm)[]).some(
-    (field) => field !== 'validUntil' && form[field].trim() !== stored[field].trim(),
+    (field) =>
+      field !== 'validUntil' &&
+      field !== 'stockLocation' &&
+      form[field].trim() !== stored[field].trim(),
   )
+}
+
+/**
+ * Whether the store in the section differs from the stored one.
+ *
+ * <p>Kept apart from {@link headerPayload} for the same reason the validity is: in the header
+ * request a field that is left out stays as it is stored, so "back to the store of the
+ * document type" could never travel through it. `PUT /stock-location` reads `null` as exactly
+ * that order (ADR-0067 of the backend).
+ *
+ * @param form the section as it stands
+ * @param document the stored draft
+ */
+export function stockLocationChanged(form: HeaderForm, document: SalesDocument): boolean {
+  return form.stockLocation.trim() !== (document.stockLocationId?.toString() ?? '')
+}
+
+/**
+ * The store as the API takes it.
+ *
+ * <p>`null` and not an omitted field: that is the order to follow the kind of document again.
+ *
+ * @param form the section as it stands
+ * @returns the id, or null for "Vorgabe der Belegart"
+ */
+export function stockLocationPayload(form: HeaderForm): { locationId: number | null } {
+  const trimmed = form.stockLocation.trim()
+  return { locationId: trimmed === '' ? null : Number(trimmed) }
 }
 
 /**

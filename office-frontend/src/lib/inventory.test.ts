@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ProductAvailability, StockLocation, StockShortfall } from './types'
 import {
   INVENTORY_RIGHTS,
+  availabilityAt,
   availabilityHint,
   availabilityKey,
   availabilityUrl,
@@ -625,5 +626,63 @@ describe('availabilityHint', () => {
     })
 
     expect(availabilityHint(split)).toBe('Bestand 9 · 4 reserviert')
+  })
+})
+
+describe('availabilityAt', () => {
+  /** Twelve pieces in the main store, nine in the outside store; four spoken for in the main. */
+  function twoStores(): ProductAvailability {
+    return {
+      productId: 42,
+      stockManaged: true,
+      onHand: 21,
+      reserved: 4,
+      availableQuantity: 17,
+      locations: [
+        { locationId: 1, locationName: 'Hauptlager', onHand: 12, reserved: 4, availableQuantity: 8 },
+        { locationId: 2, locationName: 'Aussenlager', onHand: 9, reserved: 0, availableQuantity: 9 },
+      ],
+    }
+  }
+
+  it('availabilityAtTest', () => {
+    const here = availabilityAt(twoStores(), 2)
+
+    expect(here?.onHand).toBe(9)
+    expect(here?.reserved).toBe(0)
+    expect(here?.availableQuantity).toBe(9)
+    expect(here?.locations).toHaveLength(1)
+  })
+
+  it('availabilityAtWithoutALocationTest', () => {
+    // A tenant with one store: the whole-tenant figure is the same number anyway.
+    expect(availabilityAt(twoStores(), undefined)).toEqual(twoStores())
+  })
+
+  it('availabilityAtOfAStoreWithoutStockTest', () => {
+    // Never lain there: a free quantity of zero, and that is what it is.
+    const here = availabilityAt(twoStores(), 99)
+
+    expect(here?.onHand).toBe(0)
+    expect(here?.availableQuantity).toBe(0)
+    expect(here?.locations).toEqual([])
+  })
+
+  it('availabilityAtWithoutASplitTest', () => {
+    // An answer without a per-store split cannot be narrowed; the sum stays.
+    const flat: ProductAvailability = { productId: 42, stockManaged: true, availableQuantity: 8 }
+
+    expect(availabilityAt(flat, 2)).toEqual(flat)
+  })
+
+  it('availabilityAtWithoutAnAnswerTest', () => {
+    expect(availabilityAt(undefined, 2)).toBeUndefined()
+  })
+
+  it('availabilityAtKeepsWhatItDoesNotNarrowTest', () => {
+    const here = availabilityAt(twoStores(), 1)
+
+    expect(here?.productId).toBe(42)
+    expect(here?.stockManaged).toBe(true)
   })
 })

@@ -52,6 +52,7 @@ export function ProductLineDialog({
   line,
   busy,
   error,
+  stockLocationId,
 }: {
   tenantId: number
   /** The customer of the document, whose price list decides what a product costs. */
@@ -74,6 +75,12 @@ export function ProductLineDialog({
   busy: boolean
   /** Why the last attempt was refused; the dialog stays open until one goes through. */
   error?: unknown
+  /**
+   * The store the document delivers from, as the server worked it out. Every free quantity in
+   * this dialog is the one of that store — a Lieferschein out of the outside store must not
+   * report what lies in the main one (ADR-0067 of the backend).
+   */
+  stockLocationId?: number
 }) {
   const [picked, setPicked] = useState<Product | undefined>(undefined)
   // True while the field names a product rather than a search term. A line being edited opens
@@ -274,6 +281,7 @@ export function ProductLineDialog({
             vatOf={vatOf}
             back={back}
             inputRef={search}
+            stockLocationId={stockLocationId}
           />
 
           <ProductFacts
@@ -285,6 +293,7 @@ export function ProductLineDialog({
             currency={currency}
             vatOf={vatOf}
             vatFailed={vatFailed}
+            stockLocationId={stockLocationId}
           />
 
           <TextField

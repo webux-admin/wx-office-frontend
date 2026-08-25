@@ -7,6 +7,7 @@ import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
 import { api } from '../../lib/api'
 import { matchParts } from '../../lib/highlight'
+import { availabilityAt } from '../../lib/inventory'
 import { nextIndex } from '../../lib/keyboardList'
 import type { OriginState } from '../../lib/origin'
 import { listQuery } from '../../lib/paging'
@@ -46,6 +47,7 @@ export function ProductQuickSearch({
   vatOf,
   back,
   inputRef,
+  stockLocationId,
 }: {
   tenantId: number
   /** What is in the field. Held by the dialog, which clears it for the next position. */
@@ -65,6 +67,11 @@ export function ProductQuickSearch({
   back: OriginState
   /** Lets the dialog put the focus back here after a position was added. */
   inputRef?: Ref<HTMLInputElement>
+  /**
+   * The store the document delivers from, as the server worked it out. Undefined where the
+   * document moves no stock or the tenant keeps one store (ADR-0067 of the backend).
+   */
+  stockLocationId?: number
 }) {
   const listId = useId()
   const [open, setOpen] = useState(!chosen)
@@ -100,8 +107,14 @@ export function ProductQuickSearch({
   // be a cross-module table read the backend forbids, so the sum comes from the inventory
   // itself — once.
   const availabilities = useAvailabilities(tenantId, found.map((product) => product.id))
+  // Narrowed to the store the document delivers from, so a hit list opened on a Lieferschein
+  // out of the outside store does not report what lies in the main one (ADR-0067 of the
+  // backend).
   const freeOf = new Map(
-    (availabilities.data ?? []).map((entry) => [entry.productId, entry]),
+    (availabilities.data ?? []).map((entry) => [
+      entry.productId,
+      availabilityAt(entry, stockLocationId),
+    ]),
   )
   // The list can grow shorter between two answers while the mark stays where it was.
   const active = Math.min(marked, found.length - 1)

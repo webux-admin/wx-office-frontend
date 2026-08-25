@@ -317,6 +317,38 @@ export function stockLocationLabel(location: StockLocation | undefined): string 
 }
 
 /**
+ * What is free of a product at one store.
+ *
+ * <p>The document mask needs this rather than the whole-tenant figure: a Lieferschein that
+ * delivers from the outside store must not be told what lies in the main one, or it reports a
+ * quantity that has nothing to do with what will be booked (ADR-0067 of the backend).
+ *
+ * <p>Without a store, and for an answer that carries no per-store split, the whole-tenant
+ * figure stays — that is the tenant with one store, where both figures are the same number.
+ * A store the product has never lain in comes back as a free quantity of zero, which is what
+ * it is.
+ *
+ * @param availability what the inventory answered for the product, undefined while unknown
+ * @param locationId the store the document delivers from, undefined for the whole tenant
+ * @returns the same answer narrowed to that store, undefined when there is none
+ */
+export function availabilityAt(
+  availability: ProductAvailability | undefined,
+  locationId: number | undefined,
+): ProductAvailability | undefined {
+  if (availability === undefined || locationId === undefined) return availability
+  if (availability.locations === undefined) return availability
+  const here = availability.locations.find((entry) => entry.locationId === locationId)
+  return {
+    ...availability,
+    onHand: here?.onHand ?? 0,
+    reserved: here?.reserved ?? 0,
+    availableQuantity: here?.availableQuantity ?? 0,
+    locations: here === undefined ? [] : [here],
+  }
+}
+
+/**
  * Query key of the movement journal.
  *
  * <p>The filters are part of the key, so two differently filtered lists do not share one
