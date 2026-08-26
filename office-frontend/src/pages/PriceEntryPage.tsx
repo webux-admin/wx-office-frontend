@@ -18,6 +18,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatAmount, formatDate } from '../lib/format'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
+import { onlyBarCodeMatched } from '../lib/productSearch'
 import type { Page, Partner, PriceEntryResult, PriceEntryRow, PriceGroup } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
 import { partnerLabel } from './document/partnerSearch'
@@ -222,7 +223,18 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
       key: 'name',
       header: 'Bezeichnung',
       sortKey: 'name',
-      render: (row) => <span className="font-medium">{row.name}</span>,
+      render: (row) => (
+        <span className="inline-flex flex-col items-start">
+          <span className="font-medium">{row.name}</span>
+          {/* The code under the name, and only where it is the whole reason the row is here:
+              this table has no column for it, so a scanned article would otherwise stand
+              among the others without a single field that says why. The product list answers
+              the same search the same way. */}
+          {onlyBarCodeMatched(row, search.term) && (
+            <span className="font-mono text-[11px] text-text-tertiary">{row.eanCode}</span>
+          )}
+        </span>
+      ),
     },
     {
       key: 'unit',
@@ -426,7 +438,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
                 search.setValue(next)
                 setPage(0)
               }}
-              placeholder="Nummer oder Bezeichnung"
+              placeholder="Nummer, Bezeichnung oder Strichcode"
             />
             <CheckboxField
               label="Nur aktive"

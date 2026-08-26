@@ -13,6 +13,9 @@ import { ProductListPage } from './ProductListPage'
 
 const TENANT = 1
 
+/** The bar code of the screw — what a scanner reads instead of the product number. */
+const EAN = '7612345678901'
+
 const PRODUCTS: Product[] = [
   {
     id: 7,
@@ -29,6 +32,7 @@ const PRODUCTS: Product[] = [
     productType: 'GOODS',
     unit: 'PIECE',
     vatCategory: 'STANDARD',
+    eanCode: EAN,
   },
 ]
 
@@ -62,7 +66,12 @@ function stubFetch() {
   vi.stubGlobal('fetch', (url: string) => {
     if (url.includes('/products')) asked.push(url)
     const term = decodeURIComponent(/[?&]search=([^&]*)/.exec(url)?.[1] ?? '').toLowerCase()
-    const found = PRODUCTS.filter((product) => product.name.toLowerCase().includes(term))
+    // The same three columns the server matches over, bar code included.
+    const found = PRODUCTS.filter((product) =>
+      [product.name, product.productNumber ?? '', product.eanCode ?? ''].some((column) =>
+        column.toLowerCase().includes(term),
+      ),
+    )
     const body = url.includes('/products')
       ? {
           content: found,
@@ -170,5 +179,27 @@ describe('ProductListPage', () => {
 
     expect(rows()).toHaveLength(1)
     expect(container.textContent).toContain('Schraube')
+  })
+
+  it('productListPageShowsTheBarCodeOfARowFoundByItTest', async () => {
+    await render()
+
+    type(EAN)
+    await settle()
+
+    // Neither the number nor the name carries what was scanned, so without the code on the
+    // row the article looks like an arbitrary hit.
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].textContent).toContain(EAN)
+  })
+
+  it('productListPageLeavesTheBarCodeOffARowFoundByNameTest', async () => {
+    await render()
+
+    type('schraube')
+    await settle()
+
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].textContent).not.toContain(EAN)
   })
 })

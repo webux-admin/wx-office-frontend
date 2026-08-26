@@ -589,6 +589,8 @@ export type PriceEntryRow = {
   productId: number
   productNumber?: string
   name: string
+  /** Absent where the article keeps none. The search runs over it, so a row may be here for it. */
+  eanCode?: string
   unitLabel?: string
   /** Absent where nothing applies to this product at all. */
   effectivePrice?: number

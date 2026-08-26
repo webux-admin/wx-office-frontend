@@ -1,16 +1,28 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type Ref } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type Ref,
+  type RefObject,
+} from 'react'
 import { Link } from 'react-router-dom'
+import { BarcodeScanner } from '../../components/BarcodeScanner'
 import { Spinner } from '../../components/Spinner'
 import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
 import { api } from '../../lib/api'
 import { matchParts } from '../../lib/highlight'
-import { availabilityAt } from '../../lib/inventory'
+// The wording for an unknown bar code is shared with the booking dialog rather than written
+// again: the same gesture must not answer in four different sentences.
+import { availabilityAt, unknownBarcodeMessage } from '../../lib/inventory'
 import { nextIndex } from '../../lib/keyboardList'
 import type { OriginState } from '../../lib/origin'
 import { listQuery } from '../../lib/paging'
+import { onlyBarCodeMatched } from '../../lib/productSearch'
 import type { Page, Product, VatCategory } from '../../lib/types'
 import { productMeta } from './productInfo'
 import { useAvailabilities } from './stockInfo'
@@ -30,13 +42,18 @@ const DEBOUNCE = 200
 /**
  * The type-ahead a position starts with: a field, and the products it matches under it.
  *
- * <p>Searching happens on the server, over number and name at once, and only after the field
- * has stood still — the alternative, holding the whole catalogue in the browser and filtering
- * it, stops working at the size where a catalogue needs a search at all.
+ * <p>Searching happens on the server, over number, name and bar code at once, and only after
+ * the field has stood still — the alternative, holding the whole catalogue in the browser and
+ * filtering it, stops working at the size where a catalogue needs a search at all.
+ *
+ * <p>Beside the field sits the camera, where the browser has one, and it fills the same field
+ * a hand scanner types into. A single hit is marked, never taken over on its own: a wrong
+ * article on a document costs more than the Enter that confirms the right one.
  *
  * <p>The field is a combobox in the sense of ARIA: the arrow keys move the mark through the
  * list without the focus ever leaving the field, and Enter takes what is marked. Escape is
- * deliberately not caught here, so it keeps closing the dialog.
+ * deliberately not caught here, so it keeps closing the dialog — while the camera overlay is
+ * open the scanner catches it first and closes only the overlay.
  */
 export function ProductQuickSearch({
   tenantId,
@@ -86,6 +103,21 @@ export function ProductQuickSearch({
   }
   const box = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLUListElement>(null)
+  const field = useRef<HTMLInputElement>(null)
+  // The code the camera read, until something is typed or a hit is taken. It carries the one
+  // sentence about a code the catalogue answers nothing to — a typed term gets the wording of
+  // the empty list instead.
+  const [scanned, setScanned] = useState<string | null>(null)
+  const [wasScanned, setWasScanned] = useState<string | null>(null)
+  // Opened while rendering, like the block above and for a related reason: the scanner hands
+  // the focus back to the field on its way out, and that focus handler still runs with the
+  // props of the render before the code arrived — for a position that had a product it would
+  // read it as still chosen and shut the list again. Done here it costs one render, and an
+  // effect that sets state would cost another.
+  if (wasScanned !== scanned) {
+    setWasScanned(scanned)
+    if (scanned !== null) setOpen(true)
+  }
 
   const settled = useDebouncedValue(term.trim(), DEBOUNCE)
   const query = listQuery({ search: settled, activeOnly: true, size: HITS, sort: 'name,asc' })
@@ -128,6 +160,20 @@ export function ProductQuickSearch({
   // pointing at a listbox that is not in the DOM tells a screen reader about a list that does
   // not exist.
   const showsList = open && !hits.isPending && !hits.isError && found.length > 0
+  // A scanned code the catalogue knows nothing about. Only while the rows on screen answer
+  // that code: during the debounce and while a request is out the list is empty for a moment,
+  // and saying "not found" then would be a guess.
+  const unknownCode =
+    scanned !== null &&
+    settled === scanned &&
+    answersTheTerm &&
+    !hits.isPending &&
+    found.length === 0
+      ? scanned
+      : null
+  // The one sentence about that code, in the wording the booking dialog uses. Empty where
+  // there is nothing to say — the region below carries it either way.
+  const scanMessage = unknownCode === null ? '' : unknownBarcodeMessage(unknownCode)
 
   // The marked hit has to be visible; with twenty of them the list scrolls.
   useEffect(() => {
@@ -135,8 +181,26 @@ export function ProductQuickSearch({
     list.current?.children[active]?.scrollIntoView?.({ block: 'nearest' })
   }, [showsList, active])
 
+  /**
+   * Takes what the camera read into the field, as if it had been typed: same debounce, same
+   * request, same list. Nothing is chosen here — the hit is only marked.
+   */
+  const onScan = (code: string) => {
+    // Trimmed, and that is not cosmetic: the search runs on `term.trim()`, so an untrimmed
+    // code would never be the term that came back and the sentence about it would never be
+    // said. Code 128 and QR payloads carry spaces and a closing newline as a matter of course.
+    const read = code.trim()
+    // Nothing but padding is nothing to search for. The scanner only turns away the empty
+    // string, so what is left after trimming can still be empty.
+    if (read === '') return
+    setScanned(read)
+    setMarked(0)
+    onTerm(read)
+  }
+
   const take = (product: Product, andAdd = false) => {
     setOpen(false)
+    setScanned(null)
     onChoose(product, andAdd)
   }
 
@@ -175,36 +239,58 @@ export function ProductQuickSearch({
         if (!box.current?.contains(event.relatedTarget)) setOpen(false)
       }}
     >
-      <TextField
-        ref={inputRef}
-        label="Produkt"
-        value={term}
-        onChange={(event) => {
-          onTerm(event.target.value)
-          setMarked(0)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(!chosen)}
-        onKeyDown={onKeyDown}
-        placeholder="Nummer oder Bezeichnung"
-        // The column searched over is 140 characters wide, so nothing longer can ever match.
-        // A pasted block of text would go out as a query string and come back as a 400, which
-        // the box would then report as a broken catalogue.
-        maxLength={140}
-        icon={<Search size={15} />}
-        action={hits.isFetching ? <Spinner size={14} label="Wird gesucht" /> : undefined}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={showsList}
-        aria-controls={showsList ? listId : undefined}
-        aria-autocomplete="list"
-        aria-activedescendant={showsList && active >= 0 ? optionId(active) : undefined}
-        hint={
-          chosen
-            ? 'Tippen sucht ein anderes Produkt.'
-            : 'Pfeiltasten wählen, Enter übernimmt.'
-        }
-      />
+      <div className="flex items-end gap-2">
+        <TextField
+          ref={mergeRefs(inputRef, field)}
+          label="Produkt"
+          value={term}
+          onChange={(event) => {
+            onTerm(event.target.value)
+            setScanned(null)
+            setMarked(0)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(!chosen)}
+          onKeyDown={onKeyDown}
+          placeholder="Nummer, Bezeichnung oder Strichcode"
+          // The column searched over is 140 characters wide, so nothing longer can ever match.
+          // A pasted block of text would go out as a query string and come back as a 400, which
+          // the box would then report as a broken catalogue.
+          maxLength={140}
+          icon={<Search size={15} />}
+          action={hits.isFetching ? <Spinner size={14} label="Wird gesucht" /> : undefined}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showsList}
+          aria-controls={showsList ? listId : undefined}
+          aria-autocomplete="list"
+          aria-activedescendant={showsList && active >= 0 ? optionId(active) : undefined}
+          className="flex-1"
+          hint={
+            chosen
+              ? 'Tippen sucht ein anderes Produkt.'
+              : 'Pfeiltasten wählen, Enter übernimmt.'
+          }
+        />
+        {/* Beside the field, not inside it: the frame already carries the spinner of the
+            running search, and where the browser reads no bar code there is no button here
+            at all. */}
+        <div className="pb-[22px]">
+          <BarcodeScanner onScan={onScan} onClose={() => field.current?.focus()} />
+        </div>
+      </div>
+
+      {/* Mounted for as long as the field is, with changing text, like the count region
+          below and for the same reason: a region that is inserted together with its text is
+          not a change a screen reader announces, and this sentence is the only word anybody
+          gets about a code that found nothing. While there is nothing to say it holds no
+          words and takes no room. */}
+      <p
+        role="status"
+        className={scanMessage === '' ? 'sr-only' : 'mt-1 text-[12px] text-warning'}
+      >
+        {scanMessage}
+      </p>
 
       {open && (
         <div className="mt-2 overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface shadow-card">
@@ -212,7 +298,7 @@ export function ProductQuickSearch({
               inserted together with its text is not a change a screen reader announces —
               and the moment the count matters is exactly the one where it changes. */}
           <p aria-live="polite" className="sr-only">
-            {countText(hits.isPending, hits.isError, found.length)}
+            {countText(hits.isPending, hits.isError, unknownCode !== null, found.length)}
           </p>
 
           {hits.isPending ? (
@@ -225,11 +311,16 @@ export function ProductQuickSearch({
               Der Produktkatalog konnte nicht gelesen werden.
             </p>
           ) : found.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] text-text-secondary">
-              {settled === ''
-                ? 'Kein aktives Produkt im Katalog.'
-                : `Für «${settled}» gibt es keinen Treffer.`}
-            </p>
+            // One thing is said once. For a scanned code the sentence above the box says it
+            // and names the code as well; the same news in other words right underneath reads
+            // as a second, different problem.
+            unknownCode !== null ? null : (
+              <p className="px-3 py-3 text-[13px] text-text-secondary">
+                {settled === ''
+                  ? 'Kein aktives Produkt im Katalog.'
+                  : `Für «${settled}» gibt es keinen Treffer.`}
+              </p>
+            )
           ) : (
             <ul
               ref={list}
@@ -255,8 +346,19 @@ export function ProductQuickSearch({
                     <span className="w-[86px] shrink-0 truncate font-mono text-[12px] text-text-tertiary">
                       <Marked text={product.productNumber ?? '-'} term={settled} />
                     </span>
-                    <span className="truncate text-[13px] text-text-primary">
-                      <Marked text={product.name} term={settled} />
+                    <span className="flex min-w-0 flex-col items-start">
+                      <span className="max-w-full truncate text-[13px] text-text-primary">
+                        <Marked text={product.name} term={settled} />
+                      </span>
+                      {/* The code under the name, and only where it is the whole reason the
+                          row is here: neither the number nor the name then carries what was
+                          read, and the article stands there looking like an arbitrary hit.
+                          The product list answers the same scan the same way. */}
+                      {onlyBarCodeMatched(product, settled) && (
+                        <span className="max-w-full truncate font-mono text-[11px] text-text-tertiary">
+                          <Marked text={product.eanCode ?? ''} term={settled} />
+                        </span>
+                      )}
                     </span>
                   </span>
                   <span className="shrink-0 text-[11px] text-text-tertiary">
@@ -293,16 +395,24 @@ export function ProductQuickSearch({
 /**
  * What the live region says about the open list.
  *
- * <p>The refusal is left out on purpose: it is announced by the `role="alert"` next to it,
- * and saying it twice is worse than saying it once.
+ * <p>Two cases are left out on purpose, both because something beside it already says what
+ * happened and saying it twice is worse than saying it once: the refusal has the
+ * `role="alert"`, and a scanned code the catalogue knows nothing about has the sentence above
+ * the box, which names the code as well.
  *
  * @param pending true while the first answer is still on its way
  * @param failed true where the catalogue could not be read
+ * @param saidElsewhere true where another region already reports what became of the search
  * @param count how many hits are on screen
  * @returns the sentence to announce, empty where there is nothing to say yet
  */
-function countText(pending: boolean, failed: boolean, count: number): string {
-  if (pending || failed) return ''
+function countText(
+  pending: boolean,
+  failed: boolean,
+  saidElsewhere: boolean,
+  count: number,
+): string {
+  if (pending || failed || saidElsewhere) return ''
   return count === 0 ? 'Kein Treffer' : `${count} Treffer`
 }
 
@@ -315,6 +425,25 @@ function countText(pending: boolean, failed: boolean, count: number): string {
 function searchOf(term: string): string {
   const trimmed = term.trim()
   return trimmed === '' ? '' : `?suche=${encodeURIComponent(trimmed)}`
+}
+
+/**
+ * Lets the field be held by the dialog and by this component at the same time.
+ *
+ * <p>The dialog wants the focus after a position was added; this component wants it back
+ * after the camera closed.
+ */
+function mergeRefs(
+  outer: Ref<HTMLInputElement> | undefined,
+  inner: RefObject<HTMLInputElement | null>,
+): Ref<HTMLInputElement> {
+  return (element: HTMLInputElement | null) => {
+    inner.current = element
+    if (typeof outer === 'function') outer(element)
+    // What is left of the Ref union once the callback form is handled is the object form:
+    // React 19 knows no string refs any more, and the type still allows for one.
+    else if (outer) (outer as RefObject<HTMLInputElement | null>).current = element
+  }
 }
 
 /** A text with the part the search term matched set off from the rest. */

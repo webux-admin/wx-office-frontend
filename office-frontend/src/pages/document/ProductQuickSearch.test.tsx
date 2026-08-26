@@ -14,6 +14,16 @@ import { ProductQuickSearch } from './ProductQuickSearch'
 
 const TENANT = 1
 const BACK = originState('/auftraege/42', 'Auftrag')
+/** The bar code on the cable, the way a scanner reads it off the shelf. */
+const EAN = '7612345678901'
+/** A bar code no article of this tenant carries. */
+const UNKNOWN_EAN = '7690000000005'
+/**
+ * The same code as a code 128 or QR payload delivers it: with a space in front and the
+ * newline the reader appends. Nothing about that is unusual, and none of it is part of the
+ * number.
+ */
+const PADDED_UNKNOWN_EAN = ` ${UNKNOWN_EAN}\n`
 
 const PRODUCTS: Product[] = [
   {
@@ -40,6 +50,8 @@ const PRODUCTS: Product[] = [
     id: 9,
     productNumber: 'K-010',
     name: 'Kabel',
+    // The only article with a bar code, so a scan finds exactly one thing.
+    eanCode: EAN,
     productType: 'GOODS',
     unit: 'PIECE',
     unitLabel: 'Stk',
@@ -116,7 +128,10 @@ function stubFetch(status = 200) {
       (product) =>
         term === '' ||
         product.name.toLowerCase().includes(decodeURIComponent(term)) ||
-        (product.productNumber ?? '').toLowerCase().includes(decodeURIComponent(term)),
+        (product.productNumber ?? '').toLowerCase().includes(decodeURIComponent(term)) ||
+        // The bar code is a search condition of the backend as well: a scanner reads the EAN
+        // and not the product number, and without it the read is right and the search empty.
+        (product.eanCode ?? '').includes(decodeURIComponent(term)),
     )
     const body =
       status === 200
@@ -169,6 +184,11 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   vi.unstubAllGlobals()
+  delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector
+  // Put on the navigator with a property of its own, which `vi.unstubAllGlobals` does not
+  // reach — without this the camera outlives the test that asked for it.
+  delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices
+  vi.useRealTimers()
 })
 
 /** What the field reported back, so a test can check what was chosen. */
@@ -245,6 +265,19 @@ function type(value: string) {
   })
 }
 
+/**
+ * Leaves the field the way the browser does when the focus moves on.
+ *
+ * <p>React listens on `focusout`, not on `blur`: only the first of the two bubbles up to
+ * the root the field is drawn in. Without a related target the focus went nowhere near the
+ * block, which is what closes the list.
+ */
+function leaveField() {
+  act(() => {
+    input().dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+  })
+}
+
 function press(key: string, modifier: 'ctrl' | undefined = undefined) {
   act(() => {
     input().dispatchEvent(
@@ -252,6 +285,65 @@ function press(key: string, modifier: 'ctrl' | undefined = undefined) {
     )
   })
 }
+
+/** A camera that hands out a stream nobody has to close for real. */
+function stubCamera() {
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia: () => Promise.resolve({ getTracks: () => [{ stop: () => undefined }] }) },
+  })
+}
+
+/** A browser that can read bar codes and always sees the same picture. */
+function stubDetector(codes: { rawValue: string }[]) {
+  ;(window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector = class {
+    detect() {
+      return Promise.resolve(codes)
+    }
+  }
+}
+
+/** The camera button, or nothing where the browser reads no bar code. */
+const cameraButton = () =>
+  [...container.querySelectorAll('button')].find(
+    (element) => element.getAttribute('aria-label') === 'Mit der Kamera scannen',
+  )
+
+/** Opens the camera, lets it read what the stub sees, and waits out the search that follows. */
+async function scan() {
+  await act(async () => {
+    cameraButton()?.click()
+  })
+  // The camera is asked for on the click, so the stream has to settle before the first look.
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    vi.advanceTimersByTime(300)
+  })
+  await act(async () => {
+    await Promise.resolve()
+  })
+  await settle()
+}
+
+/**
+ * A dialog around the field, as far as Escape is concerned: Dialog.tsx listens on the
+ * document and closes on Escape, so a press that gets that far would close the whole mask.
+ */
+function listenLikeADialog(): { closed: number; stop: () => void } {
+  const state: { closed: number; stop: () => void } = { closed: 0, stop: () => undefined }
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') state.closed += 1
+  }
+  document.addEventListener('keydown', onKeyDown)
+  state.stop = () => document.removeEventListener('keydown', onKeyDown)
+  return state
+}
+
+/** The region the sentence about a scanned code lives in, mounted whether it says anything
+ * or not. Narrowed to a `p`: the spinner of the running search is a `span` with the same
+ * role. */
+const scanRegion = () => container.querySelector('p[role="status"]')
 
 /** What the live region of the open box currently announces. */
 const announced = () =>
@@ -343,6 +435,34 @@ describe('ProductQuickSearch', () => {
 
     const marked = [...container.querySelectorAll('mark')].map((one) => one.textContent)
     expect(marked).toContain('Wartung')
+  })
+
+  /**
+   * The list marks what the term matched, and on a scanned code it has nothing to mark:
+   * neither the number nor the name carries a bar code. The row would stand there as an
+   * article nobody can hold against what was read — the same reason the product list shows
+   * the code, answered the same way.
+   */
+  it('productQuickSearchShowsTheBarCodeOfAHitFoundByItTest', async () => {
+    await render()
+    type(EAN)
+    await settle()
+
+    expect(options()).toHaveLength(1)
+    expect(options()[0].textContent).toContain(EAN)
+    // And marked like any other hit, so the eye finds the digits it just read.
+    const marked = [...options()[0].querySelectorAll('mark')].map((one) => one.textContent)
+    expect(marked).toEqual([EAN])
+  })
+
+  it('productQuickSearchLeavesTheBarCodeOffAHitFoundByNameTest', async () => {
+    await render()
+    type('kabel')
+    await settle()
+
+    // The name carries the term, so the row explains itself and the code stays out of the way.
+    expect(options()).toHaveLength(1)
+    expect(options()[0].textContent).not.toContain(EAN)
   })
 
   it('productQuickSearchIsAComboboxTest', async () => {
@@ -573,5 +693,197 @@ describe('ProductQuickSearch', () => {
     await render()
 
     expect(text()).toContain('Kein aktives Produkt im Katalog.')
+  })
+
+  /**
+   * No greyed out button that explains itself after the click: where the browser reads no bar
+   * code — today above all iPhone and Firefox — the hand scanner types into the same field,
+   * and there is nothing to press.
+   */
+  it('productSearchScannerHiddenWithoutSupportTest', async () => {
+    await render()
+
+    expect(cameraButton()).toBeUndefined()
+    // The field itself is untouched, so what a hand scanner types still arrives.
+    expect(input()).not.toBeNull()
+  })
+
+  /** What the camera read stands in the field and goes out as the search term. */
+  it('productSearchScannerFillsSearchFieldTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: EAN }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await render()
+
+    await scan()
+
+    expect(input().value).toBe(EAN)
+    expect(asked.at(-1)).toContain(`search=${EAN}`)
+    // The overlay is out of the way once it read something.
+    expect(text()).not.toContain('Strichcode vor die Kamera halten.')
+  })
+
+  /**
+   * Exactly one hit is marked and waits for Enter. Taking it over on its own would put an
+   * article on the document that nobody looked at, and that costs more than one keystroke.
+   */
+  it('productSearchScannerPreselectsSingleHitTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: EAN }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const calls = await render()
+
+    await scan()
+
+    expect(options()).toHaveLength(1)
+    expect(options()[0].textContent).toContain('Kabel')
+    // Nothing was taken over; the confirmation is the user's.
+    expect(calls.chosen).toEqual([])
+
+    // That it is marked is what Enter proves without an arrow key first. An `aria-selected`
+    // on the only row of the list would say nothing: the mark is clamped to the last row, so
+    // it sits on row one whether the scan moved it or not — that is
+    // productSearchScannerMarksTheFirstHitTest, on a list with two.
+    press('Enter')
+
+    expect(calls.chosen.map((product) => product.name)).toEqual(['Kabel'])
+  })
+
+  /** A code nothing matches stays in the field, so it can be read and corrected. */
+  it('productSearchScannerUnknownCodeShowsMessageTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: UNKNOWN_EAN }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await render()
+
+    await scan()
+
+    expect(input().value).toBe(UNKNOWN_EAN)
+    expect(options()).toHaveLength(0)
+    expect(text()).toContain('Kein Artikel zu 7690000000005 gefunden.')
+    // And that is the whole of it. The empty list and the count region would report the same
+    // find in two further wordings, which reads as three problems instead of one.
+    expect(text()).not.toContain('gibt es keinen Treffer')
+    expect(announced()).toBe('')
+
+    // Typing takes the message away again: it belongs to the code that was read.
+    type('kabel')
+    await settle()
+
+    expect(text()).not.toContain('Kein Artikel zu 7690000000005 gefunden.')
+  })
+
+  /**
+   * The sentence has to arrive in a region that was already on the page. One that is inserted
+   * together with its text is no change to a screen reader, which passes it by (ADR-0008) —
+   * and then a blind user is left with a code in the field and no reason for it.
+   */
+  it('productSearchScannerAnnouncesTheUnknownCodeTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: UNKNOWN_EAN }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await render()
+    const region = scanRegion()
+    expect(region).not.toBeNull()
+    expect(region?.textContent).toBe('')
+
+    await scan()
+
+    // The same node as before, with other words in it.
+    expect(scanRegion()).toBe(region)
+    expect(region?.textContent).toBe('Kein Artikel zu 7690000000005 gefunden.')
+
+    // And it outlives the box. The list hangs on the focus and is gone the moment it moves
+    // on; the sentence about the code does not — it belongs to the code still standing in
+    // the field, which is what gets corrected next. A region that lived inside the box would
+    // take the only word about that code with it.
+    leaveField()
+
+    expect(text()).not.toContain('In der Produktmaske suchen')
+    expect(scanRegion()).toBe(region)
+    expect(region?.textContent).toBe('Kein Artikel zu 7690000000005 gefunden.')
+  })
+
+  /**
+   * What a reader hands over is not always the bare number: code 128 and QR payloads carry
+   * spaces and a closing newline. Untrimmed, the code never equals the term the search ran
+   * with, and the sentence about it stays away for good.
+   */
+  it('productSearchScannerTrimsTheScannedCodeTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: PADDED_UNKNOWN_EAN }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await render()
+
+    await scan()
+
+    expect(input().value).toBe(UNKNOWN_EAN)
+    expect(asked.at(-1)).toContain(`search=${UNKNOWN_EAN}`)
+    expect(text()).toContain('Kein Artikel zu 7690000000005 gefunden.')
+  })
+
+  /**
+   * A scan marks the first of what it found, wherever the mark stood before. Two hits are
+   * needed to see it: on a single hit the mark is clamped onto that row anyway.
+   */
+  it('productSearchScannerMarksTheFirstHitTest', async () => {
+    stubCamera()
+    // An article label rather than an EAN — code 128 carries the product number, and "P-"
+    // begins two of them.
+    stubDetector([{ rawValue: 'P-' }])
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await render()
+    press('ArrowDown')
+    press('ArrowDown')
+    expect(options()[2].getAttribute('aria-selected')).toBe('true')
+
+    await scan()
+
+    expect(options()).toHaveLength(2)
+    expect(options()[0].getAttribute('aria-selected')).toBe('true')
+    expect(options()[1].getAttribute('aria-selected')).toBe('false')
+    expect(input().getAttribute('aria-activedescendant')).toBe(options()[0].id)
+  })
+
+  /** Escape while the camera is open belongs to the overlay, not to the dialog behind it. */
+  it('productSearchScannerEscapeClosesTheOverlayTest', async () => {
+    stubCamera()
+    // A picture without a code, so the overlay is still open when Escape arrives.
+    stubDetector([])
+    await render()
+    await act(async () => {
+      cameraButton()?.click()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(text()).toContain('Strichcode vor die Kamera halten.')
+    const dialog = listenLikeADialog()
+
+    press('Escape')
+
+    expect(text()).not.toContain('Strichcode vor die Kamera halten.')
+    // The mask behind it stays open, and the focus is back where the typing goes on.
+    expect(dialog.closed).toBe(0)
+    expect(document.activeElement).toBe(input())
+    dialog.stop()
+  })
+
+  /**
+   * And with no overlay open Escape goes on closing the dialog. The field catches it as
+   * little as it did before — one key, one effect.
+   */
+  it('productQuickSearchEscapeStillClosesTheDialogTest', async () => {
+    stubCamera()
+    stubDetector([{ rawValue: EAN }])
+    await render()
+    expect(cameraButton()).toBeDefined()
+    const dialog = listenLikeADialog()
+
+    press('Escape')
+
+    expect(dialog.closed).toBe(1)
+    dialog.stop()
   })
 })

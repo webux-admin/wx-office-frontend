@@ -13,7 +13,6 @@ import {
   stockAt,
   toBookPayload,
   toTransferPayload,
-  unknownBarcodeMessage,
   type BookStockForm,
 } from './bookStockForm'
 
@@ -350,11 +349,5 @@ describe('productLabel', () => {
 
   it('productLabelWithoutAProductTest', () => {
     expect(productLabel(null)).toBe('')
-  })
-})
-
-describe('unknownBarcodeMessage', () => {
-  it('unknownBarcodeMessageTest', () => {
-    expect(unknownBarcodeMessage('7612345678901')).toBe('Kein Artikel zu 7612345678901 gefunden.')
   })
 })

@@ -236,18 +236,6 @@ export function shortfallWarning(
 }
 
 /**
- * What the mask says about a scanned code nothing matches.
- *
- * <p>The field keeps the code all the same, so it can be corrected instead of typed again.
- *
- * @param code the string the scanner or the hand scanner delivered
- * @returns the German sentence
- */
-export function unknownBarcodeMessage(code: string): string {
-  return `Kein Artikel zu ${code} gefunden.`
-}
-
-/**
  * Checks what can be checked here, before anything is sent.
  *
  * <p>The decimal rule of the unit and the shortfall policy of the location are the server's

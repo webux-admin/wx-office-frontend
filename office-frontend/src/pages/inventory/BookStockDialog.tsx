@@ -15,6 +15,7 @@ import {
   stockBalancesUrl,
   stockMovementsUrl,
   stockTransfersUrl,
+  unknownBarcodeMessage,
 } from '../../lib/inventory'
 import { listQuery } from '../../lib/paging'
 import type {
@@ -40,7 +41,6 @@ import {
   showsLocationFields,
   toBookPayload,
   toTransferPayload,
-  unknownBarcodeMessage,
   type BookingKind,
   type BookStockForm,
 } from './bookStockForm'

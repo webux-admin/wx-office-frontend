@@ -18,6 +18,7 @@ import { formatAmount, formatCount } from '../lib/format'
 import { shortLabelForCode } from '../lib/masterData'
 import { optionalOriginOf, originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
+import { onlyBarCodeMatched } from '../lib/productSearch'
 import type { Page, Product } from '../lib/types'
 import { useCatalogueLabel, useMasterDataEntries } from '../masterdata/useMasterData'
 
@@ -80,13 +81,18 @@ function ProductList({ tenantId }: { tenantId: number }) {
       header: 'Bezeichnung',
       sortKey: 'name',
       render: (product) => (
-        <Link
-          to={`/produkte/${product.id}`}
-          state={ORIGIN}
-          className="font-medium transition-colors hover:text-accent-text"
-        >
-          {product.name}
-        </Link>
+        <span className="inline-flex flex-col items-start">
+          <Link
+            to={`/produkte/${product.id}`}
+            state={ORIGIN}
+            className="font-medium transition-colors hover:text-accent-text"
+          >
+            {product.name}
+          </Link>
+          {onlyBarCodeMatched(product, search.term) && (
+            <span className="font-mono text-[11px] text-text-tertiary">{product.eanCode}</span>
+          )}
+        </span>
       ),
     },
     {
@@ -160,7 +166,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
                 search.setValue(next)
                 setPage(0)
               }}
-              placeholder="Bezeichnung oder Artikelnummer"
+              placeholder="Nummer, Bezeichnung oder Strichcode"
               maxLength={140}
             />
             <CheckboxField

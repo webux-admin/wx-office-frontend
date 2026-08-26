@@ -18,6 +18,9 @@ const GROUPS: PriceGroup[] = [
   { id: 4, code: 'HANDEL', name: 'Handel' },
 ]
 
+/** The bar code of the cable — what a scanner reads instead of the product number. */
+const EAN = '7612345678901'
+
 const ROWS: PriceEntryRow[] = [
   {
     productId: 7,
@@ -35,7 +38,14 @@ const ROWS: PriceEntryRow[] = [
     ownPrice: 0.4,
     ownValidFrom: '2020-01-01',
   },
-  { productId: 11, productNumber: 'K-001', name: 'Kabel', effectivePrice: 12, origin: 'BASE' },
+  {
+    productId: 11,
+    productNumber: 'K-001',
+    name: 'Kabel',
+    eanCode: EAN,
+    effectivePrice: 12,
+    origin: 'BASE',
+  },
 ]
 
 /** A session that may read and write prices. */
@@ -72,8 +82,15 @@ function stubFetch() {
         }),
       )
     }
+    const term = decodeURIComponent(/[?&]search=([^&]*)/.exec(url)?.[1] ?? '').toLowerCase()
+    // The same three columns the server matches over, bar code included (ADR-0072).
+    const found = ROWS.filter((row) =>
+      [row.name, row.productNumber ?? '', row.eanCode ?? ''].some((column) =>
+        column.toLowerCase().includes(term),
+      ),
+    )
     const body = url.includes('/price-entry')
-      ? { content: ROWS, page: 0, size: 50, totalElements: ROWS.length, totalPages: 1, sort: '' }
+      ? { content: found, page: 0, size: 50, totalElements: found.length, totalPages: 1, sort: '' }
       : url.includes('/price-groups')
         ? GROUPS
         : []
@@ -127,6 +144,14 @@ async function settle(ms = 50) {
 /** The price fields of the table, in the order they are read. */
 const priceFields = () =>
   [...container.querySelectorAll('tbody input')] as HTMLInputElement[]
+
+const rows = () => [...container.querySelectorAll('tbody tr')]
+
+/** The catalogue search, found by its wording rather than by its place among the fields. */
+const searchField = () =>
+  container.querySelector(
+    'input[placeholder="Nummer, Bezeichnung oder Strichcode"]',
+  ) as HTMLInputElement
 
 function type(control: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(control, value)
@@ -221,6 +246,28 @@ describe('PriceEntryPage', () => {
 
     expect(saved).toHaveLength(0)
     expect(container.textContent).toContain('ist keine Zahl')
+  })
+
+  it('priceEntryPageShowsTheBarCodeOfARowFoundByItTest', async () => {
+    await render()
+
+    type(searchField(), EAN)
+    await settle(300)
+
+    // Neither the number nor the name carries what was scanned, so without the code on the
+    // row the article looks like an arbitrary hit.
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].textContent).toContain(EAN)
+  })
+
+  it('priceEntryPageLeavesTheBarCodeOffARowFoundByNameTest', async () => {
+    await render()
+
+    type(searchField(), 'kabel')
+    await settle(300)
+
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].textContent).not.toContain(EAN)
   })
 
   it('priceEntryPageAsksBeforeAChangeThatWouldLoseWhatWasTypedTest', async () => {

@@ -44,6 +44,7 @@ import {
   stocktakeProtocolUrl,
   stockTransfersUrl,
   stockUrl,
+  unknownBarcodeMessage,
   valueColumnNote,
   shortageCauseLabel,
   shortageCauseTone,
@@ -644,6 +645,12 @@ describe('availabilityHint', () => {
     })
 
     expect(availabilityHint(split)).toBe('Bestand 9 · 4 reserviert')
+  })
+})
+
+describe('unknownBarcodeMessage', () => {
+  it('unknownBarcodeMessageTest', () => {
+    expect(unknownBarcodeMessage('7612345678901')).toBe('Kein Artikel zu 7612345678901 gefunden.')
   })
 })
 

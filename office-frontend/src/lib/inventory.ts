@@ -284,6 +284,20 @@ export function availabilityHint(availability: ProductAvailability | undefined):
 }
 
 /**
+ * What a mask says about a scanned code nothing matches.
+ *
+ * <p>Shared wording: the booking dialog and the product search of a position both answer a
+ * scan, and one gesture must not come back in two sentences. The field keeps the code all
+ * the same, so it can be corrected instead of typed again.
+ *
+ * @param code the string the camera or the hand scanner delivered
+ * @returns the German sentence
+ */
+export function unknownBarcodeMessage(code: string): string {
+  return `Kein Artikel zu ${code} gefunden.`
+}
+
+/**
  * Query key of the stock location list.
  *
  * <p>Built here rather than typed out in the screens, so a rename has exactly one place.
