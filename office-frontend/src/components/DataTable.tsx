@@ -24,6 +24,15 @@ export type Column<T> = {
    * answers 400 for anything it does not know.
    */
   sortKey?: string
+  /**
+   * Drops the column below the given breakpoint, header and cells together.
+   *
+   * <p>For a column that explains a row rather than identifies it — a unit, a cost. On a phone
+   * the table keeps the two or three columns the screen is about; the rest come back as soon
+   * as there is room. Set it only where the row still reads without the column, and only on
+   * the same route: a narrow screen gets fewer columns, never a second mask.
+   */
+  hideBelow?: 'sm'
   render: (row: T) => ReactNode
 }
 
@@ -135,10 +144,20 @@ export function DataTable<T>({
   if (loading) return <LoadingBlock />
   if (rows.length === 0) return <>{empty}</>
 
+  // A table that gives columns up on a narrow screen means to fit on it. Keeping the floor
+  // that makes the wider tables scroll instead of squeezing would undo exactly that, so it
+  // starts at the same breakpoint the columns come back at. Tables without such a column keep
+  // the floor they always had.
+  const narrows = columns.some((column) => column.hideBelow)
+
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-[13px]">
+        <table
+          className={`w-full border-collapse text-[13px] ${
+            narrows ? 'sm:min-w-[640px]' : 'min-w-[640px]'
+          }`}
+        >
           <thead>
             <tr className="border-b border-line-subtle">
               {columns.map((column) => {
@@ -161,7 +180,7 @@ export function DataTable<T>({
                     }
                     className={`text-overline whitespace-nowrap px-5 py-2.5 font-medium text-text-tertiary ${
                       column.align === 'right' ? 'text-right' : 'text-left'
-                    } ${column.width ?? ''}`}
+                    } ${column.width ?? ''} ${column.hideBelow ? 'hidden sm:table-cell' : ''}`}
                   >
                     {sortable ? (
                       <button
@@ -205,7 +224,7 @@ export function DataTable<T>({
                       key={column.key}
                       className={`px-5 py-2.5 align-middle ${
                         column.align === 'right' ? 'text-right font-mono tabular-nums' : ''
-                      }`}
+                      } ${column.hideBelow ? 'hidden sm:table-cell' : ''}`}
                     >
                       {column.render(row)}
                     </td>

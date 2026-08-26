@@ -189,6 +189,21 @@ export function toIsoDate(today: Date = new Date()): string {
 }
 
 /**
+ * Whether a date field holds a whole day, written as `yyyy-MM-dd`.
+ *
+ * <p>Shape only, and on purpose: a `<input type="date">` never hands out the 31st of February,
+ * and whether a day may be asked about at all is a question for the endpoint. What this catches
+ * is the empty and the half entered field — a request built from one of those is malformed and
+ * is better not sent.
+ *
+ * @param value the raw field value
+ * @returns true once the field holds a whole ISO day
+ */
+export function isCompleteIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+/**
  * Builds the initials shown in an avatar.
  *
  * <p>Takes the first letter of the first and the last word, so "Martin Muster" becomes MM
@@ -202,4 +217,34 @@ export function initialsOf(name: string): string {
   if (words.length === 0) return ''
   if (words.length === 1) return words[0].slice(0, 1).toUpperCase()
   return (words[0][0] + words[words.length - 1][0]).toUpperCase()
+}
+
+/** Units of {@link formatByteCount} above the byte, from the smallest upwards. */
+const BYTE_UNITS = ['KB', 'MB', 'GB'] as const
+
+/** One step to the next unit. 1024, because that is the number a file manager shows. */
+const BYTE_STEP = 1024
+
+const BYTE_SIZE = new Intl.NumberFormat('de-CH', { maximumFractionDigits: 1 })
+
+/**
+ * Formats the size of a file, for example an archived PDF, as `128 KB`.
+ *
+ * <p>Below a kilobyte the exact count is shown, above it one decimal: a file that grows by a
+ * few bytes should not read as a different one.
+ *
+ * @param value the number of bytes, `undefined` for an unknown size
+ * @returns the formatted size, or a hyphen when there is nothing to show
+ */
+export function formatByteCount(value: number | undefined | null): string {
+  if (value === undefined || value === null || Number.isNaN(value) || value < 0) return '-'
+  if (value < BYTE_STEP) return `${COUNT.format(value)} ${value === 1 ? 'Byte' : 'Bytes'}`
+
+  let size = value / BYTE_STEP
+  let unit = 0
+  while (size >= BYTE_STEP && unit < BYTE_UNITS.length - 1) {
+    size /= BYTE_STEP
+    unit += 1
+  }
+  return `${BYTE_SIZE.format(size)} ${BYTE_UNITS[unit]}`
 }

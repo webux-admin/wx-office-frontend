@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatAmount,
+  formatByteCount,
   formatCount,
   formatDate,
   formatDateTime,
@@ -9,6 +10,7 @@ import {
   formatQuantity,
   formatRelativeTime,
   initialsOf,
+  isCompleteIsoDate,
   parseDecimal,
   toIsoDate,
 } from './format'
@@ -200,6 +202,33 @@ describe('toIsoDate', () => {
   })
 })
 
+describe('isCompleteIsoDate', () => {
+  it('isCompleteIsoDateTest', () => {
+    expect(isCompleteIsoDate('2026-08-18')).toBe(true)
+  })
+
+  /** What a date field holds until somebody has entered a day. */
+  it('isCompleteIsoDateWithAnEmptyFieldTest', () => {
+    expect(isCompleteIsoDate('')).toBe(false)
+  })
+
+  it('isCompleteIsoDateWithAHalfTypedDayTest', () => {
+    expect(isCompleteIsoDate('2026-08')).toBe(false)
+    expect(isCompleteIsoDate('2026-8-1')).toBe(false)
+    expect(isCompleteIsoDate('18.08.2026')).toBe(false)
+  })
+
+  /** A day and not a moment: what goes to the endpoint as `date` carries no time. */
+  it('isCompleteIsoDateWithATimeTest', () => {
+    expect(isCompleteIsoDate('2026-08-18T14:03')).toBe(false)
+  })
+
+  /** Whether the day may be asked about is the answer of the endpoint, not of this shape check. */
+  it('isCompleteIsoDateInTheFutureTest', () => {
+    expect(isCompleteIsoDate('2099-12-31')).toBe(true)
+  })
+})
+
 describe('formatRelativeTime', () => {
   const NOW = new Date('2026-08-18T12:00:00Z')
 
@@ -238,5 +267,59 @@ describe('formatRelativeTime', () => {
 
   it('formatRelativeTimeWithUnexpectedValueTest', () => {
     expect(formatRelativeTime('irgendwann', NOW)).toBe('irgendwann')
+  })
+})
+
+describe('formatByteCount', () => {
+  it('formatByteCountTest', () => {
+    expect(formatByteCount(131072)).toBe('128 KB')
+  })
+
+  /** Below a kilobyte the exact count, so a file of a few hundred bytes is not «0.1 KB». */
+  it('formatByteCountBelowAKilobyteTest', () => {
+    expect(formatByteCount(512)).toBe('512 Bytes')
+    expect(formatByteCount(1023)).toBe(`1${GROUP}023 Bytes`)
+  })
+
+  /** One byte is one byte; «1 Bytes» is how nobody writes. */
+  it('formatByteCountWithOneByteTest', () => {
+    expect(formatByteCount(1)).toBe('1 Byte')
+  })
+
+  /** An archived PDF is never empty, but a zero must not read as a missing size either. */
+  it('formatByteCountWithZeroTest', () => {
+    expect(formatByteCount(0)).toBe('0 Bytes')
+  })
+
+  it('formatByteCountAtTheUnitBoundaryTest', () => {
+    expect(formatByteCount(1024)).toBe('1 KB')
+    expect(formatByteCount(1048576)).toBe('1 MB')
+    expect(formatByteCount(1073741824)).toBe('1 GB')
+  })
+
+  /** One decimal above the kilobyte: a file that grows by a few bytes stays the same file. */
+  it('formatByteCountRoundsToOneDecimalTest', () => {
+    expect(formatByteCount(1536)).toBe('1.5 KB')
+    expect(formatByteCount(1587)).toBe('1.5 KB')
+  })
+
+  /**
+   * `inventory_stocktake_archive.byte_count` is an `INTEGER`, so this is the largest size that
+   * can ever arrive — and it still lands inside the last unit rather than running off the end.
+   */
+  it('formatByteCountAtTheLargestSizeTest', () => {
+    expect(formatByteCount(2147483647)).toBe('2 GB')
+  })
+
+  /** Absent while a count list is not booked: there is no archived file to size up yet. */
+  it('formatByteCountWithoutValueTest', () => {
+    expect(formatByteCount(undefined)).toBe('-')
+    expect(formatByteCount(null)).toBe('-')
+  })
+
+  it('formatByteCountWithUnexpectedValueTest', () => {
+    expect(formatByteCount(Number.NaN)).toBe('-')
+    // A file cannot have fewer than no bytes, and «-1 Bytes» would be printed as a fact.
+    expect(formatByteCount(-1)).toBe('-')
   })
 })

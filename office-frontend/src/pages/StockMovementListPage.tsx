@@ -52,7 +52,9 @@ function StockMovements({ tenantId }: { tenantId: number }) {
   const sourceLabel = useCatalogueLabel(tenantId, 'movement-source-kind')
 
   // A link may arrive with the journal already narrowed to one product and location — that is
-  // what every number in the product mask points at.
+  // what every number in the product mask points at. The stock-as-of report adds «bis» to
+  // that: its links carry the cut-off day, so the journal opens on the same period the
+  // report was calculated from instead of showing what was booked after it.
   const [params] = useSearchParams()
   const search = useQuickSearch('')
   const [productId] = useState(params.get('produkt') ?? '')
@@ -62,7 +64,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
   const [locationId, setLocationId] = useState(params.get('lagerort') ?? '')
   const [reason, setReason] = useState('')
   const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [to, setTo] = useState(params.get('bis') ?? '')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('bookedOn,desc')
   const [booking, setBooking] = useState(false)

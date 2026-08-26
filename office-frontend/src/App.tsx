@@ -7,6 +7,7 @@ import { AppShell } from './layout/AppShell'
 import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
+import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
 
@@ -48,6 +49,7 @@ const StocktakeListPage = lazy(() => import('./pages/StocktakeListPage').then((m
 const StocktakePage = lazy(() => import('./pages/StocktakePage').then((module) => ({ default: module.StocktakePage })))
 const StockMovementListPage = lazy(() => import('./pages/StockMovementListPage').then((module) => ({ default: module.StockMovementListPage })))
 const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
+const StockAsOfPage = lazy(() => import('./pages/StockAsOfPage').then((module) => ({ default: module.StockAsOfPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
 const TenantPage = lazy(() => import('./pages/TenantPage').then((module) => ({ default: module.TenantPage })))
 const UserListPage = lazy(() => import('./pages/UserListPage').then((module) => ({ default: module.UserListPage })))
@@ -109,6 +111,10 @@ export default function App() {
                 <Route path="/lagerorte" element={<StockLocationListPage />} />
                 <Route path="/inventuren" element={<StocktakeListPage />} />
                 <Route path="/inventuren/:id" element={<StocktakePage />} />
+                {/* The neighbours above write their path out, this one takes it from
+                    lib/inventory: the address is already a constant there, and menu and route
+                    read the same one so neither can move without the other. */}
+                <Route path={STOCK_AS_OF_PATH} element={<StockAsOfPage />} />
 
                 <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 

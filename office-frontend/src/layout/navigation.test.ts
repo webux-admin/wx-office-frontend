@@ -56,8 +56,9 @@ describe('NAV_GROUPS', () => {
 
   /**
    * The working screens of the inventory stand together and in the order somebody uses them:
-   * what lies there, what is missing, what is spoken for, and the journal that explains them.
-   * The setup screens belong one group lower and are not part of this one.
+   * what lies there, what is missing, what is spoken for, the journal that explains them, the
+   * counts and the report on a cut-off date the counts are held against. The setup screens
+   * belong one group lower and are not part of this one.
    */
   it('navGroupsCoverTheInventoryGroupTest', () => {
     const lager = NAV_GROUPS.find((group) => group.title === 'Lager')
@@ -69,6 +70,7 @@ describe('NAV_GROUPS', () => {
       '/reservierungen',
       '/lagerbewegungen',
       '/inventuren',
+      '/inventar',
     ])
     for (const entry of entries) {
       expect(entry.permission).toBe('INVENTORY_READ')

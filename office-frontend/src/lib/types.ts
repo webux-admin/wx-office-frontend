@@ -1907,6 +1907,14 @@ export type Stocktake = {
   differenceSum?: number
   openedAt?: string
   postedAt?: string
+  /**
+   * How big the archived inventory protocol is, in bytes. Absent while the list is not booked,
+   * and absent in the list, which does not read the archive — so a mask can name the size of
+   * the file it offers without fetching it.
+   */
+  protocolByteCount?: number
+  /** When that protocol was written, which is the moment the list was booked. */
+  protocolCreatedAt?: string
   createdBy?: string
   changedBy?: string
 }
@@ -1972,4 +1980,49 @@ export type StocktakeStatusEntry = {
   changedAt: string
   changedBy: string
   note?: string
+}
+
+/**
+ * One line of the stock report for a cut-off date, as `StockAsOfDto` sends it.
+ *
+ * <p>Worked out from the movement journal, never from the projection: a balance sheet asks
+ * about the 31st of December, and the projection knows today (backend ADR-0071). Number, name
+ * and unit are the ones frozen onto the last movement up to that day, so a report on an old
+ * date shows the wording of back then.
+ */
+export type StockAsOfEntry = {
+  productId: number
+  productNumber?: string
+  productName: string
+  locationId: number
+  locationCode: string
+  locationName: string
+  quantity: number
+  unitShortName?: string
+  /** The last cost recorded up to the cut-off date; absent where none ever was. */
+  unitCost?: number
+  unitCostCurrency?: string
+  /** Quantity times cost. Absent where there is no cost — never 0. */
+  lineValue?: number
+}
+
+/**
+ * What the whole stock report for a cut-off date adds up to, as `StockAsOfSummaryDto` sends it.
+ *
+ * <p>`showsValue` comes from the server rather than being worked out here: the all-or-nothing
+ * rule of the value column belongs in one place.
+ */
+export type StockAsOfSummary = {
+  asOf: string
+  /** When it was worked out. The report is a recalculation and may read differently tomorrow. */
+  generatedAt: string
+  lineCount: number
+  unvaluedLineCount: number
+  foreignCurrencyLineCount: number
+  baseCurrencyCode?: string
+  /** Absent as soon as one line cannot be valued. A total that leaves lines out is no total. */
+  totalValue?: number
+  /** Bookings dated up to the cut-off date that were entered after it. There is no period lock. */
+  backdatedMovements: number
+  showsValue: boolean
 }

@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { ProductAvailability, StockLocation, StockShortfall } from './types'
+import type {
+  Page,
+  ProductAvailability,
+  StockAsOfEntry,
+  StockAsOfSummary,
+  StockLocation,
+  StockShortfall,
+} from './types'
 import {
   INVENTORY_RIGHTS,
   availabilityAt,
+  backdatedMovementsText,
   availabilityHint,
   availabilityKey,
   availabilityUrl,
@@ -12,7 +20,9 @@ import {
   inventoryUrl,
   isReversible,
   manualReasonsFor,
+  missingAsOfDateNote,
   showsLocationChoice,
+  stockAsOfPageToShow,
   stockBalanceKey,
   stockBalancesUrl,
   stockLocationLabel,
@@ -24,9 +34,17 @@ import {
   stockMovementsUrl,
   stockShortageListKey,
   stockReversalLabel,
+  stockAsOfListKey,
+  stockAsOfPdfUrl,
+  stockAsOfStandText,
+  stockAsOfSummaryKey,
+  stockAsOfSummaryUrl,
+  stockAsOfUrl,
   stockShortagesUrl,
+  stocktakeProtocolUrl,
   stockTransfersUrl,
   stockUrl,
+  valueColumnNote,
   shortageCauseLabel,
   shortageCauseTone,
   affectsStock,
@@ -684,5 +702,297 @@ describe('availabilityAt', () => {
 
     expect(here?.productId).toBe(42)
     expect(here?.stockManaged).toBe(true)
+  })
+})
+
+/** The figures over a whole report, with the value column intact. */
+function summary(fields: Partial<StockAsOfSummary> = {}): StockAsOfSummary {
+  return {
+    asOf: '2025-12-31',
+    generatedAt: '2026-01-21T13:03:00Z',
+    lineCount: 84,
+    unvaluedLineCount: 0,
+    foreignCurrencyLineCount: 0,
+    baseCurrencyCode: 'CHF',
+    backdatedMovements: 0,
+    showsValue: true,
+    ...fields,
+  }
+}
+
+/** One line of the report. */
+function asOfEntry(fields: Partial<StockAsOfEntry> = {}): StockAsOfEntry {
+  return {
+    productId: 42,
+    productNumber: '10-042',
+    productName: 'Kaffeebohnen',
+    locationId: 1,
+    locationCode: 'HAUPT',
+    locationName: 'Hauptlager',
+    quantity: 12,
+    unitShortName: 'kg',
+    ...fields,
+  }
+}
+
+/** One page of the report, as the server answers it. */
+function asOfPage(rows: StockAsOfEntry[]): Page<StockAsOfEntry> {
+  return { content: rows, page: 0, size: 50, totalElements: rows.length, totalPages: 1, sort: '' }
+}
+
+describe('stockAsOfUrl', () => {
+  it('stockAsOfUrlTest', () => {
+    expect(stockAsOfUrl(7)).toBe('/api/tenants/7/inventory/as-of')
+  })
+
+  /** The report of one tenant is never the report of another (backend ADR-0003). */
+  it('stockAsOfUrlPerTenantTest', () => {
+    expect(stockAsOfUrl(8)).not.toBe(stockAsOfUrl(7))
+  })
+})
+
+describe('stockAsOfSummaryUrl', () => {
+  it('stockAsOfSummaryUrlTest', () => {
+    expect(stockAsOfSummaryUrl(7)).toBe('/api/tenants/7/inventory/as-of/summary')
+  })
+})
+
+describe('stockAsOfPdfUrl', () => {
+  it('stockAsOfPdfUrlTest', () => {
+    expect(stockAsOfPdfUrl(7, 'date=2025-12-31&locationId=3')).toBe(
+      '/api/tenants/7/inventory/as-of/pdf?date=2025-12-31&locationId=3',
+    )
+  })
+
+  /** No filters, no dangling question mark. */
+  it('stockAsOfPdfUrlWithoutFiltersTest', () => {
+    expect(stockAsOfPdfUrl(7, '')).toBe('/api/tenants/7/inventory/as-of/pdf')
+  })
+})
+
+describe('stocktakeProtocolUrl', () => {
+  it('stocktakeProtocolUrlTest', () => {
+    expect(stocktakeProtocolUrl(7, 42)).toBe('/api/tenants/7/inventory/stocktakes/42/protocol')
+  })
+})
+
+describe('stockAsOfListKey', () => {
+  it('stockAsOfListKeyTest', () => {
+    expect(stockAsOfListKey(7, 'date=2025-12-31&page=0')).toEqual([
+      'stock-as-of',
+      7,
+      'date=2025-12-31&page=0',
+    ])
+  })
+
+  /** Another cut-off date is another report and must not be read out of the old answer. */
+  it('stockAsOfListKeyWithAnotherDateTest', () => {
+    expect(stockAsOfListKey(7, 'date=2025-12-31')).not.toEqual(
+      stockAsOfListKey(7, 'date=2025-06-30'),
+    )
+  })
+
+  it('stockAsOfListKeyPerTenantTest', () => {
+    expect(stockAsOfListKey(8, 'date=2025-12-31')).not.toEqual(
+      stockAsOfListKey(7, 'date=2025-12-31'),
+    )
+  })
+
+  it('stockAsOfListKeyWithoutAQueryTest', () => {
+    expect(stockAsOfListKey(7, '')).toEqual(['stock-as-of', 7, ''])
+  })
+})
+
+describe('stockAsOfSummaryKey', () => {
+  it('stockAsOfSummaryKeyTest', () => {
+    expect(stockAsOfSummaryKey(7, 'date=2025-12-31')).toEqual([
+      'stock-as-of-summary',
+      7,
+      'date=2025-12-31',
+    ])
+  })
+
+  /** The page and the figures are two answers; one cache entry for both would mix them. */
+  it('stockAsOfSummaryKeyIsNotTheListKeyTest', () => {
+    expect(stockAsOfSummaryKey(7, 'date=2025-12-31')).not.toEqual(
+      stockAsOfListKey(7, 'date=2025-12-31'),
+    )
+  })
+
+  it('stockAsOfSummaryKeyWithAnotherLocationTest', () => {
+    expect(stockAsOfSummaryKey(7, 'date=2025-12-31&locationId=3')).not.toEqual(
+      stockAsOfSummaryKey(7, 'date=2025-12-31&locationId=4'),
+    )
+  })
+})
+
+describe('missingAsOfDateNote', () => {
+  it('missingAsOfDateNoteTest', () => {
+    expect(missingAsOfDateNote('2025-12-31')).toBeUndefined()
+  })
+
+  it('missingAsOfDateNoteWithAnEmptyFieldTest', () => {
+    expect(missingAsOfDateNote('')).toBe('Zu einem Bestandsbericht gehört ein vollständiger '
+      + 'Stichtag.')
+  })
+
+  /** Half a day is no day: the request would go out without the parameter the endpoint needs. */
+  it('missingAsOfDateNoteWithAHalfTypedDayTest', () => {
+    expect(missingAsOfDateNote('2025-12')).toBe('Zu einem Bestandsbericht gehört ein '
+      + 'vollständiger Stichtag.')
+  })
+
+  /**
+   * A day in the future is a whole day, so it is asked for and the server refuses it in its own
+   * words. The rule belongs to the inventory, not to this mask.
+   */
+  it('missingAsOfDateNoteWithADayInTheFutureTest', () => {
+    expect(missingAsOfDateNote('2099-12-31')).toBeUndefined()
+  })
+})
+
+describe('stockAsOfPageToShow', () => {
+  it('stockAsOfPageToShowTest', () => {
+    const answered = asOfPage([asOfEntry()])
+
+    expect(stockAsOfPageToShow(answered, asOfPage([]))).toBe(answered)
+  })
+
+  /** A refused cut-off date must not empty the table under the message at the date field. */
+  it('stockAsOfPageToShowKeepsTheLastAnswerTest', () => {
+    const kept = asOfPage([asOfEntry()])
+
+    expect(stockAsOfPageToShow(undefined, kept)).toBe(kept)
+  })
+
+  /** An empty answer is an answer: those rows are gone, not merely unanswered. */
+  it('stockAsOfPageToShowWithAnEmptyAnswerTest', () => {
+    const answered = asOfPage([])
+
+    expect(stockAsOfPageToShow(answered, asOfPage([asOfEntry()]))).toBe(answered)
+  })
+
+  it('stockAsOfPageToShowWithoutAnyAnswerTest', () => {
+    const shown = stockAsOfPageToShow(undefined, undefined)
+
+    expect(shown.content).toEqual([])
+    expect(shown.totalElements).toBe(0)
+  })
+})
+
+describe('backdatedMovementsText', () => {
+  it('backdatedMovementsTextTest', () => {
+    expect(backdatedMovementsText(3, '2025-12-31')).toBe(
+      '3 Buchungen wurden nachträglich auf einen Tag bis zum 31.12.2025 gebucht.',
+    )
+  })
+
+  /** One booking is one booking; «1 Buchungen wurden» is how nobody writes. */
+  it('backdatedMovementsTextWithOneBookingTest', () => {
+    expect(backdatedMovementsText(1, '2025-12-31')).toBe(
+      '1 Buchung wurde nachträglich auf einen Tag bis zum 31.12.2025 gebucht.',
+    )
+  })
+
+  it('backdatedMovementsTextWithoutBackdatedTest', () => {
+    expect(backdatedMovementsText(0, '2025-12-31')).toBe('')
+  })
+
+  /** A count below zero is nonsense and says nothing rather than «-2 Buchungen». */
+  it('backdatedMovementsTextWithANegativeCountTest', () => {
+    expect(backdatedMovementsText(-2, '2025-12-31')).toBe('')
+  })
+})
+
+describe('valueColumnNote', () => {
+  /** Every line valued: the column is there and needs no explanation. */
+  it('valueColumnNoteTest', () => {
+    expect(valueColumnNote(summary())).toBe('')
+  })
+
+  it('valueColumnNoteWithoutCostsTest', () => {
+    const note = valueColumnNote(summary({ showsValue: false, unvaluedLineCount: 12 }))
+
+    expect(note).toBe(
+      'Für 12 von 84 Zeilen ist kein Einstandspreis erfasst — der Bericht führt deshalb '
+        + 'keine Werte.',
+    )
+  })
+
+  /** Nothing is converted: a rate nobody recorded is no rate. */
+  it('valueColumnNoteWithAForeignCurrencyTest', () => {
+    const note = valueColumnNote(summary({ showsValue: false, foreignCurrencyLineCount: 3 }))
+
+    expect(note).toBe(
+      'Für 3 von 84 Zeilen liegt der Einstandspreis in einer Fremdwährung — es wird nicht '
+        + 'umgerechnet, der Bericht führt deshalb keine Werte.',
+    )
+  })
+
+  /**
+   * Without a bookkeeping currency the server has nothing to compare a cost against and counts
+   * every one of them as foreign. Saying «Fremdwährung» here would send somebody looking for a
+   * purchase in euros that nobody made.
+   */
+  it('valueColumnNoteWithoutABaseCurrencyTest', () => {
+    const note = valueColumnNote(
+      summary({ showsValue: false, foreignCurrencyLineCount: 84, baseCurrencyCode: undefined }),
+    )
+
+    expect(note).toBe(
+      'Der Bericht führt keine Werte, weil der Mandant keine Buchführungswährung hinterlegt '
+        + 'hat.',
+    )
+  })
+
+  /**
+   * Both reasons hold here, and each one alone would take the column away. The note names the
+   * costs: setting a bookkeeping currency would not bring the column back while twelve lines
+   * carry no cost, so blaming the currency would promise a remedy that does not work.
+   */
+  it('valueColumnNoteWithoutABaseCurrencyAndWithoutCostsTest', () => {
+    const note = valueColumnNote(
+      summary({
+        showsValue: false,
+        unvaluedLineCount: 12,
+        foreignCurrencyLineCount: 72,
+        baseCurrencyCode: undefined,
+      }),
+    )
+
+    expect(note).toBe(
+      'Für 12 von 84 Zeilen ist kein Einstandspreis erfasst — der Bericht führt deshalb '
+        + 'keine Werte.',
+    )
+  })
+
+  /** Nothing on the report: the empty state says it, a note beside it would say it twice. */
+  it('valueColumnNoteWithoutLinesTest', () => {
+    expect(valueColumnNote(summary({ showsValue: false, lineCount: 0 }))).toBe('')
+  })
+
+  it('valueColumnNoteWithoutASummaryTest', () => {
+    expect(valueColumnNote(undefined)).toBe('')
+  })
+})
+
+describe('stockAsOfStandText', () => {
+  it('stockAsOfStandTextTest', () => {
+    // The time is read in the time zone of whoever looks, so only the day is pinned down.
+    expect(stockAsOfStandText(summary())).toMatch(/^84 Zeilen · Stand 21\.01\.2026, \d{2}:\d{2}$/)
+  })
+
+  it('stockAsOfStandTextWithOneLineTest', () => {
+    expect(stockAsOfStandText(summary({ lineCount: 1 }))).toMatch(/^1 Zeile · Stand /)
+  })
+
+  it('stockAsOfStandTextWithoutLinesTest', () => {
+    expect(stockAsOfStandText(summary({ lineCount: 0, showsValue: false }))).toMatch(
+      /^0 Zeilen · Stand /,
+    )
+  })
+
+  it('stockAsOfStandTextWithoutASummaryTest', () => {
+    expect(stockAsOfStandText(undefined)).toBe('')
   })
 })

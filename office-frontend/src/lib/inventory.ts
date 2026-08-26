@@ -1,12 +1,16 @@
-import { formatDate, formatQuantity } from './format'
+import { formatDate, formatDateTime, formatQuantity, isCompleteIsoDate } from './format'
+import { emptyPage } from './paging'
 import type {
   LotKind,
   MovementDirection,
   MovementReason,
+  Page,
   ProductAvailability,
   ProductTracking,
   ReservationHolder,
   ShortageCause,
+  StockAsOfEntry,
+  StockAsOfSummary,
   StockEffect,
   StockLocation,
   StockReservationStatus,
@@ -961,4 +965,183 @@ function formatTime(value: string): string {
   return Number.isNaN(at.getTime())
     ? ''
     : `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+}
+
+/** Where the stock report for a cut-off date lives. */
+export const STOCK_AS_OF_PATH = '/inventar'
+
+/**
+ * The REST resource of the stock report for a cut-off date.
+ *
+ * <p>Not the same as {@link stockUrl}: that one is today out of the projection, this one is a
+ * day out of the movement journal. Because a count runs without stopping the store, the two
+ * answer different questions (backend ADR-0071).
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stockAsOfUrl(tenantId: number): string {
+  return `${inventoryUrl(tenantId)}/as-of`
+}
+
+/**
+ * The figures over the whole report, asked for apart from the page.
+ *
+ * @param tenantId the tenant
+ * @returns the address, without a trailing slash
+ */
+export function stockAsOfSummaryUrl(tenantId: number): string {
+  return `${stockAsOfUrl(tenantId)}/summary`
+}
+
+/**
+ * The report as a PDF, rendered fresh on every call and never archived.
+ *
+ * @param tenantId the tenant
+ * @param query the filters the screen is showing, without a leading `?`
+ * @returns the address
+ */
+export function stockAsOfPdfUrl(tenantId: number, query: string): string {
+  return `${stockAsOfUrl(tenantId)}/pdf${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * The archived inventory protocol of a booked count list.
+ *
+ * <p>Always the bytes written when the list was booked, never a fresh render — a count list
+ * has to look the same in ten years (backend ADR-0024).
+ *
+ * @param tenantId the tenant
+ * @param stocktakeId the count list
+ * @returns the address
+ */
+export function stocktakeProtocolUrl(tenantId: number, stocktakeId: number): string {
+  return `${stocktakeUrl(tenantId, stocktakeId)}/protocol`
+}
+
+/**
+ * Query key of one page of the report.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the page asked with
+ * @returns the key TanStack Query caches that page under
+ */
+export function stockAsOfListKey(tenantId: number, query: string): (string | number)[] {
+  return ['stock-as-of', tenantId, query]
+}
+
+/**
+ * Query key of the figures over the whole report.
+ *
+ * @param tenantId the tenant
+ * @param query the query string the figures were asked with
+ * @returns the key TanStack Query caches them under
+ */
+export function stockAsOfSummaryKey(tenantId: number, query: string): (string | number)[] {
+  return ['stock-as-of-summary', tenantId, query]
+}
+
+/**
+ * What the screen itself says about the day standing in the cut-off field.
+ *
+ * <p>Only the empty and the half entered field, and that is a matter of the mask: the endpoint
+ * demands the date, so a request built without one is malformed and never leaves. Whether a
+ * whole day may be asked about — one in the future may not — is a rule of the inventory and
+ * stays with the server; its answer then appears at this same field, in its own words
+ * (backend `InventoryRules.validateAsOfDate`). Repeating the rule here would give the same
+ * rule two wordings that drift apart.
+ *
+ * @param typed the raw field value
+ * @returns the sentence for the field, or undefined once a whole day stands there
+ */
+export function missingAsOfDateNote(typed: string): string | undefined {
+  return isCompleteIsoDate(typed)
+    ? undefined
+    : 'Zu einem Bestandsbericht gehört ein vollständiger Stichtag.'
+}
+
+/**
+ * The page of the report the table shows.
+ *
+ * <p>A cut-off date the server refuses comes back as a 400, and the query then holds no rows:
+ * `placeholderData: keepPreviousData` covers a request on its way, not one that failed. An
+ * empty table under a message at the date field would read as «nothing was booked on that
+ * day», which is a different statement and a false one — so the rows the server last answered
+ * stay until it answers again.
+ *
+ * @param answered the page the running request answered, absent while it is on its way or was
+ *                 refused
+ * @param kept the page the screen last showed, absent before the first answer
+ * @returns the page to put in the table, an empty one until the first answer arrives
+ */
+export function stockAsOfPageToShow(
+  answered: Page<StockAsOfEntry> | undefined,
+  kept: Page<StockAsOfEntry> | undefined,
+): Page<StockAsOfEntry> {
+  return answered ?? kept ?? emptyPage<StockAsOfEntry>()
+}
+
+/**
+ * What the screen says about bookings that were entered after the cut-off date.
+ *
+ * <p>There is no period lock, so a booking may be dated back. Without this sentence nobody
+ * can explain why the same report reads differently than last month (backend ADR-0071).
+ *
+ * @param backdated how many such bookings there are
+ * @param asOf the cut-off date, as an ISO day
+ * @returns the sentence, empty where there is nothing to say
+ */
+export function backdatedMovementsText(backdated: number, asOf: string): string {
+  if (backdated <= 0) return ''
+  const many = backdated === 1 ? 'Buchung wurde' : 'Buchungen wurden'
+  return `${backdated} ${many} nachträglich auf einen Tag bis zum ${formatDate(asOf)} gebucht.`
+}
+
+/**
+ * Why the report carries no value column.
+ *
+ * <p>All or nothing: one line without a cost takes the column away from the whole report, and
+ * a cost in another currency does the same — nothing is converted. **Never 0.00.**
+ *
+ * <p>Three reasons, each of them enough on its own, and the note names the one that is to be
+ * dealt with first: the lines without a cost, then a tenant with no bookkeeping currency, then
+ * the costs in a foreign one. The missing bookkeeping currency comes before the foreign count
+ * because without one the server has nothing to compare a cost against and counts every one of
+ * them as foreign — «Fremdwährung» would then send somebody looking for a purchase in euros
+ * that nobody made.
+ *
+ * @param summary the figures over the whole report, absent while they are on their way
+ * @returns the sentence, empty where values are shown or there is nothing to show
+ */
+export function valueColumnNote(summary: StockAsOfSummary | undefined): string {
+  if (summary === undefined || summary.showsValue || summary.lineCount === 0) return ''
+  if (summary.unvaluedLineCount > 0) {
+    return `Für ${summary.unvaluedLineCount} von ${summary.lineCount} Zeilen ist kein `
+      + 'Einstandspreis erfasst — der Bericht führt deshalb keine Werte.'
+  }
+  // Absent as well as blank: either way there is no currency to compare a cost against.
+  if (!summary.baseCurrencyCode) {
+    return 'Der Bericht führt keine Werte, weil der Mandant keine Buchführungswährung '
+      + 'hinterlegt hat.'
+  }
+  // What is left: every line carries a cost and the tenant has a currency to compare it
+  // against, so only a cost in another one can have taken the column away.
+  return `Für ${summary.foreignCurrencyLineCount} von ${summary.lineCount} Zeilen liegt der `
+    + 'Einstandspreis in einer Fremdwährung — es wird nicht umgerechnet, der Bericht führt '
+    + 'deshalb keine Werte.'
+}
+
+/**
+ * The line over the table: how many rows, and when they were worked out.
+ *
+ * <p>The moment matters here and nowhere else in the app: this report is a recalculation and
+ * may read differently tomorrow.
+ *
+ * @param summary the figures over the whole report, absent while they are on their way
+ * @returns for example «84 Zeilen · Stand 21.01.2026 14:03», empty while nothing is known
+ */
+export function stockAsOfStandText(summary: StockAsOfSummary | undefined): string {
+  if (summary === undefined) return ''
+  const rows = summary.lineCount === 1 ? '1 Zeile' : `${summary.lineCount} Zeilen`
+  return `${rows} · Stand ${formatDateTime(summary.generatedAt)}`
 }

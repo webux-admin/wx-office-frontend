@@ -35,6 +35,7 @@ import type {
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { DifferenceDialog } from './stocktake/DifferenceDialog'
 import { StocktakeLinesTable } from './stocktake/StocktakeLinesTable'
+import { StocktakeProtocol } from './stocktake/StocktakeProtocol'
 
 /** How many lines one page of the counting mask holds. */
 const LINES_PER_PAGE = 100
@@ -252,6 +253,17 @@ function StocktakeMask({ tenantId, stocktakeId }: { tenantId: number; stocktakeI
             {`Differenz insgesamt ${formatQuantity(head.differenceSum ?? 0)}`}
           </p>
         </Panel>
+      )}
+
+      {/* Same condition as the panel above, for the same reason: the protocol is written while
+          the list is booked, so before that there is nothing to show and nothing to grey out
+          (backend ADR-0071). */}
+      {head.postedAt !== undefined && (
+        <StocktakeProtocol
+          tenantId={tenantId}
+          stocktakeId={stocktakeId}
+          stocktakeNumber={head.stocktakeNumber}
+        />
       )}
 
       <Panel title="Verlauf">

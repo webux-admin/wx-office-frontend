@@ -5,6 +5,7 @@ import {
   BookOpen,
   Boxes,
   Building2,
+  CalendarClock,
   ClipboardCheck,
   ClipboardList,
   Coins,
@@ -40,6 +41,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { basicDataFor } from '../lib/basicData'
+import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -211,6 +213,16 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Inventuren',
         icon: ClipboardCheck,
         href: '/inventuren',
+        permission: 'INVENTORY_READ',
+        module: 'inventory',
+      },
+      // Behind the count lists, because it answers the question they raise: a count says who
+      // counted what, the report says what stood there on a day. Since counting runs without
+      // closing the store, the two are not the same figure (backend ADR-0071).
+      {
+        label: 'Inventar',
+        icon: CalendarClock,
+        href: STOCK_AS_OF_PATH,
         permission: 'INVENTORY_READ',
         module: 'inventory',
       },
