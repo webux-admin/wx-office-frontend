@@ -745,6 +745,20 @@ export function lotProposalUrl(tenantId: number, productId: number): string {
 }
 
 /**
+ * The endpoint that names the numbers of one product that last went out on a document.
+ *
+ * <p>What a return offers instead of a fresh pick. Its own address rather than a flag on the
+ * lot list: this is the movement journal read, not the lot master filtered.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @returns the address, without a query string
+ */
+export function issuedLotsUrl(tenantId: number, productId: number): string {
+  return `/api/tenants/${tenantId}/products/${productId}/issued-lots`
+}
+
+/**
  * The endpoint that computes running serial numbers without saving any of them.
  *
  * @param tenantId the tenant
@@ -826,6 +840,20 @@ export function lotProposalKey(
   quantity: number,
 ): (string | number)[] {
   return ['lot-proposal', tenantId, productId, locationId, quantity]
+}
+
+/**
+ * Query key of the numbers that last went out on a document.
+ *
+ * <p>Neither location nor quantity: what left the house left it, whatever is being taken back
+ * and wherever it is being put.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @returns the key TanStack Query caches those numbers under
+ */
+export function issuedLotsKey(tenantId: number, productId: number): (string | number)[] {
+  return ['issued-lots', tenantId, productId]
 }
 
 // --- inventory counts (backend ADR-0070) -------------------------------------

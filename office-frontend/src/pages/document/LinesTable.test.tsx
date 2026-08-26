@@ -42,6 +42,30 @@ const LINES: DocumentLine[] = [
   line({ lineNumber: 3, description: 'Ersatzteil', quantity: 1, unit: 'PIECE', unitPrice: 75, vatRate: 8.1, lineNet: 75 }),
 ]
 
+/**
+ * A position that moves two numbered pieces, the way a delivery note carries them.
+ *
+ * <p>With a comment and a product number around it, because the numbers stand between the two
+ * and a row in the wrong place is a row nobody finds (backend ADR-0069).
+ */
+const TRACKED: DocumentLine[] = [
+  line({
+    lineNumber: 1,
+    description: 'Bohrmaschine',
+    note: 'Anlieferung Montag',
+    productNumber: 'P-300',
+    quantity: 2,
+    unit: 'PIECE',
+    unitPrice: 250,
+    vatRate: 8.1,
+    lineNet: 500,
+    lots: [
+      { lotNumber: 'SN-4711', tracking: 'SERIAL', quantity: 1 },
+      { lotNumber: 'SN-4712', tracking: 'SERIAL', quantity: 1 },
+    ],
+  }),
+]
+
 function order(
   lines: DocumentLine[],
   status: DocumentStatus = 'DRAFT',
@@ -174,6 +198,11 @@ function byLabel(label: string): HTMLButtonElement {
  */
 function lastColumnOf(row: HTMLTableRowElement): number {
   return [...row.cells].reduce((column, cell) => column + cell.colSpan, 0)
+}
+
+/** The columns the table draws, by their heading; the two empty ones carry grip and controls. */
+function headers(): string[] {
+  return [...container.querySelectorAll('thead th')].map((cell) => cell.textContent ?? '')
 }
 
 function click(element: HTMLElement) {
@@ -360,6 +389,33 @@ describe('LinesTable', () => {
     const body = container.querySelector('tbody') as HTMLTableSectionElement
     // A line without the two texts keeps its cell to the one description.
     expect(body.rows[0].cells[2].textContent).toBe('Wartung')
+  })
+
+  it('linesTableShowsTheNumbersInTheDescriptionCellTest', async () => {
+    await draw(order(TRACKED))
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    const cell = body.rows[0].cells[2].textContent ?? ''
+    // The numbers are printed under the position, so the mask has to show them too — and it
+    // shows them where the printed document has them: after the comment, before the number
+    // of the product.
+    expect(cell).toContain('Serien: SN-4711, SN-4712')
+    expect(cell.indexOf('Serien:')).toBeGreaterThan(cell.indexOf('Anlieferung Montag'))
+    expect(cell.indexOf('Serien:')).toBeLessThan(cell.indexOf('P-300'))
+  })
+
+  it('linesTableAddsNoColumnForTheNumbersTest', async () => {
+    await draw(order(TRACKED))
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    const foot = container.querySelector('tfoot') as HTMLTableSectionElement
+    // A column of its own would stay empty on every document that follows no numbers, and
+    // `COLUMNS`, the value span and every colSpan under it would have to be pulled along.
+    // The same arithmetic as a document without a single number, to the cell.
+    expect(headers()).toEqual(['', 'Pos', 'Bezeichnung', 'Menge', 'Einzelpreis', 'MwSt', 'Netto', ''])
+    expect(lastColumnOf(body.rows[0])).toBe(8)
+    expect(lastColumnOf(foot.rows[0])).toBe(7)
+    expect(foot.rows[0].cells[0].colSpan).toBe(6)
   })
 
   it('linesTableWithoutLinesInADraftTest', async () => {

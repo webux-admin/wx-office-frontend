@@ -4,11 +4,14 @@ import { Plus, X } from 'lucide-react'
 import { BarcodeScanner } from '../../components/BarcodeScanner'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
-import { WarningNotice } from '../../components/Notice'
+import { EmptyState, WarningNotice } from '../../components/Notice'
 import { api } from '../../lib/api'
 import { formatQuantity, parseDecimal } from '../../lib/format'
 import {
   expiryLabel,
+  issuedLotsKey,
+  issuedLotsUrl,
+  lotKindLabel,
   lotKindLabelPlural,
   lotKindOf,
   lotProposalKey,
@@ -19,7 +22,9 @@ import {
 } from '../../lib/inventory'
 import { listQuery } from '../../lib/paging'
 import type {
+  IssuedLot,
   LotAllocation,
+  LotKind,
   LotProposal,
   MovementDirection,
   Page,
@@ -33,8 +38,11 @@ import {
   allocationAnnouncement,
   allocationSummary,
   emptyRow,
+  issuedLabel,
+  listsEveryNumber,
   LOT_NUMBER_MAX,
   lotComplaint,
+  neverIssuedWarning,
   SERIAL_PROPOSAL_MAX,
   nextKey,
   openOf,
@@ -42,6 +50,7 @@ import {
   receiptRows,
   toAllocations,
   uncoveredWarning,
+  withIssuedNumber,
   withNumber,
   withoutRow,
   withQuantity,
@@ -78,6 +87,8 @@ export function LotAllocationField({
   quantity,
   onChange,
   allowWithoutNumber = true,
+  returning = false,
+  saved,
 }: {
   tenantId: number
   /** The product being booked. Drawn only where it is tracked at all. */
@@ -96,21 +107,79 @@ export function LotAllocationField({
    * rather than offered and refused later (backend ADR-0069).
    */
   allowWithoutNumber?: boolean
+  /**
+   * True where the goods are coming back from a customer, not in from a supplier.
+   *
+   * <p>Both are `IN`, and they want opposite things: a receipt writes numbers off the
+   * supplier's label, a return names numbers that already left this house. Where this is set
+   * the field offers the ones that last went out and warns about one that is not among them —
+   * it never refuses, the choice on a return is free (backend ADR-0069).
+   */
+  returning?: boolean
+  /**
+   * The split the caller already holds, read once when the field opens.
+   *
+   * <p>A stored position brings its numbers back rather than being handed a fresh pick: what
+   * was saved is what is on the document, and opening it again must move nothing. Later
+   * changes are ignored — the caller mounts the field afresh with a `key`, the way the
+   * position dialog does.
+   *
+   * <p>Unsigned, like everything else here: the field counts pieces and the caller makes the
+   * sign, so a return line hands its two pieces over as two.
+   */
+  saved?: readonly LotAllocation[]
 }) {
   const kind = lotKindOf(product.tracking)
   const issuing = direction === 'OUT'
+  // What the rows were built for. A new answer for another quantity or another location
+  // replaces them; typing in them does not.
+  const signature = `${direction}|${product.id}|${locationId}|${quantity ?? ''}`
 
-  const [rows, setRows] = useState<LotRow[]>([])
+  // What the caller handed in, as rows. Read once; from here on the field owns them.
+  const [initial] = useState<LotRow[]>(() => savedRows(saved))
+  const [rows, setRows] = useState<LotRow[]>(initial)
+  // True while the handed in rows still wait for the proposal to say what lies behind their
+  // numbers. Cleared the moment they are drawn against it, or given up for another pick.
+  const [awaitingProposal, setAwaitingProposal] = useState(initial.length > 0)
+  // True while the split in the field is somebody's decision rather than the last proposal:
+  // the rows the caller handed in, and everything scanned, typed or taken back since. Every
+  // later answer is then drawn against those rows instead of replacing them — a proposal
+  // suggests, and it arrives a good while after the hand does.
+  //
+  // Once set it stays set for as long as the split does, and that is the whole point. A
+  // decision does not stop being one because a proposal was drawn against it: cleared after the
+  // first merge, a stored Lieferschein position would be handed today's FEFO pick on the next
+  // keystroke in the quantity — printed serial numbers the customer never got, frozen on the
+  // document for ten years. What a changed quantity does instead is ask: the counter says «1 zu
+  // viel», the save button stays dark, and the user takes one off (decision of the Product
+  // Owner in issue #21). It also makes the field answer the same way twice: without it a
+  // hand-made pick survived one quantity change and was wiped by the second.
+  //
+  // The one thing that does take it back is the turn from an issue into a return below, which
+  // empties the field: there is then no split left to be anybody's decision.
+  const [ownSplit, setOwnSplit] = useState(initial.length > 0)
+  // Which way the rows in the field were picked, so a turn from an issue into a return can be
+  // told apart from any other change.
+  const [pickedFor, setPickedFor] = useState<MovementDirection>(direction)
   const [scanned, setScanned] = useState('')
   const [announcement, setAnnouncement] = useState('')
+  // Why the last number was not taken in, together with the pick it was refused against. Drawn
+  // as well as spoken: whoever scans has to see that the piece did not arrive.
+  const [lastRefusal, setLastRefusal] = useState<{ of: string; message: string } | null>(null)
+  // True while the camera overlay is delivering. The overlay is drawn over the whole screen,
+  // so the refusal has to be lifted over it — under it, it is a message nobody ever sees.
+  const [scanning, setScanning] = useState(false)
+  // The batch line being typed in. What stands in it half-finished is not yet a number, and
+  // warning about it would re-word the sentence on every keystroke.
+  const [typing, setTyping] = useState<string | null>(null)
   const [lit, setLit] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const [picking, setPicking] = useState(false)
   const scanField = useRef<HTMLInputElement>(null)
 
-  // What the rows were built for. A new answer for another quantity or another location
-  // replaces them; typing in them does not.
-  const [seeded, setSeeded] = useState('')
+  // A field that opens on a stored split counts as seeded for what it opened with, so the
+  // proposal is drawn against those rows instead of replacing them.
+  const [seeded, setSeeded] = useState(initial.length === 0 ? '' : signature)
 
   const proposalQuery = useQuery({
     queryKey: lotProposalKey(tenantId, product.id, locationId, quantity ?? 0),
@@ -124,16 +193,60 @@ export function LotAllocationField({
     enabled: issuing && locationId !== '' && quantity !== null && quantity > 0,
   })
 
-  const signature = `${direction}|${product.id}|${locationId}|${quantity ?? ''}`
+  // What last went out, for a return. Neither location nor quantity is asked with: what left
+  // the house left it, wherever it is being put back and however much comes back.
+  const issuedQuery = useQuery({
+    queryKey: issuedLotsKey(tenantId, product.id),
+    queryFn: () => api.get<IssuedLot[]>(issuedLotsUrl(tenantId, product.id)),
+    enabled: !issuing && returning,
+  })
+  // Offered on the way in and only on a return: a supplier delivery writes its numbers off the
+  // label, and the numbers this house delivered say nothing about it.
+  const offering = !issuing && returning
+  const issued = offering ? issuedQuery.data : undefined
 
   // Adjusted while rendering rather than in an effect: an effect would draw the empty field
   // for one frame, and the summary line would say «offen 5» about a split that is already
   // filled in. The same pattern the booking dialog uses for its own reset.
-  if (issuing && proposalQuery.data !== undefined && seeded !== signature) {
+  //
+  // One chain and not four ifs: the turn of the direction has to empty the field before
+  // anything is seeded into it, and the branches below read `rows` and `seeded` as this pass
+  // still shows them. React runs the component again with the reset state, and that pass
+  // seeds.
+  const flipped = pickedFor !== direction
+  if (flipped) {
+    // A pick made for the other direction says nothing here: a number lying at the location is
+    // one that may go out, never one that comes back, and what a customer returns is what left
+    // the house. Kept across the turn, it would also leave the caller counting the same pieces
+    // with the opposite sign — «offen 2» over a field that reports nothing open.
+    setPickedFor(direction)
+    setRows([])
+    setSeeded('')
+    setAwaitingProposal(false)
+    setOwnSplit(false)
+    setScanned('')
+    setLit(null)
+  } else if (
+    issuing
+    && proposalQuery.data !== undefined
+    // Two ways an answer becomes the one this field is drawn against: it is the first for
+    // another quantity or another location, or it is the one the rows handed in were waiting
+    // for. Both do the same thing with it, so they are one branch.
+    && (seeded !== signature || awaitingProposal)
+  ) {
     setSeeded(signature)
-    setRows(proposalRows(proposalQuery.data, allowWithoutNumber))
-  }
-  if (!issuing && kind === 'LOT' && seeded !== signature) {
+    setAwaitingProposal(false)
+    // Wholesale only where nobody has picked anything: the proposed quantities are the whole
+    // point of FEFO, and drawing an empty hand against them would answer «offen 5» on a line
+    // that should have been one glance. Where somebody has picked — the numbers the caller
+    // handed in, or a number scanned while this very answer was still on its way — the answer
+    // brings the facts and the pick stays, for this quantity and for every one after it.
+    setRows(
+      ownSplit
+        ? mergedRows(proposalQuery.data, rows, allowWithoutNumber)
+        : proposalRows(proposalQuery.data, allowWithoutNumber),
+    )
+  } else if (!issuing && kind === 'LOT' && seeded !== signature) {
     setSeeded(signature)
     // One delivery under one number is the normal case, so the single row carries the whole
     // quantity. A second row means somebody is splitting on purpose, and then nothing is
@@ -146,8 +259,7 @@ export function LotAllocationField({
             lotNumber: current[0]?.lotNumber ?? '',
           })),
     )
-  }
-  if (!issuing && kind === 'SERIAL' && seeded !== signature) {
+  } else if (!issuing && kind === 'SERIAL' && seeded !== signature) {
     setSeeded(signature)
   }
 
@@ -157,7 +269,10 @@ export function LotAllocationField({
   useEffect(() => {
     report.current = onChange
   }, [onChange])
-  const reported = useRef('')
+  // Starts at what the caller handed in, so opening the field reports nothing. An empty first
+  // report would take the numbers off the very position that is being edited — and on a
+  // return line, where no proposal fills them back in, it would take them off for good.
+  const reported = useRef(JSON.stringify(toAllocations(initial)))
   useEffect(() => {
     const allocations = toAllocations(rows)
     const written = JSON.stringify(allocations)
@@ -174,21 +289,105 @@ export function LotAllocationField({
 
   if (kind === undefined) return null
 
+  // Only while it is still about this pick. The refusal answered one scan against the quantity
+  // and the location as they then stood, and both are part of the signature — a change to
+  // either answers it back, and a red line that outlives its reason is a mask complaining
+  // about something that is gone. Derived rather than cleared in an effect, which would draw
+  // the stale sentence for one frame.
+  const refused = lastRefusal !== null && lastRefusal.of === signature ? lastRefusal.message : null
+
   const open = openOf(quantity, rows)
   const complaint = lotComplaint(quantity, rows, kind)
   const uncovered = issuing ? uncoveredWarning(proposalQuery.data) : null
+  const withoutNumber = issuing ? withoutNumberHint(proposalQuery.data, allowWithoutNumber) : null
+  // A number nobody was ever delivered is warned about and taken all the same: whoever holds
+  // the goods in their hand knows more about them than the journal does. The line being typed
+  // in is left out of it: on a return the line already carries the whole quantity, so the
+  // sentence would appear on the first keystroke of a number and re-word until it is finished.
+  const neverIssued = offering
+    ? neverIssuedWarning(rows.filter((row) => row.key !== typing), issued)
+    : null
+
+  // Only where the answer is known to name every number at the location. While it is on its
+  // way, or where it came back full, the field takes what it is given: refusing a number it
+  // merely did not hear about would be worse than staying quiet.
+  const onlyListed = issuing && listsEveryNumber(proposalQuery.data)
+
+  /**
+   * Takes a change somebody made to the split.
+   *
+   * <p>Two things hang on it. Every later proposal is drawn against these rows instead of
+   * replacing them — a number scanned while the answer is still on its way is a decision, and
+   * the answer arrives a good while after the hand does. The field never picks for the user
+   * again after this, not on the next quantity and not on the one after: it asks. And the
+   * refusal of the last number goes: this is the user answering it, and a red line that
+   * outlives its reason is a mask complaining about something that is no longer there.
+   *
+   * @param next the rows as they now stand
+   */
+  const changeRows = (next: LotRow[]) => {
+    setRows(next)
+    setOwnSplit(true)
+    setLastRefusal(null)
+  }
 
   const take = (input: string) => {
-    const added = addSerialNumber(rows, input)
-    setRows(added.rows)
+    const lotNumber = input.trim()
     setScanned('')
-    if (added.duplicate !== null) {
-      setLit(added.duplicate)
-      setAnnouncement(`${input.trim()} ist bereits erfasst`)
+    if (lotNumber === '') return
+    const added = addSerialNumber(rows, input, onlyListed)
+    if (added.unlisted) {
+      // Never taken in silently: it would count the open quantity down and be refused on
+      // issuing, long after whoever scanned it has moved on. The reason stays open on purpose
+      // — the proposal leaves out what is blocked as well as what is not there, so naming one
+      // of the two would be a wrong reason for a right refusal.
+      const refusal = `${lotNumber} ist an diesem Lagerort nicht verfügbar: kein Bestand oder gesperrt.`
+      setLastRefusal({ of: signature, message: refusal })
+      setAnnouncement(refusal)
       return
     }
-    setAnnouncement(allocationAnnouncement(input.trim(), quantity, added.rows))
+    changeRows(added.rows)
+    if (added.duplicate !== null) {
+      setLit(added.duplicate)
+      setAnnouncement(`${lotNumber} ist bereits erfasst`)
+      return
+    }
+    setAnnouncement(allocationAnnouncement(lotNumber, quantity, added.rows))
   }
+
+  /**
+   * Takes over a number that once went out.
+   *
+   * <p>A serial number becomes a chip like a scanned one, so a number picked twice lights the
+   * chip that is already there instead of counting a second piece. A batch number goes into
+   * the line that is still without one, which on the everyday return — one line, the whole
+   * quantity — completes the split in a single click.
+   *
+   * @param lotNumber the number that was picked out of the list
+   */
+  const takeIssued = (lotNumber: string) => {
+    if (kind === 'SERIAL') {
+      take(lotNumber)
+      return
+    }
+    const next = withIssuedNumber(rows, lotNumber)
+    changeRows(next)
+    setAnnouncement(allocationAnnouncement(lotNumber, quantity, next))
+  }
+
+  /**
+   * Gives one number up again.
+   *
+   * <p>On the way out the row stays and only loses its quantity: the piece still lies at the
+   * location, and whoever changes their mind has to be able to pick that very number again.
+   * On the way in there is no list to stay in, so a typed number that is taken back is gone.
+   *
+   * @param current the rows
+   * @param key the row whose number is given up
+   * @returns the rows without that piece
+   */
+  const released = (current: LotRow[], key: string) =>
+    issuing ? withQuantity(current, key, '') : withoutRow(current, key)
 
   const onScanKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
@@ -206,7 +405,11 @@ export function LotAllocationField({
     }
     if (event.key === 'Backspace' && scanned === '' && rows.length > 0) {
       event.preventDefault()
-      setRows(rows.slice(0, -1))
+      // The last number that carries a piece, not the last row: on the way out the list holds
+      // the numbers nobody picked as well, and dropping one of those would look to whoever
+      // pressed the key like nothing happened at all.
+      const last = [...rows].reverse().find((row) => (parseDecimal(row.quantity) ?? 0) > 0)
+      if (last !== undefined) changeRows(released(rows, last.key))
     }
   }
 
@@ -239,7 +442,8 @@ export function LotAllocationField({
           onScanned={setScanned}
           onKeyDown={onScanKeyDown}
           onTake={take}
-          onRemove={(key) => setRows(withoutRow(rows, key))}
+          onScanning={setScanning}
+          onRemove={(key) => changeRows(released(rows, key))}
         />
       ) : (
         <BatchRows
@@ -247,14 +451,40 @@ export function LotAllocationField({
           product={product}
           rows={rows}
           issuing={issuing}
-          onQuantity={(key, value) => setRows(withQuantity(rows, key, value))}
-          onNumber={(key, value) => setRows(withNumber(rows, key, value))}
-          onRemove={(key) => setRows(withoutRow(rows, key))}
-          onAdd={() => setRows([...rows, emptyRow(nextKey(rows))])}
+          issued={offering ? (issued ?? []) : undefined}
+          onQuantity={(key, value) => changeRows(withQuantity(rows, key, value))}
+          onNumber={(key, value) => {
+            setTyping(key)
+            changeRows(withNumber(rows, key, value))
+          }}
+          onTyping={setTyping}
+          onRemove={(key) => changeRows(withoutRow(rows, key))}
+          onAdd={() => changeRows([...rows, emptyRow(nextKey(rows))])}
         />
       )}
 
-      {kind === 'SERIAL' && !issuing && (
+      {refused !== null && <p className="text-[12px] text-danger">{refused}</p>}
+
+      {/* Lifted over the camera overlay, which is drawn `fixed inset-0` and would leave the
+          line above it out of sight. Whoever scans has to learn that the piece did not arrive
+          while the camera is still running, not after they put it down (issue #21, Nachtrag).
+          Not a live region: the announcement above already speaks it. */}
+      {scanning && refused !== null && (
+        <p className="fixed inset-x-4 top-4 z-[70] rounded-[var(--radius-sm)] bg-danger-surface px-3 py-2 text-center text-[13px] text-on-accent">
+          {refused}
+        </p>
+      )}
+
+      {offering && (
+        <IssuedLots
+          issued={issued}
+          kind={kind}
+          failed={issuedQuery.isError}
+          onTake={takeIssued}
+        />
+      )}
+
+      {kind === 'SERIAL' && !issuing && !returning && (
         <SerialGenerator
           tenantId={tenantId}
           product={product}
@@ -263,7 +493,7 @@ export function LotAllocationField({
           missing={open > 0 ? open : 0}
           onNumbers={(numbers) => {
             const added = addSerialNumbers(rows, numbers)
-            setRows(added.rows)
+            changeRows(added.rows)
             setLit(added.duplicate)
             setAnnouncement(
               `${numbers.length} Nummern übernommen, ${formatQuantity(
@@ -286,7 +516,10 @@ export function LotAllocationField({
       )}
 
       {issuing && kind === 'SERIAL' && (
-        <LotFreeRow rows={rows} onQuantity={(key, value) => setRows(withQuantity(rows, key, value))} />
+        <LotFreeRow
+          rows={rows}
+          onQuantity={(key, value) => changeRows(withQuantity(rows, key, value))}
+        />
       )}
 
       {complaint !== null && (
@@ -295,12 +528,84 @@ export function LotAllocationField({
 
       {uncovered !== null && <WarningNotice>{uncovered}</WarningNotice>}
 
+      {withoutNumber !== null && <WarningNotice>{withoutNumber}</WarningNotice>}
+
+      {neverIssued !== null && <WarningNotice>{neverIssued}</WarningNotice>}
+
       {issuing && proposalQuery.isError && (
         <p role="alert" className="text-[12px] text-danger">
           {proposalQuery.error instanceof Error
             ? proposalQuery.error.message
             : `Die ${lotKindLabelPlural(kind)} konnten nicht gelesen werden.`}
         </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * «Zuletzt ausgeliefert»: the numbers that went out, with the document each left on.
+ *
+ * <p>Open on the screen and not behind a button: on a return this is the list the work is
+ * done from, and a customer who sends a piece back sends back one of these. The document
+ * stands next to every number, because that is what the delivery note in the hand says.
+ *
+ * <p>It only offers. A number that is not in it is typed or scanned like any other and comes
+ * with a warning next to it, never with a refusal (backend ADR-0069).
+ */
+function IssuedLots({
+  issued,
+  kind,
+  failed,
+  onTake,
+}: {
+  /** What last went out, absent while the answer is on its way. */
+  issued: readonly IssuedLot[] | undefined
+  kind: LotKind
+  failed: boolean
+  onTake: (lotNumber: string) => void
+}) {
+  if (failed) {
+    return (
+      <p role="alert" className="text-[12px] text-danger">
+        Die zuletzt ausgelieferten Nummern konnten nicht gelesen werden.
+      </p>
+    )
+  }
+  if (issued === undefined) return null
+
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-[11px] uppercase tracking-[0.06em] text-text-tertiary">
+        Zuletzt ausgeliefert
+      </p>
+      {issued.length === 0 ? (
+        <p className="text-[12px] text-text-secondary">
+          {`Über einen Beleg ist noch keine ${lotKindLabel(kind)} dieses Produkts abgegangen.`}
+        </p>
+      ) : (
+        <ul className="max-h-[180px] overflow-y-auto">
+          {issued.map((one) => (
+            <li key={one.lotNumber}>
+              <button
+                type="button"
+                onClick={() => onTake(one.lotNumber)}
+                aria-label={`${one.lotNumber} übernehmen`}
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-1 text-left text-[13px] hover:bg-surface"
+              >
+                <span className="font-mono">
+                  {one.lotNumber}
+                  {kind === 'LOT' && (
+                    <span className="ml-2 text-[12px] text-text-tertiary">
+                      {formatQuantity(one.quantity)}
+                    </span>
+                  )}
+                </span>
+                <span className="text-[12px] text-text-tertiary">{issuedLabel(one)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
@@ -319,8 +624,10 @@ function BatchRows({
   product,
   rows,
   issuing,
+  issued,
   onQuantity,
   onNumber,
+  onTyping,
   onRemove,
   onAdd,
 }: {
@@ -328,20 +635,36 @@ function BatchRows({
   product: Product
   rows: LotRow[]
   issuing: boolean
+  /**
+   * What last went out, on a return. Then those are the numbers offered while typing — the
+   * ones the product happens to carry say nothing about what a customer sends back.
+   */
+  issued: readonly IssuedLot[] | undefined
   onQuantity: (key: string, value: string) => void
   onNumber: (key: string, value: string) => void
+  /**
+   * Says which line is being typed in, and `null` again when it is left. What stands there
+   * half-finished is not yet a number and must not be judged as one.
+   */
+  onTyping: (key: string | null) => void
   onRemove: (key: string) => void
   onAdd: () => void
 }) {
-  const known = useKnownNumbers(tenantId, product, !issuing)
+  const known = useKnownNumbers(tenantId, product, !issuing, issued)
 
   if (rows.length === 0) {
+    if (!issuing) {
+      return (
+        <p className="text-[12px] text-text-secondary">
+          Erfassen Sie die Chargennummer der Lieferung.
+        </p>
+      )
+    }
     return (
-      <p className="text-[12px] text-text-secondary">
-        {issuing
-          ? 'Für diese Menge gibt es an diesem Lagerort keine Charge.'
-          : 'Erfassen Sie die Chargennummer der Lieferung.'}
-      </p>
+      <EmptyState
+        title="Keine Charge mit Bestand"
+        description="Für dieses Produkt liegt an diesem Lagerort keine Charge mit Bestand. Buchen Sie zuerst einen Zugang im Lager."
+      />
     )
   }
 
@@ -381,6 +704,8 @@ function BatchRows({
               label="Chargennummer"
               value={row.lotNumber}
               onChange={(event) => onNumber(row.key, event.target.value)}
+              onFocus={() => onTyping(row.key)}
+              onBlur={() => onTyping(null)}
               maxLength={LOT_NUMBER_MAX}
               list={known.listId}
               autoComplete="off"
@@ -439,6 +764,7 @@ function SerialNumberChips({
   onScanned,
   onKeyDown,
   onTake,
+  onScanning,
   onRemove,
 }: {
   rows: LotRow[]
@@ -449,6 +775,11 @@ function SerialNumberChips({
   onScanned: (value: string) => void
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   onTake: (code: string) => void
+  /**
+   * True while the camera overlay is delivering numbers, false again when it closes. The
+   * overlay covers the whole screen, so a refusal has to be drawn over it rather than under.
+   */
+  onScanning: (scanning: boolean) => void
   onRemove: (key: string) => void
 }) {
   // A chip is one piece. A proposal line the server offered but did not pick — an expired lot,
@@ -479,8 +810,16 @@ function SerialNumberChips({
           <BarcodeScanner
             label="Seriennummern mit der Kamera scannen"
             continuous
-            onScan={onTake}
-            onClose={() => scanField.current?.focus()}
+            onScan={(code) => {
+              // Noted on the first number rather than on the click: the scanner reports no
+              // opening, and one delivered number is proof enough that the overlay is up.
+              onScanning(true)
+              onTake(code)
+            }}
+            onClose={() => {
+              onScanning(false)
+              scanField.current?.focus()
+            }}
           />
         </div>
       </div>
@@ -755,37 +1094,142 @@ function LotFreeRow({
 }
 
 /**
- * The batch numbers this product already carries, as a suggestion list.
+ * The batch numbers offered while one is typed.
  *
- * <p>Typed rather than chosen: a batch number comes off the supplier's label. The list only
- * saves the second delivery of the same batch from being typed twice, with two spellings.
+ * <p>On a delivery from a supplier those are the numbers this product already carries: the
+ * number comes off the label, and the list only saves the second delivery of the same batch
+ * from being typed twice, with two spellings.
+ *
+ * <p>On a return they are the numbers that last went out, and nothing else — what a customer
+ * sends back is what was delivered, and the batches on the shelf say nothing about it. The
+ * caller has read them already, so this asks for nothing.
  *
  * @param tenantId the tenant
  * @param product the product being booked
  * @param enabled false where nothing is typed, so no request goes out
+ * @param issued the numbers that last went out on a return, absent on a supplier delivery
  * @returns the id to bind the field to, and the list itself
  */
 function useKnownNumbers(
   tenantId: number,
   product: Product,
   enabled: boolean,
+  issued: readonly IssuedLot[] | undefined,
 ): { listId: string; list: ReactNode } {
   const listId = `lots-${product.id}`
   const query = listQuery({ size: PICKER_SIZE, sort: 'lotNumber,asc' })
   const lots = useQuery({
     queryKey: productLotsKey(tenantId, product.id, query),
     queryFn: () => api.get<Page<Lot>>(`${productLotsUrl(tenantId, product.id)}?${query}`),
-    enabled,
+    enabled: enabled && issued === undefined,
   })
+  const numbers = issued === undefined
+    ? (lots.data?.content ?? []).map((lot) => lot.lotNumber)
+    : issued.map((one) => one.lotNumber)
 
   return {
     listId,
     list: (
       <datalist id={listId}>
-        {(lots.data?.content ?? []).map((lot) => (
-          <option key={lot.id} value={lot.lotNumber} />
+        {numbers.map((lotNumber) => (
+          <option key={lotNumber} value={lotNumber} />
         ))}
       </datalist>
     ),
   }
+}
+
+/**
+ * The split a caller already holds, as rows.
+ *
+ * <p>Kept unsigned: the field counts pieces and the caller makes the sign, so a return of two
+ * pieces arrives here as two. An entry without a number never comes back this way — a document
+ * line freezes a number, and the stock without one has none to freeze (backend ADR-0069).
+ *
+ * @param saved what the caller holds, absent where it holds nothing
+ * @returns one row per number, in the order they were handed in
+ */
+function savedRows(saved: readonly LotAllocation[] | undefined): LotRow[] {
+  return (saved ?? [])
+    .filter((allocation) => allocation.lotNumber !== null && allocation.quantity !== 0)
+    .map((allocation, index) => ({
+      key: `saved-${index + 1}`,
+      lotId: null,
+      lotNumber: allocation.lotNumber,
+      expired: false,
+      quantity: `${Math.abs(allocation.quantity)}`,
+    }))
+}
+
+/**
+ * The split as it stands, drawn against what the location holds today.
+ *
+ * <p>The proposal brings the facts — what lies there, when it expires — and the rows in hand
+ * bring the quantities. Nothing moves: a position opened again shows the whole pick list with
+ * exactly the split it was saved with, and the user can shift a piece to another batch without
+ * first losing the one they had.
+ *
+ * <p>A number the location no longer holds keeps a row of its own. It is on the document
+ * either way, and dropping it here would silently empty a position.
+ *
+ * @param proposal what the server suggests taking
+ * @param held the rows as they stand — what the caller handed in, plus whatever was done while
+ *             the proposal was still on its way
+ * @param allowWithoutNumber whether the stock without a number may be allocated at all
+ * @returns the offered rows carrying the held quantities, then the held numbers that are no
+ *          longer offered
+ */
+function mergedRows(
+  proposal: LotProposal,
+  held: readonly LotRow[],
+  allowWithoutNumber: boolean,
+): LotRow[] {
+  const offered = proposalRows(proposal, allowWithoutNumber).map((row) => ({
+    ...row,
+    quantity: held.find((one) => sameLot(one, row))?.quantity ?? '',
+  }))
+  const gone = held.filter((one) => !offered.some((row) => sameLot(one, row)))
+  return [...offered, ...gone]
+}
+
+/**
+ * Whether two rows name the same lot.
+ *
+ * <p>Case is ignored, as the unique index in the database ignores it: `ch-a` and `CH-A` are one
+ * batch, and a stored number must find its row whichever way it was written.
+ *
+ * @param one the row handed in
+ * @param other the row offered
+ * @returns true where they name the same lot, or both name the stock without a number
+ */
+function sameLot(one: LotRow, other: LotRow): boolean {
+  if (one.lotNumber === null || other.lotNumber === null) return one.lotNumber === other.lotNumber
+  return (
+    one.lotNumber.trim().toLocaleLowerCase('de-CH') ===
+    other.lotNumber.trim().toLocaleLowerCase('de-CH')
+  )
+}
+
+/**
+ * What to say about stock that carries no number where none of it may be taken.
+ *
+ * <p>The changeover case: goods that lay there before the product was tracked. They are real
+ * and they are countable, and they still cannot go on a document line, because the line freezes
+ * a number and this stock has none. Explained rather than offered — without the sentence the
+ * user reads «offen 2» next to a shelf they know is full and has no way to learn why
+ * (backend ADR-0069).
+ *
+ * @param proposal what the server suggests taking, absent while it is on its way
+ * @param allowWithoutNumber whether the caller may take that stock; where it may, the stock has
+ *                           a row of its own and needs no sentence
+ * @returns the German sentence, or `null` where there is nothing to explain
+ */
+function withoutNumberHint(
+  proposal: LotProposal | undefined,
+  allowWithoutNumber: boolean,
+): string | null {
+  if (allowWithoutNumber) return null
+  const available = proposal?.withoutNumber?.available ?? 0
+  if (available <= 0) return null
+  return `Bestand ohne Chargennummer: ${formatQuantity(available)}. Über eine Inventur zuordnen.`
 }

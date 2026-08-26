@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentLine } from '../../lib/types'
 import {
   allocatedQuantity,
+  carriedLots,
   carriesText,
   discountFieldsOf,
   discountPayload,
@@ -10,6 +11,7 @@ import {
   hasProblem,
   itemLineCount,
   lineProblems,
+  lotHeadline,
   lotProblems,
   lotSummary,
   moreDetailsSummary,
@@ -17,6 +19,7 @@ import {
   NO_DISCOUNT,
   NOTHING_TOUCHED,
   openQuantity,
+  signedLots,
   structureKindOptions,
   structureLineProblem,
   visibleProblems,
@@ -487,6 +490,129 @@ describe('allocatedQuantity', () => {
   })
 })
 
+describe('carriedLots', () => {
+  const picked = { productId: 9, entries: [{ lotNumber: 'SN-4711', quantity: 1 }] }
+  const tracked = { id: 9, tracking: 'SERIAL' as const }
+
+  /** The everyday case: the numbers were picked for this product and this document books. */
+  it('carriedLotsTest', () => {
+    expect(carriedLots(picked, 9, tracked, 'ISSUE')).toEqual([
+      { lotNumber: 'SN-4711', quantity: 1 },
+    ])
+    expect(carriedLots(picked, 9, tracked, 'ISSUE_IF_NOT_BOOKED')).toHaveLength(1)
+  })
+
+  /**
+   * Typing over the product name and picking another one leaves the numbers behind: they name
+   * pieces lying under the product they were picked for, and the endpoint refuses them on any
+   * other.
+   */
+  it('carriedLotsOfAnotherProductTest', () => {
+    expect(carriedLots(picked, 7, { id: 7, tracking: 'NONE' }, 'ISSUE')).toEqual([])
+    expect(carriedLots(picked, 8, { id: 8, tracking: 'SERIAL' }, 'ISSUE')).toEqual([])
+  })
+
+  /** A product that was followed when the line was written and is not any more. */
+  it('carriedLotsOnAnUntrackedProductTest', () => {
+    expect(carriedLots(picked, 9, { id: 9, tracking: 'NONE' }, 'ISSUE')).toEqual([])
+    expect(carriedLots(picked, 9, { id: 9, tracking: undefined }, 'ISSUE')).toEqual([])
+  })
+
+  /** An Offerte moves nothing and names nothing, whatever is followed. */
+  it('carriedLotsWhereNothingIsBookedTest', () => {
+    expect(carriedLots(picked, 9, tracked, 'NONE')).toEqual([])
+    expect(carriedLots(picked, 9, tracked, 'RESERVE')).toEqual([])
+    expect(carriedLots(picked, 9, tracked, undefined)).toEqual([])
+  })
+
+  /** While the search field carries a term rather than a product there is nothing to send. */
+  it('carriedLotsWithoutAProductTest', () => {
+    expect(carriedLots(picked, undefined, undefined, 'ISSUE')).toEqual([])
+    expect(carriedLots({ entries: [] }, 9, tracked, 'ISSUE')).toEqual([])
+  })
+
+  /**
+   * The position names a product whose details are not there — still on their way, or refused
+   * for good to a clerk without `PRODUCT_READ`. Answering «no numbers» would strip the stored
+   * position of the ones it carries on the very next save, silently and for good.
+   */
+  it('carriedLotsWhileTheProductIsUnknownTest', () => {
+    expect(carriedLots(picked, 9, undefined, 'ISSUE')).toEqual([
+      { lotNumber: 'SN-4711', quantity: 1 },
+    ])
+  })
+})
+
+describe('signedLots', () => {
+  it('signedLotsTest', () => {
+    expect(signedLots([{ lotNumber: 'L-2604', quantity: 3 }], 5)).toEqual([
+      { lotNumber: 'L-2604', quantity: 3 },
+    ])
+  })
+
+  /** A return names the same pieces the other way round. */
+  it('signedLotsOnAReturnTest', () => {
+    expect(
+      signedLots(
+        [
+          { lotNumber: 'SN-4711', quantity: 1 },
+          { lotNumber: 'SN-4712', quantity: 1 },
+        ],
+        -2,
+      ),
+    ).toEqual([
+      { lotNumber: 'SN-4711', quantity: -1 },
+      { lotNumber: 'SN-4712', quantity: -1 },
+    ])
+  })
+
+  /**
+   * The sign is read fresh every time, never remembered: a position picked as an issue and
+   * then turned into a return must not keep pointing the way it did.
+   */
+  it('signedLotsTurnedOverTest', () => {
+    expect(signedLots([{ lotNumber: 'SN-4711', quantity: -1 }], 1)).toEqual([
+      { lotNumber: 'SN-4711', quantity: 1 },
+    ])
+  })
+
+  it('signedLotsWithoutAQuantityTest', () => {
+    expect(signedLots([], 5)).toEqual([])
+    expect(signedLots([{ lotNumber: 'L-2604', quantity: 3 }], null)).toEqual([
+      { lotNumber: 'L-2604', quantity: 3 },
+    ])
+  })
+})
+
+describe('lotHeadline', () => {
+  it('lotHeadlineTest', () => {
+    expect(lotHeadline(5, [{ lotNumber: 'L-2604', quantity: 3 }])).toBe(
+      'Menge 5 · zugeordnet 3 · offen 2',
+    )
+  })
+
+  /** A return counts pieces like everything else; the sign is a fact of the line. */
+  it('lotHeadlineOnAReturnTest', () => {
+    expect(lotHeadline(-2, [{ lotNumber: 'SN-4711', quantity: -1 }])).toBe(
+      'Menge 2 · zugeordnet 1 · offen 1',
+    )
+  })
+
+  /** Worded the way the field words it, so the two lines can never contradict each other. */
+  it('lotHeadlineWithTooManyTest', () => {
+    expect(
+      lotHeadline(1, [
+        { lotNumber: 'SN-4711', quantity: 1 },
+        { lotNumber: 'SN-4712', quantity: 1 },
+      ]),
+    ).toBe('Menge 1 · zugeordnet 2 · 1 zu viel')
+  })
+
+  it('lotHeadlineWithoutAQuantityTest', () => {
+    expect(lotHeadline(null, [])).toBe('Menge — · zugeordnet 0 · offen 0')
+  })
+})
+
 describe('openQuantity', () => {
   it('openQuantityTest', () => {
     expect(openQuantity(5, [{ lotNumber: 'L-2604', quantity: 3 }])).toBe(2)
@@ -503,6 +629,19 @@ describe('openQuantity', () => {
   it('openQuantityWithoutAQuantityTest', () => {
     expect(openQuantity(null, [])).toBe(0)
   })
+
+  /**
+   * Four decimals, the way a quantity is kept. Without the rounding the split below answers a
+   * millionth instead of zero, and the button stays dark over a position that is complete.
+   */
+  it('openQuantityWithFractionsTest', () => {
+    expect(
+      openQuantity(5, [
+        { lotNumber: 'L-2604', quantity: 1.1 },
+        { lotNumber: 'L-2605', quantity: 3.9 },
+      ]),
+    ).toBe(0)
+  })
 })
 
 describe('lotProblems', () => {
@@ -510,6 +649,21 @@ describe('lotProblems', () => {
     expect(lotProblems(5, 'LOT', [{ lotNumber: 'L-2604', quantity: 3 }])).toBe(
       'Noch 2 ohne Nummer.',
     )
+  })
+
+  it('lotProblemsWithTooManyNumbersTest', () => {
+    // A shortened quantity over a stored allocation is the ordinary way here: the numbers stay,
+    // the quantity drops, and the mask asks for the correction. Saying «noch ohne Nummer» there
+    // would contradict the field, which says «zu viel zugeordnet» three lines below.
+    expect(
+      lotProblems(4, 'SERIAL', [
+        { lotNumber: 'SN-4711', quantity: 1 },
+        { lotNumber: 'SN-4712', quantity: 1 },
+        { lotNumber: 'SN-4713', quantity: 1 },
+        { lotNumber: 'SN-4714', quantity: 1 },
+        { lotNumber: 'SN-4715', quantity: 1 },
+      ]),
+    ).toBe('Es sind 1 zu viel zugeordnet.')
   })
 
   it('lotProblemsWhenCoveredTest', () => {
@@ -546,6 +700,20 @@ describe('lotProblems', () => {
     expect(lotProblems(2, 'LOT', [{ lotNumber: 'L-2604', quantity: 0 }])).toBe(
       'Eine Nummer ohne Menge sagt nichts aus.',
     )
+  })
+
+  it('lotProblemsWithTooManyNumbersOnAReturnTest', () => {
+    // The counterpart of lotProblemsWithTooManyNumbersTest, and the reason the overshoot cannot
+    // be read off the sign of the open quantity: here it is -1 on a line that is short by one,
+    // and +1 on this one, which is over by one. Only «open points against the line» tells them
+    // apart.
+    expect(
+      lotProblems(-2, 'SERIAL', [
+        { lotNumber: 'SN-4711', quantity: -1 },
+        { lotNumber: 'SN-4712', quantity: -1 },
+        { lotNumber: 'SN-4713', quantity: -1 },
+      ]),
+    ).toBe('Es sind 1 zu viel zugeordnet.')
   })
 
   it('lotProblemsOnAReturnTest', () => {

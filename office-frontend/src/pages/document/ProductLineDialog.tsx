@@ -6,26 +6,33 @@ import { ErrorNotice } from '../../components/Notice'
 import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
 import { api } from '../../lib/api'
-import { formatQuantity, parseDecimal } from '../../lib/format'
+import { parseDecimal } from '../../lib/format'
 import { booksStock, tracksLots } from '../../lib/inventory'
 import type { OriginState } from '../../lib/origin'
-import type { DocumentLine, Product, StockEffect } from '../../lib/types'
+import type {
+  DocumentLine,
+  LotAllocation,
+  MovementDirection,
+  Product,
+  StockEffect,
+} from '../../lib/types'
 import { DiscountPair, MoreDetails, ServiceDateFields } from './LineDialogParts'
 import { ProductFacts } from './ProductFacts'
 import { ProductQuickSearch } from './ProductQuickSearch'
 import { LotAllocationField } from '../inventory/LotAllocationField'
 import {
+  carriedLots,
   discountFieldsOf,
   discountPayload,
   dropsDiscount,
   hasProblem,
   lineProblems,
-  allocatedQuantity,
+  lotHeadline,
   lotProblems,
   moreDetailsSummary,
   NO_DISCOUNT,
-  openQuantity,
-  type LineLotEntry,
+  signedLots,
+  type PickedLots,
   type ProductLine,
 } from './lineForm'
 import { useVatText } from './productInfo'
@@ -104,10 +111,21 @@ export function ProductLineDialog({
   const [discount, setDiscount] = useState(discountFieldsOf(line))
   const [from, setFrom] = useState(line?.serviceDateFrom ?? '')
   const [to, setTo] = useState(line?.serviceDateTo ?? '')
-  // The numbers this position moves, signed like the quantity. Held here because the field
-  // that collects them is the inventory's and knows nothing about a document line.
-  const [lots, setLots] = useState<LineLotEntry[]>(
-    (line?.lots ?? []).map((lot) => ({ lotNumber: lot.lotNumber, quantity: lot.quantity })),
+  // The numbers this position moves, counted in pieces, and the product they were picked for.
+  // Held here because the field that collects them is the inventory's and knows nothing about
+  // a document line. The sign is put on when they are read — a position can still turn from an
+  // issue into a return after the pick was made.
+  const [lots, setLots] = useState<PickedLots>({
+    productId: line?.productId,
+    entries: (line?.lots ?? []).map((lot) => ({
+      lotNumber: lot.lotNumber,
+      quantity: Math.abs(lot.quantity),
+    })),
+  })
+  // Which way the numbers are picked, kept so an empty quantity field does not turn the block
+  // over for a keystroke. Adjusted below, where the typed quantity has been read.
+  const [signedAs, setSignedAs] = useState<MovementDirection>(
+    (line?.quantity ?? 0) < 0 ? 'IN' : 'OUT',
   )
   const search = useRef<HTMLInputElement>(null)
   const count = useRef<HTMLInputElement>(null)
@@ -134,22 +152,43 @@ export function ProductLineDialog({
     retry: false,
   })
   const product = picked ?? (taken ? stored.data : undefined)
+  // True while the position names a product whose details have not arrived yet. Nothing here
+  // can then tell a followed product from a plain one — and a position saved in that window
+  // used to go out without a single number and wipe what the line carried. Only asked where
+  // the document books at all: anywhere else the answer changes nothing about the numbers,
+  // and making an Offerte wait for it would be a lock for no reason.
+  const unknownProduct =
+    booksStock(stockEffect)
+    && picked === undefined
+    && line?.productId !== undefined
+    && stored.data === undefined
+    && !stored.isError
 
   const amount = parseDecimal(quantity)
+  // Only where the kind of document books stock out and the product is followed. Anywhere
+  // else the dialog looks exactly as it did.
+  const showsLots = booksStock(stockEffect) && tracksLots(product)
+  // What may travel with this position: numbers picked for another product, for one nobody
+  // follows, or on a document that books nothing are none of its business. Signed here and
+  // not when they were picked, so the header below counts the same pieces as the field does.
+  const carried = signedLots(carriedLots(lots, productId, product, stockEffect), amount)
   // The numbers are checked together with the rest, so the existing lock on «Übernehmen»
-  // covers them without a second mechanism (backend ADR-0069).
+  // covers them without a second mechanism (backend ADR-0069). Only where the block is drawn:
+  // a lock over a field nobody can see is a dialog that refuses without a word.
   const problems = { ...lineProblems({ quantity, discount }),
-    lots: lotProblems(amount, product?.tracking, lots) }
+    lots: showsLots ? lotProblems(amount, product?.tracking, carried) : undefined }
   // The catalogue decides whether a line may be discounted at all. The backend refuses the
   // line either way; hiding the field here only spares the user a rejected dialog.
   const discountable = product === undefined || product.discountable !== false
   // A line written before the product lost its discount keeps the figure in the field. It is
   // not sent any more, so the amount of the line rises — and that has to be said out loud.
   const dropping = dropsDiscount(discountable, discount)
-  // Only where the kind of document books stock out and the product is followed. Anywhere
-  // else the dialog looks exactly as it did.
-  const showsLots = booksStock(stockEffect) && tracksLots(product)
-  const ready = productId !== undefined && !hasProblem(problems)
+  const ready = productId !== undefined && !unknownProduct && !hasProblem(problems)
+  // Read from the sign of the quantity, and the one before it while the field is empty: a
+  // quantity that is selected and retyped is empty for a keystroke, and a block that flipped
+  // to «Zugang» in that moment would throw the picked numbers away.
+  const direction: MovementDirection = amount === null ? signedAs : amount < 0 ? 'IN' : 'OUT'
+  if (direction !== signedAs) setSignedAs(direction)
 
   // Held back for as long as the field is being typed in, so the price is asked for once per
   // quantity and not once per keystroke. A quantity of zero is refused anyway; the price is
@@ -178,10 +217,17 @@ export function ProductLineDialog({
     // so the lock the dialog puts on the fading box is pinned as an attribute and no more.
     if (busy || sent.current) return
     const id = taking?.id ?? productId
-    if (id === undefined || hasProblem(problems)) return
+    // Held back while the product is unknown as well: the keyboard reaches this without ever
+    // touching the button that is dark for the same reason.
+    if (id === undefined || unknownProduct || hasProblem(problems)) return
     // Taken from the product being picked where there is one: the state of this render still
-    // says what was chosen before it.
+    // says what was chosen before it — and the numbers belong to the product they were picked
+    // for, which on this way in is the one being handed over.
     const allowsDiscount = taking === undefined ? discountable : taking.discountable !== false
+    const numbers = signedLots(
+      carriedLots(lots, taking?.id ?? id, taking ?? product, stockEffect),
+      amount,
+    )
     const payload: ProductLine = {
       productId: id,
       quantity: amount ?? 1,
@@ -190,7 +236,7 @@ export function ProductLineDialog({
       serviceDateTo: to || undefined,
       // Left out rather than sent empty: the server refuses any entry on a product nobody
       // follows, and an empty array would be one.
-      ...(lots.length === 0 ? {} : { lots }),
+      ...(numbers.length === 0 ? {} : { lots: numbers }),
     }
     // Set before the line goes out, not in the answer: the second click is there long before
     // the backend is.
@@ -209,6 +255,12 @@ export function ProductLineDialog({
         setTerm('')
         setQuantity('1')
         setDiscount(NO_DISCOUNT)
+        // The numbers go with the product they were picked for. Nothing else clears them: the
+        // field that collects them is unmounted by this very reset and reports no more, so
+        // whatever it last said would still be in here — and Strg+Enter on the same product
+        // sends in the same tick, before the field is back. The piece would go out on two
+        // positions and be refused as a 409 at «Ausstellen», over a number nobody picked.
+        setLots(NOTHING_PICKED)
         search.current?.focus()
       },
       () => {
@@ -347,33 +399,51 @@ export function ProductLineDialog({
               standing next to it (backend ADR-0069). */}
           {showsLots && product !== undefined && (
             <div className="grid gap-2 sm:col-span-2">
+              {/* The same sentence the field draws under it, from the same numbers: two
+                  counters three lines apart that disagree leave the reader no way of telling
+                  which one is lying. */}
               <p aria-live="polite" className="text-[12px] text-text-secondary">
-                {`Menge ${formatQuantity(Math.abs(amount ?? 0))} · zugeordnet `
-                  + `${formatQuantity(Math.abs(allocatedQuantity(lots)))} · offen `
-                  + `${formatQuantity(Math.abs(openQuantity(amount, lots)))}`}
+                {lotHeadline(amount, carried)}
               </p>
               <LotAllocationField
+                // Another product is another field: what the position carried says nothing
+                // about the one that was just picked instead.
+                key={product.id}
                 tenantId={tenantId}
                 product={product}
                 locationId={stockLocationId === undefined ? '' : String(stockLocationId)}
+                // What the position already carries, so opening it again shows its numbers
+                // instead of quietly replacing them with a fresh pick. Only where it is still
+                // the stored product — the numbers belong to that one and to no other.
+                saved={product.id === line?.productId ? savedAllocation(line) : undefined}
                 // A return is a receipt: it names numbers that come back rather than ones
-                // that leave, and the field offers accordingly.
-                direction={(amount ?? 0) < 0 ? 'IN' : 'OUT'}
+                // that leave, and the field offers accordingly. It gives up a pick made for
+                // the other direction when this turns over — a number lying in the store is
+                // one that may go out, never one that comes back.
+                direction={direction}
+                // And a negative line on a document is always a return: goods coming back
+                // from a customer, never a delivery from a supplier. So the field offers the
+                // numbers that last went out and warns about one that never did — it does
+                // not block, the choice on a return is free (backend ADR-0069).
+                returning
                 quantity={amount === null ? null : Math.abs(amount)}
                 // The stock without a number cannot travel on a document line: the line
                 // freezes a number, and that stock has none.
                 allowWithoutNumber={false}
                 onChange={(allocations) =>
-                  setLots(
-                    allocations
+                  setLots({
+                    // Noted with the product they were picked for: on another one they name
+                    // nothing, and the endpoint refuses them.
+                    productId: product.id,
+                    entries: allocations
                       .filter((allocation) => allocation.lotNumber !== null)
                       .map((allocation) => ({
                         lotNumber: allocation.lotNumber as string,
-                        // Signed like the line, which is what the API takes.
-                        quantity:
-                          (amount ?? 0) < 0 ? -allocation.quantity : allocation.quantity,
+                        // Pieces, as the field counts them. The sign of the line is put on
+                        // when they are read: this quantity can still turn negative.
+                        quantity: allocation.quantity,
                       })),
-                  )
+                  })
                 }
               />
               {problems.lots !== undefined && (
@@ -416,6 +486,14 @@ export function ProductLineDialog({
 }
 
 /**
+ * What a position carries before anything is picked for it.
+ *
+ * <p>Named rather than written out twice: this is what "no numbers" is, and the reset for the
+ * next position has to answer it exactly as the empty dialog does.
+ */
+const NOTHING_PICKED: PickedLots = { productId: undefined, entries: [] }
+
+/**
  * How a product is named in the search field once it is chosen.
  *
  * @param product the chosen product
@@ -435,4 +513,21 @@ function labelOf(product: Product): string {
 function storedLabel(line: DocumentLine | undefined): string {
   if (!line) return ''
   return [line.productNumber, line.description].filter(Boolean).join(' · ')
+}
+
+/**
+ * The numbers a stored position already carries, for the field that collects them.
+ *
+ * <p>Unsigned: the line signs them and the field counts pieces, so a return of two pieces goes
+ * in as two. Read when the field opens and never after — what the user does from there on is
+ * the field's business (backend ADR-0069).
+ *
+ * @param line the line being edited, undefined for a new one
+ * @returns one entry per number, empty on a position that carries none
+ */
+function savedAllocation(line: DocumentLine | undefined): LotAllocation[] {
+  return (line?.lots ?? []).map((lot) => ({
+    lotNumber: lot.lotNumber,
+    quantity: Math.abs(lot.quantity),
+  }))
 }

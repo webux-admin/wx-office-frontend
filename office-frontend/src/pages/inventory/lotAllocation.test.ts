@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LotProposal, LotProposalLine } from '../../lib/types'
+import type { IssuedLot, LotProposal, LotProposalLine } from '../../lib/types'
 import {
   addSerialNumber,
   addSerialNumbers,
@@ -8,7 +8,11 @@ import {
   allocationSummary,
   emptyRow,
   isAllocated,
+  issuedLabel,
+  listsEveryNumber,
+  LOT_PROPOSAL_MAX_LINES,
   lotComplaint,
+  neverIssuedWarning,
   nextKey,
   openOf,
   proposalRows,
@@ -16,6 +20,7 @@ import {
   serialRow,
   toAllocations,
   uncoveredWarning,
+  withIssuedNumber,
   withNumber,
   withoutRow,
   withQuantity,
@@ -45,6 +50,17 @@ function proposal(fields: Partial<LotProposal> = {}): LotProposal {
 
 function row(fields: Partial<LotRow> = {}): LotRow {
   return { key: 'row-1', lotId: null, lotNumber: 'CH-1', expired: false, quantity: '1', ...fields }
+}
+
+/** One number as the journal answers it: what went out, when, and on which document. */
+function issued(fields: Partial<IssuedLot> = {}): IssuedLot {
+  return {
+    lotNumber: 'SN-4711',
+    quantity: 1,
+    bookedOn: '2026-08-21',
+    documentNumber: 'LS-2026-0002',
+    ...fields,
+  }
 }
 
 describe('proposalRows', () => {
@@ -167,6 +183,76 @@ describe('addSerialNumber', () => {
 
     expect(added.rows).toHaveLength(1)
     expect(added.duplicate).toBeNull()
+  })
+
+  /**
+   * A number the server listed but did not propose — an expired lot, or one beyond the asked
+   * quantity. Taking it is what listing it is for; reading it as a repeat would leave it
+   * unreachable from every way in.
+   */
+  it('addSerialNumberTakesAListedNumberTest', () => {
+    const listed = [
+      row({ key: 'lot-1', lotNumber: 'SN-1', quantity: '1' }),
+      row({ key: 'lot-3', lotNumber: 'SN-3', quantity: '' }),
+    ]
+
+    const added = addSerialNumber(listed, 'SN-3')
+
+    expect(added.duplicate).toBeNull()
+    expect(added.unlisted).toBe(false)
+    expect(added.rows).toHaveLength(2)
+    expect(added.rows[1].quantity).toBe('1')
+  })
+
+  /** «Bereits erfasst» is about a number that carries a piece, not one that stands in the list. */
+  it('addSerialNumberTakesAListedNumberOnlyOnceTest', () => {
+    const listed = [row({ key: 'lot-3', lotNumber: 'SN-3', quantity: '' })]
+
+    const twice = addSerialNumber(addSerialNumber(listed, 'SN-3').rows, 'SN-3')
+
+    expect(twice.rows).toHaveLength(1)
+    expect(twice.duplicate).toBe('lot-3')
+  })
+
+  /** Where the list is known to be complete, a number nobody offered has no stock to go out. */
+  it('addSerialNumberRefusesAnUnlistedNumberTest', () => {
+    const listed = [row({ key: 'lot-1', lotNumber: 'SN-1', quantity: '1' })]
+
+    const added = addSerialNumber(listed, 'SN-9', true)
+
+    expect(added.unlisted).toBe(true)
+    expect(added.duplicate).toBeNull()
+    expect(added.rows).toHaveLength(1)
+  })
+
+  /** Nothing is refused where the caller cannot know: a receipt names numbers nobody holds yet. */
+  it('addSerialNumberTakesAnUnlistedNumberWhereTheListIsNotKnownTest', () => {
+    const added = addSerialNumber([], 'SN-9')
+
+    expect(added.unlisted).toBe(false)
+    expect(added.rows).toHaveLength(1)
+  })
+})
+
+describe('listsEveryNumber', () => {
+  /** A list shorter than the cap is the whole stock of that location. */
+  it('listsEveryNumberTest', () => {
+    expect(listsEveryNumber(proposal({ lines: [line({ lotId: 1 }), line({ lotId: 2 })] }))).toBe(true)
+  })
+
+  /** A full list may be missing one, so nothing may be refused over it. */
+  it('listsEveryNumberWithAFullListTest', () => {
+    const full = [...Array(LOT_PROPOSAL_MAX_LINES).keys()].map((index) =>
+      line({ lotId: index + 1, lotNumber: `SN-${index + 1}` }),
+    )
+
+    expect(listsEveryNumber(proposal({ lines: full }))).toBe(false)
+  })
+
+  /** While the answer is on its way the field knows nothing and refuses nothing. */
+  it('listsEveryNumberWithoutAProposalTest', () => {
+    expect(listsEveryNumber(undefined)).toBe(false)
+    expect(listsEveryNumber(proposal())).toBe(true)
   })
 })
 
@@ -439,5 +525,111 @@ describe('uncoveredWarning', () => {
   /** Nothing on its way yet warns about nothing. */
   it('uncoveredWarningWithoutProposalTest', () => {
     expect(uncoveredWarning(undefined)).toBeNull()
+  })
+})
+
+describe('withIssuedNumber', () => {
+  /** The everyday return: one line carrying the whole quantity, one number, one click. */
+  it('withIssuedNumberTest', () => {
+    const rows = withIssuedNumber([row({ lotNumber: '', quantity: '2' })], 'CH-A')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].lotNumber).toBe('CH-A')
+    expect(rows[0].quantity).toBe('2')
+  })
+
+  /** A second number opens a line of its own instead of overwriting the first. */
+  it('withIssuedNumberWithAFilledLineTest', () => {
+    const rows = withIssuedNumber([row({ lotNumber: 'CH-A', quantity: '2' })], 'CH-B')
+
+    expect(rows.map((entry) => entry.lotNumber)).toEqual(['CH-A', 'CH-B'])
+    expect(rows[1].quantity).toBe('')
+  })
+
+  /** Picking the same number twice is a slip of the hand, not a second line. */
+  it('withIssuedNumberWithTheSameNumberTwiceTest', () => {
+    const rows = withIssuedNumber([row({ lotNumber: 'ch-a', quantity: '2' })], 'CH-A')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].lotNumber).toBe('ch-a')
+  })
+
+  /** Nothing picked, nothing changed. */
+  it('withIssuedNumberWithoutANumberTest', () => {
+    expect(withIssuedNumber([row({ lotNumber: '', quantity: '2' })], '  ')).toEqual([
+      row({ lotNumber: '', quantity: '2' }),
+    ])
+  })
+})
+
+describe('neverIssuedWarning', () => {
+  /** A number this house never delivered is named — and taken all the same. */
+  it('neverIssuedWarningTest', () => {
+    expect(neverIssuedWarning([row({ lotNumber: 'SN-9001', quantity: '1' })], [issued()])).toBe(
+      'SN-9001 ist nicht unter den zuletzt ausgelieferten Nummern.'
+        + ' Die Rücknahme wird trotzdem gebucht.',
+    )
+  })
+
+  /** A number that did go out says nothing, however it was spelled. */
+  it('neverIssuedWarningWithAnIssuedNumberTest', () => {
+    const rows = [row({ lotNumber: 'sn-4711', quantity: '1' })]
+
+    expect(neverIssuedWarning(rows, [issued()])).toBeNull()
+  })
+
+  /**
+   * Exactly one more, which German writes out: «und eine weitere», never «und 1 weitere».
+   *
+   * <p>The same rule {@code shortfallText} follows for the documents holding a quantity.
+   */
+  it('neverIssuedWarningWithSeveralNumbersTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-9001', quantity: '1' }),
+      row({ key: 'row-2', lotNumber: 'SN-9002', quantity: '1' }),
+    ]
+
+    expect(neverIssuedWarning(rows, [issued()])).toBe(
+      'SN-9001 und eine weitere sind nicht unter den zuletzt ausgelieferten Nummern.'
+        + ' Die Rücknahme wird trotzdem gebucht.',
+    )
+  })
+
+  /** From two more on it is a figure again; the first number still names the case. */
+  it('neverIssuedWarningWithManyNumbersTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-9001', quantity: '1' }),
+      row({ key: 'row-2', lotNumber: 'SN-9002', quantity: '1' }),
+      row({ key: 'row-3', lotNumber: 'SN-9003', quantity: '1' }),
+    ]
+
+    expect(neverIssuedWarning(rows, [issued()])).toBe(
+      'SN-9001 und 2 weitere sind nicht unter den zuletzt ausgelieferten Nummern.'
+        + ' Die Rücknahme wird trotzdem gebucht.',
+    )
+  })
+
+  /** A line that carries nothing yet is no statement about any goods. */
+  it('neverIssuedWarningWithAnEmptyLineTest', () => {
+    const rows = [row({ lotNumber: 'SN-9001', quantity: '' }), row({ key: 'row-2', lotNumber: '' })]
+
+    expect(neverIssuedWarning(rows, [issued()])).toBeNull()
+  })
+
+  /** Nothing of this product ever went out on a document: every number is a stranger. */
+  it('neverIssuedWarningWithoutAnyIssueTest', () => {
+    expect(neverIssuedWarning([row({ lotNumber: 'SN-1', quantity: '1' })], [])).not.toBeNull()
+  })
+
+  /** While the answer is on its way nothing is claimed about any number. */
+  it('neverIssuedWarningWithoutAnAnswerTest', () => {
+    expect(neverIssuedWarning([row({ lotNumber: 'SN-1', quantity: '1' })], undefined)).toBeNull()
+  })
+})
+
+describe('issuedLabel', () => {
+  /** The document and the day it left, as they stand under the number. */
+  it('issuedLabelTest', () => {
+    expect(issuedLabel(issued())).toBe('LS-2026-0002 · 21.08.2026')
   })
 })

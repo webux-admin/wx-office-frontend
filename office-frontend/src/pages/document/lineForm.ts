@@ -6,12 +6,15 @@
  * backend refuses the other case, and the mask has to say so before the request goes out.
  */
 import { formatAmount, formatDate, formatPercent, formatQuantity, parseDecimal } from '../../lib/format'
+import { booksStock, tracksLots } from '../../lib/inventory'
 import type { SelectableEntry } from '../../lib/masterData'
 import type {
   DocumentLine,
   DocumentLineKind,
   DocumentLineLot,
+  Product,
   ProductTracking,
+  StockEffect,
   VatCategory,
 } from '../../lib/types'
 
@@ -34,10 +37,13 @@ export type ProductLine = {
 }
 
 /**
- * One number and what of the position falls on it, as the API takes it.
+ * One number and what of the position falls on it.
  *
- * <p>Signed like the line: a return of two pieces names two numbers with minus one each. That
- * is what makes the counter document of a Storno a plain negation.
+ * <p>Sent signed like the line: a return of two pieces names two numbers with minus one each.
+ * That is what makes the counter document of a Storno a plain negation.
+ *
+ * <p>Collected unsigned, as pieces — see {@link PickedLots}. The sign is the one of the line
+ * and is put on by {@link signedLots} when the numbers are read, never when they are picked.
  */
 export type LineLotEntry = {
   lotNumber: string
@@ -419,6 +425,77 @@ export function itemLineCount(lines: readonly DocumentLine[] | undefined): numbe
 // --- batches and serial numbers at the position (backend ADR-0069) -----------
 
 /**
+ * The numbers a position holds, together with the product they were picked for.
+ *
+ * <p>Kept as one value rather than as two states side by side: a number names a piece lying in
+ * the store under one product, so it is only ever an answer about that product.
+ *
+ * <p>The entries count pieces and carry no sign. The line makes the sign, and it can still
+ * turn from an issue into a return after the pick was made — stamped on at the pick, it would
+ * point the wrong way from then on.
+ */
+export type PickedLots = {
+  /** The product the numbers were picked for, absent while none is chosen. */
+  productId?: number
+  entries: LineLotEntry[]
+}
+
+/**
+ * The numbers a position may take with it.
+ *
+ * <p>Empty wherever it may carry none: another product than the one they were picked for, a
+ * product nobody follows any more, or a kind of document that books nothing. Sent on, they
+ * would be numbers the endpoint refuses — «Für dieses Produkt gibt es die Nummer SN-4711
+ * nicht» — over numbers the mask has long stopped showing, which is a refusal nobody can act
+ * on (backend ADR-0069).
+ *
+ * <p>An unknown product is the opposite case and the dangerous one. While the details are
+ * still on their way — or where a document clerk without `PRODUCT_READ` never gets them at
+ * all — nothing here can tell a followed product from a plain one, and answering «none» would
+ * strip a stored position of its numbers on the next save, silently and for good. What the
+ * position already carries therefore stays on it until something is known that says otherwise.
+ *
+ * @param picked what was collected, with the product it was collected for
+ * @param productId the product the position names, absent while the search field carries a
+ *                  term rather than a product
+ * @param product the details of that product, absent while they are on their way or refused
+ * @param stockEffect what issuing this kind of document does to the stock
+ * @returns the entries, empty wherever the position may carry none
+ */
+export function carriedLots(
+  picked: PickedLots,
+  productId: number | undefined,
+  product: Pick<Product, 'id' | 'tracking'> | undefined,
+  stockEffect: StockEffect | undefined,
+): LineLotEntry[] {
+  if (productId === undefined) return []
+  if (picked.productId !== productId) return []
+  if (product === undefined) return picked.entries
+  if (!booksStock(stockEffect) || !tracksLots(product)) return []
+  return picked.entries
+}
+
+/**
+ * The numbers of a position signed the way its quantity is.
+ *
+ * <p>Read at the moment they are needed rather than written at the moment they are picked. A
+ * position that turns from an issue of one piece into a return of one would otherwise keep
+ * entries pointing the other way: the dialog would count «offen 2» over a field that reports
+ * nothing open, and lock a position nobody can unlock (backend ADR-0069).
+ *
+ * @param lots the numbers as they were picked, counting pieces
+ * @param quantity what the position sells, negative on a return
+ * @returns the same numbers, each carrying the sign of the line
+ */
+export function signedLots(
+  lots: readonly LineLotEntry[],
+  quantity: number | null,
+): LineLotEntry[] {
+  const sign = (quantity ?? 0) < 0 ? -1 : 1
+  return lots.map((lot) => ({ lotNumber: lot.lotNumber, quantity: sign * Math.abs(lot.quantity) }))
+}
+
+/**
  * How much of a position the numbers already cover.
  *
  * <p>Signed, like the line itself: a return of two pieces is covered by two entries of minus
@@ -446,7 +523,35 @@ export function openQuantity(
   quantity: number | null,
   lots: readonly LineLotEntry[] | undefined,
 ): number {
-  return (quantity ?? 0) - allocatedQuantity(lots)
+  // Rounded to the four decimals a quantity is kept in. Without it `5 - 1.1 - 3.9` answers a
+  // millionth instead of zero, and «Übernehmen» stays dark over a split the field below it
+  // already reports as complete.
+  return Math.round(((quantity ?? 0) - allocatedQuantity(lots)) * 10_000) / 10_000
+}
+
+/**
+ * The line over the block: «Menge 5 · zugeordnet 3 · offen 2».
+ *
+ * <p>Worded and counted exactly like the one the collecting field draws under it, so the two
+ * can never say different things about one position. They stand three lines apart, and a
+ * reader who sees «offen 2» over «offen 0» has no way of telling which one is lying.
+ *
+ * <p>Unsigned throughout: a return of two pieces reads «Menge 2 · zugeordnet 2 · offen 0» like
+ * everything else. The sign is a fact of the line, not something to count with.
+ *
+ * @param quantity what the position sells, absent while the field is empty
+ * @param lots the numbers named so far, signed like the line
+ * @returns the line to draw
+ */
+export function lotHeadline(
+  quantity: number | null,
+  lots: readonly LineLotEntry[] | undefined,
+): string {
+  const booked = quantity === null ? '—' : formatQuantity(Math.abs(quantity))
+  const allocated = Math.abs(allocatedQuantity(lots))
+  const open = Math.round((Math.abs(quantity ?? 0) - allocated) * 10_000) / 10_000
+  const rest = open < 0 ? `${formatQuantity(-open)} zu viel` : `offen ${formatQuantity(open)}`
+  return `Menge ${booked} · zugeordnet ${formatQuantity(allocated)} · ${rest}`
 }
 
 /**
@@ -480,6 +585,15 @@ export function lotProblems(
   }
   const open = openQuantity(quantity, named)
   if (open === 0) return undefined
+  // Too many is not the same complaint as too few, and the field says so three lines below.
+  // One wording for both put «Noch 1 ohne Nummer.» beside «Es sind 1 zu viel zugeordnet.» —
+  // on the very path a shortened quantity leads to.
+  //
+  // The sign of `open` alone does not tell the two apart: these entries are signed, so a
+  // return of 2 with one number assigned is also `-1`, and it is short, not over. What marks
+  // an overshoot is `open` pointing against the line — the numbers reach past the quantity.
+  const overshoot = open !== 0 && Math.sign(open) === -Math.sign(quantity ?? 0)
+  if (overshoot) return `Es sind ${formatQuantity(Math.abs(open))} zu viel zugeordnet.`
   return `Noch ${formatQuantity(Math.abs(open))} ohne Nummer.`
 }
 

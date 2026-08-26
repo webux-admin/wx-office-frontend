@@ -1,6 +1,12 @@
-import { formatQuantity, parseDecimal } from '../../lib/format'
+import { formatDate, formatQuantity, parseDecimal } from '../../lib/format'
 import { lotKindLabel } from '../../lib/inventory'
-import type { LotAllocation, LotKind, LotProposal, LotProposalLine } from '../../lib/types'
+import type {
+  IssuedLot,
+  LotAllocation,
+  LotKind,
+  LotProposal,
+  LotProposalLine,
+} from '../../lib/types'
 
 /**
  * One number and what of the booked quantity falls on it, while it is being filled in.
@@ -28,6 +34,9 @@ export const LOT_NUMBER_MAX = 60
 
 /** How many numbers the generator hands out at most, as `InventoryRules` caps it. */
 export const SERIAL_PROPOSAL_MAX = 500
+
+/** How many lots a take-out proposal names at most, as `LotProposal.MAX_LINES` caps it. */
+export const LOT_PROPOSAL_MAX_LINES = 20
 
 /**
  * The rows of a take-out, as the server suggests them.
@@ -111,26 +120,53 @@ export function serialRow(lotNumber: string): LotRow {
   }
 }
 
+/** What taking one number in did to the rows. */
+export type SerialTake = {
+  rows: LotRow[]
+  /** The key of the row that already carries this number as a piece, for the highlight. */
+  duplicate: string | null
+  /** True where the number is none the location holds, so nothing was taken. */
+  unlisted: boolean
+}
+
 /**
- * Takes a number into the list, unless it is already in it.
+ * Takes a number in: a new one as a row of its own, one the list already names by picking it.
+ *
+ * <p>«Already recorded» means a number that already carries a piece, not one that merely
+ * stands in the list. The server lists every lot at the location and proposes only some — the
+ * expired ones and everything beyond the asked quantity come with nothing filled in, so that
+ * another piece can be chosen (backend ADR-0069). Reading those as a repeat would leave them
+ * unreachable from every way in, and the position could only ever be what FEFO named.
  *
  * <p>Scanning the same label twice is a slip of the hand, not a second piece: the number stays
  * once and the caller is told which row to highlight. Without that a double scan silently
  * books one piece too many.
  *
- * @param rows the numbers so far
+ * @param rows the numbers so far, the listed ones among them
  * @param input what was typed or scanned
- * @returns the rows and the key of the row a repeated number is already in
+ * @param onlyListed true on a take-out whose list is known to name every number the location
+ *                   holds: one that is not in it has no stock there and is refused rather than
+ *                   counted against the open quantity
+ * @returns the rows, the row a repeated number stands in, and whether it was refused
  */
 export function addSerialNumber(
   rows: readonly LotRow[],
   input: string,
-): { rows: LotRow[]; duplicate: string | null } {
+  onlyListed = false,
+): SerialTake {
   const lotNumber = input.trim()
-  if (lotNumber === '') return { rows: [...rows], duplicate: null }
-  const known = rows.find((row) => sameNumber(row.lotNumber, lotNumber))
-  if (known !== undefined) return { rows: [...rows], duplicate: known.key }
-  return { rows: [...rows, serialRow(lotNumber)], duplicate: null }
+  if (lotNumber === '') return { rows: [...rows], duplicate: null, unlisted: false }
+  const listed = rows.find((row) => sameNumber(row.lotNumber, lotNumber))
+  if (listed !== undefined) {
+    if ((parseDecimal(listed.quantity) ?? 0) > 0) {
+      return { rows: [...rows], duplicate: listed.key, unlisted: false }
+    }
+    // Listed and not picked: the piece lies there, it was only not proposed. Taking it is
+    // what listing it is for.
+    return { rows: withQuantity(rows, listed.key, '1'), duplicate: null, unlisted: false }
+  }
+  if (onlyListed) return { rows: [...rows], duplicate: null, unlisted: true }
+  return { rows: [...rows, serialRow(lotNumber)], duplicate: null, unlisted: false }
 }
 
 /**
@@ -143,14 +179,100 @@ export function addSerialNumber(
 export function addSerialNumbers(
   rows: readonly LotRow[],
   numbers: readonly string[],
-): { rows: LotRow[]; duplicate: string | null } {
-  return numbers.reduce<{ rows: LotRow[]; duplicate: string | null }>(
+): SerialTake {
+  return numbers.reduce<SerialTake>(
     (carried, number) => {
       const next = addSerialNumber(carried.rows, number)
-      return { rows: next.rows, duplicate: next.duplicate ?? carried.duplicate }
+      return {
+        rows: next.rows,
+        duplicate: next.duplicate ?? carried.duplicate,
+        unlisted: next.unlisted || carried.unlisted,
+      }
     },
-    { rows: [...rows], duplicate: null },
+    { rows: [...rows], duplicate: null, unlisted: false },
   )
+}
+
+/**
+ * Puts a number that once went out into the batch lines.
+ *
+ * <p>Into the line that is still without a number, so the everyday return — one line, the
+ * whole quantity, one batch — is a single click. A second click on another number opens a
+ * line of its own instead of overwriting the first.
+ *
+ * <p>A number that is already in stands once: picking it twice is a slip of the hand, and
+ * two lines under one number would be refused by the server anyway.
+ *
+ * @param rows the lines so far
+ * @param lotNumber the number that was picked
+ * @returns the lines with that number in them
+ */
+export function withIssuedNumber(rows: readonly LotRow[], lotNumber: string): LotRow[] {
+  const picked = lotNumber.trim()
+  if (picked === '') return [...rows]
+  if (rows.some((row) => sameNumber(row.lotNumber, picked))) return [...rows]
+  const free = rows.find((row) => row.lotNumber !== null && row.lotNumber.trim() === '')
+  if (free !== undefined) return withNumber(rows, free.key, picked)
+  return [...rows, { ...emptyRow(nextKey(rows)), lotNumber: picked }]
+}
+
+/**
+ * What is said about a number that is not among the ones that last went out.
+ *
+ * <p>A warning and never a block: the choice on a return is free (backend ADR-0073). It says
+ * «not among the last ones» rather than «never delivered», because that is all the answer
+ * knows — the server names the most recent numbers, not every number this product ever
+ * carried out of the house. The list is capped, so this sentence can appear over a number
+ * that is very much out with a customer; the price of an extract is one needless sentence,
+ * which is exactly why nothing is refused here (backend ADR-0073).
+ *
+ * @param rows the lines as they stand
+ * @param issued what last went out, absent while the answer is on its way
+ * @returns the German sentence, or `null` where every number is one that went out
+ */
+export function neverIssuedWarning(
+  rows: readonly LotRow[],
+  issued: readonly IssuedLot[] | undefined,
+): string | null {
+  if (issued === undefined) return null
+  const known = new Set(issued.map((one) => one.lotNumber.trim().toLocaleLowerCase('de-CH')))
+  const strangers = rows
+    .filter((row) => (parseDecimal(row.quantity) ?? 0) > 0)
+    .map((row) => (row.lotNumber ?? '').trim())
+    .filter((lotNumber) => lotNumber !== '')
+    .filter((lotNumber) => !known.has(lotNumber.toLocaleLowerCase('de-CH')))
+  if (strangers.length === 0) return null
+  // Exactly one more is written out, as German writes it — «und eine weitere», never «und 1
+  // weitere». The same rule the reservation sentence follows in `lib/inventory`.
+  const rest = strangers.length - 1
+  const more = rest === 1 ? 'eine weitere' : `${rest} weitere`
+  const named = rest === 0 ? `${strangers[0]} ist` : `${strangers[0]} und ${more} sind`
+  return `${named} nicht unter den zuletzt ausgelieferten Nummern. Die Rücknahme wird trotzdem gebucht.`
+}
+
+/**
+ * The document one number went out on, as one line: «LS-2026-0002 · 21.08.2026».
+ *
+ * @param issued the number as the journal answered it
+ * @returns the line under the number
+ */
+export function issuedLabel(issued: IssuedLot): string {
+  return `${issued.documentNumber} · ${formatDate(issued.bookedOn)}`
+}
+
+/**
+ * Whether the answer names every number the location holds.
+ *
+ * <p>The server lists at most {@link LOT_PROPOSAL_MAX_LINES} lots. A full list may be one
+ * short of the truth, so only a shorter one lets the field say that a scanned number has no
+ * stock — a mask that refuses a number it merely did not hear about is worse than one that
+ * stays quiet (backend ADR-0073).
+ *
+ * @param proposal what the server suggested, absent while it is on its way
+ * @returns true where a number that is not in it provably has no stock at that location
+ */
+export function listsEveryNumber(proposal: LotProposal | undefined): boolean {
+  return proposal !== undefined && proposal.lines.length < LOT_PROPOSAL_MAX_LINES
 }
 
 /**

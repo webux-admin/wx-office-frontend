@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
 import { originState } from '../../lib/origin'
-import type { DocumentLine, Product } from '../../lib/types'
+import type { DocumentLine, LotProposal, Product, StockEffect } from '../../lib/types'
 import { ProductLineDialog } from './ProductLineDialog'
 import type { ProductLine } from './lineForm'
 
@@ -28,6 +28,7 @@ const PRODUCTS: Product[] = [
     revenueAccount: '3400',
     revenueAccountLabel: 'Dienstleistungsertrag',
     vatCategory: 'STANDARD',
+    tracking: 'NONE',
   },
   {
     id: 8,
@@ -40,7 +41,57 @@ const PRODUCTS: Product[] = [
     vatCategory: 'STANDARD',
     discountable: false,
   },
+  {
+    id: 9,
+    productNumber: 'P-300',
+    name: 'Bohrmaschine',
+    productType: 'GOODS',
+    unit: 'PIECE',
+    unitLabel: 'Stk',
+    revenueAccount: '3000',
+    vatCategory: 'STANDARD',
+    tracking: 'SERIAL',
+  },
 ]
+
+/** The serial numbers the delivering store holds, in the order the server offers them. */
+const SERIALS_IN_STOCK = ['SN-4711', 'SN-4712', 'SN-4713']
+
+/** What the movement journal says went out on a document, for the return line. */
+const ISSUED = [
+  { lotNumber: 'SN-4720', quantity: 1, bookedOn: '2026-08-21', documentNumber: 'LS-2026-0002' },
+]
+
+/**
+ * What the server suggests taking, as the proposal of the inventory answers it.
+ *
+ * <p>One line per number that lies at the location and what it cannot cover — three pieces
+ * against a position of five leave two that somebody has to name themselves.
+ *
+ * @param url the request, whose `quantity` decides how much is proposed
+ */
+function lotProposal(url: string): LotProposal {
+  const asked = Number(/quantity=(\d+)/.exec(url)?.[1] ?? 0)
+  return {
+    lines: SERIALS_IN_STOCK.map((lotNumber, index) => ({
+      lotId: 70 + index,
+      lotNumber,
+      expiryDate: null,
+      expired: false,
+      available: 1,
+      proposed: index < asked ? 1 : 0,
+    })),
+    withoutNumber: {
+      lotId: null,
+      lotNumber: null,
+      expiryDate: null,
+      expired: false,
+      available: 0,
+      proposed: 0,
+    },
+    uncovered: Math.max(0, asked - SERIALS_IN_STOCK.length),
+  }
+}
 
 let container: HTMLDivElement
 let root: Root
@@ -50,6 +101,13 @@ let priceRefused = false
 let sendLatency = 0
 /** True where the VAT rates of the day are refused, the way an unseeded day refuses them. */
 let ratesRefused = false
+/**
+ * While set, the answer about the stored product waits for this, so a test can act in the
+ * window in which the dialog knows the product only by its id.
+ */
+let productGate: Promise<void> | null = null
+/** True where the catalogue is refused, the way it is for a clerk without `PRODUCT_READ`. */
+let productRefused = false
 
 /** What the inventory answers about the product the dialog works with. */
 const AVAILABILITY = {
@@ -69,6 +127,8 @@ function stubFetch() {
   priceRefused = false
   sendLatency = 0
   ratesRefused = false
+  productGate = null
+  productRefused = false
   vi.stubGlobal('fetch', (url: string) => {
     // The stock figures. Matched before "/products", which the path of the catalogue also
     // carries. The hit list asks for a whole list and gets an array; the fact box asks about
@@ -90,8 +150,17 @@ function stubFetch() {
         : json({ STANDARD: 8.1, REDUCED: 2.6 })
     }
     if (url.includes('/catalogues')) return json({ 'vat-category': [{ code: 'STANDARD', name: 'Normalsatz' }] })
+    // Matched before the single product below, whose path this one carries as well.
+    if (url.includes('/lot-proposal')) return json(lotProposal(url))
+    if (url.includes('/issued-lots')) return json(ISSUED)
     const single = /\/products\/(\d+)/.exec(url)
-    if (single) return json(PRODUCTS.find((product) => String(product.id) === single[1]) ?? {})
+    if (single) {
+      const answer = () =>
+        productRefused
+          ? json({ detail: 'Dafür fehlt die Berechtigung.' }, 403)
+          : json(PRODUCTS.find((product) => String(product.id) === single[1]) ?? {})
+      return productGate === null ? answer() : productGate.then(answer)
+    }
     if (url.includes('/products')) {
       return json({
         content: PRODUCTS,
@@ -152,10 +221,16 @@ type Calls = { sent: ProductLine[]; closed: number }
 let calls: Calls
 
 /**
+ * What the kind of document does to the stock, and which store it delivers from. Left out the
+ * dialog knows of neither, which is how an Offerte opens it.
+ */
+type Stock = { stockEffect?: StockEffect; stockLocationId?: number }
+
+/**
  * The dialog with the `busy` flag wired to the request the way the order mask wires it: true
  * from the moment a line goes out until the backend has answered.
  */
-function Harness({ line, refused }: { line?: DocumentLine; refused: boolean }) {
+function Harness({ line, refused, stock }: { line?: DocumentLine; refused: boolean; stock: Stock }) {
   const [busy, setBusy] = useState(false)
   return (
     <ProductLineDialog
@@ -187,11 +262,13 @@ function Harness({ line, refused }: { line?: DocumentLine; refused: boolean }) {
       }}
       line={line}
       busy={busy}
+      stockLocationId={stock.stockLocationId}
+      stockEffect={stock.stockEffect}
     />
   )
 }
 
-async function render(line?: DocumentLine, refused = false): Promise<Calls> {
+async function render(line?: DocumentLine, refused = false, stock: Stock = {}): Promise<Calls> {
   calls = { sent: [], closed: 0 }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
@@ -199,7 +276,7 @@ async function render(line?: DocumentLine, refused = false): Promise<Calls> {
       <MemoryRouter>
         <AuthContext.Provider value={auth()}>
           <QueryClientProvider client={client}>
-            <Harness line={line} refused={refused} />
+            <Harness line={line} refused={refused} stock={stock} />
           </QueryClientProvider>
         </AuthContext.Provider>
       </MemoryRouter>,
@@ -268,9 +345,81 @@ const announced = () =>
     .map((one) => one.textContent ?? '')
     .join(' | ')
 
+/**
+ * Every line in the dialog that counts the pieces of this position: the one over the block and
+ * the one the collecting field draws under it.
+ *
+ * <p>They stand three lines apart and must never say different things — a reader who sees
+ * «offen 2» over «offen 0» has no way of telling which one is lying.
+ */
+const counters = () =>
+  text().match(
+    /Menge (?:—|[\d’.]+) · zugeordnet [\d’.]+ · (?:offen [\d’.]+|[\d’.]+ zu viel)/g,
+  ) ?? []
+
+/**
+ * The red lines in the dialog.
+ *
+ * <p>Read off the elements rather than out of the page text: a refusal also stands in the
+ * region that speaks to a screen reader, and that one is never taken back — a test on the page
+ * text would find it there and never see the line go.
+ */
+const refusals = () =>
+  [...container.querySelectorAll('p.text-danger')].map((one) => one.textContent ?? '')
+
 /** Picks the first hit of the quick search the way the keyboard does. */
 function takeFirstProduct() {
   press(field('Produkt'), 'Enter')
+}
+
+/** Picks a named hit of the quick search the way the mouse does. */
+function takeProduct(name: string) {
+  const hit = options().find((one) => one.textContent?.includes(name))
+  if (!hit) throw new Error(`Kein Treffer mit dem Namen "${name}"`)
+  click(hit as HTMLElement)
+}
+
+/** Sends one serial number the way a hand scanner does: the number, then Enter. */
+function scan(lotNumber: string) {
+  type(field('Seriennummer'), lotNumber)
+  press(field('Seriennummer'), 'Enter')
+}
+
+/** Takes one number over out of the list of what last went out. */
+function pick(lotNumber: string) {
+  const found = container.querySelector<HTMLButtonElement>(
+    `[aria-label="${lotNumber} übernehmen"]`,
+  )
+  if (!found) throw new Error(`Keine angebotene Nummer "${lotNumber}"`)
+  click(found)
+}
+
+/** Takes one number back the way the "×" on its chip does. */
+function removeChip(lotNumber: string) {
+  const found = container.querySelector<HTMLButtonElement>(`[aria-label="${lotNumber} entfernen"]`)
+  if (!found) throw new Error(`Kein Chip mit der Nummer "${lotNumber}"`)
+  click(found)
+}
+
+/** A stored position of five pieces, each with the number it was written with. */
+function storedSerialLine(): DocumentLine {
+  return {
+    lineNumber: 1,
+    kind: 'ITEM',
+    productId: 9,
+    productNumber: 'P-300',
+    description: 'Bohrmaschine',
+    quantity: 5,
+    priceIncludesVat: false,
+    lineNet: 0,
+    lineVat: 0,
+    lineGross: 0,
+    lots: ['SN-4711', 'SN-4712', 'SN-4713', 'SN-9001', 'SN-9002'].map((lotNumber) => ({
+      lotNumber,
+      tracking: 'SERIAL' as const,
+      quantity: 1,
+    })),
+  }
 }
 
 describe('ProductLineDialog', () => {
@@ -731,5 +880,432 @@ describe('ProductLineDialog', () => {
     press(field('Menge'), 'Enter')
 
     expect(calls.sent).toEqual([])
+  })
+
+  it('productLineDialogBlocksASerialPositionWhileNumbersAreOpenTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '5')
+    await settle()
+
+    // The store holds three of the five pieces, so two carry no number yet. That stands in
+    // the mask before anything is pressed, and the button is dark while it does — a rule that
+    // only speaks after the click teaches people to guess.
+    expect(announced()).toContain('Menge 5 · zugeordnet 3 · offen 2')
+    expect(text()).toContain('Noch 2 ohne Nummer.')
+    expect(button('Hinzufügen').disabled).toBe(true)
+    expect(button('Hinzufügen und weiter').disabled).toBe(true)
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    // Enter in the quantity adds a position — the keyboard must not walk past the lock the
+    // button carries.
+    expect(calls.sent).toEqual([])
+  })
+
+  it('productLineDialogSendsTheNumbersOfASerialPositionTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '3')
+    await settle()
+
+    expect(announced()).toContain('Menge 3 · zugeordnet 3 · offen 0')
+    expect(button('Hinzufügen').disabled).toBe(false)
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    // Three pieces, three numbers, and they travel in the body of the position: one piece per
+    // serial number.
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: 3,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: [
+          { lotNumber: 'SN-4711', quantity: 1 },
+          { lotNumber: 'SN-4712', quantity: 1 },
+          { lotNumber: 'SN-4713', quantity: 1 },
+        ],
+      },
+    ])
+    expect(calls.closed).toBe(1)
+  })
+
+  it('productLineDialogOffersWhatWentOutOnAReturnLineTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '-1')
+    await settle()
+
+    // A negative position is a return. It is offered the number that went out on a document,
+    // with that document next to it — and not a generator, which would invent a number for a
+    // piece that exists (decision of the Product Owner, backend ADR-0069).
+    expect(text()).toContain('Zuletzt ausgeliefert')
+    expect(text()).toContain('SN-4720')
+    expect(text()).toContain('LS-2026-0002 · 21.08.2026')
+
+    pick('SN-4720')
+
+    expect(announced()).toContain('Menge 1 · zugeordnet 1 · offen 0')
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    // Signed like the line: the piece comes back in.
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: -1,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: [{ lotNumber: 'SN-4720', quantity: -1 }],
+      },
+    ])
+  })
+
+  /**
+   * «Hinzufügen und weiter» takes the numbers with it, and the next position must not get them.
+   *
+   * <p>The reset clears the product, the term and the quantity, and the collecting field goes
+   * with them — so nothing ever tells the dialog that the numbers are gone too. Pressing
+   * Strg+Enter on the same product again sends before the field is even mounted, and the same
+   * serial number stands on two positions. The user first learns of it as a 409 at
+   * «Ausstellen», naming a number they never picked.
+   */
+  it('productLineDialogDropsTheNumbersWhenItStaysOpenForTheNextPositionTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    await settle()
+
+    // One piece, one number, seeded from the proposal.
+    expect(text()).toContain('SN-4711')
+
+    press(field('Menge'), 'Enter', 'ctrl')
+    await settle(0)
+    await settle()
+
+    expect(calls.sent[0].lots).toEqual([{ lotNumber: 'SN-4711', quantity: 1 }])
+    // Cleared for the next position, and the block is not drawn while no product is chosen.
+    expect(field('Produkt').value).toBe('')
+    expect(text()).not.toContain('SN-4711')
+
+    // The same product again, taken and added in one keystroke: the position goes out in the
+    // same tick, long before the collecting field could mount and say what it holds.
+    press(field('Produkt'), 'ArrowDown')
+    press(field('Produkt'), 'ArrowDown')
+    press(field('Produkt'), 'Enter', 'ctrl')
+    await settle(0)
+
+    expect(calls.sent).toHaveLength(2)
+    expect(calls.sent[1].productId).toBe(9)
+    // Nothing was picked for this one, so nothing travels with it. Sending SN-4711 again would
+    // put the same piece on two positions.
+    expect(calls.sent[1].lots).toBeUndefined()
+  })
+
+  it('productLineDialogWarnsAboutANumberThatNeverWentOutTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '-1')
+    await settle()
+
+    scan('SN-9001')
+
+    // Warned and taken: on a return the choice is free, and whoever holds the goods knows
+    // more about them than the journal does.
+    expect(text()).toContain('SN-9001 ist nicht unter den zuletzt ausgelieferten Nummern.')
+    expect(announced()).toContain('Menge 1 · zugeordnet 1 · offen 0')
+    expect(button('Hinzufügen').disabled).toBe(false)
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: -1,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: [{ lotNumber: 'SN-9001', quantity: -1 }],
+      },
+    ])
+  })
+
+  it('productLineDialogTakesANumberTheStoreListedButDidNotProposeTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '2')
+    await settle()
+
+    // The store holds three pieces and two are proposed; the third is listed for whoever
+    // wants to send that one instead. Without it a position can only ever be what FEFO named.
+    expect(announced()).toContain('Menge 2 · zugeordnet 2 · offen 0')
+
+    removeChip('SN-4711')
+    expect(announced()).toContain('Menge 2 · zugeordnet 1 · offen 1')
+
+    scan('SN-4713')
+
+    expect(announced()).toContain('Menge 2 · zugeordnet 2 · offen 0')
+    expect(text()).not.toContain('bereits erfasst')
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: 2,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: [
+          { lotNumber: 'SN-4712', quantity: 1 },
+          { lotNumber: 'SN-4713', quantity: 1 },
+        ],
+      },
+    ])
+  })
+
+  it('productLineDialogRefusesANumberThatIsNotInStockTest', async () => {
+    await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '5')
+    await settle()
+    scan('SN-9001')
+
+    // A number the store does not hold is not counted down quietly: it would be refused on
+    // issuing, long after whoever scanned it has moved on (issue #21, Nachtrag). The reason
+    // stays open, because the proposal leaves out the blocked numbers as well as the missing
+    // ones — «nicht im Bestand» would be a wrong reason for a right refusal.
+    expect(refusals()).toEqual([
+      'SN-9001 ist an diesem Lagerort nicht verfügbar: kein Bestand oder gesperrt.',
+    ])
+    expect(announced()).toContain('Menge 5 · zugeordnet 3 · offen 2')
+    expect(button('Hinzufügen').disabled).toBe(true)
+
+    // And the quantity is the other way of answering it: the pick the number was refused
+    // against is gone, and a red line that outlives its reason complains about nothing.
+    type(field('Menge'), '3')
+    await settle()
+
+    expect(refusals()).toEqual([])
+  })
+
+  /**
+   * The line turns from an issue into a return while a number is already picked for the issue.
+   *
+   * <p>SN-4711 lies in the store and never left it, so it cannot be a piece coming back — and
+   * the two counters, the one over the block and the one under it, must not end up counting the
+   * same chip with opposite signs.
+   */
+  it('productLineDialogClearsTheOutgoingPickWhenTheLineTurnsIntoAReturnTest', async () => {
+    await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    // The quantity starts at one, so the proposal for the issue lands and seeds a chip before
+    // anything is typed. Typing the minus in the same breath would hide the whole defect.
+    await settle()
+    expect(text()).toContain('SN-4711')
+    expect(counters()).toEqual(['Menge 1 · zugeordnet 1 · offen 0', 'Menge 1 · zugeordnet 1 · offen 0'])
+
+    type(field('Menge'), '-1')
+    await settle()
+
+    expect(text()).toContain('Zuletzt ausgeliefert')
+    expect(text()).not.toContain('SN-4711')
+    expect(counters()).toEqual(['Menge 1 · zugeordnet 0 · offen 1', 'Menge 1 · zugeordnet 0 · offen 1'])
+    expect(text()).toContain('Noch 1 ohne Nummer.')
+    expect(button('Hinzufügen').disabled).toBe(true)
+
+    pick('SN-4720')
+    await settle()
+
+    expect(counters()).toEqual(['Menge 1 · zugeordnet 1 · offen 0', 'Menge 1 · zugeordnet 1 · offen 0'])
+    expect(button('Hinzufügen').disabled).toBe(false)
+  })
+
+  /**
+   * The details of the stored product are still on their way. Nothing in the dialog can then
+   * tell a followed product from a plain one, and saving in that window used to send a position
+   * without a single number — wiping what the line carried, without a word.
+   */
+  it('productLineDialogWaitsForTheProductBeforeSavingAStoredNumberTest', async () => {
+    let arrive: () => void = () => undefined
+    productGate = new Promise<void>((resolve) => {
+      arrive = resolve
+    })
+
+    const calls = await render(storedSerialLine(), false, {
+      stockEffect: 'ISSUE',
+      stockLocationId: 1,
+    })
+
+    expect(button('Übernehmen').disabled).toBe(true)
+
+    // And the keyboard walks past no lock the button carries.
+    press(field('Menge'), 'Enter')
+    await settle(0)
+    expect(calls.sent).toEqual([])
+
+    await act(async () => {
+      arrive()
+    })
+    await settle()
+
+    expect(button('Übernehmen').disabled).toBe(false)
+
+    click(button('Übernehmen'))
+    await settle(0)
+
+    expect(calls.sent[0].lots).toHaveLength(5)
+  })
+
+  /**
+   * A document clerk without `PRODUCT_READ` never learns what the product is. The block cannot
+   * be drawn, and the numbers the line carries have to travel untouched all the same — a
+   * position that quietly loses them is a data loss nobody would ever see.
+   */
+  it('productLineDialogKeepsTheStoredNumbersWithoutTheRightToReadTheProductTest', async () => {
+    productRefused = true
+
+    const calls = await render(storedSerialLine(), false, {
+      stockEffect: 'ISSUE',
+      stockLocationId: 1,
+    })
+
+    expect(text()).not.toContain('Seriennummer')
+    expect(button('Übernehmen').disabled).toBe(false)
+
+    click(button('Übernehmen'))
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: 5,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: ['SN-4711', 'SN-4712', 'SN-4713', 'SN-9001', 'SN-9002'].map((lotNumber) => ({
+          lotNumber,
+          quantity: 1,
+        })),
+      },
+    ])
+  })
+
+  it('productLineDialogDropsTheNumbersWhenTheProductChangesTest', async () => {
+    const calls = await render(storedSerialLine(), false, {
+      stockEffect: 'ISSUE',
+      stockLocationId: 1,
+    })
+
+    expect(announced()).toContain('Menge 5 · zugeordnet 5 · offen 0')
+
+    type(field('Produkt'), 'Wartung')
+    await settle()
+    takeProduct('Wartung')
+    await settle()
+
+    // The numbers name pieces lying under the product they were picked for. Carried over,
+    // they would travel to an endpoint that refuses them, with a message about numbers the
+    // mask no longer shows.
+    expect(text()).not.toContain('Seriennummer')
+    expect(button('Übernehmen').disabled).toBe(false)
+
+    click(button('Übernehmen'))
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      { productId: 7, quantity: 5, serviceDateFrom: undefined, serviceDateTo: undefined },
+    ])
+  })
+
+  it('productLineDialogKeepsTheStoredNumbersOfAPositionTest', async () => {
+    const stored = ['SN-4711', 'SN-4712', 'SN-4713', 'SN-9001', 'SN-9002']
+    const calls = await render(
+      {
+        lineNumber: 1,
+        kind: 'ITEM',
+        productId: 9,
+        productNumber: 'P-300',
+        description: 'Bohrmaschine',
+        quantity: 5,
+        priceIncludesVat: false,
+        lineNet: 0,
+        lineVat: 0,
+        lineGross: 0,
+        lots: stored.map((lotNumber) => ({ lotNumber, tracking: 'SERIAL' as const, quantity: 1 })),
+      },
+      false,
+      { stockEffect: 'ISSUE', stockLocationId: 1 },
+    )
+
+    // What is on the document is what was agreed. Opening the position again must not quietly
+    // hand it the fresh pick of today — two of these numbers have long left the store, and
+    // being offered three instead would lock a position that is complete.
+    expect(announced()).toContain('Menge 5 · zugeordnet 5 · offen 0')
+    expect(text()).toContain('SN-9002')
+    expect(button('Übernehmen').disabled).toBe(false)
+
+    click(button('Übernehmen'))
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      {
+        productId: 9,
+        quantity: 5,
+        serviceDateFrom: undefined,
+        serviceDateTo: undefined,
+        lots: stored.map((lotNumber) => ({ lotNumber, quantity: 1 })),
+      },
+    ])
+  })
+
+  it('productLineDialogAsksForNoNumberOnAnUntrackedProductTest', async () => {
+    const calls = await render(undefined, false, { stockEffect: 'ISSUE', stockLocationId: 1 })
+
+    takeFirstProduct()
+    type(field('Menge'), '5')
+    await settle()
+
+    // A product nobody follows has no number to give, and the dialog looks exactly as it did
+    // before any of this existed — not even the line that counts the pieces.
+    expect(text()).not.toContain('zugeordnet')
+    expect(text()).not.toContain('Seriennummer')
+    expect(button('Hinzufügen').disabled).toBe(false)
+
+    press(field('Menge'), 'Enter')
+    await settle(0)
+
+    expect(calls.sent).toEqual([
+      { productId: 7, quantity: 5, serviceDateFrom: undefined, serviceDateTo: undefined },
+    ])
+  })
+
+  it('productLineDialogAsksForNoNumberWhereNothingIsBookedTest', async () => {
+    await render(undefined, false, { stockEffect: 'NONE', stockLocationId: 1 })
+
+    takeProduct('Bohrmaschine')
+    type(field('Menge'), '5')
+    await settle()
+
+    // An Offerte moves nothing, so it asks for nothing — not even for a product that is
+    // followed piece by piece. The numbers are named on the document that books them out.
+    expect(field('Produkt').value).toBe('P-300 · Bohrmaschine')
+    expect(text()).not.toContain('zugeordnet')
+    expect(text()).not.toContain('Seriennummer')
+    // And it goes out: a lock over numbers nobody asked for is a dialog that refuses without
+    // a word, since the block that would explain it is not drawn here at all.
+    expect(button('Hinzufügen').disabled).toBe(false)
   })
 })

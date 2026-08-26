@@ -885,6 +885,27 @@ export type LotProposal = {
 }
 
 /**
+ * One number that went out on a document, as `IssuedLotDto` sends it.
+ *
+ * <p>What a return is filled in from: a customer sends back what was delivered, so the mask
+ * offers the numbers that last left the house rather than the ones the product happens to
+ * carry. It suggests and binds nothing — the choice on a return is free, and a number that is
+ * not in this list is warned about and never refused (backend ADR-0073).
+ *
+ * <p>At most twenty of them come back, so the list is an extract and never a proof: a number
+ * missing from it may well be out with a customer (backend ADR-0073).
+ */
+export type IssuedLot = {
+  lotNumber: string
+  /** How many pieces left on that document, always positive. */
+  quantity: number
+  /** The day it left, `YYYY-MM-DD`. */
+  bookedOn: string
+  /** The document it left on. Only what a document booked is ever listed. */
+  documentNumber: string
+}
+
+/**
  * One number and what of the booked quantity falls on it, as `LotAllocationRequest` takes it.
  *
  * <p>`lotNumber: null` means the stock without a number and is only allowed on the way out.

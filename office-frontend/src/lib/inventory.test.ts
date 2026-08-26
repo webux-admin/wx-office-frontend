@@ -18,6 +18,8 @@ import {
   reservedForText,
   shortfallText,
   inventoryUrl,
+  issuedLotsKey,
+  issuedLotsUrl,
   isReversible,
   manualReasonsFor,
   missingAsOfDateNote,
@@ -450,6 +452,29 @@ describe('reservation constants', () => {
   it('stockReservationPathTest', () => {
     expect(STOCK_RESERVATION_PATH).toBe('/reservierungen')
     expect(STALE_RESERVATION_DAYS).toBe(30)
+  })
+})
+
+describe('issuedLotsUrl', () => {
+  /** Under the product, like every lot resource, and its own address next to the lot list. */
+  it('issuedLotsUrlTest', () => {
+    expect(issuedLotsUrl(7, 42)).toBe('/api/tenants/7/products/42/issued-lots')
+  })
+})
+
+describe('issuedLotsKey', () => {
+  it('issuedLotsKeyTest', () => {
+    expect(issuedLotsKey(7, 42)).toEqual(['issued-lots', 7, 42])
+  })
+
+  /** What one tenant delivered is nothing another one may be offered. */
+  it('issuedLotsKeyPerTenantTest', () => {
+    expect(issuedLotsKey(7, 42)).not.toEqual(issuedLotsKey(8, 42))
+  })
+
+  /** Two products of one tenant do not share an answer either. */
+  it('issuedLotsKeyPerProductTest', () => {
+    expect(issuedLotsKey(7, 42)).not.toEqual(issuedLotsKey(7, 43))
   })
 })
 
