@@ -330,8 +330,15 @@ export function stockLocationLabel(location: StockLocation | undefined): string 
  *
  * <p>Without a store, and for an answer that carries no per-store split, the whole-tenant
  * figure stays — that is the tenant with one store, where both figures are the same number.
- * A store the product has never lain in comes back as a free quantity of zero, which is what
- * it is.
+ *
+ * <p><b>An absent split and an empty one both mean «none was sent».</b> The endpoint of a
+ * single product sends the split; the batch endpoint behind the hit list sends bare sums with
+ * `locations: []`, because the backend leaves out null and never an empty list. Only a split
+ * that names at least one store can be narrowed — an empty one read as «nothing lies there»
+ * puts a zero on every row.
+ *
+ * <p>A store the product has never lain in does come back as a free quantity of zero: that
+ * answer carries a split, and this store is not in it.
  *
  * @param availability what the inventory answered for the product, undefined while unknown
  * @param locationId the store the document delivers from, undefined for the whole tenant
@@ -342,7 +349,11 @@ export function availabilityAt(
   locationId: number | undefined,
 ): ProductAvailability | undefined {
   if (availability === undefined || locationId === undefined) return availability
-  if (availability.locations === undefined) return availability
+  // An empty split is not a split. The batch endpoint behind the hit list answers with bare
+  // sums and sends `locations: []`, so reading it as «nothing lies at that store» would put a
+  // zero on every row.
+  if (availability.locations === undefined || availability.locations.length === 0)
+    return availability
   const here = availability.locations.find((entry) => entry.locationId === locationId)
   return {
     ...availability,

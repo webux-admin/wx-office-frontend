@@ -693,6 +693,24 @@ describe('availabilityAt', () => {
     expect(availabilityAt(flat, 2)).toEqual(flat)
   })
 
+  it('availabilityAtWithAnEmptySplitTest', () => {
+    // Exactly what the batch endpoint of the hit list sends: the sums, and an empty split
+    // rather than none — Jackson drops null, never an empty list, so the JSON really carries
+    // `"locations": []`. Read as «nothing lies at that store» it turned every stock-managed
+    // row of the product search into a «0 verfügbar» in the warning tone.
+    const batch: ProductAvailability = {
+      productId: 42,
+      stockManaged: true,
+      onHand: 21,
+      reserved: 4,
+      availableQuantity: 17,
+      locations: [],
+      heldBy: [],
+    }
+
+    expect(availabilityAt(batch, 2)).toEqual(batch)
+  })
+
   it('availabilityAtWithoutAnAnswerTest', () => {
     expect(availabilityAt(undefined, 2)).toBeUndefined()
   })
