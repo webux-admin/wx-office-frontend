@@ -29,6 +29,7 @@ import {
   formatLongDate,
 } from '../lib/format'
 import { INVENTORY_RIGHTS } from '../lib/inventory'
+import { runsModule } from '../lib/modules'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery } from '../lib/paging'
 import {
@@ -153,7 +154,7 @@ const TILES: CountedTile[] = [
     tone: 'bg-module-lager',
     permission: INVENTORY_RIGHTS.read,
     href: '/bestand',
-    module: 'inventory',
+    module: 'INVENTORY',
     detail: (data) =>
       data.shortages === 0
         ? 'Bestand gedeckt'
@@ -210,15 +211,12 @@ export function DashboardPage() {
   const { user, can } = useAuth()
   const tenantId = useTenantId()
 
-  // Which switchable modules this tenant runs. It travels with the session, exactly as the
-  // sidebar reads it, so a tenant without an inventory gets no inventory tile.
-  const activeTenant = user?.tenants.find((tenant) => tenant.id === user.activeTenantId)
-  const modules: Record<NavModule, boolean> = {
-    inventory: activeTenant?.inventoryEnabled === true,
-  }
+  // Which switchable modules this tenant runs. The list travels with the session, exactly as
+  // the sidebar reads it, so a tenant without an inventory gets no inventory tile.
+  const runs = (module: NavModule) => runsModule(user?.tenants, user?.activeTenantId, module)
   const readsPartners = can('PARTNER_READ')
   const readsProducts = can('PRODUCT_READ')
-  const countsShortages = modules.inventory && can(INVENTORY_RIGHTS.read)
+  const countsShortages = runs('INVENTORY') && can(INVENTORY_RIGHTS.read)
 
   // A tile shows one number, so it asks for one row and reads the total off the page. The
   // unpaged version loaded every partner, product and document of the tenant to count them,
@@ -280,8 +278,7 @@ export function DashboardPage() {
     (readsProducts && (productCount.isPending || priceGroups.isPending)) ||
     (countsShortages && shortages.isPending)
   const tiles = TILES.filter(
-    (tile) =>
-      can(tile.permission) && (tile.module === undefined || modules[tile.module]),
+    (tile) => can(tile.permission) && (tile.module === undefined || runs(tile.module)),
   )
   const salesTiles = SALES_TILES.filter((tile) => can(tile.permission))
 

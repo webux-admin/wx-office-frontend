@@ -55,14 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await api.post<AuthenticatedUser>(`/api/auth/tenants/${tenantId}`))
   }, [])
 
+  // Nothing to read back while nobody is signed in — and asking anyway would answer 401 and
+  // look like a session that had just ended.
+  const refresh = useCallback(async () => {
+    if (user === null) return
+    setUser(await api.get<AuthenticatedUser>('/api/auth/me'))
+  }, [user])
+
   const can = useCallback(
     (permission: string) => user?.permissions.includes(permission) ?? false,
     [user],
   )
 
   const value = useMemo<AuthState>(
-    () => ({ user, loading, signIn, signOut, switchTenant, can }),
-    [user, loading, signIn, signOut, switchTenant, can],
+    () => ({ user, loading, signIn, signOut, switchTenant, refresh, can }),
+    [user, loading, signIn, signOut, switchTenant, refresh, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

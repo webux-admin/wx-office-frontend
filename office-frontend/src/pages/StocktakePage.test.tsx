@@ -40,7 +40,7 @@ const SESSION: AuthState = {
     username: 'muster',
     activeTenantId: TENANT,
     superuser: false,
-    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled: true }],
+    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['INVENTORY'] }],
     // Read through a getter, so a test can narrow the rights before it renders without
     // building a second session object next to this one.
     get permissions() {
@@ -51,6 +51,7 @@ const SESSION: AuthState = {
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
+  refresh: () => Promise.resolve(),
   can: (permission: string) => rights.includes(permission),
 }
 

@@ -8,6 +8,7 @@ import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
+import { MODULE_PATH } from './lib/modules'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
 
@@ -49,6 +50,7 @@ const StocktakeListPage = lazy(() => import('./pages/StocktakeListPage').then((m
 const StocktakePage = lazy(() => import('./pages/StocktakePage').then((module) => ({ default: module.StocktakePage })))
 const StockMovementListPage = lazy(() => import('./pages/StockMovementListPage').then((module) => ({ default: module.StockMovementListPage })))
 const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
+const ModulePage = lazy(() => import('./pages/ModulePage').then((module) => ({ default: module.ModulePage })))
 const StockAsOfPage = lazy(() => import('./pages/StockAsOfPage').then((module) => ({ default: module.StockAsOfPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
 const TenantPage = lazy(() => import('./pages/TenantPage').then((module) => ({ default: module.TenantPage })))
@@ -147,6 +149,7 @@ export default function App() {
                 <Route path="/nummernkreise" element={<NumberRangePage />} />
 
                 <Route path="/mandanten" element={<TenantListPage />} />
+                <Route path={MODULE_PATH} element={<ModulePage />} />
                 <Route path="/mandanten/:id" element={<TenantPage />} />
 
                 <Route path="/benutzer" element={<UserListPage />} />

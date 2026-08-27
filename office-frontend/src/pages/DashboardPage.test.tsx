@@ -27,6 +27,7 @@ const SESSION: AuthState = {
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
+  refresh: () => Promise.resolve(),
   can: (permission: string) => permission === 'OFFER_READ',
 }
 
@@ -85,15 +86,21 @@ function stubFetch() {
 /**
  * A session of a tenant that runs the inventory and may read it.
  *
- * @param inventoryEnabled whether that tenant has the module switched on
+ * @param runsInventory whether that tenant has the module switched on
  */
-function inventorySession(inventoryEnabled: boolean): AuthState {
+function inventorySession(runsInventory: boolean): AuthState {
   return {
     ...SESSION,
     user: {
       ...SESSION.user!,
       tenants: [
-        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled },
+        {
+          id: TENANT,
+          code: 'WX',
+          name: 'Webux',
+          isDefault: true,
+          modules: runsInventory ? ['INVENTORY'] : [],
+        },
       ],
       permissions: ['INVENTORY_READ'],
     },

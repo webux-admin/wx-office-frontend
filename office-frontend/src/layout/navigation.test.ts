@@ -74,7 +74,7 @@ describe('NAV_GROUPS', () => {
     ])
     for (const entry of entries) {
       expect(entry.permission).toBe('INVENTORY_READ')
-      expect(entry.module).toBe('inventory')
+      expect(entry.module).toBe('INVENTORY')
     }
   })
 
@@ -122,6 +122,24 @@ describe('NAV_GROUPS', () => {
     expect(titles).toContain('Moduleinstellungen')
     expect(titles).not.toContain('Basisdaten')
     expect(titles).not.toContain('Einstellungen')
+  })
+
+  /**
+   * The module screen stands beside «Mandanten» in the system settings, not in a folder of
+   * its own under the module settings: the sorting rule of ADR-0011 asks how many modules
+   * read the value, and the module switch is read by every one of them.
+   *
+   * <p>And it carries no `module` field. A screen that hides itself once somebody switches
+   * everything off leaves no way back but psql (ADR-0018).
+   */
+  it('navGroupsHoldsTheModuleScreenTest', () => {
+    const system = NAV_GROUPS.find((group) => group.title === 'Systemeinstellungen')
+    const entry = system?.entries.find((node) => !isFolder(node) && node.label === 'Module')
+
+    expect(entry).toBeDefined()
+    expect(entry && !isFolder(entry) ? entry.href : undefined).toBe('/module')
+    expect(entry?.permission).toBe('TENANT_READ')
+    expect(entry?.module).toBeUndefined()
   })
 
   /** Module settings come per module, so every top level entry there is a module folder. */
@@ -189,7 +207,7 @@ describe('visibleNavGroups', () => {
   }
 
   it('visibleNavGroupsTest', () => {
-    const visible = visibleNavGroups(all, { inventory: true })
+    const visible = visibleNavGroups(all, () => true)
 
     expect(hrefs(visible)).toContain('/lagerorte')
     expect(hrefs(visible)).toContain('/kunden')
@@ -200,7 +218,7 @@ describe('visibleNavGroups', () => {
    * many inventory rights the session holds (ADR-0060 of the backend).
    */
   it('visibleNavGroupsHidesASwitchedOffModuleTest', () => {
-    const visible = visibleNavGroups(all, { inventory: false })
+    const visible = visibleNavGroups(all, () => false)
 
     expect(hrefs(visible)).not.toContain('/lagerorte')
     expect(hrefs(visible)).toContain('/kunden')
@@ -209,7 +227,7 @@ describe('visibleNavGroups', () => {
   it('visibleNavGroupsHidesWhatThePermissionForbidsTest', () => {
     const visible = visibleNavGroups(
       (permission) => permission !== 'INVENTORY_READ',
-      { inventory: true },
+      () => true,
     )
 
     expect(hrefs(visible)).not.toContain('/lagerorte')
@@ -217,14 +235,14 @@ describe('visibleNavGroups', () => {
 
   /** A folder whose last child fell away disappears rather than folding open on nothing. */
   it('visibleNavGroupsDropsAnEmptyFolderTest', () => {
-    const visible = visibleNavGroups(all, { inventory: false })
+    const visible = visibleNavGroups(all, () => false)
     const module = visible.find((group) => group.title === 'Moduleinstellungen')
 
     expect(module?.entries.some((node) => isFolder(node) && node.label === 'Lager')).toBe(false)
   })
 
   it('visibleNavGroupsWithoutAnyPermissionTest', () => {
-    const visible = visibleNavGroups(none, { inventory: true })
+    const visible = visibleNavGroups(none, () => true)
 
     // Only the overview is left: it is the one entry that asks for no permission.
     expect(hrefs(visible)).toEqual(['/'])

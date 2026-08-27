@@ -89,6 +89,7 @@ function auth(): AuthState {
     signIn: () => Promise.reject(new Error('not in this test')),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
     can: (permission: string) =>
       !(withoutInventoryRight && permission === 'INVENTORY_READ'),
   }

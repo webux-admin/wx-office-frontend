@@ -68,7 +68,7 @@ function session(permissions: string[]): AuthState {
       activeTenantId: TENANT,
       superuser: false,
       tenants: [
-        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled: true },
+        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['INVENTORY'] },
       ],
       permissions,
     },
@@ -76,6 +76,7 @@ function session(permissions: string[]): AuthState {
     signIn: () => Promise.reject(new Error('nicht gebraucht')),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
     can: (permission: string) => permissions.includes(permission),
   }
 }

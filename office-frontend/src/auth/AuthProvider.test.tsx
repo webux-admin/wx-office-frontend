@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from './AuthProvider'
+import type { AuthState } from './authContext'
+import { useAuth } from './useAuth'
 import { RequireAuth } from './RequireAuth'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -77,6 +79,42 @@ function appOn(path: string) {
   )
 }
 
+/** The session the probe below reads, with the modules of its one tenant. */
+function signedIn(modules: string[]) {
+  return {
+    userId: 1,
+    username: 'admin',
+    activeTenantId: 1,
+    superuser: false,
+    tenants: [{ id: 1, code: 'WX', name: 'Webux', isDefault: true, modules }],
+    permissions: [],
+  }
+}
+
+/** The session as the last render saw it, so a test can call into it. */
+let state: AuthState | null = null
+
+/**
+ * A tree that shows the module list of the session and hands the state out.
+ *
+ * <p>Not under StrictMode: the double mount of the two tests above is what they are about,
+ * and here it would only make the request bookkeeping harder to read.
+ */
+function sessionProbe() {
+  function Probe() {
+    state = useAuth()
+    const active = state.user?.tenants.find((tenant) => tenant.id === state?.user?.activeTenantId)
+    return <div>Module: {active?.modules.join(', ') || '—'}</div>
+  }
+  return (
+    <MemoryRouter>
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    </MemoryRouter>
+  )
+}
+
 describe('AuthProvider', () => {
   it('authProviderKeepsDeepLinkOnStrictModeRemountTest', async () => {
     // The bug this pins down: StrictMode aborts the first mount's session request, and the
@@ -109,5 +147,39 @@ describe('AuthProvider', () => {
     await answerNextRequest(401, null)
 
     expect(container.textContent).toContain('Anmeldemaske')
+  })
+
+  /**
+   * What the module screen calls after switching a module: the session is read again, so
+   * sidebar and overview see the new module list without a page reload (ADR-0018).
+   */
+  it('refreshTest', async () => {
+    stubFetch()
+    act(() => root.render(sessionProbe()))
+    await act(async () => {})
+    await answerNextRequest(200, signedIn(['INVENTORY']))
+    expect(container.textContent).toContain('Module: INVENTORY')
+
+    await act(async () => {
+      void state?.refresh()
+    })
+    await answerNextRequest(200, signedIn([]))
+
+    expect(container.textContent).toContain('Module: —')
+  })
+
+  /** Nobody is signed in: asking anyway would answer 401 and look like a session ending. */
+  it('refreshWithoutSessionTest', async () => {
+    stubFetch()
+    act(() => root.render(sessionProbe()))
+    await act(async () => {})
+    await answerNextRequest(401, null)
+    expect(pendingRequests).toHaveLength(0)
+
+    await act(async () => {
+      void state?.refresh()
+    })
+
+    expect(pendingRequests).toHaveLength(0)
   })
 })

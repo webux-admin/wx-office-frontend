@@ -390,7 +390,7 @@ describe('StocktakePage line views', () => {
       activeTenantId: TENANT,
       superuser: false,
       tenants: [
-        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled: true },
+        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['INVENTORY'] },
       ],
       permissions: PERMISSIONS,
     },
@@ -398,6 +398,7 @@ describe('StocktakePage line views', () => {
     signIn: () => Promise.reject(new Error('nicht gebraucht')),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
     can: (permission: string) => PERMISSIONS.includes(permission),
   }
 

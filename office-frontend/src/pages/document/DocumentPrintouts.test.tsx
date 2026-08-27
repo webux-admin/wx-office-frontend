@@ -73,6 +73,7 @@ function auth(permissions: string[]): AuthState {
     signIn: () => Promise.reject(new Error('not in this test')),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
     can: (permission: string) => permissions.includes(permission),
   }
 }

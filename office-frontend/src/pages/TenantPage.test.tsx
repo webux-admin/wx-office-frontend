@@ -21,13 +21,14 @@ const SESSION: AuthState = {
     username: 'muster',
     activeTenantId: TENANT,
     superuser: false,
-    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled: true }],
+    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['INVENTORY'] }],
     permissions: PERMISSIONS,
   },
   loading: false,
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
+  refresh: () => Promise.resolve(),
   can: (permission: string) => PERMISSIONS.includes(permission),
 }
 
@@ -53,7 +54,6 @@ function tenant(overrides: Partial<Tenant> = {}): Tenant {
     defaultLanguage: 'de',
     cashRoundingEnabled: true,
     cashRoundingIncrement: 0.05,
-    inventoryEnabled: true,
     stocktakeReasonPercent: 12.5,
     stocktakeReasonMinimum: 3,
     ...overrides,
@@ -143,15 +143,6 @@ function field(label: string): HTMLInputElement | undefined {
   return (document.getElementById(caption.htmlFor) as HTMLInputElement | null) ?? undefined
 }
 
-function fill(input: HTMLInputElement | undefined, value: string) {
-  expect(input).toBeDefined()
-  if (!input) return
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
-  act(() => {
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-}
-
 async function save() {
   const button = [...container.querySelectorAll('button')].find(
     (entry) => entry.textContent === 'Speichern',
@@ -164,56 +155,28 @@ async function save() {
 }
 
 describe('TenantPage', () => {
-  it('tenantPageShowsStocktakeReasonThresholdsTest', async () => {
+  it('tenantPageHasNoInventoryCheckboxTest', async () => {
+    // The switch moved to «Systemeinstellungen → Module» — and with it the two thresholds,
+    // which had this checkbox as their only visibility condition (ADR-0018).
     await render()
 
-    expect(field(PERCENT)?.value).toBe('12.5')
-    expect(field(MINIMUM)?.value).toBe('3')
+    const labels = [...container.querySelectorAll('label')].map((entry) => entry.textContent)
+    expect(labels).not.toContain('Lager verwenden')
+    expect(field(PERCENT)).toBeUndefined()
+    expect(field(MINIMUM)).toBeUndefined()
   })
 
-  it('tenantPageShowsZeroStocktakeReasonPercentTest', async () => {
-    // Zero is a threshold and not an empty field: it means «always a reason».
-    stored = tenant({ stocktakeReasonPercent: 0, stocktakeReasonMinimum: 0 })
-
+  it('tenantPageDoesNotSendTheModuleSwitchTest', async () => {
+    // The heart of the repair: a payload that leaves the field out changes nothing about it.
+    // Sending `false` here would switch the store off on every save of this form.
     await render()
 
-    expect(field(PERCENT)?.value).toBe('0')
-    expect(field(MINIMUM)?.value).toBe('0')
-  })
-
-  it('tenantPageSavesStocktakeReasonThresholdsTest', async () => {
-    await render()
-
-    fill(field(PERCENT), '7.5')
-    fill(field(MINIMUM), '2')
     await save()
 
     expect(written).toHaveLength(1)
     expect(written[0].method).toBe('PUT')
-    expect(written[0].body.stocktakeReasonPercent).toBe(7.5)
-    expect(written[0].body.stocktakeReasonMinimum).toBe(2)
-  })
-
-  it('tenantPageSavesZeroStocktakeReasonPercentTest', async () => {
-    await render()
-
-    fill(field(PERCENT), '0')
-    await save()
-
-    // Zero has to reach the endpoint as zero. Sent as «nothing», it would arrive as «not
-    // stated», and the backend would keep the old threshold instead of asking for a reason
-    // on every difference.
-    expect(written[0].body.stocktakeReasonPercent).toBe(0)
-  })
-
-  it('tenantPageHidesStocktakeReasonThresholdsWithoutInventoryTest', async () => {
-    stored = tenant({ inventoryEnabled: false })
-
-    await render()
-
-    expect(field(PERCENT)).toBeUndefined()
-    // Nothing shown, nothing sent: the stored threshold stays as it is.
-    await save()
+    expect(written[0].body.inventoryEnabled).toBeUndefined()
     expect(written[0].body.stocktakeReasonPercent).toBeUndefined()
+    expect(written[0].body.stocktakeReasonMinimum).toBeUndefined()
   })
 })

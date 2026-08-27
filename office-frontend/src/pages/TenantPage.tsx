@@ -82,9 +82,6 @@ type TenantForm = {
   cashRoundingIncrement: string
   defaultRevenueAccount: string
   invoiceFooterText: string
-  inventoryEnabled: boolean
-  stocktakeReasonPercent: string
-  stocktakeReasonMinimum: string
 }
 
 function initial(tenant: Tenant | null): TenantForm {
@@ -119,11 +116,6 @@ function initial(tenant: Tenant | null): TenantForm {
     cashRoundingIncrement: tenant?.cashRoundingIncrement?.toString() ?? '0.05',
     defaultRevenueAccount: tenant?.defaultRevenueAccount ?? '',
     invoiceFooterText: tenant?.invoiceFooterText ?? '',
-    inventoryEnabled: tenant?.inventoryEnabled === true,
-    // A stored zero has to show as «0», not as the shipped 5: it is the setting that asks for
-    // a reason on every difference. Only a tenant that carries nothing falls back.
-    stocktakeReasonPercent: tenant?.stocktakeReasonPercent?.toString() ?? '5',
-    stocktakeReasonMinimum: tenant?.stocktakeReasonMinimum?.toString() ?? '1',
   }
 }
 
@@ -194,15 +186,10 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
       : undefined,
     defaultRevenueAccount: form.defaultRevenueAccount || undefined,
     invoiceFooterText: form.invoiceFooterText.trim() || undefined,
-    inventoryEnabled: form.inventoryEnabled,
-    // Only sent while the two fields are on screen. Left out, the backend keeps the stored
-    // threshold rather than resetting it — a mask must not change what it does not show.
-    stocktakeReasonPercent: form.inventoryEnabled
-      ? (parseDecimal(form.stocktakeReasonPercent) ?? undefined)
-      : undefined,
-    stocktakeReasonMinimum: form.inventoryEnabled
-      ? (parseDecimal(form.stocktakeReasonMinimum) ?? undefined)
-      : undefined,
+    // Neither the module switch nor the two count thresholds are sent any more. They live on
+    // «Systemeinstellungen → Module», and a payload that leaves a field out changes nothing
+    // about it — which is what keeps every save of this form from switching the store off
+    // (backend ADR-0078 and ADR-0079).
   })
 
   const save = useMutation({
@@ -561,45 +548,12 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
               className="mt-4"
             />
 
-            {/* Which modules this tenant runs. Guarded by TENANT_WRITE like the rest of the
-                settings and not by a right of its own: whoever switches a module on is
-                configuring the tenant, not working in the module (ADR-0060). */}
-            <CheckboxField
-              label="Lager verwenden"
-              hint="Blendet Lagerorte, Bestände und Bewegungen ein. Ohne Haken bleiben sie verborgen, auch für Benutzer mit Lagerrechten."
-              checked={form.inventoryEnabled}
-              onChange={(event) => set('inventoryEnabled', event.target.checked)}
-              disabled={!mayWrite}
-              className="mt-4 items-center"
-            />
-
-            {/* From when a counted difference has to be explained. Two values rather than
-                one: a percentage alone asks for an explanation of every single piece on small
-                expected quantities, an absolute floor alone lets everything through on large
-                ones (ADR-0070). They stand beside the switch because they only mean something
-                to a tenant that counts. */}
-            {form.inventoryEnabled && (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Begründungspflicht ab"
-                  value={form.stocktakeReasonPercent}
-                  onChange={(event) => set('stocktakeReasonPercent', event.target.value)}
-                  disabled={!mayWrite}
-                  inputMode="decimal"
-                  numeric
-                  hint="Prozent der Sollmenge. 0 % heisst: immer ein Grund."
-                />
-                <TextField
-                  label="Untergrenze der Begründungspflicht"
-                  value={form.stocktakeReasonMinimum}
-                  onChange={(event) => set('stocktakeReasonMinimum', event.target.value)}
-                  disabled={!mayWrite}
-                  inputMode="decimal"
-                  numeric
-                  hint="Eine Menge, kein Prozentsatz: darunter wird nie ein Grund verlangt."
-                />
-              </div>
-            )}
+            {/* «Lager verwenden» stood here, with the two count thresholds under it. Both
+                moved to «Systemeinstellungen → Module»: a switch that decides whether a whole
+                part of the application exists is not a field beside the invoice footer, and
+                the thresholds belong beside the switch they were put next to (ADR-0074,
+                backend ADR-0079). This form does not send either of them any more, and a
+                payload that leaves a field out changes nothing about it. */}
           </Panel>
         )}
       </div>

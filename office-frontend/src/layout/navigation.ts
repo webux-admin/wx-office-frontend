@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BellRing,
+  Blocks,
   BookmarkCheck,
   BookOpen,
   Boxes,
@@ -42,6 +43,7 @@ import {
 } from 'lucide-react'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
+import { MODULE_PATH, MODULE_RIGHTS } from '../lib/modules'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -51,8 +53,12 @@ import type { DocumentCategory } from '../lib/types'
  * <p>Visibility then has two sources: the permission says **who** may, the switch says
  * whether the tenant **runs** the module at all. Both have to agree — see ADR-0060 of the
  * backend.
+ *
+ * <p>The values are the backend codes, spelling included. A translation table between menu
+ * key and backend code was weighed and dropped: it would be the second place where somebody
+ * forgets a module (ADR-0018).
  */
-export type NavModule = 'inventory'
+export type NavModule = 'INVENTORY'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -182,14 +188,14 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Boxes,
         href: '/bestand',
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
       {
         label: 'Unterdeckung',
         icon: TriangleAlert,
         href: '/unterdeckung',
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
       // Between the shortfalls and the journal: it answers «why is verfügbar lower than
       // Bestand», which is the question the two screens above provoke.
@@ -198,14 +204,14 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: BookmarkCheck,
         href: '/reservierungen',
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
       {
         label: 'Bewegungen',
         icon: ArrowLeftRight,
         href: '/lagerbewegungen',
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
       // Last of the group: an inventory is a thing one does now and then, while the four
       // above answer questions that come up every day.
@@ -214,7 +220,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ClipboardCheck,
         href: '/inventuren',
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
       // Behind the count lists, because it answers the question they raise: a count says who
       // counted what, the report says what stood there on a day. Since counting runs without
@@ -224,7 +230,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: CalendarClock,
         href: STOCK_AS_OF_PATH,
         permission: 'INVENTORY_READ',
-        module: 'inventory',
+        module: 'INVENTORY',
       },
     ],
   },
@@ -288,6 +294,11 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
+      // Beside «Mandanten» and not under Moduleinstellungen: the sorting rule of ADR-0011 is
+      // «how many modules read the value» — the module switch is read by every one of them.
+      // It carries no `module` field of its own, on purpose: a screen that hides itself once
+      // somebody switches everything off leaves no way back but psql (ADR-0018).
+      { label: 'Module', icon: Blocks, href: MODULE_PATH, permission: MODULE_RIGHTS.read },
       { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
       { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
     ],
@@ -341,14 +352,14 @@ export const NAV_GROUPS: NavGroup[] = [
         // daily stand in the group «Lager» above.
         label: 'Lager',
         icon: Warehouse,
-        module: 'inventory',
+        module: 'INVENTORY',
         children: [
           {
             label: 'Lagerorte',
             icon: Warehouse,
             href: '/lagerorte',
             permission: 'INVENTORY_READ',
-            module: 'inventory',
+            module: 'INVENTORY',
           },
         ],
       },
@@ -377,20 +388,23 @@ export const NAV_GROUPS: NavGroup[] = [
  * <p>Filtering only tidies the sidebar. The backend refuses the request either way — with
  * 403 for a missing permission and with 409 for a module that is switched off.
  *
- * @param can     answers whether the session holds a permission
- * @param modules which switchable modules this tenant runs
+ * @param can  answers whether the session holds a permission
+ * @param runs answers whether this tenant runs a switchable module. A lookup and not a total
+ *             record, exactly parallel to `can`: with a record, every caller would have to
+ *             name every module, and a forgotten key is a type error in a place nobody looks
+ *             (ADR-0018)
  * @returns the groups with something left in them, in the order they stand
  */
 export function visibleNavGroups(
   can: (permission: string) => boolean,
-  modules: Record<NavModule, boolean>,
+  runs: (module: NavModule) => boolean,
 ): NavGroup[] {
   const allowed = (node: NavNode): NavNode | null => {
-    if (node.module !== undefined && !modules[node.module]) return null
+    if (node.module !== undefined && !runs(node.module)) return null
     if (!isFolder(node)) return !node.permission || can(node.permission) ? node : null
     const children = node.children.filter(
       (child) =>
-        (child.module === undefined || modules[child.module]) &&
+        (child.module === undefined || runs(child.module)) &&
         (!child.permission || can(child.permission)),
     )
     return children.length === 0 ? null : { ...node, children }

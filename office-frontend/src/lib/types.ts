@@ -170,12 +170,27 @@ export type TenantAccess = {
   /** Preselected after login. */
   isDefault: boolean
   /**
-   * Whether this tenant runs the inventory module.
+   * The modules this tenant runs, as the names of the backend `LicensedModule` values.
    *
-   * <p>Travels with the session so the sidebar can hide the inventory of a tenant that does
-   * not use it, without a request of its own for a single flag.
+   * <p>Travels with the session so the sidebar can hide a module the tenant does not run,
+   * without a request of its own. Always present — a tenant that runs nothing sends an empty
+   * list, never a missing field (backend ADR-0079).
    */
-  inventoryEnabled?: boolean
+  modules: string[]
+}
+
+/**
+ * One switchable module as the module screen shows it.
+ *
+ * <p>`usage` says what already lies in the module, so switching it off is a decision with
+ * figures in front of it. Absent where nothing does.
+ */
+export type TenantModule = {
+  code: string
+  label: string
+  description: string
+  active: boolean
+  usage?: string
 }
 
 /** Answer of /api/auth/login, /me and the tenant switch. */
@@ -272,9 +287,10 @@ export type Tenant = {
   /**
    * Whether this tenant uses the inventory module.
    *
-   * <p>Off by default. It decides visibility together with the rights: switched off, the
-   * inventory disappears from the navigation even for somebody holding every inventory
-   * right, and writing endpoints answer 409 rather than 403.
+   * <p>**Read by no screen any more.** The truth is the module screen at `/module`, and the
+   * session carries it as `TenantAccess.modules` (backend ADR-0078 and ADR-0079). The field
+   * still travels in the tenant payload for one release so a rollback does not lose the
+   * switch; it disappears with the migration that drops the column.
    */
   inventoryEnabled?: boolean
   /**

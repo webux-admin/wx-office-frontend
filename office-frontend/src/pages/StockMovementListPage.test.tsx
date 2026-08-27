@@ -56,13 +56,14 @@ const SESSION: AuthState = {
     username: 'muster',
     activeTenantId: TENANT,
     superuser: false,
-    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, inventoryEnabled: true }],
+    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['INVENTORY'] }],
     permissions: ['INVENTORY_READ'],
   },
   loading: false,
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
+  refresh: () => Promise.resolve(),
   can: (permission: string) => permission === 'INVENTORY_READ',
 }
 

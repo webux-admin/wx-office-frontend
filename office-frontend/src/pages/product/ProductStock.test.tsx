@@ -76,6 +76,7 @@ const SESSION: AuthState = {
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
+  refresh: () => Promise.resolve(),
   can: (permission: string) => permission === 'INVENTORY_READ',
 }
 

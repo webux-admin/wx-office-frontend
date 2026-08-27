@@ -15,12 +15,14 @@ import {
 import { BrandMark } from '../components/BrandMark'
 import { useAuth } from '../auth/useAuth'
 import { initialsOf } from '../lib/format'
+import { runsModule } from '../lib/modules'
 import {
   flattenNav,
   isFolder,
   visibleNavGroups,
   type NavEntry,
   type NavFolder,
+  type NavModule,
 } from './navigation'
 import { useSidebarCollapsed } from './useSidebarCollapsed'
 import { useTheme } from './useTheme'
@@ -62,15 +64,13 @@ function Sidebar({
 }) {
   const { user, signOut, can } = useAuth()
 
-  // Which switchable modules this tenant runs. It travels with the session, so hiding the
-  // inventory of a tenant that does not use it costs no request.
-  const activeTenant = user?.tenants.find((tenant) => tenant.id === user.activeTenantId)
+  // Which switchable modules this tenant runs. The list travels with the session, so hiding
+  // a module the tenant does not run costs no request.
+  const runs = (module: NavModule) => runsModule(user?.tenants, user?.activeTenantId, module)
 
   // Groups the user may see at all. Computed up front so the rail knows which one is first
   // and can leave the separator off there.
-  const visibleGroups = visibleNavGroups(can, {
-    inventory: activeTenant?.inventoryEnabled === true,
-  })
+  const visibleGroups = visibleNavGroups(can, runs)
 
   // The aside deliberately does not clip its overflow: folded, the tenant menu has to
   // reach past the rail. The scrolling navigation below clips on its own.
