@@ -206,6 +206,22 @@ describe('isReversible', () => {
     expect(isReversible({ sourceKind: 'MANUAL', reason: 'REVERSAL' })).toBe(false)
   })
 
+  /** Both lines of a transfer are typed in by hand; the group id is what rules them out. */
+  it('isReversibleForHalfATransferTest', () => {
+    expect(
+      isReversible({ sourceKind: 'MANUAL', reason: 'TRANSFER_OUT', transferGroupId: 7 }),
+    ).toBe(false)
+    expect(
+      isReversible({ sourceKind: 'MANUAL', reason: 'TRANSFER_IN', transferGroupId: 7 }),
+    ).toBe(false)
+  })
+
+  it('isReversibleWithoutATransferGroupTest', () => {
+    expect(
+      isReversible({ sourceKind: 'MANUAL', reason: 'RECEIPT', transferGroupId: undefined }),
+    ).toBe(true)
+  })
+
   it('isReversibleWithoutAMovementTest', () => {
     expect(isReversible(undefined)).toBe(false)
   })

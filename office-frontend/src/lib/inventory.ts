@@ -519,11 +519,19 @@ export function shortageCauseTone(
  * document, and a counter booking is not itself reversed — it would leave two rows that undo
  * each other and say nothing.
  *
+ * <p>Half a transfer is not one of them either. A transfer writes two rows under one group id,
+ * and taking one of them back would give the goods to the source while the target keeps them —
+ * a serial number would then lie at two locations at once. The way back is a transfer the
+ * other way round.
+ *
  * @param movement the row, absent while none is chosen
  * @returns true where the reversal dialog may be opened for it
  */
-export function isReversible(movement: { sourceKind: string; reason: string } | undefined): boolean {
+export function isReversible(
+  movement: { sourceKind: string; reason: string; transferGroupId?: number } | undefined,
+): boolean {
   if (movement === undefined) return false
+  if (movement.transferGroupId != null) return false
   return movement.sourceKind === 'MANUAL' && movement.reason !== 'REVERSAL'
 }
 
