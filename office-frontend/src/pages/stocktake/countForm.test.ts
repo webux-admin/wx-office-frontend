@@ -4,10 +4,12 @@ import {
   counted,
   countedQuantity,
   countProblem,
+  isSerialLine,
   lineDifference,
   lineLotLabel,
   mayPost,
   nextOpenIndex,
+  typedDifference,
   uncountedCount,
   uncountedText,
 } from './countForm'
@@ -109,6 +111,71 @@ describe('countedQuantity', () => {
 
   it('countedQuantityBelowZeroTest', () => {
     expect(countedQuantity('-1')).toBeUndefined()
+  })
+
+  /**
+   * The mask writes quantities back with the apostrophe of de-CH, so it is read back the same
+   * way — in both views, out of this one function.
+   */
+  it('countedQuantityWithAThousandsApostropheTest', () => {
+    expect(countedQuantity('1’200')).toBe(1200)
+    expect(countedQuantity("1'200")).toBe(1200)
+  })
+
+  it('countedQuantityWithACommaTest', () => {
+    expect(countedQuantity('2,5')).toBe(2.5)
+  })
+})
+
+describe('isSerialLine', () => {
+  it('isSerialLineTest', () => {
+    expect(isSerialLine(line({ id: 1, lotNumber: 'SN-4711', expectedQuantity: 1 }))).toBe(true)
+  })
+
+  /** A found piece stands at zero and is still one piece. */
+  it('isSerialLineOnFoundGoodsTest', () => {
+    expect(isSerialLine(line({ id: 1, lotNumber: 'SN-4712', expectedQuantity: 0 }))).toBe(true)
+  })
+
+  /** A lot number over a quantity is a batch, not a serial number. */
+  it('isSerialLineOnALotTest', () => {
+    expect(isSerialLine(line({ id: 1, lotNumber: 'CH-2026', expectedQuantity: 40 }))).toBe(false)
+  })
+
+  it('isSerialLineWithoutALotTest', () => {
+    expect(isSerialLine(line({ id: 1, expectedQuantity: 1 }))).toBe(false)
+  })
+
+  /** On a blind count there is no expected quantity to read it off, so nothing is claimed. */
+  it('isSerialLineOnABlindCountTest', () => {
+    expect(isSerialLine(line({ id: 1, lotNumber: 'SN-4711' }))).toBe(false)
+  })
+})
+
+describe('typedDifference', () => {
+  it('typedDifferenceTest', () => {
+    expect(typedDifference('18', line({ id: 1, expectedQuantity: 20 }))).toBe(-2)
+  })
+
+  it('typedDifferenceWithoutADifferenceTest', () => {
+    expect(typedDifference('20', line({ id: 1, expectedQuantity: 20 }))).toBe(0)
+  })
+
+  it('typedDifferenceWithAThousandsApostropheTest', () => {
+    expect(typedDifference('1’200', line({ id: 1, expectedQuantity: 1000 }))).toBe(200)
+  })
+
+  it('typedDifferenceOfAnEmptyFieldTest', () => {
+    expect(typedDifference('', line({ id: 1, expectedQuantity: 20 }))).toBeUndefined()
+  })
+
+  it('typedDifferenceOfNonsenseTest', () => {
+    expect(typedDifference('abc', line({ id: 1, expectedQuantity: 20 }))).toBeUndefined()
+  })
+
+  /** Nothing to compare against on a blind count, and a made-up zero would show a difference. */
+  it('typedDifferenceOnABlindCountTest', () => {
+    expect(typedDifference('18', line({ id: 1 }))).toBeUndefined()
   })
 })
 

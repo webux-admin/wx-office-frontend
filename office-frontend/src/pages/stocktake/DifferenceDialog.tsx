@@ -29,6 +29,13 @@ import type { Stocktake, StocktakeDifference, UncountedHandling } from '../../li
  * equal buttons, no preselection, and the answer stays on the record. An incomplete count must
  * never look like a complete one (backend ADR-0070).
  *
+ * <p><b>A reason counts once the server has taken it, not once it has been typed.</b> Each
+ * reason saves on its own when the field is left, the way the counting mask saves a line
+ * (ADR-0016); a save that failed turns the row red, says what the backend answered and offers
+ * «Erneut senden», and the typed word stays in the field. Until the save lands the difference
+ * is still unexplained here — and the server refuses the booking either way, which is where
+ * the rule really lives.
+ *
  * @param tenantId the tenant
  * @param stocktake the count list about to be booked
  * @param open whether the dialog is on screen
@@ -50,7 +57,12 @@ export function DifferenceDialog({
 }) {
   const queryClient = useQueryClient()
   const [handling, setHandling] = useState<UncountedHandling | undefined>(undefined)
-  const [reasons, setReasons] = useState<Record<number, string>>({})
+  /** What stands in each field, which is not yet what the server holds. */
+  const [typed, setTyped] = useState<Record<number, string>>({})
+  /** What the server took, line by line — the only thing that counts as an explanation. */
+  const [saved, setSaved] = useState<Record<number, string>>({})
+  /** What a failed save answered, line by line. */
+  const [failed, setFailed] = useState<Record<number, string>>({})
 
   const differences = useQuery({
     queryKey: stocktakeDifferencesKey(tenantId, stocktake.id),
@@ -60,11 +72,12 @@ export function DifferenceDialog({
   })
 
   const rows = differences.data ?? []
-  const reasonOf = (row: StocktakeDifference) =>
-    reasons[row.lineId] ?? row.differenceReason ?? ''
-  const unexplained = rows.filter(
-    (row) => row.needsReason && reasonOf(row).trim() === '',
-  ).length
+  /** The reason on the record: what a save landed, else what the list came with. */
+  const onRecord = (row: StocktakeDifference) =>
+    (saved[row.lineId] ?? row.differenceReason ?? '').trim()
+  /** What stands in the field, which may be a word nobody has sent yet. */
+  const valueOf = (row: StocktakeDifference) => typed[row.lineId] ?? onRecord(row)
+  const unexplained = rows.filter((row) => row.needsReason && onRecord(row) === '').length
   const sum = rows.reduce((total, row) => total + row.difference, 0)
   const uncounted = uncountedText(stocktake.lineCount, stocktake.countedCount)
   // Where every line was counted there is nothing to choose about: «what happens to the
@@ -73,11 +86,55 @@ export function DifferenceDialog({
   const chosenHandling = uncounted === '' ? 'KEEP' : handling
 
   const saveReason = useMutation({
-    mutationFn: (row: StocktakeDifference) =>
+    mutationFn: ({ row, reason }: { row: StocktakeDifference; reason: string }) =>
       api.put(lineReasonUrl(tenantId, stocktake.id, row.lineId), {
-        reason: reasonOf(row).trim() === '' ? undefined : reasonOf(row).trim(),
+        reason: reason === '' ? undefined : reason,
       }),
   })
+
+  /**
+   * Sends the reason of one line and records what became of it.
+   *
+   * <p>Nothing goes out where the field says what the server already holds — leaving a field
+   * nobody touched is not a change. «Erneut senden» forces it out anyway, because after a
+   * failure the two are not the same thing.
+   *
+   * <p><b>The answer is read off the returned promise, not off callbacks handed to the
+   * mutation.</b> Every row shares one mutation here, and a mutation keeps only the callbacks
+   * of the call that started last: leaving a second field while the first is still on its way
+   * would drop the first row's answer, leave it counted as unexplained and «Buchen» shut, with
+   * nothing on screen saying why. The promise belongs to this call alone — the same shape the
+   * counting mask uses ({@code useCountEntry}).
+   */
+  const send = (row: StocktakeDifference, force = false) => {
+    const reason = valueOf(row).trim()
+    if (!force && reason === onRecord(row)) return
+    void saveReason.mutateAsync({ row, reason }).then(
+      () => {
+        setSaved((current) => ({ ...current, [row.lineId]: reason }))
+        setFailed((current) => {
+          const rest = { ...current }
+          delete rest[row.lineId]
+          return rest
+        })
+      },
+      // Nothing arrived, so the reason is not with the server. Saying so is the whole point:
+      // a mask that swallowed this would show a word nobody recorded.
+      (error: unknown) =>
+        setFailed((current) => ({
+          ...current,
+          [row.lineId]: error instanceof Error ? error.message : 'Unbekannter Fehler',
+        })),
+    )
+  }
+
+  /** What stands under one reason field: the failure, or what the threshold asks for. */
+  const hintOf = (row: StocktakeDifference) => {
+    const broken = failed[row.lineId]
+    if (broken !== undefined) return `Nicht gespeichert: ${broken}`
+    if (row.needsReason && onRecord(row) === '') return 'Diese Abweichung braucht einen Grund.'
+    return undefined
+  }
 
   const post = useMutation({
     mutationFn: () =>
@@ -174,21 +231,32 @@ export function DifferenceDialog({
                       <td className="px-3 py-2">
                         <TextField
                           label={"Grund " + row.productName}
-                          value={reasonOf(row)}
+                          value={valueOf(row)}
                           onChange={(event) =>
-                            setReasons((current) => ({
+                            setTyped((current) => ({
                               ...current,
                               [row.lineId]: event.target.value,
                             }))
                           }
-                          onBlur={() => saveReason.mutate(row)}
-                          invalid={row.needsReason && reasonOf(row).trim() === ''}
-                          hint={
-                            row.needsReason && reasonOf(row).trim() === ''
-                              ? 'Diese Abweichung braucht einen Grund.'
-                              : undefined
+                          onBlur={() => send(row)}
+                          invalid={
+                            failed[row.lineId] !== undefined ||
+                            (row.needsReason && onRecord(row) === '')
                           }
+                          hint={hintOf(row)}
                         />
+                        {/* The typed word stays in the field, and this sends it again —
+                            the same answer the counting mask gives a failed line
+                            (ADR-0016). */}
+                        {failed[row.lineId] !== undefined && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => send(row, true)}
+                            className="mt-1.5"
+                          >
+                            Erneut senden
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

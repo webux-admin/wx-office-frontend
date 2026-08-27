@@ -277,6 +277,21 @@ export type Tenant = {
    * right, and writing endpoints answer 409 rather than 403.
    */
   inventoryEnabled?: boolean
+  /**
+   * From which deviation on a counted difference needs a written reason, in percent of the
+   * expected quantity.
+   *
+   * <p>Shipped with 5. `0` means «always a reason» and is a value like any other; leaving the
+   * field out of a payload means «not stated», and the backend then keeps what it stored.
+   */
+  stocktakeReasonPercent?: number
+  /**
+   * The absolute floor under that percentage: below it no reason is ever asked for.
+   *
+   * <p>A quantity, not a percentage. Without it one piece out of two thousand would need a
+   * written explanation, and explanations that are always demanded stop being read.
+   */
+  stocktakeReasonMinimum?: number
   createdAt?: string
   changedAt?: string
 }

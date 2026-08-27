@@ -9,6 +9,14 @@ import { parseDecimal } from '../../lib/format'
 import type { StocktakeLine } from '../../lib/types'
 
 /**
+ * What the way back onto a line whose save failed says.
+ *
+ * <p>One wording for both views: the table and the cards are the same mask, and a value that is
+ * not with the server yet is offered the same way in either (Frontend-ADR-0016).
+ */
+export const RESEND_LABEL = 'Erneut senden'
+
+/**
  * What one counted line differs by, against the quantity that was frozen.
  *
  * <p>The figure the mask shows live while counting. It is <b>not</b> what gets booked: the
@@ -73,6 +81,42 @@ export function countedQuantity(value: string): number | undefined {
   const parsed = parseDecimal(value)
   if (parsed === null || parsed < 0) return undefined
   return parsed
+}
+
+/**
+ * What one line differs by while it is being typed into, against the frozen quantity.
+ *
+ * <p>The figure next to the field, before anything is saved. Reads the typed text through
+ * {@link countedQuantity}, so `1’200` means the same here as it does on the way to the server —
+ * the two must never disagree about one figure.
+ *
+ * @param value what stands in the field
+ * @param line the line as the server sent it
+ * @returns the difference, or undefined where the field says nothing countable and on a blind
+ *          count, which carries no expected quantity to compare against
+ */
+export function typedDifference(value: string, line: StocktakeLine): number | undefined {
+  const parsed = countedQuantity(value)
+  if (parsed === undefined || line.expectedQuantity === undefined) return undefined
+  return parsed - line.expectedQuantity
+}
+
+/**
+ * Whether a line stands for a single piece.
+ *
+ * <p>Read off the lot number rather than sent as a flag of its own: a line without one is not a
+ * serial line, and one with one is exactly as serial as its product is. The server refuses a
+ * count above one either way; this only spares the user the refusal.
+ *
+ * @param line the line as the server sent it
+ * @returns true where the line is one piece under one number
+ */
+export function isSerialLine(line: StocktakeLine): boolean {
+  return (
+    line.lotNumber !== undefined &&
+    line.expectedQuantity !== undefined &&
+    line.expectedQuantity <= 1
+  )
 }
 
 /**

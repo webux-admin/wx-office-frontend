@@ -56,7 +56,11 @@ function StockMovements({ tenantId }: { tenantId: number }) {
   // that: its links carry the cut-off day, so the journal opens on the same period the
   // report was calculated from instead of showing what was booked after it.
   const [params] = useSearchParams()
-  const search = useQuickSearch('')
+  // «suche» is a document number, and the quick search of the journal looks into the source
+  // number of a row: that is how the «Buchungen» panel of a booked count list points at
+  // exactly the movements that list wrote. Read once, like the four parameters below — the
+  // field takes over from there, so the term can be widened again.
+  const search = useQuickSearch(params.get('suche') ?? '')
   const [productId] = useState(params.get('produkt') ?? '')
   // Narrowed to one lot by the product mask: that link is the whole of the traceability, so
   // it arrives filtered rather than expecting somebody to type the number in.

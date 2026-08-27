@@ -83,6 +83,8 @@ type TenantForm = {
   defaultRevenueAccount: string
   invoiceFooterText: string
   inventoryEnabled: boolean
+  stocktakeReasonPercent: string
+  stocktakeReasonMinimum: string
 }
 
 function initial(tenant: Tenant | null): TenantForm {
@@ -118,6 +120,10 @@ function initial(tenant: Tenant | null): TenantForm {
     defaultRevenueAccount: tenant?.defaultRevenueAccount ?? '',
     invoiceFooterText: tenant?.invoiceFooterText ?? '',
     inventoryEnabled: tenant?.inventoryEnabled === true,
+    // A stored zero has to show as «0», not as the shipped 5: it is the setting that asks for
+    // a reason on every difference. Only a tenant that carries nothing falls back.
+    stocktakeReasonPercent: tenant?.stocktakeReasonPercent?.toString() ?? '5',
+    stocktakeReasonMinimum: tenant?.stocktakeReasonMinimum?.toString() ?? '1',
   }
 }
 
@@ -189,6 +195,14 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     defaultRevenueAccount: form.defaultRevenueAccount || undefined,
     invoiceFooterText: form.invoiceFooterText.trim() || undefined,
     inventoryEnabled: form.inventoryEnabled,
+    // Only sent while the two fields are on screen. Left out, the backend keeps the stored
+    // threshold rather than resetting it — a mask must not change what it does not show.
+    stocktakeReasonPercent: form.inventoryEnabled
+      ? (parseDecimal(form.stocktakeReasonPercent) ?? undefined)
+      : undefined,
+    stocktakeReasonMinimum: form.inventoryEnabled
+      ? (parseDecimal(form.stocktakeReasonMinimum) ?? undefined)
+      : undefined,
   })
 
   const save = useMutation({
@@ -558,6 +572,34 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
               disabled={!mayWrite}
               className="mt-4 items-center"
             />
+
+            {/* From when a counted difference has to be explained. Two values rather than
+                one: a percentage alone asks for an explanation of every single piece on small
+                expected quantities, an absolute floor alone lets everything through on large
+                ones (ADR-0070). They stand beside the switch because they only mean something
+                to a tenant that counts. */}
+            {form.inventoryEnabled && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label="Begründungspflicht ab"
+                  value={form.stocktakeReasonPercent}
+                  onChange={(event) => set('stocktakeReasonPercent', event.target.value)}
+                  disabled={!mayWrite}
+                  inputMode="decimal"
+                  numeric
+                  hint="Prozent der Sollmenge. 0 % heisst: immer ein Grund."
+                />
+                <TextField
+                  label="Untergrenze der Begründungspflicht"
+                  value={form.stocktakeReasonMinimum}
+                  onChange={(event) => set('stocktakeReasonMinimum', event.target.value)}
+                  disabled={!mayWrite}
+                  inputMode="decimal"
+                  numeric
+                  hint="Eine Menge, kein Prozentsatz: darunter wird nie ein Grund verlangt."
+                />
+              </div>
+            )}
           </Panel>
         )}
       </div>
