@@ -285,15 +285,6 @@ export type Tenant = {
   defaultRevenueAccountLabel?: string
   invoiceFooterText?: string
   /**
-   * Whether this tenant uses the inventory module.
-   *
-   * <p>**Read by no screen any more.** The truth is the module screen at `/module`, and the
-   * session carries it as `TenantAccess.modules` (backend ADR-0078 and ADR-0079). The field
-   * still travels in the tenant payload for one release so a rollback does not lose the
-   * switch; it disappears with the migration that drops the column.
-   */
-  inventoryEnabled?: boolean
-  /**
    * From which deviation on a counted difference needs a written reason, in percent of the
    * expected quantity.
    *

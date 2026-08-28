@@ -167,15 +167,16 @@ describe('TenantPage', () => {
   })
 
   it('tenantPageDoesNotSendTheModuleSwitchTest', async () => {
-    // The heart of the repair: a payload that leaves the field out changes nothing about it.
-    // Sending `false` here would switch the store off on every save of this form.
+    // The form has nothing to say about the modules, and the payload no longer carries a field
+    // for them at all — they are switched on their own screen (backend ADR-0079). The two count
+    // thresholds do still travel, and leaving them out is what keeps a save from resetting them.
     await render()
 
     await save()
 
     expect(written).toHaveLength(1)
     expect(written[0].method).toBe('PUT')
-    expect(written[0].body.inventoryEnabled).toBeUndefined()
+    expect(Object.keys(written[0].body)).not.toContain('inventoryEnabled')
     expect(written[0].body.stocktakeReasonPercent).toBeUndefined()
     expect(written[0].body.stocktakeReasonMinimum).toBeUndefined()
   })
