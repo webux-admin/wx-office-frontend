@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from './AuthProvider'
-import type { AuthState } from './authContext'
+import type { AuthState, SignInResult } from './authContext'
 import { useAuth } from './useAuth'
 import { RequireAuth } from './RequireAuth'
 
@@ -166,6 +166,94 @@ describe('AuthProvider', () => {
     await answerNextRequest(200, signedIn([]))
 
     expect(container.textContent).toContain('Module: —')
+  })
+
+  // --- the second factor ----------------------------------------------------
+
+  /** Puts the probe on screen with nobody signed in, ready for a `signIn` call. */
+  async function signedOutProbe() {
+    stubFetch()
+    act(() => root.render(sessionProbe()))
+    await act(async () => {})
+    await answerNextRequest(401, null)
+  }
+
+  /**
+   * The third exit. Without it the login screen could not tell «wrong password» from «not
+   * finished», which is the whole reason the backend answers 200 here rather than 401.
+   */
+  it('signInReportsThatASecondFactorIsOwedTest', async () => {
+    await signedOutProbe()
+
+    let result: SignInResult | undefined
+    await act(async () => {
+      void state?.signIn('anna', 'geheim').then((answer) => {
+        result = answer
+      })
+    })
+    await answerNextRequest(200, {
+      secondFactorRequired: true,
+      method: 'TOTP',
+      methods: ['TOTP', 'EMAIL'],
+    })
+
+    expect(result?.kind).toBe('secondFactor')
+    expect(result).toMatchObject({ method: 'TOTP', methods: ['TOTP', 'EMAIL'] })
+  })
+
+  /**
+   * The property the whole feature stands on, seen from the browser: between the two steps
+   * the session is not a session. A screen behind the login must not draw itself.
+   */
+  it('signInDoesNotSignInWhileASecondFactorIsOwedTest', async () => {
+    await signedOutProbe()
+
+    await act(async () => {
+      void state?.signIn('anna', 'geheim')
+    })
+    await answerNextRequest(200, {
+      secondFactorRequired: true,
+      method: 'TOTP',
+      methods: ['TOTP'],
+    })
+
+    expect(state?.user).toBeNull()
+  })
+
+  it('completeSecondFactorSignsInTest', async () => {
+    await signedOutProbe()
+    await act(async () => {
+      void state?.signIn('anna', 'geheim')
+    })
+    await answerNextRequest(200, {
+      secondFactorRequired: true,
+      method: 'TOTP',
+      methods: ['TOTP'],
+    })
+
+    await act(async () => {
+      void state?.completeSecondFactor('123456')
+    })
+    await answerNextRequest(200, signedIn(['INVENTORY']))
+
+    expect(state?.user?.username).toBe('admin')
+    expect(container.textContent).toContain('Module: INVENTORY')
+  })
+
+  /** A user without a factor keeps the one step the login always had. */
+  it('signInWithoutASecondFactorTest', async () => {
+    await signedOutProbe()
+
+    let result: SignInResult | undefined
+    await act(async () => {
+      void state?.signIn('admin', 'geheim').then((answer) => {
+        result = answer
+      })
+    })
+    await answerNextRequest(200, signedIn([]))
+
+    expect(result?.kind).toBe('signedIn')
+    expect(state?.user?.username).toBe('admin')
   })
 
   /** Nobody is signed in: asking anyway would answer 401 and look like a session ending. */

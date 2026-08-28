@@ -15,6 +15,7 @@ import { api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
 import type { TenantAccess, User } from '../lib/types'
+import { TwoFactorAdminPanel } from './user/TwoFactorAdminPanel'
 import { UserAccessPanel } from './user/UserAccessPanel'
 
 /** The shortest password the backend accepts. Stated so the field can say so before sending. */
@@ -290,6 +291,8 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
             )}
           </Panel>
         </div>
+
+        <TwoFactorAdminPanel user={user} />
 
         {can('USER_READ') && tenants.length > 0 && (
           <UserAccessPanel user={user} tenants={tenants} />

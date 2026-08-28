@@ -81,6 +81,8 @@ function auth(): AuthState {
     user: null,
     loading: false,
     signIn: () => Promise.reject(new Error('not in this test')),
+    completeSecondFactor: () => Promise.reject(new Error('not in this test')),
+    sendSecondFactorCode: () => Promise.resolve(),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
     refresh: () => Promise.resolve(),

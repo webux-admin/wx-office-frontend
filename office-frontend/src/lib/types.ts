@@ -2193,3 +2193,38 @@ export type DocumentMailPreview = {
   fileName: string
   byteCount: number
 }
+
+// --- second factor -----------------------------------------------------------
+
+/**
+ * Whether an account is protected, and how well.
+ *
+ * <p>As `SecondFactorStateDto` sends it. Never the secret and never the recovery codes —
+ * those exist in readable form for exactly one moment.
+ */
+export type SecondFactorState = {
+  enrolled: boolean
+  /** How it is delivered, absent where nothing stands. */
+  method?: string
+  /** How many codes off the paper list are still good. */
+  remainingRecoveryCodes: number
+}
+
+/** What a mask needs to get a second factor into an authenticator app. */
+export type SecondFactorEnrolment = {
+  /** The shared secret in Base32, for typing in where a camera fails. */
+  secret: string
+  otpAuthUri: string
+  /** The link as an SVG image, ready to be put into the page. */
+  qrSvg: string
+}
+
+/**
+ * The codes that get somebody in without their telephone.
+ *
+ * <p>The only moment they are readable. Whoever does not put them in front of the user now
+ * has lost them.
+ */
+export type RecoveryCodes = {
+  codes: string[]
+}

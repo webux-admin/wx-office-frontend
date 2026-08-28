@@ -1,5 +1,12 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -9,6 +16,7 @@ import {
   EyeOff,
   Lock,
   Package,
+  ShieldCheck,
   Tags,
   User,
   Users,
@@ -18,6 +26,7 @@ import { TextField } from '../components/TextField'
 import { BrandMark } from '../components/BrandMark'
 import { ApiError, UnauthorizedError } from '../lib/api'
 import { useAuth } from '../auth/useAuth'
+import { CODE_LENGTH, RECOVERY_CODE_LENGTH, RESEND_SECONDS } from '../lib/twoFactor'
 
 /**
  * Modules shown as drifting tiles on the dark panel. Colours come from the design tokens.
@@ -81,6 +90,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   /** Counts submissions so a repeated failure shakes the card again. */
   const [attempt, setAttempt] = useState(0)
+  /** The second step, `null` while the password is still the question. */
+  const [challenge, setChallenge] = useState<SecondFactorChallenge | null>(null)
   const usernameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => usernameRef.current?.focus(), [])
@@ -97,7 +108,14 @@ export function LoginPage() {
     setError(null)
     setBusy(true)
     try {
-      await signIn(username.trim(), password)
+      const result = await signIn(username.trim(), password)
+      if (result.kind === 'secondFactor') {
+        // The password is right and the session is not a session yet. The password is dropped
+        // here: it has done its work, and the second step does not carry it.
+        setChallenge({ method: result.method, methods: result.methods })
+        setPassword('')
+        return
+      }
       void navigate('/', { replace: true })
     } catch (failure) {
       setError(messageFor(failure))
@@ -106,6 +124,19 @@ export function LoginPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * Back to the password, with nothing of the half finished attempt left over.
+   *
+   * <p>Not «back to a half session»: the pending state on the server dies with the next login,
+   * and the mask says as much rather than leaving somebody guessing what state they are in.
+   */
+  function cancelSecondFactor() {
+    setChallenge(null)
+    setPassword('')
+    setError(null)
+    window.setTimeout(() => usernameRef.current?.focus(), 0)
   }
 
   function useDemoAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
@@ -131,6 +162,14 @@ export function LoginPage() {
             <span className="text-[16px] font-semibold tracking-tight">webux ERP</span>
           </div>
 
+          {challenge !== null ? (
+            <SecondFactorStep
+              challenge={challenge}
+              onDone={() => void navigate('/', { replace: true })}
+              onCancel={cancelSecondFactor}
+            />
+          ) : (
+            <>
           <h1 className="text-[24px] font-semibold leading-8 tracking-tight">Anmelden</h1>
           <p className="mt-1.5 text-text-secondary">
             Melde dich an, um mit deinen Mandanten zu arbeiten.
@@ -240,10 +279,228 @@ export function LoginPage() {
           </motion.form>
 
           <DemoAccounts onPick={useDemoAccount} />
+            </>
+          )}
         </motion.div>
       </main>
     </div>
   )
+}
+
+/** What the first step answered: which methods this account can prove itself with. */
+type SecondFactorChallenge = { method: string; methods: string[] }
+
+/**
+ * The second step of the login.
+ *
+ * <p><b>On this page, not on a route of its own.</b> A route that only works while a pending
+ * state sits in the session is a route somebody bookmarks and then lands on with nothing to
+ * do (ADR-0022).
+ *
+ * <p>Most of what is here is not the code field but the ways beside it: the lost telephone,
+ * the code that does not arrive, the abandoned attempt. This is the one screen in the
+ * application where a mistake locks somebody out.
+ */
+function SecondFactorStep({
+  challenge,
+  onDone,
+  onCancel,
+}: {
+  challenge: SecondFactorChallenge
+  onDone: () => void
+  onCancel: () => void
+}) {
+  const { completeSecondFactor, sendSecondFactorCode } = useAuth()
+
+  const [code, setCode] = useState('')
+  const [recovery, setRecovery] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+  /** Seconds until another code may be asked for. Counted here, see below. */
+  const [cooldown, setCooldown] = useState(0)
+  const codeRef = useRef<HTMLInputElement>(null)
+  /** Guards the auto-submit, so six digits are sent once and not on every render. */
+  const submitted = useRef('')
+
+  const offersMail = challenge.methods.includes('EMAIL')
+  const expected = recovery ? RECOVERY_CODE_LENGTH : CODE_LENGTH
+
+  useEffect(() => codeRef.current?.focus(), [recovery])
+
+  // The backend refuses a second code within a minute and answers 204 all the same — it says
+  // nothing, on purpose (backend ADR-0089). Counting here is the only way somebody learns why
+  // pressing again does nothing.
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = window.setTimeout(() => setCooldown((left) => left - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [cooldown])
+
+  const send = useCallback(async () => {
+    setError(null)
+    setSent(true)
+    setCooldown(RESEND_SECONDS)
+    await sendSecondFactorCode()
+  }, [sendSecondFactorCode])
+
+  const finish = useCallback(
+    async (typed: string) => {
+      setBusy(true)
+      setError(null)
+      try {
+        await completeSecondFactor(typed)
+        onDone()
+      } catch (failure) {
+        setError(secondFactorMessage(failure))
+        setCode('')
+        submitted.current = ''
+      } finally {
+        setBusy(false)
+      }
+    },
+    [completeSecondFactor, onDone],
+  )
+
+  /**
+   * Sends as soon as the code is complete.
+   *
+   * <p>Whoever has just typed a six digit number off a telephone does not want to look for a
+   * button afterwards. The guard is the point: without it every keystroke past the sixth would
+   * fire another request.
+   */
+  function typeCode(value: string) {
+    const cleaned = recovery
+      ? value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, RECOVERY_CODE_LENGTH)
+      : value.replace(/\D/g, '').slice(0, CODE_LENGTH)
+    setCode(cleaned)
+    if (cleaned.length === expected && !busy && submitted.current !== cleaned) {
+      submitted.current = cleaned
+      void finish(cleaned)
+    }
+  }
+
+  return (
+    <>
+      <h1 className="text-[24px] font-semibold leading-8 tracking-tight">Bestätigen</h1>
+      <p className="mt-1.5 text-text-secondary">
+        {recovery
+          ? 'Geben Sie einen Ihrer Wiederherstellungscodes ein.'
+          : challenge.method === 'EMAIL'
+            ? 'Wir senden einen Code an die hinterlegte E-Mail-Adresse.'
+            : 'Geben Sie den Code aus Ihrer Authenticator-App ein.'}
+      </p>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (code.length === expected && !busy) void finish(code)
+        }}
+        noValidate
+        className="mt-7"
+      >
+        <div aria-live="assertive">
+          {error !== null && (
+            <div className="mb-5 flex gap-2.5 rounded-[var(--radius-md)] border border-danger/25 bg-danger/6 p-3 text-[12px] leading-[17px] text-danger">
+              <AlertTriangle size={15} className="mt-px shrink-0" aria-hidden />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <TextField
+          ref={codeRef}
+          label={recovery ? 'Wiederherstellungscode' : 'Code'}
+          value={code}
+          onChange={(event) => typeCode(event.target.value)}
+          inputMode={recovery ? 'text' : 'numeric'}
+          // The browser and the telephone offer the code out of the mail with this.
+          autoComplete={recovery ? 'off' : 'one-time-code'}
+          autoCapitalize="characters"
+          spellCheck={false}
+          maxLength={expected}
+          invalid={Boolean(error)}
+          icon={<ShieldCheck size={15} />}
+          hint={
+            recovery
+              ? 'Zehn Zeichen von Ihrer ausgedruckten Liste. Jeder Code gilt einmal.'
+              : 'Sechs Ziffern.'
+          }
+        />
+
+        {!recovery && offersMail && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={cooldown > 0}
+              className="text-[13px] text-accent-text underline-offset-2 hover:underline disabled:text-text-tertiary disabled:no-underline"
+            >
+              {sent ? 'Neuen Code senden' : 'Code per E-Mail senden'}
+            </button>
+            <p aria-live="polite" className="mt-1 text-[12px] text-text-tertiary">
+              {cooldown > 0
+                ? `Ein neuer Code ist in ${cooldown} Sekunden möglich.`
+                : sent
+                  ? 'Der Code wurde an die hinterlegte Adresse geschickt. Er gilt zehn Minuten.'
+                  : ''}
+            </p>
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          block
+          busy={busy}
+          className="mt-6"
+          disabled={code.length !== expected}
+        >
+          Anmelden
+        </Button>
+      </form>
+
+      <div className="mt-5 flex flex-col gap-2 text-[13px]">
+        {/* Not a hidden way out. This is the one somebody needs at seven in the morning with
+            a new telephone in their hand. */}
+        <button
+          type="button"
+          onClick={() => {
+            setRecovery((on) => !on)
+            setCode('')
+            setError(null)
+            submitted.current = ''
+          }}
+          className="self-start text-accent-text underline-offset-2 hover:underline"
+        >
+          {recovery
+            ? 'Doch einen Code aus der App eingeben'
+            : 'Ich habe keinen Zugriff auf meine App'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="self-start text-text-tertiary underline-offset-2 hover:underline"
+        >
+          Abbrechen und neu anmelden
+        </button>
+      </div>
+    </>
+  )
+}
+
+/**
+ * Turns a failed second step into one of three sentences.
+ *
+ * <p>Three, because they call for three different things: try again, start over, start over.
+ * One message for all of them would leave somebody retyping a code into a form that has
+ * already given up.
+ */
+function secondFactorMessage(error: unknown): string {
+  if (error instanceof UnauthorizedError || (error instanceof ApiError && error.status === 401)) {
+    return 'Der Code stimmt nicht. Nach fünf Versuchen müssen Sie sich neu anmelden.'
+  }
+  if (error instanceof ApiError) return error.message
+  return 'Das Backend ist nicht erreichbar. Läuft es auf Port 8082?'
 }
 
 /** The dark half: identity, claim, and the module tiles drifting behind them. */

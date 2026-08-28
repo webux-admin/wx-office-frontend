@@ -1,6 +1,24 @@
 import { createContext } from 'react'
 import type { AuthenticatedUser } from '../lib/types'
 
+/**
+ * What a sign-in ended in.
+ *
+ * <p><b>Three outcomes, not two.</b> The third — «the password was right and a second factor
+ * is still owed» — is neither success nor failure. Squeezing it into either would leave the
+ * login screen unable to tell «wrong» from «not finished», which is exactly the distinction
+ * the backend answers 200 rather than 401 to make (backend ADR-0087).
+ */
+export type SignInResult =
+  | { kind: 'signedIn'; user: AuthenticatedUser }
+  | {
+      kind: 'secondFactor'
+      /** The preferred method, `TOTP` where the user has an app. */
+      method: string
+      /** Every method this user could use, preferred one first. */
+      methods: string[]
+    }
+
 /** What the rest of the application may do with the session. */
 export type AuthState = {
   /** The signed in user, `null` while nobody is. */
@@ -8,12 +26,31 @@ export type AuthState = {
   /** True until the first `/api/auth/me` has answered, so no screen flashes the login form. */
   loading: boolean
   /**
-   * Signs in and keeps the session.
+   * Signs in, or reports that a second factor is still owed.
+   *
+   * <p><b>Between the two steps the session does not count as signed in.</b> `user` stays
+   * `null` until {@link completeSecondFactor} succeeds — anything else would let a screen
+   * behind the login draw itself on a half finished session.
    *
    * @throws ApiError with status 401 when the credentials are wrong, the account is
    *         deactivated, or it is locked after too many failed attempts
    */
-  signIn: (username: string, password: string) => Promise<AuthenticatedUser>
+  signIn: (username: string, password: string) => Promise<SignInResult>
+  /**
+   * Finishes a login with a code out of the app, out of a mail, or off the paper list.
+   *
+   * @throws ApiError with status 401 when the code is wrong, the attempt ran out of tries,
+   *         or the pending state expired
+   */
+  completeSecondFactor: (code: string) => Promise<AuthenticatedUser>
+  /**
+   * Asks for a code by mail.
+   *
+   * <p>Answers the same way whatever happened — sent, refused as too soon, or impossible for
+   * want of a mail server. The backend says nothing, on purpose (backend ADR-0089), so the
+   * mask counts the seconds itself rather than reporting an outcome it does not have.
+   */
+  sendSecondFactorCode: () => Promise<void>
   /** Ends the session. The local state is cleared even when the request fails. */
   signOut: () => Promise<void>
   /** Switches the tenant this session works in and reloads the permissions for it. */

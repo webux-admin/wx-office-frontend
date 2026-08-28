@@ -28,6 +28,8 @@ function session(permissions: string[]): AuthState {
     },
     loading: false,
     signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
     refresh: () => Promise.resolve(),
