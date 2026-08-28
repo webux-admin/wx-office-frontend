@@ -1,9 +1,10 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { GitBranch } from 'lucide-react'
+import { GitBranch, Mail } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { SplitButton } from '../components/SplitButton'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
@@ -24,7 +25,9 @@ import {
   stockReversalLabel,
 } from '../lib/inventory'
 import { openByLineId, openByLineNumber } from '../lib/openQuantity'
+import { runsModule } from '../lib/modules'
 import { originOf, originState } from '../lib/origin'
+import { OUTBOX_MODULE, OUTBOX_PATH, OUTBOX_RIGHTS } from '../lib/outbox'
 import {
   ORDER_KIND,
   offerTrackingKey,
@@ -49,6 +52,7 @@ import type {
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
 import { ChangePartnerDialog } from './document/ChangePartnerDialog'
+import { SendDocumentDialog } from './document/SendDocumentDialog'
 import { NewDocumentMask } from './document/NewDocumentMask'
 import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
 import { DocumentLines } from './document/DocumentLines'
@@ -163,7 +167,7 @@ function DocumentMask({
 }) {
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const outcomeLabel = useCatalogueLabel(tenantId, 'offer-outcome')
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const locationState: unknown = useLocation().state
@@ -184,6 +188,11 @@ function DocumentMask({
     kind.tracking ? initialTabOf(locationState) : 'beleg',
   )
   const [askingToIssue, setAskingToIssue] = useState(false)
+  const [sending, setSending] = useState(false)
+  // What the mask says after a mail was queued. «In den Postausgang gelegt» and never
+  // «gesendet»: the runner sends afterwards, and a message claiming more than happened is a
+  // wrong message (backend ADR-0084).
+  const [queued, setQueued] = useState(false)
   // The way back holds the focus, not the way on: a dialog that asks «trotzdem?» must not be
   // answered with a stray Enter.
   const backToMask = useRef<HTMLButtonElement>(null)
@@ -438,6 +447,11 @@ function DocumentMask({
     },
   })
 
+  // Both have to agree: the tenant runs the outbox, and this session may send. The backend
+  // refuses either way — 409 for the module, 403 for the right — so this only tidies the mask.
+  const sendable =
+    runsModule(user?.tenants, user?.activeTenantId, OUTBOX_MODULE) && can(OUTBOX_RIGHTS.send)
+
   // A draft renders on the spot and comes back with a watermark; an issued document hands out
   // the PDF that was archived when it was issued, so a reprint is the same document.
   const print = useMutation({
@@ -545,9 +559,41 @@ function DocumentMask({
               Entwurf löschen
             </Button>
           )}
-        <Button variant="secondary" onClick={() => print.mutate()} busy={print.isPending}>
-          {document.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
-        </Button>
+        {/* Sending is the second way to hand the same document out, so it sits behind the
+            arrow of the printing button rather than beside it. A sixth button in this row
+            would make life hard for the five that are already here (frontend ADR-0020).
+
+            Without the module the entry is gone altogether, not greyed out: a switched-off
+            outbox is a setting of the tenant, not a state of this document, and a greyed
+            entry invites a question this mask cannot answer. */}
+        {sendable ? (
+          <SplitButton
+            onClick={() => print.mutate()}
+            busy={print.isPending}
+            menuLabel={`Weitere Wege, ${kind.gender === 'feminine' ? 'die' : 'den'} ${kind.singular} herauszugeben`}
+            actions={[
+              {
+                id: 'send',
+                label: 'Als E-Mail senden',
+                icon: <Mail size={15} aria-hidden />,
+                // Greyed out with the reason, not hidden: a button that disappears explains
+                // nothing, and «why can I not send this?» has an answer here.
+                disabled: document.status === 'DRAFT',
+                hint:
+                  document.status === 'DRAFT'
+                    ? 'Ein Entwurf kann nicht versendet werden'
+                    : undefined,
+                onSelect: () => setSending(true),
+              },
+            ]}
+          >
+            {document.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
+          </SplitButton>
+        ) : (
+          <Button variant="secondary" onClick={() => print.mutate()} busy={print.isPending}>
+            {document.status === 'DRAFT' ? 'Vorschau' : 'Drucken'}
+          </Button>
+        )}
         {document.status === 'FINALISED' && can(kind.rights.reopen) && (
           <Button variant="secondary" onClick={() => setReopening(true)}>
             Zurückstellen
@@ -617,6 +663,19 @@ function DocumentMask({
       </PageHeader>
 
       <div className="px-8 pb-12">
+        {/* Said out loud, because sending is the one action of this mask whose result is not
+            visible on it. `aria-live` so a screen reader hears it too. */}
+        <div aria-live="polite">
+          {queued && (
+            <p className="mb-6 text-[13px] text-success">
+              Die E-Mail wurde in den Postausgang gelegt.{' '}
+              <Link to={OUTBOX_PATH} className="underline underline-offset-2">
+                Postausgang öffnen
+              </Link>
+            </p>
+          )}
+        </div>
+
         {/* Only where the button really moves stock. A permanent hint without content is the
             second worst mistake such a mask can make; the invisible rule is the worst. */}
         {document.status === 'DRAFT'
@@ -827,6 +886,17 @@ function DocumentMask({
           />
         )}
       </div>
+
+      {sendable && (
+        <SendDocumentDialog
+          open={sending}
+          onClose={() => setSending(false)}
+          onQueued={() => setQueued(true)}
+          tenantId={tenantId}
+          kind={kind}
+          documentId={document.id}
+        />
+      )}
 
       <ChangePartnerDialog
         tenantId={tenantId}

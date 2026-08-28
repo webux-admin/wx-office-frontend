@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
+import {
+  MAIL_TEMPLATE_PATH,
+  OUTBOX_ACCOUNT_PATH,
+  OUTBOX_PATH,
+  OUTBOX_RIGHTS,
+} from '../lib/outbox'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
 import { flattenNav, isFolder, NAV_GROUPS, visibleNavGroups, type NavEntry } from './navigation'
 
@@ -76,6 +82,37 @@ describe('NAV_GROUPS', () => {
       expect(entry.permission).toBe('INVENTORY_READ')
       expect(entry.module).toBe('INVENTORY')
     }
+  })
+
+  /**
+   * Three screens for the outbox, and all three carry the module: a tenant that does not send
+   * mail is offered neither the account, nor the log, nor the texts (backend ADR-0086).
+   */
+  it('navGroupsCoverTheOutboxScreensTest', () => {
+    const outbox = allEntries().filter((entry) =>
+      [OUTBOX_ACCOUNT_PATH, OUTBOX_PATH, MAIL_TEMPLATE_PATH].includes(entry.href),
+    )
+
+    expect(outbox).toHaveLength(3)
+    for (const entry of outbox) {
+      expect(entry.permission).toBe(OUTBOX_RIGHTS.read)
+      expect(entry.module).toBe('OUTBOX')
+    }
+  })
+
+  /**
+   * The account stands with the tenant, the log and the texts with the documents. That split
+   * is the decision of ADR-0020 and is worth a test: an account is an operating setting, a log
+   * is worked with.
+   */
+  it('navGroupsPutTheAccountWithTheTenantTest', () => {
+    const system = NAV_GROUPS.find((group) => group.title === 'Systemeinstellungen')
+    const modules = NAV_GROUPS.find((group) => group.title === 'Moduleinstellungen')
+
+    expect(flattenNav(system?.entries ?? []).map((entry) => entry.href)).toContain(
+      OUTBOX_ACCOUNT_PATH,
+    )
+    expect(flattenNav(modules?.entries ?? []).map((entry) => entry.href)).toContain(OUTBOX_PATH)
   })
 
   it('navGroupsHaveNoDuplicateHrefsTest', () => {
@@ -181,6 +218,8 @@ describe('flattenNav', () => {
       '/druckvorlagen',
       '/drucker',
       '/nummernkreise',
+      OUTBOX_PATH,
+      MAIL_TEMPLATE_PATH,
       '/basisdaten/verrechnungsarten',
       '/basisdaten/mahnarten',
     ])
@@ -222,6 +261,30 @@ describe('visibleNavGroups', () => {
 
     expect(hrefs(visible)).not.toContain('/lagerorte')
     expect(hrefs(visible)).toContain('/kunden')
+  })
+
+  /**
+   * The same for the outbox, and this one is worth its own case: three screens in two
+   * different groups have to disappear together, and one of them sits among screens that stay.
+   */
+  it('visibleNavGroupsHidesTheOutboxWithoutTheModuleTest', () => {
+    const visible = visibleNavGroups(all, (module) => module !== 'OUTBOX')
+
+    expect(hrefs(visible)).not.toContain(OUTBOX_ACCOUNT_PATH)
+    expect(hrefs(visible)).not.toContain(OUTBOX_PATH)
+    expect(hrefs(visible)).not.toContain(MAIL_TEMPLATE_PATH)
+    expect(hrefs(visible)).toContain('/nummernkreise')
+    expect(hrefs(visible)).toContain('/mandanten')
+  })
+
+  it('visibleNavGroupsHidesTheOutboxWithoutTheRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== OUTBOX_RIGHTS.read,
+      () => true,
+    )
+
+    expect(hrefs(visible)).not.toContain(OUTBOX_PATH)
+    expect(hrefs(visible)).toContain('/nummernkreise')
   })
 
   it('visibleNavGroupsHidesWhatThePermissionForbidsTest', () => {

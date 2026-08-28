@@ -9,6 +9,7 @@ import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { MODULE_PATH } from './lib/modules'
+import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
 
@@ -51,6 +52,9 @@ const StocktakePage = lazy(() => import('./pages/StocktakePage').then((module) =
 const StockMovementListPage = lazy(() => import('./pages/StockMovementListPage').then((module) => ({ default: module.StockMovementListPage })))
 const StockLocationListPage = lazy(() => import('./pages/StockLocationListPage').then((module) => ({ default: module.StockLocationListPage })))
 const ModulePage = lazy(() => import('./pages/ModulePage').then((module) => ({ default: module.ModulePage })))
+const OutboxAccountPage = lazy(() => import('./pages/OutboxAccountPage').then((module) => ({ default: module.OutboxAccountPage })))
+const OutboxListPage = lazy(() => import('./pages/OutboxListPage').then((module) => ({ default: module.OutboxListPage })))
+const OutboxTemplatePage = lazy(() => import('./pages/OutboxTemplatePage').then((module) => ({ default: module.OutboxTemplatePage })))
 const StockAsOfPage = lazy(() => import('./pages/StockAsOfPage').then((module) => ({ default: module.StockAsOfPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
 const TenantPage = lazy(() => import('./pages/TenantPage').then((module) => ({ default: module.TenantPage })))
@@ -147,6 +151,11 @@ export default function App() {
                 <Route path="/druckvorlagen/:id" element={<PrintLayoutPage />} />
                 <Route path="/drucker" element={<PrinterListPage />} />
                 <Route path="/nummernkreise" element={<NumberRangePage />} />
+                {/* Like the module screen, these take their address from the building block
+                    the menu reads, so neither can move without the other. */}
+                <Route path={OUTBOX_ACCOUNT_PATH} element={<OutboxAccountPage />} />
+                <Route path={OUTBOX_PATH} element={<OutboxListPage />} />
+                <Route path={MAIL_TEMPLATE_PATH} element={<OutboxTemplatePage />} />
 
                 <Route path="/mandanten" element={<TenantListPage />} />
                 <Route path={MODULE_PATH} element={<ModulePage />} />

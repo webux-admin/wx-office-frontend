@@ -21,6 +21,8 @@ import {
   LayoutGrid,
   LayoutTemplate,
   Lock,
+  Mail,
+  MailPlus,
   Package,
   PackageCheck,
   Percent,
@@ -44,6 +46,13 @@ import {
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { MODULE_PATH, MODULE_RIGHTS } from '../lib/modules'
+import {
+  MAIL_TEMPLATE_PATH,
+  OUTBOX_ACCOUNT_PATH,
+  OUTBOX_MODULE,
+  OUTBOX_PATH,
+  OUTBOX_RIGHTS,
+} from '../lib/outbox'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -294,6 +303,16 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
+      // Between «Mandanten» and «Module»: the mail account is an operating setting of the
+      // tenant, like its address — not a value a module reads (backend ADR-0082). It carries
+      // the module, so a tenant that does not send sees no way to set up sending.
+      {
+        label: 'Postausgang',
+        icon: Mail,
+        href: OUTBOX_ACCOUNT_PATH,
+        permission: OUTBOX_RIGHTS.read,
+        module: OUTBOX_MODULE,
+      },
       // Beside «Mandanten» and not under Moduleinstellungen: the sorting rule of ADR-0011 is
       // «how many modules read the value» — the module switch is read by every one of them.
       // It carries no `module` field of its own, on purpose: a screen that hides itself once
@@ -342,6 +361,25 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: Hash,
             href: '/nummernkreise',
             permission: 'NUMBER_RANGE_READ',
+          },
+          // What went out and what did not. Beside the forms and the printers, because mail is
+          // the third way a document leaves the house — and it is a screen rather than a line
+          // on the document, because what failed has to be findable without knowing which
+          // document it was (backend ADR-0084).
+          {
+            label: 'Postausgang',
+            icon: Mail,
+            href: OUTBOX_PATH,
+            permission: OUTBOX_RIGHTS.read,
+            module: OUTBOX_MODULE,
+          },
+          // Directly below it: the texts those mails go out with.
+          {
+            label: 'Mailvorlagen',
+            icon: MailPlus,
+            href: MAIL_TEMPLATE_PATH,
+            permission: OUTBOX_RIGHTS.read,
+            module: OUTBOX_MODULE,
           },
           listEntry('verrechnungsarten', Receipt),
           listEntry('mahnarten', BellRing),

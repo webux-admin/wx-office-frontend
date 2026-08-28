@@ -2089,3 +2089,107 @@ export type StockAsOfSummary = {
   backdatedMovements: number
   showsValue: boolean
 }
+
+// --- outbox ------------------------------------------------------------------
+
+/** How a mail account signs in. One value today; Microsoft 365 follows. */
+export type AuthKind = 'SMTP_PASSWORD'
+
+/** How the connection to the mail server is protected. */
+export type SmtpSecurity = 'NONE' | 'STARTTLS' | 'SSL'
+
+/** What became of one queued mail. */
+export type MessageStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'FAILED'
+
+/**
+ * The mail account of a tenant, as `MailAccountDto` sends it.
+ *
+ * <p>`passwordSet` and never the password itself: the backend hands it out nowhere, not even
+ * as a cipher (backend ADR-0083). The mask therefore says «gespeichert» and offers an empty
+ * field, and an empty field means «unchanged».
+ */
+export type MailAccount = {
+  authKind: AuthKind
+  host: string
+  port: number
+  security: SmtpSecurity
+  username?: string
+  senderAddress: string
+  senderName?: string
+  replyTo?: string
+  active: boolean
+  passwordSet: boolean
+}
+
+/** One row of the outbox list, as `OutboxSummaryDto` sends it. */
+export type OutboxSummary = {
+  id: number
+  status: MessageStatus
+  /** Every recipient in one line, the way the row shows it. */
+  recipients: string
+  subject: string
+  attempts: number
+  sentAt?: string
+  lastError?: string
+  createdAt: string
+}
+
+/** What hung on a mail, as `OutboxMessageDto.AttachmentDto` sends it. */
+export type OutboxAttachment = {
+  id: number
+  fileName: string
+  mediaType: string
+  byteCount: number
+}
+
+/** One mail with its text and what hung on it, as `OutboxMessageDto` sends it. */
+export type OutboxMessage = {
+  id: number
+  status: MessageStatus
+  senderAddress: string
+  senderName?: string
+  replyTo?: string
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  body: string
+  bodyHtml?: string
+  /** `DOCUMENT` where a document was sent; absent for a free mail. */
+  sourceModule?: string
+  /** The document category, for example `INVOICE`. */
+  sourceKind?: string
+  sourceId?: number
+  attachments: OutboxAttachment[]
+  attempts: number
+  nextAttemptAt?: string
+  sentAt?: string
+  lastError?: string
+  createdAt: string
+}
+
+/**
+ * One covering text, as `MailTemplateDto` sends it.
+ *
+ * <p>`overridden` false means the shipped text: the tenant has no row of its own, and what
+ * stands in `subject` and `body` is what the application brings along (backend ADR-0085).
+ */
+export type MailTemplate = {
+  categoryCode: string
+  categoryLabel: string
+  languageCode: string
+  subject: string
+  body: string
+  overridden: boolean
+}
+
+/** What a document mail would look like, as `DocumentMailPreviewDto` sends it. */
+export type DocumentMailPreview = {
+  documentNumber: string
+  to: string[]
+  subject: string
+  body: string
+  senderAddress: string
+  fileName: string
+  byteCount: number
+}

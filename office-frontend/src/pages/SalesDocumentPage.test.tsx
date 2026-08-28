@@ -38,22 +38,35 @@ const PERMISSIONS = [
   'INVENTORY_READ',
 ]
 
-const SESSION: AuthState = {
-  user: {
-    userId: 1,
-    username: 'muster',
-    activeTenantId: TENANT,
-    superuser: false,
-    tenants: [],
-    permissions: PERMISSIONS,
-  },
-  loading: false,
-  signIn: () => Promise.reject(new Error('nicht gebraucht')),
-  signOut: () => Promise.resolve(),
-  switchTenant: () => Promise.resolve(),
-  refresh: () => Promise.resolve(),
-  can: (permission: string) => PERMISSIONS.includes(permission),
+/**
+ * A session with the given rights and switchable modules.
+ *
+ * <p>The modules matter since the outbox became switchable: the send entry is drawn only where
+ * the tenant runs it, and that is read off the session (backend ADR-0086).
+ */
+function sessionWith(permissions: string[], modules: string[] = []): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'muster',
+      activeTenantId: TENANT,
+      superuser: false,
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
 }
+
+const SESSION: AuthState = sessionWith(PERMISSIONS)
+
+/** The session the next render uses; a test about the outbox sets its own. */
+let sessionState: AuthState
 
 const CATALOGUES = {
   'document-status': [
@@ -153,6 +166,20 @@ function json(body: unknown, status = 200) {
   )
 }
 
+/** What the send preview answers, or the status it fails with. */
+let previewState: { status: number; body: unknown }
+
+/** What the preview of a mail about this offer looks like. */
+const PREVIEW = {
+  documentNumber: 'OF-2026-0001',
+  to: ['kunde@example.ch'],
+  subject: 'Offerte OF-2026-0001',
+  body: 'Guten Tag\n\nBeiliegend die Offerte.',
+  senderAddress: 'offerte@webux.ch',
+  fileName: 'Offerte_OF-2026-0001.pdf',
+  byteCount: 20480,
+}
+
 function stubFetch() {
   sent = []
   trackingState = { outcome: 'OPEN', expired: false }
@@ -165,6 +192,11 @@ function stubFetch() {
     const method = options?.method ?? 'GET'
     const body = options?.body === undefined ? undefined : JSON.parse(String(options.body))
     sent.push({ url, method, body })
+
+    if (url.includes('/outbox/') && url.endsWith('/preview')) {
+      return json(previewState.body, previewState.status)
+    }
+    if (url.includes('/outbox/') && method === 'POST') return json({ id: 9 })
 
     if (url.endsWith('/tracking/outcome') && method === 'PUT') {
       const asked = body as { outcome: OfferOutcome; reasonCode?: string; note?: string }
@@ -205,6 +237,8 @@ function stubFetch() {
 }
 
 beforeEach(() => {
+  sessionState = SESSION
+  previewState = { status: 200, body: PREVIEW }
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -232,7 +266,7 @@ async function render(path: string, state?: unknown): Promise<void> {
       <MemoryRouter
         initialEntries={[state === undefined ? path : { pathname: path, state }]}
       >
-        <AuthContext.Provider value={SESSION}>
+        <AuthContext.Provider value={sessionState}>
           <QueryClientProvider client={client}>
             <Routes>
               <Route path="/offerten/:id" element={<SalesDocumentPage kind={OFFER_KIND} />} />
@@ -651,5 +685,182 @@ describe('SalesDocumentPage', () => {
     await press('Stornieren')
 
     expect(text()).toContain('Der Storno bucht den Bestand zurück')
+  })
+
+  // --- sending -------------------------------------------------------------
+
+  /** A session that runs the outbox and may send through it. */
+  const SENDER = sessionWith([...PERMISSIONS, 'OUTBOX_SEND'], ['OUTBOX'])
+
+  /** The arrow of the printing button, absent while there is no second way out. */
+  function menuToggle(): HTMLButtonElement | undefined {
+    return [...document.querySelectorAll('button')].find(
+      (entry) => entry.getAttribute('aria-haspopup') === 'menu',
+    ) as HTMLButtonElement | undefined
+  }
+
+  /** Opens the menu behind the printing button. Its entries exist only while it is open. */
+  async function openMenu() {
+    await act(async () => {
+      menuToggle()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await settle()
+  }
+
+  async function openSendDialog() {
+    await openMenu()
+    await press('Als E-Mail senden')
+  }
+
+  /**
+   * Sending is the second way to hand the same document out, so it sits behind the arrow of
+   * the printing button. A sixth button in that row would make life hard for the five that
+   * are already there (ADR-0020).
+   */
+  it('salesDocumentPageOffersSendingBesideThePrintingTest', async () => {
+    sessionState = SENDER
+    await render('/offerten/42')
+
+    expect(menuToggle()).toBeDefined()
+    expect(text()).toContain('Drucken')
+
+    await openMenu()
+
+    expect(text()).toContain('Als E-Mail senden')
+  })
+
+  /**
+   * Without the module the entry is gone, not greyed out: a switched-off outbox is a setting
+   * of the tenant, not a state of this document, and this mask cannot answer «why not?».
+   */
+  it('salesDocumentPageHidesSendingWithoutTheModuleTest', async () => {
+    sessionState = sessionWith([...PERMISSIONS, 'OUTBOX_SEND'], [])
+    await render('/offerten/42')
+
+    expect(menuToggle()).toBeUndefined()
+    expect(text()).toContain('Drucken')
+  })
+
+  it('salesDocumentPageHidesSendingWithoutTheRightTest', async () => {
+    sessionState = sessionWith(PERMISSIONS, ['OUTBOX'])
+    await render('/offerten/42')
+
+    expect(menuToggle()).toBeUndefined()
+  })
+
+  /** Greyed out with the reason. A button that disappears explains nothing. */
+  it('salesDocumentPageGreysOutSendingOnADraftTest', async () => {
+    sessionState = SENDER
+    orderState = { ...issued('ORDER'), status: 'DRAFT', documentNumber: undefined }
+    await render('/auftraege/42')
+
+    await act(async () => {
+      ;[...document.querySelectorAll('button')]
+        .find((entry) => entry.getAttribute('aria-haspopup') === 'menu')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await settle()
+
+    expect(buttonNamed('Als E-Mail sendenEin Entwurf kann nicht versendet werden').disabled)
+      .toBe(true)
+  })
+
+  it('salesDocumentPageShowsWhatWouldGoOutTest', async () => {
+    sessionState = SENDER
+    await render('/offerten/42')
+
+    await openSendDialog()
+
+    expect(byLabel<HTMLInputElement>('An').value).toBe('kunde@example.ch')
+    expect(byLabel<HTMLInputElement>('Betreff').value).toBe('Offerte OF-2026-0001')
+    expect(text()).toContain('Beiliegend die Offerte.')
+    expect(text()).toContain('Offerte_OF-2026-0001.pdf')
+    expect(text()).toContain('20 KB')
+  })
+
+  it('salesDocumentPageSendsWhatTheDialogShowsTest', async () => {
+    sessionState = SENDER
+    await render('/offerten/42')
+    await openSendDialog()
+
+    type(byLabel<HTMLInputElement>('An'), 'neu@example.ch, zweite@example.ch')
+    await settle()
+    await press('Senden')
+
+    const posted = sent.find(
+      (entry) => entry.method === 'POST' && entry.url.includes('/outbox/offers/42'),
+    )
+    expect(posted?.body).toMatchObject({
+      to: ['neu@example.ch', 'zweite@example.ch'],
+      subject: 'Offerte OF-2026-0001',
+      copyToSender: false,
+    })
+  })
+
+  /** Queued, not sent: the runner sends afterwards, and a message claiming more is wrong. */
+  it('salesDocumentPageSaysTheMailWasQueuedTest', async () => {
+    sessionState = SENDER
+    await render('/offerten/42')
+    await openSendDialog()
+
+    await press('Senden')
+
+    expect(text()).toContain('in den Postausgang gelegt')
+    expect(text()).not.toContain('wurde gesendet')
+  })
+
+  it('salesDocumentPageRefusesToSendWithoutARecipientTest', async () => {
+    sessionState = SENDER
+    previewState = { status: 200, body: { ...PREVIEW, to: [] } }
+    await render('/offerten/42')
+
+    await openSendDialog()
+
+    expect(text()).toContain('Am Kunden ist keine E-Mail-Adresse hinterlegt')
+    expect(buttonNamed('Senden').disabled).toBe(true)
+  })
+
+  /** But it can be typed in, and that changes the mail rather than the document. */
+  it('salesDocumentPageSendsToATypedAddressTest', async () => {
+    sessionState = SENDER
+    previewState = { status: 200, body: { ...PREVIEW, to: [] } }
+    await render('/offerten/42')
+    await openSendDialog()
+
+    type(byLabel<HTMLInputElement>('An'), 'nachgetragen@example.ch')
+    await settle()
+
+    expect(buttonNamed('Senden').disabled).toBe(false)
+  })
+
+  it('salesDocumentPageLinksToTheAccountWithoutOneTest', async () => {
+    sessionState = sessionWith(
+      [...PERMISSIONS, 'OUTBOX_SEND', 'OUTBOX_CONFIGURE'],
+      ['OUTBOX'],
+    )
+    previewState = {
+      status: 400,
+      body: { detail: 'Für diesen Mandanten ist kein Mailkonto eingerichtet' },
+    }
+    await render('/offerten/42')
+
+    await openSendDialog()
+
+    expect(text()).toContain('Systemeinstellungen → Postausgang')
+  })
+
+  /** Whoever cannot set the account up is sent to somebody who can, not to a dead link. */
+  it('salesDocumentPageNamesTheAdministrationWithoutTheRightTest', async () => {
+    sessionState = SENDER
+    previewState = {
+      status: 400,
+      body: { detail: 'Für diesen Mandanten ist kein Mailkonto eingerichtet' },
+    }
+    await render('/offerten/42')
+
+    await openSendDialog()
+
+    expect(text()).toContain('Bitte an die Administration wenden')
+    expect(text()).not.toContain('Systemeinstellungen → Postausgang')
   })
 })
