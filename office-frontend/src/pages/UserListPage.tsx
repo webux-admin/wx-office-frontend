@@ -15,6 +15,7 @@ import { useTenantId } from '../layout/useTenantId'
 import { api } from '../lib/api'
 import { formatCount, formatDateTime, formatRelativeTime } from '../lib/format'
 import { originState } from '../lib/origin'
+import { methodLabel } from '../lib/twoFactor'
 import type { User } from '../lib/types'
 
 /** What a user mask returns to when it is saved here. */
@@ -77,6 +78,21 @@ function UserList() {
           {user.lastLoginAt ? formatRelativeTime(user.lastLoginAt) : 'Nie'}
         </span>
       ),
+    },
+    {
+      key: 'twoFactor',
+      header: '2FA',
+      width: 'w-[150px]',
+      // One field on the answer, not one request per row: the list is unpaged, and a hundred
+      // accounts would have meant a hundred requests for one badge each (ADR-0022).
+      render: (user) =>
+        user.secondFactorMethod === undefined ? (
+          // Muted, not red. Most accounts have none, and a column of red badges reads as
+          // «alarm» where the truth is «not set up».
+          <Badge tone="muted">Nein</Badge>
+        ) : (
+          <Badge tone="success">{methodLabel(user.secondFactorMethod)}</Badge>
+        ),
     },
     {
       key: 'state',

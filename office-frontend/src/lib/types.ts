@@ -217,6 +217,13 @@ export type User = {
   /** Set after too many failed sign in attempts; only an administrator clears it. */
   locked: boolean
   lastLoginAt?: string
+  /**
+   * How the account proves itself a second time, absent where nothing stands.
+   *
+   * <p>The preferred method where two of them do: whoever has an app is shown as having an
+   * app (backend ADR-0087).
+   */
+  secondFactorMethod?: string
 }
 
 /** What a user may do in one tenant: through roles, plus anything granted directly. */
