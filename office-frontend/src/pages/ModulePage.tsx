@@ -209,7 +209,7 @@ function Modules({ tenantId }: { tenantId: number }) {
                     disabled={!mayWrite}
                     inputMode="decimal"
                     numeric
-                    hint="Prozent der Sollmenge. 0 % heisst: immer ein Grund."
+                    hint="In Prozent der Sollmenge: bei 5 % fragt die Inventur ab 5 Stück Abweichung auf 100 Soll nach einem Grund. 0 % heisst: bei jeder Abweichung."
                   />
                   <TextField
                     label="Untergrenze der Begründungspflicht"
@@ -220,7 +220,7 @@ function Modules({ tenantId }: { tenantId: number }) {
                     disabled={!mayWrite}
                     inputMode="decimal"
                     numeric
-                    hint="Eine Menge, kein Prozentsatz: darunter wird nie ein Grund verlangt."
+                    hint="Eine Menge, kein Prozentsatz: kleinere Abweichungen bleiben ohne Grund, auch bei 0 %. Bei 1 wird ein fehlendes halbes Kilo nie erklärt."
                   />
                 </div>
               </>
