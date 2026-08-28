@@ -58,7 +58,7 @@ import type { DocumentCategory } from '../lib/types'
  * key and backend code was weighed and dropped: it would be the second place where somebody
  * forgets a module (ADR-0018).
  */
-export type NavModule = 'INVENTORY'
+export type NavModule = 'INVENTORY' | 'OUTBOX'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {

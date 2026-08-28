@@ -16,6 +16,34 @@ import { MODULE_RIGHTS, tenantModulesKey, tenantModulesUrl } from '../lib/module
 import type { Tenant, TenantModule } from '../lib/types'
 
 /**
+ * What stops working when a module goes off, one sentence per module.
+ *
+ * <p>Written here and not sent by the backend: `label` and `description` say what a module *is*
+ * and belong to the catalogue, while this says what a *screen* stops doing. It lives beside the
+ * dialog that shows it, the way the menu texts live in `navigation.ts` (ADR-0018).
+ *
+ * <p>Keyed by the backend code. A module without a sentence gets the neutral one — a missing
+ * entry must never turn the dialog into the warning of another module, which is what happened
+ * while this text was a fixed paragraph about the stock.
+ */
+const CONSEQUENCES: Record<string, string> = {
+  INVENTORY:
+    'Lieferscheine buchen danach keinen Abgang mehr, und der Bestand läuft auseinander. ' +
+    'Die gebuchten Bewegungen bleiben erhalten — gelöscht wird nichts.',
+  OUTBOX:
+    'Belege lassen sich danach nicht mehr per E-Mail versenden, und was in der Warteschlange ' +
+    'steht, bleibt dort liegen. Gesendete Nachrichten bleiben lesbar — gelöscht wird nichts.',
+}
+
+/** The neutral sentence, for a module nobody wrote one for. */
+const CONSEQUENCE_FALLBACK =
+  'Was im Modul liegt, bleibt erhalten — gelöscht wird nichts.'
+
+function consequenceOf(code: string): string {
+  return CONSEQUENCES[code] ?? CONSEQUENCE_FALLBACK
+}
+
+/**
  * Which modules this tenant runs.
  *
  * <p>Its own screen rather than a checkbox on the tenant form: a switch that decides whether a
@@ -225,8 +253,7 @@ function Modules({ tenantId }: { tenantId: number }) {
         }
       >
         <p className="text-[13px] text-text-secondary">
-          Lieferscheine buchen danach keinen Abgang mehr, und der Bestand läuft auseinander.
-          Die gebuchten Bewegungen bleiben erhalten — gelöscht wird nichts.
+          {pending === null ? '' : consequenceOf(pending.code)}
         </p>
       </Dialog>
     </>

@@ -72,6 +72,16 @@ function inventory(overrides: Partial<TenantModule> = {}): TenantModule {
   }
 }
 
+function outbox(overrides: Partial<TenantModule> = {}): TenantModule {
+  return {
+    code: 'OUTBOX',
+    label: 'Postausgang',
+    description: 'E-Mail-Versand von Belegen, Mailkonto, Textvorlagen und Versandprotokoll.',
+    active: false,
+    ...overrides,
+  }
+}
+
 function json(body: unknown) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
@@ -194,6 +204,68 @@ describe('ModulePage', () => {
     const put = written.find((entry) => entry.url.includes('/modules'))
     expect(put?.method).toBe('PUT')
     expect(put?.body.modules).toEqual([{ code: 'INVENTORY', active: true }])
+  })
+
+  it('modulePageListsEveryModuleTest', async () => {
+    // The screen was built for one module and had never seen a second one. Since the outbox
+    // became switchable there are two, and there will be more (ADR-0086).
+    modules = [inventory(), outbox({ active: true })]
+    await render()
+
+    expect(box('Lager verwenden')?.checked).toBe(false)
+    expect(box('Postausgang verwenden')?.checked).toBe(true)
+    expect(container.textContent).toContain('Textvorlagen und Versandprotokoll')
+  })
+
+  it('modulePageSendsOnlyWhatChangedTest', async () => {
+    // The payload names changes, not the whole state: a module the payload is silent about
+    // keeps what it had. Switching one module must therefore not carry the other along.
+    modules = [inventory(), outbox()]
+    await render()
+
+    await toggle('Postausgang verwenden', true)
+    await click(button('Speichern'))
+
+    const put = written.find((entry) => entry.url.includes('/modules'))
+    expect(put?.body.modules).toEqual([{ code: 'OUTBOX', active: true }])
+  })
+
+  it('modulePageWarnsAboutTheModuleBeingSwitchedOffTest', async () => {
+    // The consequence used to be a fixed paragraph about delivery notes and stock, written
+    // when the stock was the only switchable module. Switching the outbox off warned about
+    // the stock.
+    modules = [
+      inventory({ active: true, usage: '142 Bewegungen' }),
+      outbox({ active: true, usage: '1284 gesendete Nachrichten, 2 wartende' }),
+    ]
+    await render()
+
+    await toggle('Postausgang verwenden', false)
+
+    expect(container.textContent).toContain('1284 gesendete Nachrichten, 2 wartende')
+    expect(container.textContent).toContain('nicht mehr per E-Mail versenden')
+    expect(container.textContent).not.toContain('der Bestand läuft auseinander')
+  })
+
+  it('modulePageWarnsAboutTheStockWhenTheStockGoesOffTest', async () => {
+    modules = [inventory({ active: true, usage: '142 Bewegungen' }), outbox({ active: true })]
+    await render()
+
+    await toggle('Lager verwenden', false)
+
+    expect(container.textContent).toContain('der Bestand läuft auseinander')
+    expect(container.textContent).not.toContain('nicht mehr per E-Mail versenden')
+  })
+
+  it('modulePageWarnsNeutrallyForAModuleWithoutASentenceTest', async () => {
+    // A module the screen has never heard of gets the neutral sentence, never the one of
+    // whichever module happens to be listed first.
+    modules = [outbox({ code: 'PROJECT', label: 'Projekte', active: true, usage: '7 Projekte' })]
+    await render()
+
+    await toggle('Projekte verwenden', false)
+
+    expect(container.textContent).toContain('Was im Modul liegt, bleibt erhalten')
   })
 
   it('modulePageRefreshesTheSessionAfterSavingTest', async () => {
