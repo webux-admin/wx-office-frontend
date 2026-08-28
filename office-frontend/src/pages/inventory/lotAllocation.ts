@@ -6,6 +6,7 @@ import type {
   LotKind,
   LotProposal,
   LotProposalLine,
+  SerialNumberHolding,
 } from '../../lib/types'
 
 /**
@@ -248,6 +249,51 @@ export function neverIssuedWarning(
   const more = rest === 1 ? 'eine weitere' : `${rest} weitere`
   const named = rest === 0 ? `${strangers[0]} ist` : `${strangers[0]} und ${more} sind`
   return `${named} nicht unter den zuletzt ausgelieferten Nummern. Die Rücknahme wird trotzdem gebucht.`
+}
+
+/**
+ * What is said about a number that is already lying in the warehouse.
+ *
+ * <p>Unlike {@link neverIssuedWarning} this one names what will happen: the server refuses a
+ * return that brings a piece back which never left, and it refuses it when the document is
+ * issued (backend ADR-0077). Saying so while the number is typed saves searching for the guilty
+ * position on a return over twenty devices (backend ADR-0081).
+ *
+ * <p>Still a warning and not a block. The mask does not decide what is refused — it asks, and
+ * the server answers with a location only where a warning is due. A batch, a number nobody ever
+ * wrote down and a number that lies nowhere all come back without one.
+ *
+ * <p>The location is named only where there is exactly one number to name it for. «SN-1 und
+ * zwei weitere liegen in Hauptlager» would be a lie as soon as they lie in different places.
+ *
+ * @param rows the lines as they stand
+ * @param holdings what the server answered about the numbers in them, by number
+ * @returns the German sentence, or `null` where no number lies anywhere
+ */
+export function alreadyInStockWarning(
+  rows: readonly LotRow[],
+  holdings: ReadonlyMap<string, SerialNumberHolding>,
+): string | null {
+  const lying = rows
+    .filter((row) => (parseDecimal(row.quantity) ?? 0) > 0)
+    .map((row) => (row.lotNumber ?? '').trim())
+    .filter((lotNumber) => lotNumber !== '')
+    .map((lotNumber) => holdings.get(lotNumber.toLocaleLowerCase('de-CH')))
+    .filter((holding): holding is SerialNumberHolding => (holding?.locationName ?? null) !== null)
+  const named = lying.filter(
+    (holding, at) => lying.findIndex((one) => one.lotNumber === holding.lotNumber) === at,
+  )
+  if (named.length === 0) return null
+  if (named.length === 1) {
+    return `${named[0].lotNumber} liegt bereits in ${named[0].locationName}.`
+      + ' Das Ausstellen weist die Position ab.'
+  }
+  // Exactly one more is written out, as German writes it — «und eine weitere», never «und 1
+  // weitere». The same rule the sentence above follows.
+  const rest = named.length - 1
+  const more = rest === 1 ? 'eine weitere' : `${rest} weitere`
+  return `${named[0].lotNumber} und ${more} liegen bereits im Lager.`
+    + ' Das Ausstellen weist die Position ab.'
 }
 
 /**

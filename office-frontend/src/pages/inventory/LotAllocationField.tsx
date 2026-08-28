@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { BarcodeScanner } from '../../components/BarcodeScanner'
 import { Button } from '../../components/Button'
@@ -18,6 +18,8 @@ import {
   lotProposalUrl,
   productLotsKey,
   productLotsUrl,
+  serialNumberHoldingKey,
+  serialNumberHoldingUrl,
   serialNumberProposalUrl,
 } from '../../lib/inventory'
 import { listQuery } from '../../lib/paging'
@@ -30,11 +32,13 @@ import type {
   Page,
   Product,
   Lot,
+  SerialNumberHolding,
   SerialNumbers,
 } from '../../lib/types'
 import {
   addSerialNumber,
   addSerialNumbers,
+  alreadyInStockWarning,
   allocationAnnouncement,
   allocationSummary,
   emptyRow,
@@ -114,6 +118,10 @@ export function LotAllocationField({
    * supplier's label, a return names numbers that already left this house. Where this is set
    * the field offers the ones that last went out and warns about one that is not among them —
    * it never refuses, the choice on a return is free (backend ADR-0069).
+   *
+   * <p>It also asks where each finished number lies and warns about one that is already in the
+   * warehouse. That one the server does refuse, when the document is issued (backend ADR-0077);
+   * the warning only says so early enough to be useful (backend ADR-0081).
    */
   returning?: boolean
   /**
@@ -204,6 +212,33 @@ export function LotAllocationField({
   // label, and the numbers this house delivered say nothing about it.
   const offering = !issuing && returning
   const issued = offering ? issuedQuery.data : undefined
+
+  // The numbers a return has finished typing, each asked about once. The line being typed in is
+  // left out for the same reason the «never issued» sentence leaves it out: half a number is not
+  // a number, and asking about it would fire a request per keystroke.
+  const asking = offering
+    ? Array.from(new Set(rows
+        .filter((row) => row.key !== typing)
+        .map((row) => (row.lotNumber ?? '').trim())
+        .filter((lotNumber) => lotNumber !== '')
+        .map((lotNumber) => lotNumber.toLocaleLowerCase('de-CH'))))
+    : []
+  // One query per number rather than one for all of them: adding a number to a return then
+  // costs one request instead of asking about every number again. Which of them are worth a
+  // warning is the server's to say, for every kind — the mask must not carry that rule twice
+  // (backend ADR-0081).
+  const holdingQueries = useQueries({
+    queries: asking.map((lotNumber) => ({
+      queryKey: serialNumberHoldingKey(tenantId, product.id, lotNumber),
+      queryFn: () => api.get<SerialNumberHolding>(
+        serialNumberHoldingUrl(tenantId, product.id, lotNumber),
+      ),
+    })),
+  })
+  const holdings = new Map<string, SerialNumberHolding>()
+  holdingQueries.forEach((query, at) => {
+    if (query.data !== undefined) holdings.set(asking[at], query.data)
+  })
 
   // Adjusted while rendering rather than in an effect: an effect would draw the empty field
   // for one frame, and the summary line would say «offen 5» about a split that is already
@@ -306,6 +341,12 @@ export function LotAllocationField({
   // sentence would appear on the first keystroke of a number and re-word until it is finished.
   const neverIssued = offering
     ? neverIssuedWarning(rows.filter((row) => row.key !== typing), issued)
+    : null
+  // And a number that is lying in the warehouse right now is warned about and taken all the
+  // same — but this one says what will happen: the server refuses it when the document is
+  // issued, and on a return over twenty devices that is twenty positions too late (ADR-0081).
+  const alreadyInStock = offering
+    ? alreadyInStockWarning(rows.filter((row) => row.key !== typing), holdings)
     : null
 
   // Only where the answer is known to name every number at the location. While it is on its
@@ -531,6 +572,8 @@ export function LotAllocationField({
       {withoutNumber !== null && <WarningNotice>{withoutNumber}</WarningNotice>}
 
       {neverIssued !== null && <WarningNotice>{neverIssued}</WarningNotice>}
+
+      {alreadyInStock !== null && <WarningNotice>{alreadyInStock}</WarningNotice>}
 
       {issuing && proposalQuery.isError && (
         <p role="alert" className="text-[12px] text-danger">

@@ -218,14 +218,28 @@ const ISSUED: IssuedLot[] = [
  * batches that happen to lie on the shelf are exactly what it must not offer.
  *
  * @param issued what the journal says last went out
+ * @param lying which numbers lie somewhere, by number and location. Everything else is answered
+ *              without a location — a batch, a number nobody wrote down and one that lies
+ *              nowhere all come back that way (backend ADR-0081)
+ * @returns the addresses that were asked, in the order they were asked
  */
-function stubIssuedFetch(issued: IssuedLot[]) {
+function stubIssuedFetch(issued: IssuedLot[], lying: Record<string, string> = {}): string[] {
+  const asked: string[] = []
   vi.stubGlobal('fetch', (url: string) => {
+    asked.push(url)
+    // Matched without regard to case and answered with the spelling the lot master holds, the
+    // way the server does it — the field asks with the number lower-cased.
+    const asking = decodeURIComponent(url.split('lotNumber=')[1] ?? '')
+    const stored = Object.keys(lying).find(
+      (one) => one.toLocaleLowerCase('de-CH') === asking.toLocaleLowerCase('de-CH'),
+    )
     const body = url.includes('/issued-lots')
       ? issued
-      : url.includes('/lots')
-        ? { content: KNOWN_LOTS, page: 0, size: 20, totalElements: 1, totalPages: 1, sort: '' }
-        : []
+      : url.includes('/serial-number-holding')
+        ? { lotNumber: stored ?? asking, locationName: stored === undefined ? null : lying[stored] }
+        : url.includes('/lots')
+          ? { content: KNOWN_LOTS, page: 0, size: 20, totalElements: 1, totalPages: 1, sort: '' }
+          : []
     return Promise.resolve(
       new Response(JSON.stringify(body), {
         status: 200,
@@ -233,6 +247,7 @@ function stubIssuedFetch(issued: IssuedLot[]) {
       }),
     )
   })
+  return asked
 }
 
 function stubFetch(proposal: LotProposal = PROPOSAL) {
@@ -1307,6 +1322,82 @@ describe('LotAllocationField', () => {
     expect(document.querySelector('[aria-label="SN-9001 entfernen"]')).not.toBeNull()
     expect(document.body.textContent).toContain('Menge 1 · zugeordnet 1 · offen 0')
     expect(reports.at(-1)).toEqual([{ lotNumber: 'SN-9001', quantity: 1 }])
+  })
+
+  /**
+   * A piece that is lying in the warehouse right now is named while it is scanned, not when the
+   * document is issued: the server refuses it then, and on a return over twenty devices that is
+   * twenty positions too late (backend ADR-0077, ADR-0081).
+   */
+  it('lotAllocationFieldWarnsAboutANumberAlreadyInStockTest', async () => {
+    stubIssuedFetch(ISSUED, { 'SN-4711': 'Hauptlager' })
+
+    const reports = await showField({
+      product: SERIALISED,
+      locationId: '1',
+      direction: 'IN',
+      returning: true,
+      quantity: 1,
+      allowWithoutNumber: false,
+    })
+
+    await act(async () => {
+      scan('SN-4711')
+    })
+    await settle()
+
+    expect(document.body.textContent).toContain(
+      'SN-4711 liegt bereits in Hauptlager. Das Ausstellen weist die Position ab.',
+    )
+    // A warning and not a block: the number stays in, and the caller gets it.
+    expect(document.querySelector('[aria-label="SN-4711 entfernen"]')).not.toBeNull()
+    expect(reports.at(-1)).toEqual([{ lotNumber: 'SN-4711', quantity: 1 }])
+  })
+
+  /** A number that lies nowhere is exactly what a return brings back, and is not warned about. */
+  it('lotAllocationFieldStaysQuietAboutANumberThatLiesNowhereTest', async () => {
+    stubIssuedFetch(ISSUED)
+
+    await showField({
+      product: SERIALISED,
+      locationId: '1',
+      direction: 'IN',
+      returning: true,
+      quantity: 1,
+      allowWithoutNumber: false,
+    })
+
+    await act(async () => {
+      scan('SN-4711')
+    })
+    await settle()
+
+    expect(document.body.textContent).not.toContain('liegt bereits')
+  })
+
+  /**
+   * On the way out nothing is asked at all: the numbers there are the ones that lie at the
+   * location, and lying there is what makes them choosable.
+   */
+  it('lotAllocationFieldAsksNothingAboutStockOnAnIssueTest', async () => {
+    stubSerialFetch(serialProposal())
+    const asked: string[] = []
+    const answering = globalThis.fetch
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push(url)
+      return answering(url)
+    })
+
+    await showField({
+      product: SERIALISED,
+      locationId: '1',
+      direction: 'OUT',
+      quantity: 2,
+      allowWithoutNumber: false,
+    })
+
+    expect(asked.some((url) => url.includes('/serial-number-holding'))).toBe(false)
+    expect(document.body.textContent).not.toContain('liegt bereits')
   })
 
   /**

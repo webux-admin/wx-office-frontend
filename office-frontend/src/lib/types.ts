@@ -937,6 +937,24 @@ export type IssuedLot = {
 }
 
 /**
+ * Where one serial number lies right now, as `SerialNumberHoldingDto` sends it.
+ *
+ * <p>What a return asks before it is issued. A piece that is already lying somewhere cannot
+ * arrive a second time, and the server refuses it — but only when the document is issued, which
+ * on a return over twenty devices is twenty positions too late (backend ADR-0077, ADR-0081).
+ *
+ * <p>The server decides what is worth saying, not the mask: a batch, a number nobody ever wrote
+ * down and a number that lies nowhere all come back **without** `locationName`. The rule that
+ * only single pieces are refused lives in one place, and it is not this one.
+ */
+export type SerialNumberHolding = {
+  /** The number as the lot master holds it, or as it was asked for where there is no lot. */
+  lotNumber: string
+  /** What the location holding it is called, absent where nothing is worth a warning. */
+  locationName?: string | null
+}
+
+/**
  * One number and what of the booked quantity falls on it, as `LotAllocationRequest` takes it.
  *
  * <p>`lotNumber: null` means the stock without a number and is only allowed on the way out.

@@ -24,6 +24,8 @@ import {
   manualReasonsFor,
   missingAsOfDateNote,
   showsLocationChoice,
+  serialNumberHoldingKey,
+  serialNumberHoldingUrl,
   stockAsOfPageToShow,
   stockBalanceKey,
   stockBalancesUrl,
@@ -491,6 +493,44 @@ describe('issuedLotsKey', () => {
   /** Two products of one tenant do not share an answer either. */
   it('issuedLotsKeyPerProductTest', () => {
     expect(issuedLotsKey(7, 42)).not.toEqual(issuedLotsKey(7, 43))
+  })
+})
+
+describe('serialNumberHoldingUrl', () => {
+  /** The number travels in the query string, one question per number. */
+  it('serialNumberHoldingUrlTest', () => {
+    expect(serialNumberHoldingUrl(7, 42, 'SN-4711')).toBe(
+      '/api/tenants/7/products/42/serial-number-holding?lotNumber=SN-4711',
+    )
+  })
+
+  /** A number may carry a slash or a space; it goes into the address encoded, not raw. */
+  it('serialNumberHoldingUrlEncodesTheNumberTest', () => {
+    expect(serialNumberHoldingUrl(7, 42, 'A/B C&D')).toBe(
+      '/api/tenants/7/products/42/serial-number-holding?lotNumber=A%2FB%20C%26D',
+    )
+  })
+})
+
+describe('serialNumberHoldingKey', () => {
+  it('serialNumberHoldingKeyTest', () => {
+    expect(serialNumberHoldingKey(7, 42, 'SN-4711')).toEqual([
+      'serial-number-holding', 7, 42, 'sn-4711',
+    ])
+  })
+
+  /** One number typed twice in different case is one question, and one cached answer. */
+  it('serialNumberHoldingKeyIgnoresCaseTest', () => {
+    expect(serialNumberHoldingKey(7, 42, ' sn-4711 ')).toEqual(
+      serialNumberHoldingKey(7, 42, 'SN-4711'),
+    )
+  })
+
+  /** Where a number lies is a question about one tenant and one product. */
+  it('serialNumberHoldingKeyPerTenantAndProductTest', () => {
+    expect(serialNumberHoldingKey(7, 42, 'SN-1')).not.toEqual(serialNumberHoldingKey(8, 42, 'SN-1'))
+    expect(serialNumberHoldingKey(7, 42, 'SN-1')).not.toEqual(serialNumberHoldingKey(7, 43, 'SN-1'))
+    expect(serialNumberHoldingKey(7, 42, 'SN-1')).not.toEqual(serialNumberHoldingKey(7, 42, 'SN-2'))
   })
 })
 

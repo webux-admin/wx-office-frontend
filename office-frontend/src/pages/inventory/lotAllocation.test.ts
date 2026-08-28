@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { IssuedLot, LotProposal, LotProposalLine } from '../../lib/types'
+import type { IssuedLot, LotProposal, LotProposalLine, SerialNumberHolding } from '../../lib/types'
 import {
   addSerialNumber,
   addSerialNumbers,
   allocatedOf,
   allocationAnnouncement,
   allocationSummary,
+  alreadyInStockWarning,
   emptyRow,
   isAllocated,
   issuedLabel,
@@ -624,6 +625,115 @@ describe('neverIssuedWarning', () => {
   /** While the answer is on its way nothing is claimed about any number. */
   it('neverIssuedWarningWithoutAnAnswerTest', () => {
     expect(neverIssuedWarning([row({ lotNumber: 'SN-1', quantity: '1' })], undefined)).toBeNull()
+  })
+})
+
+describe('alreadyInStockWarning', () => {
+  /** What the server answered about the numbers asked, keyed the way the field keys them. */
+  function holdings(...answers: SerialNumberHolding[]): Map<string, SerialNumberHolding> {
+    return new Map(answers.map((one) => [one.lotNumber.toLocaleLowerCase('de-CH'), one]))
+  }
+
+  /** One piece already lying somewhere: named, with the place, and with the consequence. */
+  it('alreadyInStockWarningTest', () => {
+    const rows = [row({ lotNumber: 'SN-4711', quantity: '1' })]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: 'Hauptlager' },
+    ))).toBe('SN-4711 liegt bereits in Hauptlager. Das Ausstellen weist die Position ab.')
+  })
+
+  /** Typed in another case than it was written down: still the same piece. */
+  it('alreadyInStockWarningIgnoresCaseTest', () => {
+    const rows = [row({ lotNumber: ' sn-4711 ', quantity: '1' })]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: 'Hauptlager' },
+    ))).toBe('SN-4711 liegt bereits in Hauptlager. Das Ausstellen weist die Position ab.')
+  })
+
+  /**
+   * Two of them, and no place named: they may lie in two, and one name would be a lie.
+   *
+   * <p>Exactly one more is written out, as German writes it — «und eine weitere».
+   */
+  it('alreadyInStockWarningWithTwoNumbersTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-4711', quantity: '1' }),
+      row({ key: 'row-2', lotNumber: 'SN-4712', quantity: '1' }),
+    ]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: 'Hauptlager' },
+      { lotNumber: 'SN-4712', locationName: 'Aussenlager' },
+    ))).toBe('SN-4711 und eine weitere liegen bereits im Lager.'
+      + ' Das Ausstellen weist die Position ab.')
+  })
+
+  /** From two more on it is a figure again; the first number still names the case. */
+  it('alreadyInStockWarningWithManyNumbersTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-1', quantity: '1' }),
+      row({ key: 'row-2', lotNumber: 'SN-2', quantity: '1' }),
+      row({ key: 'row-3', lotNumber: 'SN-3', quantity: '1' }),
+    ]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-1', locationName: 'Hauptlager' },
+      { lotNumber: 'SN-2', locationName: 'Hauptlager' },
+      { lotNumber: 'SN-3', locationName: 'Hauptlager' },
+    ))).toBe('SN-1 und 2 weitere liegen bereits im Lager.'
+      + ' Das Ausstellen weist die Position ab.')
+  })
+
+  /** A number that lies nowhere is exactly what a return brings back: nothing to say. */
+  it('alreadyInStockWarningWithoutStockTest', () => {
+    const rows = [row({ lotNumber: 'SN-4711', quantity: '1' })]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: null },
+    ))).toBeNull()
+  })
+
+  /**
+   * The server said nothing about this number, so neither does the field.
+   *
+   * <p>A batch comes back this way, and so does a number nobody ever wrote down — the mask does
+   * not carry the rule about which of them is refused (backend ADR-0081).
+   */
+  it('alreadyInStockWarningWithoutAnAnswerTest', () => {
+    const rows = [row({ lotNumber: 'L-2604', quantity: '1' })]
+
+    expect(alreadyInStockWarning(rows, new Map())).toBeNull()
+  })
+
+  /** A line that carries nothing yet is no statement about any goods. */
+  it('alreadyInStockWarningWithAnEmptyLineTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-4711', quantity: '' }),
+      row({ key: 'row-2', lotNumber: '' }),
+    ]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: 'Hauptlager' },
+    ))).toBeNull()
+  })
+
+  /** One number on two lines is one piece, and is counted once. */
+  it('alreadyInStockWarningWithARepeatedNumberTest', () => {
+    const rows = [
+      row({ lotNumber: 'SN-4711', quantity: '1' }),
+      row({ key: 'row-2', lotNumber: 'sn-4711', quantity: '1' }),
+    ]
+
+    expect(alreadyInStockWarning(rows, holdings(
+      { lotNumber: 'SN-4711', locationName: 'Hauptlager' },
+    ))).toBe('SN-4711 liegt bereits in Hauptlager. Das Ausstellen weist die Position ab.')
+  })
+
+  /** Nothing typed at all. */
+  it('alreadyInStockWarningWithoutRowsTest', () => {
+    expect(alreadyInStockWarning([], new Map())).toBeNull()
   })
 })
 

@@ -767,6 +767,26 @@ export function issuedLotsUrl(tenantId: number, productId: number): string {
 }
 
 /**
+ * The endpoint that says where one serial number lies.
+ *
+ * <p>Asked per number and not for the whole product: a serialised product collects one number
+ * per piece it ever sold, and the question is only ever about the few that were typed in.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @param lotNumber the number being asked about
+ * @returns the address, query string included
+ */
+export function serialNumberHoldingUrl(
+  tenantId: number,
+  productId: number,
+  lotNumber: string,
+): string {
+  return `/api/tenants/${tenantId}/products/${productId}/serial-number-holding`
+    + `?lotNumber=${encodeURIComponent(lotNumber)}`
+}
+
+/**
  * The endpoint that computes running serial numbers without saving any of them.
  *
  * @param tenantId the tenant
@@ -862,6 +882,26 @@ export function lotProposalKey(
  */
 export function issuedLotsKey(tenantId: number, productId: number): (string | number)[] {
   return ['issued-lots', tenantId, productId]
+}
+
+/**
+ * Query key of where one serial number lies.
+ *
+ * <p>The number is part of the key and lower-cased into it, the way the server compares it:
+ * one number typed twice in different case is one question, and the answer to it is cached
+ * once. Adding a number to a return therefore costs one request, not one per number again.
+ *
+ * @param tenantId the tenant
+ * @param productId the product
+ * @param lotNumber the number being asked about
+ * @returns the key TanStack Query caches that answer under
+ */
+export function serialNumberHoldingKey(
+  tenantId: number,
+  productId: number,
+  lotNumber: string,
+): (string | number)[] {
+  return ['serial-number-holding', tenantId, productId, lotNumber.trim().toLocaleLowerCase('de-CH')]
 }
 
 // --- inventory counts (backend ADR-0070) -------------------------------------
