@@ -33,6 +33,7 @@ function session(permissions: string[], activeTenantId: number | null = TENANT):
     signIn: () => Promise.reject(new Error('nicht gebraucht')),
     completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
     sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
     refresh: () => {

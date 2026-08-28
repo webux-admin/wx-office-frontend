@@ -59,6 +59,7 @@ function sessionWith(permissions: string[], modules: string[] = []): AuthState {
     signIn: () => Promise.reject(new Error('nicht gebraucht')),
     completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
     sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
     signOut: () => Promise.resolve(),
     switchTenant: () => Promise.resolve(),
     refresh: () => Promise.resolve(),

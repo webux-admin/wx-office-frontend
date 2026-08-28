@@ -12,10 +12,12 @@ import {
   AlertTriangle,
   ArrowRight,
   ClipboardList,
+  Download,
   Eye,
   EyeOff,
   Lock,
   Package,
+  Printer,
   ShieldCheck,
   Tags,
   User,
@@ -24,9 +26,17 @@ import {
 import { Button } from '../components/Button'
 import { TextField } from '../components/TextField'
 import { BrandMark } from '../components/BrandMark'
-import { ApiError, UnauthorizedError } from '../lib/api'
+import { api, ApiError, UnauthorizedError } from '../lib/api'
 import { useAuth } from '../auth/useAuth'
-import { CODE_LENGTH, RECOVERY_CODE_LENGTH, RESEND_SECONDS } from '../lib/twoFactor'
+import { ENROL_CONFIRM_URL, ENROL_URL } from '../lib/loginPolicy'
+import {
+  CODE_LENGTH,
+  RECOVERY_CODE_FILE,
+  RECOVERY_CODE_LENGTH,
+  RESEND_SECONDS,
+  recoveryCodeFileContent,
+} from '../lib/twoFactor'
+import type { AuthenticatedUser } from '../lib/types'
 
 /**
  * Modules shown as drifting tiles on the dark panel. Colours come from the design tokens.
@@ -111,8 +121,12 @@ export function LoginPage() {
       const result = await signIn(username.trim(), password)
       if (result.kind === 'secondFactor') {
         // The password is right and the session is not a session yet. The password is dropped
-        // here: it has done its work, and the second step does not carry it.
-        setChallenge({ method: result.method, methods: result.methods })
+        // here: it has done its work, and neither second step carries it.
+        setChallenge({
+          method: result.method,
+          methods: result.methods,
+          enrolmentRequired: result.enrolmentRequired,
+        })
         setPassword('')
         return
       }
@@ -163,11 +177,18 @@ export function LoginPage() {
           </div>
 
           {challenge !== null ? (
-            <SecondFactorStep
-              challenge={challenge}
-              onDone={() => void navigate('/', { replace: true })}
-              onCancel={cancelSecondFactor}
-            />
+            challenge.enrolmentRequired ? (
+              <ForcedEnrolmentStep
+                onDone={() => void navigate('/', { replace: true })}
+                onCancel={cancelSecondFactor}
+              />
+            ) : (
+              <SecondFactorStep
+                challenge={challenge}
+                onDone={() => void navigate('/', { replace: true })}
+                onCancel={cancelSecondFactor}
+              />
+            )
           ) : (
             <>
           <h1 className="text-[24px] font-semibold leading-8 tracking-tight">Anmelden</h1>
@@ -287,8 +308,15 @@ export function LoginPage() {
   )
 }
 
-/** What the first step answered: which methods this account can prove itself with. */
-type SecondFactorChallenge = { method: string; methods: string[] }
+/**
+ * What the first step answered: which methods this account can prove itself with — or that it
+ * has none and the installation demands one all the same.
+ */
+type SecondFactorChallenge = {
+  method: string
+  methods: string[]
+  enrolmentRequired: boolean
+}
 
 /**
  * The second step of the login.
@@ -480,6 +508,259 @@ function SecondFactorStep({
           type="button"
           onClick={onCancel}
           className="self-start text-text-tertiary underline-offset-2 hover:underline"
+        >
+          Abbrechen und neu anmelden
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** What the enrolment endpoint hands out to set an app up with. */
+type Enrolment = { secret: string; otpAuthUri: string; qrSvg: string }
+
+/** What the confirming request answers: the finished login and the codes, in one. */
+type EnrolledLogin = { user: AuthenticatedUser; recoveryCodes: string[] }
+
+/**
+ * Setting up a second factor <b>inside</b> the login, for an installation that demands one.
+ *
+ * <p>On this page and not on a route: there is no session yet to reach the profile with, and
+ * that is the whole difficulty. Everything here happens between the password and the finished
+ * login (backend ADR-0090).
+ *
+ * <p>The app only. The way by mail depends on a mail server the installation may not have, and
+ * a compulsory factor nobody can set up is a locked door. Whoever prefers mail adds it
+ * afterwards, in their own account.
+ */
+function ForcedEnrolmentStep({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const { adoptSession } = useAuth()
+
+  const [enrolment, setEnrolment] = useState<Enrolment | null>(null)
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  /** The finished login, kept back while the codes are on screen. */
+  const [enrolled, setEnrolled] = useState<EnrolledLogin | null>(null)
+  const [kept, setKept] = useState(false)
+  const codeRef = useRef<HTMLInputElement>(null)
+  const submitted = useRef('')
+
+  // Asked for once, as the step opens. A secret fetched again on every render would be a new
+  // secret each time, and the app the user just scanned would stop matching.
+  useEffect(() => {
+    let living = true
+    api
+      .post<Enrolment>(ENROL_URL)
+      .then((answer) => {
+        if (living) setEnrolment(answer)
+      })
+      .catch((failure: unknown) => {
+        if (living) setFailed(secondFactorMessage(failure))
+      })
+    return () => {
+      living = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (enrolment !== null) codeRef.current?.focus()
+  }, [enrolment])
+
+  const confirm = useCallback(
+    async (typed: string) => {
+      setBusy(true)
+      setError(null)
+      try {
+        // Deliberately not adopted yet. The recovery codes are readable this once, and a
+        // session taken here would draw the application over them.
+        setEnrolled(await api.post<EnrolledLogin>(ENROL_CONFIRM_URL, { code: typed }))
+      } catch (failure) {
+        setError(secondFactorMessage(failure))
+        setCode('')
+        submitted.current = ''
+      } finally {
+        setBusy(false)
+      }
+    },
+    [],
+  )
+
+  function typeCode(value: string) {
+    const cleaned = value.replace(/\D/g, '').slice(0, CODE_LENGTH)
+    setCode(cleaned)
+    if (cleaned.length === CODE_LENGTH && !busy && submitted.current !== cleaned) {
+      submitted.current = cleaned
+      void confirm(cleaned)
+    }
+  }
+
+  function download(codes: string[]) {
+    const url = URL.createObjectURL(
+      new Blob([recoveryCodeFileContent(codes)], { type: 'text/plain;charset=utf-8' }),
+    )
+    const link = document.createElement('a')
+    link.href = url
+    link.download = RECOVERY_CODE_FILE
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  if (enrolled !== null) {
+    return (
+      <>
+        <h1 className="text-[24px] font-semibold leading-8 tracking-tight">
+          Wiederherstellungscodes
+        </h1>
+        <p className="mt-1.5 text-text-secondary">
+          Jeder Code funktioniert genau einmal — und sie erscheinen <strong>nur jetzt</strong>.
+        </p>
+
+        <div className="mt-5 flex gap-2.5 rounded-[var(--radius-md)] border border-warning/25 bg-warning/6 p-3 text-[12px] leading-[17px]">
+          <AlertTriangle size={15} className="mt-px shrink-0" aria-hidden />
+          <span>
+            Ohne diese Codes und ohne Ihr Telefon kommen Sie nicht mehr in Ihr Konto. Dann muss
+            die Administration zurücksetzen.
+          </span>
+        </div>
+
+        <ul className="mt-4 grid grid-cols-2 gap-2">
+          {enrolled.recoveryCodes.map((entry) => (
+            <li
+              key={entry}
+              className="rounded-[var(--radius-sm)] bg-sunken px-3 py-2 text-center font-mono text-[15px] tracking-[1px]"
+            >
+              {entry}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => download(enrolled.recoveryCodes)}>
+            <Download size={15} aria-hidden />
+            Herunterladen
+          </Button>
+          <Button variant="secondary" onClick={() => window.print()}>
+            <Printer size={15} aria-hidden />
+            Drucken
+          </Button>
+        </div>
+
+        <label className="mt-5 flex items-start gap-2.5 text-[13px]">
+          <input
+            type="checkbox"
+            checked={kept}
+            onChange={(event) => setKept(event.target.checked)}
+            className="mt-0.5"
+          />
+          Ich habe die Codes gesichert
+        </label>
+
+        <Button
+          block
+          className="mt-4"
+          disabled={!kept}
+          onClick={() => {
+            adoptSession(enrolled.user)
+            onDone()
+          }}
+        >
+          Weiter zur Anwendung
+        </Button>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <h1 className="text-[24px] font-semibold leading-8 tracking-tight">
+        Zwei-Faktor einrichten
+      </h1>
+      <p className="mt-1.5 text-text-secondary">
+        Diese Installation verlangt von jedem Konto einen zweiten Faktor. Einmal einrichten,
+        dann sind Sie angemeldet.
+      </p>
+
+      <div aria-live="assertive">
+        {(error ?? failed) !== null && (
+          <div className="mt-5 flex gap-2.5 rounded-[var(--radius-md)] border border-danger/25 bg-danger/6 p-3 text-[12px] leading-[17px] text-danger">
+            <AlertTriangle size={15} className="mt-px shrink-0" aria-hidden />
+            <span>{error ?? failed}</span>
+          </div>
+        )}
+      </div>
+
+      {enrolment === null ? (
+        failed === null && <p className="mt-6 text-[13px] text-text-tertiary">Einen Moment …</p>
+      ) : (
+        <>
+          <ol className="mt-6 grid gap-2 text-[13px] leading-[20px] text-text-secondary">
+            <li>
+              <strong>1.</strong> Installieren Sie eine Authenticator-App — Google
+              Authenticator, Microsoft Authenticator, 1Password, Bitwarden. Sie rechnen alle
+              dasselbe.
+            </li>
+            <li>
+              <strong>2.</strong> Scannen Sie den Code, oder tippen Sie den Schlüssel darunter
+              ab.
+            </li>
+            <li>
+              <strong>3.</strong> Geben Sie die sechs Ziffern ein, die die App anzeigt.
+            </li>
+          </ol>
+
+          <div className="mt-5 flex flex-col items-center gap-3">
+            {/* The SVG comes from our own backend, not from a third party — there is no
+                markup in it that anybody outside this installation wrote. */}
+            <div
+              className="rounded-[var(--radius-md)] border border-border bg-surface p-3 [&>svg]:h-[168px] [&>svg]:w-[168px]"
+              dangerouslySetInnerHTML={{ __html: enrolment.qrSvg }}
+            />
+            <code className="select-all rounded-[var(--radius-sm)] bg-sunken px-3 py-1.5 font-mono text-[13px] tracking-[1px]">
+              {enrolment.secret}
+            </code>
+          </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (code.length === CODE_LENGTH && !busy) void confirm(code)
+            }}
+            noValidate
+            className="mt-6"
+          >
+            <TextField
+              ref={codeRef}
+              label="Code aus der App"
+              value={code}
+              onChange={(event) => typeCode(event.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              spellCheck={false}
+              maxLength={CODE_LENGTH}
+              invalid={Boolean(error)}
+              icon={<ShieldCheck size={15} />}
+              hint="Sechs Ziffern."
+            />
+            <Button
+              type="submit"
+              block
+              busy={busy}
+              className="mt-6"
+              disabled={code.length !== CODE_LENGTH}
+            >
+              Einrichten und anmelden
+            </Button>
+          </form>
+        </>
+      )}
+
+      <div className="mt-5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-[13px] text-text-tertiary underline-offset-2 hover:underline"
         >
           Abbrechen und neu anmelden
         </button>

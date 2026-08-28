@@ -9,6 +9,7 @@ import { ErrorNotice, LoadingBlock, WarningNotice } from '../../components/Notic
 import { Panel } from '../../components/Panel'
 import { TextField } from '../../components/TextField'
 import { api } from '../../lib/api'
+import { LOGIN_POLICY_KEY, LOGIN_POLICY_URL, type LoginPolicy } from '../../lib/loginPolicy'
 import {
   CODE_LENGTH,
   methodLabel,
@@ -53,6 +54,13 @@ export function TwoFactorPanel({ userId }: { userId: number }) {
   const state = useQuery({
     queryKey: secondFactorStateKey(userId),
     queryFn: () => api.get<SecondFactorState>(secondFactorStateUrl(userId)),
+  })
+
+  // Whether this installation demands a factor at all. Open to anyone signed in — the login
+  // tells whoever asks anyway, so there is nothing kept back here (backend ADR-0090).
+  const policy = useQuery({
+    queryKey: LOGIN_POLICY_KEY,
+    queryFn: () => api.get<LoginPolicy>(LOGIN_POLICY_URL),
   })
 
   /** Clears everything a finished or abandoned setup left behind. */
@@ -120,6 +128,7 @@ export function TwoFactorPanel({ userId }: { userId: number }) {
 
   const current = state.data
   const enrolled = current?.enrolled === true
+  const required = policy.data?.twoFactorRequired === true
 
   if (state.isPending) return <LoadingBlock />
   if (state.error !== null) return <ErrorNotice error={state.error} />
@@ -159,6 +168,15 @@ export function TwoFactorPanel({ userId }: { userId: number }) {
           <p className="text-[13px] text-text-secondary">
             Nach dem Passwort wird zusätzlich ein Code verlangt. Ein gestohlenes Passwort
             allein genügt dann nicht mehr, um in Ihr Konto zu kommen.
+            {/* Reachable while somebody was signed in as the duty was switched on. Their
+                current session runs on; the next login asks for the setup. */}
+            {required && (
+              <strong>
+                {' '}
+                Diese Installation verlangt einen zweiten Faktor — spätestens bei der nächsten
+                Anmeldung müssen Sie ihn einrichten.
+              </strong>
+            )}
           </p>
         )}
       </Panel>
@@ -288,16 +306,28 @@ export function TwoFactorPanel({ userId }: { userId: number }) {
         </Panel>
       )}
 
-      {enrolled && (
-        <Panel title="Abschalten">
-          <p className="text-[13px] text-text-secondary">
-            Danach genügt für die Anmeldung wieder Ihr Passwort allein.
-          </p>
-          <Button variant="secondary" className="mt-4" onClick={() => setRemoving(true)}>
-            Zwei-Faktor abschalten
-          </Button>
-        </Panel>
-      )}
+      {enrolled &&
+        (required ? (
+          // No button at all, not a disabled one: the backend refuses this with 409, and a
+          // greyed-out button invites the click that finds that out (backend ADR-0090).
+          <Panel title="Abschalten">
+            <p className="text-[13px] text-text-secondary">
+              Diese Installation verlangt von jedem Konto einen zweiten Faktor. Abschalten
+              lässt er sich deshalb nicht. Bei einem verlorenen Telefon setzt ihn eine Person
+              mit dem Recht <span className="font-mono text-[12px]">USER_TWO_FACTOR_RESET</span>{' '}
+              zurück — Sie richten ihn dann bei der nächsten Anmeldung neu ein.
+            </p>
+          </Panel>
+        ) : (
+          <Panel title="Abschalten">
+            <p className="text-[13px] text-text-secondary">
+              Danach genügt für die Anmeldung wieder Ihr Passwort allein.
+            </p>
+            <Button variant="secondary" className="mt-4" onClick={() => setRemoving(true)}>
+              Zwei-Faktor abschalten
+            </Button>
+          </Panel>
+        ))}
 
       <Dialog
         open={removing}

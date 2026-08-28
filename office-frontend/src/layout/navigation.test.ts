@@ -6,6 +6,7 @@ import {
   OUTBOX_PATH,
   OUTBOX_RIGHTS,
 } from '../lib/outbox'
+import { SECURITY_PATH } from '../lib/loginPolicy'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
 import { flattenNav, isFolder, NAV_GROUPS, visibleNavGroups, type NavEntry } from './navigation'
 
@@ -309,5 +310,31 @@ describe('visibleNavGroups', () => {
 
     // Only the overview is left: it is the one entry that asks for no permission.
     expect(hrefs(visible)).toEqual(['/'])
+  })
+
+  /**
+   * The security screen decides for the whole installation, so no right opens it — and no
+   * amount of rights either. That is the case worth a test of its own: every other entry in
+   * this menu is a matter of permissions (backend ADR-0090).
+   */
+  it('visibleNavGroupsHidesTheInstallationScreenFromEveryTenantRoleTest', () => {
+    const visible = visibleNavGroups(all, () => true)
+
+    expect(hrefs(visible)).not.toContain(SECURITY_PATH)
+    expect(hrefs(visible)).toContain('/mandanten')
+  })
+
+  it('visibleNavGroupsShowsTheInstallationScreenToASuperuserTest', () => {
+    const visible = visibleNavGroups(all, () => true, true)
+
+    expect(hrefs(visible)).toContain(SECURITY_PATH)
+  })
+
+  /** A superuser gains that one entry and nothing else — the flag is not a second permission. */
+  it('visibleNavGroupsGrantsNothingElseToASuperuserTest', () => {
+    const asUser = hrefs(visibleNavGroups(none, () => true))
+    const asSuperuser = hrefs(visibleNavGroups(none, () => true, true))
+
+    expect(asSuperuser).toEqual([...asUser, SECURITY_PATH])
   })
 })

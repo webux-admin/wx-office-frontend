@@ -27,6 +27,7 @@ const SESSION: AuthState = {
   signIn: () => Promise.reject(new Error('nicht gebraucht')),
   completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
   sendSecondFactorCode: () => Promise.resolve(),
+  adoptSession: () => {},
   signOut: () => Promise.resolve(),
   switchTenant: () => Promise.resolve(),
   refresh: () => Promise.resolve(),
@@ -41,6 +42,8 @@ let state: SecondFactorState
 let mailStart: { status: number; body: unknown }
 /** What confirming answers. */
 let confirmResult: { status: number; body: unknown }
+/** Whether the installation demands a second factor of every account. */
+let dutyStands: boolean
 /** Every write the mask sent. */
 let written: { url: string; body: Record<string, unknown> }[]
 
@@ -59,7 +62,10 @@ function stubFetch() {
   written = []
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    if (method === 'GET') return json(state)
+    if (method === 'GET') {
+      if (url.endsWith('/api/login-policy')) return json({ twoFactorRequired: dutyStands })
+      return json(state)
+    }
     written.push({
       url,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : {},
@@ -78,6 +84,7 @@ function stubFetch() {
 
 beforeEach(() => {
   state = { enrolled: false, remainingRecoveryCodes: 0 }
+  dutyStands = false
   mailStart = { status: 204, body: null }
   confirmResult = {
     status: 200,
@@ -358,5 +365,36 @@ describe('ProfilePage', () => {
 
     expect(button('Zwei-Faktor abschalten')).toBeUndefined()
     expect(button('Neue Codes erzeugen')).toBeUndefined()
+  })
+
+  /**
+   * No button at all rather than a disabled one: the backend answers 409, and a greyed-out
+   * button invites the click that finds that out (backend ADR-0090).
+   */
+  it('profilePageOffersNoSwitchingOffWhileItIsCompulsoryTest', async () => {
+    state = { enrolled: true, method: 'TOTP', remainingRecoveryCodes: 10 }
+    dutyStands = true
+    await render()
+    await openTwoFactor()
+
+    expect(button('Zwei-Faktor abschalten')).toBeUndefined()
+    expect(container.textContent).toContain('verlangt von jedem Konto')
+    expect(container.textContent).toContain('USER_TWO_FACTOR_RESET')
+    // Drawing new recovery codes stays open — that is not weakening anything.
+    expect(button('Neue Codes erzeugen')).toBeDefined()
+  })
+
+  /**
+   * Reachable while somebody was signed in as the duty was switched on: their session runs on,
+   * and the mask says what the next login will ask for rather than letting it surprise them.
+   */
+  it('profilePageAnnouncesTheComingDutyTest', async () => {
+    dutyStands = true
+    await render()
+    await openTwoFactor()
+
+    expect(container.textContent).toContain('spätestens bei der nächsten')
+    // And the way to do it now is still there.
+    expect(button('Einrichten')).toBeDefined()
   })
 })

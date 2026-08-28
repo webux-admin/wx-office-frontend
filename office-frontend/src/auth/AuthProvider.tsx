@@ -13,6 +13,14 @@ type SecondFactorChallenge = {
   secondFactorRequired: true
   method: string
   methods: string[]
+  /**
+   * Set where the factor is not yet set up but demanded all the same.
+   *
+   * <p>Optional in the type on purpose: a backend from before this feature answers without the
+   * field, and «missing» has to read as «no enrolment», not as `undefined` reaching a branch
+   * (backend ADR-0090).
+   */
+  enrolmentRequired?: boolean
 }
 
 /**
@@ -54,10 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The flag tells them apart, and the second answer carries nothing about the account —
     // there is deliberately no name in it to fall back on (backend ADR-0087).
     if ('secondFactorRequired' in answer) {
+      // An account that has yet to set one up has no methods, and there is nothing to fall
+      // back on: the list stays empty rather than pretending to an app that does not exist.
+      const enrolmentRequired = answer.enrolmentRequired === true
       return {
         kind: 'secondFactor' as const,
         method: answer.method,
-        methods: answer.methods.length > 0 ? answer.methods : [answer.method],
+        methods:
+          answer.methods.length > 0 ? answer.methods : enrolmentRequired ? [] : [answer.method],
+        enrolmentRequired,
       }
     }
     setUser(answer)
@@ -74,6 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendSecondFactorCode = useCallback(async () => {
     await api.post<void>('/api/auth/second-factor/send')
+  }, [])
+
+  // No request of its own: the forced enrolment ends in one that already answered with the
+  // user, and the login screen keeps it on the table while the recovery codes are read.
+  const adoptSession = useCallback((authenticated: AuthenticatedUser) => {
+    setUser(authenticated)
   }, [])
 
   const signOut = useCallback(async () => {
@@ -108,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       completeSecondFactor,
       sendSecondFactorCode,
+      adoptSession,
       signOut,
       switchTenant,
       refresh,
@@ -119,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       completeSecondFactor,
       sendSecondFactorCode,
+      adoptSession,
       signOut,
       switchTenant,
       refresh,

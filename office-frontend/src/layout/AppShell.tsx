@@ -70,7 +70,7 @@ function Sidebar({
 
   // Groups the user may see at all. Computed up front so the rail knows which one is first
   // and can leave the separator off there.
-  const visibleGroups = visibleNavGroups(can, runs)
+  const visibleGroups = visibleNavGroups(can, runs, user?.superuser === true)
 
   // The aside deliberately does not clip its overflow: folded, the tenant menu has to
   // reach past the rail. The scrolling navigation below clips on its own.

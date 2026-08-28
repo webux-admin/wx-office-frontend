@@ -8,6 +8,7 @@ import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
+import { SECURITY_PATH } from './lib/loginPolicy'
 import { MODULE_PATH } from './lib/modules'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
@@ -57,6 +58,7 @@ const OutboxListPage = lazy(() => import('./pages/OutboxListPage').then((module)
 const OutboxTemplatePage = lazy(() => import('./pages/OutboxTemplatePage').then((module) => ({ default: module.OutboxTemplatePage })))
 const StockAsOfPage = lazy(() => import('./pages/StockAsOfPage').then((module) => ({ default: module.StockAsOfPage })))
 const TenantListPage = lazy(() => import('./pages/TenantListPage').then((module) => ({ default: module.TenantListPage })))
+const SecurityPolicyPage = lazy(() => import('./pages/SecurityPolicyPage').then((module) => ({ default: module.SecurityPolicyPage })))
 const TenantPage = lazy(() => import('./pages/TenantPage').then((module) => ({ default: module.TenantPage })))
 const UserListPage = lazy(() => import('./pages/UserListPage').then((module) => ({ default: module.UserListPage })))
 const UserPage = lazy(() => import('./pages/UserPage').then((module) => ({ default: module.UserPage })))
@@ -163,6 +165,8 @@ export default function App() {
 
                 <Route path="/benutzer" element={<UserListPage />} />
                 <Route path="/benutzer/:id" element={<UserPage />} />
+
+                <Route path={SECURITY_PATH} element={<SecurityPolicyPage />} />
 
                 <Route path="/rollen" element={<RolePage />} />
                 <Route path="/profil" element={<ProfilePage />} />

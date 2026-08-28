@@ -31,6 +31,7 @@ import {
   ReceiptText,
   Ruler,
   Scale,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   TableProperties,
@@ -45,6 +46,7 @@ import {
 } from 'lucide-react'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
+import { SECURITY_PATH } from '../lib/loginPolicy'
 import { MODULE_PATH, MODULE_RIGHTS } from '../lib/modules'
 import {
   MAIL_TEMPLATE_PATH,
@@ -78,6 +80,14 @@ export type NavEntry = {
   permission?: string
   /** Set where the entry belongs to a module the tenant may have switched off. */
   module?: NavModule
+  /**
+   * Set where the screen decides something for the whole installation.
+   *
+   * <p>Not a permission, and deliberately so: every right in this system can be granted to a
+   * role of a single tenant, and one tenant's administrator must not switch a setting the
+   * other tenants live with (backend ADR-0090).
+   */
+  superuser?: boolean
 }
 
 /**
@@ -320,6 +330,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Module', icon: Blocks, href: MODULE_PATH, permission: MODULE_RIGHTS.read },
       { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
       { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
+      // Last in the group and the only entry in it that belongs to no tenant: it decides how
+      // the whole installation logs in. Shown to superusers alone — everybody else could read
+      // the state and change nothing, and a screen with no button on it is a dead end.
+      {
+        label: 'Sicherheit',
+        icon: ShieldAlert,
+        href: SECURITY_PATH,
+        superuser: true,
+      },
     ],
   },
   {
@@ -436,14 +455,17 @@ export const NAV_GROUPS: NavGroup[] = [
 export function visibleNavGroups(
   can: (permission: string) => boolean,
   runs: (module: NavModule) => boolean,
+  superuser = false,
 ): NavGroup[] {
+  // Both have to hold: the entry is not superuser-only, or this session is one. Folders carry
+  // no such flag — nothing behind a folder belongs to the installation rather than a tenant.
+  const mayOpen = (entry: NavEntry) =>
+    (entry.superuser !== true || superuser) && (!entry.permission || can(entry.permission))
   const allowed = (node: NavNode): NavNode | null => {
     if (node.module !== undefined && !runs(node.module)) return null
-    if (!isFolder(node)) return !node.permission || can(node.permission) ? node : null
+    if (!isFolder(node)) return mayOpen(node) ? node : null
     const children = node.children.filter(
-      (child) =>
-        (child.module === undefined || runs(child.module)) &&
-        (!child.permission || can(child.permission)),
+      (child) => (child.module === undefined || runs(child.module)) && mayOpen(child),
     )
     return children.length === 0 ? null : { ...node, children }
   }

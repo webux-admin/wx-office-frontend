@@ -15,8 +15,15 @@ export type SignInResult =
       kind: 'secondFactor'
       /** The preferred method, `TOTP` where the user has an app. */
       method: string
-      /** Every method this user could use, preferred one first. */
+      /** Every method this user could use, preferred one first. Empty before the first one. */
       methods: string[]
+      /**
+       * The installation demands a second factor and this account has none yet.
+       *
+       * <p>The next step is then not a code field but the setting up, and it happens inside
+       * the login: the account has no session to reach its profile with (backend ADR-0090).
+       */
+      enrolmentRequired: boolean
     }
 
 /** What the rest of the application may do with the session. */
@@ -51,6 +58,18 @@ export type AuthState = {
    * mask counts the seconds itself rather than reporting an outcome it does not have.
    */
   sendSecondFactorCode: () => Promise<void>
+  /**
+   * Takes a session the backend has already opened.
+   *
+   * <p>For the one login that does not end in a request this provider makes: the forced
+   * enrolment. There the last request answers with the user <b>and</b> the ten recovery codes,
+   * and the codes have to be read before the application draws itself over them — this is the
+   * moment after «I have written them down» (backend ADR-0090).
+   *
+   * <p>Opens nothing by itself. The cookie is set either way; this only tells the rest of the
+   * application whose session it is.
+   */
+  adoptSession: (user: AuthenticatedUser) => void
   /** Ends the session. The local state is cleared even when the request fails. */
   signOut: () => Promise<void>
   /** Switches the tenant this session works in and reloads the permissions for it. */
