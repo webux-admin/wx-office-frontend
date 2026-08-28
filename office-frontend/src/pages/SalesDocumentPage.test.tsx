@@ -10,6 +10,7 @@ import type {
   DocumentChainEntry,
   OfferOutcome,
   OfferTracking,
+  OutboxSummary,
   SalesDocument,
   StockCheck,
   StockReversalLine,
@@ -169,6 +170,9 @@ function json(body: unknown, status = 200) {
 /** What the send preview answers, or the status it fails with. */
 let previewState: { status: number; body: unknown }
 
+/** What already went out about the document, newest first. */
+let dispatchedState: OutboxSummary[]
+
 /** What the preview of a mail about this offer looks like. */
 const PREVIEW = {
   documentNumber: 'OF-2026-0001',
@@ -196,6 +200,7 @@ function stubFetch() {
     if (url.includes('/outbox/') && url.endsWith('/preview')) {
       return json(previewState.body, previewState.status)
     }
+    if (url.includes('/outbox/') && url.endsWith('/messages')) return json(dispatchedState)
     if (url.includes('/outbox/') && method === 'POST') return json({ id: 9 })
 
     if (url.endsWith('/tracking/outcome') && method === 'PUT') {
@@ -239,6 +244,7 @@ function stubFetch() {
 beforeEach(() => {
   sessionState = SESSION
   previewState = { status: 200, body: PREVIEW }
+  dispatchedState = []
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -847,6 +853,80 @@ describe('SalesDocumentPage', () => {
     await openSendDialog()
 
     expect(text()).toContain('Systemeinstellungen → Postausgang')
+  })
+
+  // --- what already went out ------------------------------------------------
+
+  /** A session that runs the outbox and may read it, but may not send. */
+  const READER = sessionWith([...PERMISSIONS, 'OUTBOX_READ'], ['OUTBOX'])
+
+  function sentMessage(overrides: Partial<OutboxSummary> = {}): OutboxSummary {
+    return {
+      id: 9,
+      status: 'SENT',
+      recipients: 'kunde@example.ch',
+      subject: 'Offerte OF-2026-0001',
+      attempts: 1,
+      sentAt: '2026-08-28T09:05:00Z',
+      createdAt: '2026-08-28T09:00:00Z',
+      ...overrides,
+    }
+  }
+
+  /**
+   * The question a mask is opened with the second time: is this one out of the house? Read
+   * from the outbox, never from a column on the document.
+   */
+  it('salesDocumentPageSaysWhenItWentAndToWhomTest', async () => {
+    sessionState = READER
+    dispatchedState = [sentMessage()]
+    await render('/offerten/42')
+
+    expect(text()).toContain('Gesendet am 28.08.2026 an kunde@example.ch')
+  })
+
+  /** Most documents are never mailed. A permanent «noch nicht gesendet» would be noise. */
+  it('salesDocumentPageSaysNothingWithoutADispatchTest', async () => {
+    sessionState = READER
+    await render('/offerten/42')
+
+    expect(text()).not.toContain('Gesendet am')
+    expect(text()).not.toContain('Wartet im Postausgang')
+  })
+
+  it('salesDocumentPageShowsAFailedDispatchTest', async () => {
+    sessionState = READER
+    dispatchedState = [sentMessage({ status: 'FAILED', sentAt: undefined })]
+    await render('/offerten/42')
+
+    expect(text()).toContain('Versand fehlgeschlagen')
+  })
+
+  /** Without the right the mask does not ask — and the backend would refuse anyway. */
+  it('salesDocumentPageDoesNotAskWithoutTheReadingRightTest', async () => {
+    sessionState = sessionWith(PERMISSIONS, ['OUTBOX'])
+    dispatchedState = [sentMessage()]
+    await render('/offerten/42')
+
+    expect(sent.some((entry) => entry.url.endsWith('/messages'))).toBe(false)
+    expect(text()).not.toContain('Gesendet am')
+  })
+
+  it('salesDocumentPageDoesNotAskWithoutTheModuleTest', async () => {
+    sessionState = sessionWith([...PERMISSIONS, 'OUTBOX_READ'], [])
+    dispatchedState = [sentMessage()]
+    await render('/offerten/42')
+
+    expect(sent.some((entry) => entry.url.endsWith('/messages'))).toBe(false)
+  })
+
+  /** A draft cannot have been sent, so the mask does not ask about it. */
+  it('salesDocumentPageDoesNotAskForADraftTest', async () => {
+    sessionState = READER
+    orderState = { ...issued('ORDER'), status: 'DRAFT', documentNumber: undefined }
+    await render('/auftraege/42')
+
+    expect(sent.some((entry) => entry.url.endsWith('/messages'))).toBe(false)
   })
 
   /** Whoever cannot set the account up is sent to somebody who can, not to a dead link. */

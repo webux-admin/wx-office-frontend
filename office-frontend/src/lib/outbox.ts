@@ -1,5 +1,6 @@
 import type { BadgeTone } from '../components/Badge'
-import type { MessageStatus, SmtpSecurity } from './types'
+import { formatDate } from './format'
+import type { MessageStatus, OutboxSummary, SmtpSecurity } from './types'
 
 /**
  * Addresses, rights and wording of the outbox.
@@ -140,6 +141,34 @@ export function documentMailPreviewKey(
   return ['document-mail-preview', tenantId, resource, documentId]
 }
 
+/**
+ * @param tenantId the tenant
+ * @param resource the REST segment of the document kind
+ * @param documentId the document
+ * @returns address of what ever went out about that document
+ */
+export function documentMailMessagesUrl(
+  tenantId: number,
+  resource: string,
+  documentId: number,
+): string {
+  return `${documentMailUrl(tenantId, resource, documentId)}/messages`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param resource the REST segment of the document kind
+ * @param documentId the document
+ * @returns cache key of that list
+ */
+export function documentMailMessagesKey(
+  tenantId: number,
+  resource: string,
+  documentId: number,
+): readonly unknown[] {
+  return ['document-mail-messages', tenantId, resource, documentId]
+}
+
 /** What each state of a mail is called on screen. */
 const STATUS_LABELS: Record<MessageStatus, string> = {
   QUEUED: 'Wartet',
@@ -222,6 +251,42 @@ export const MAIL_LANGUAGES: { code: string; label: string }[] = [
   { code: 'it', label: 'Italienisch' },
   { code: 'en', label: 'Englisch' },
 ]
+
+/** What the header of a document says about its dispatch, and how loudly. */
+export type DispatchNote = {
+  tone: 'success' | 'danger' | 'neutral'
+  text: string
+}
+
+/**
+ * What a document mask says about the mails that went out about it.
+ *
+ * <p><b>The newest message decides.</b> Where a second send failed after a first one arrived,
+ * this says «fehlgeschlagen» — hiding bad news behind older good news is the worse mistake, and
+ * the whole story is one click away in the outbox.
+ *
+ * <p>Nothing at all where nothing was ever sent: a permanent line saying «noch nicht gesendet»
+ * would sit on every document that is never mailed.
+ *
+ * @param messages what went out about the document, newest first
+ * @returns the line and its tone, or null where there is nothing to say
+ */
+export function dispatchNote(messages: OutboxSummary[]): DispatchNote | null {
+  const latest = messages[0]
+  if (latest === undefined) return null
+
+  const more = messages.length > 1 ? ` · ${messages.length} Mails` : ''
+  if (latest.status === 'SENT') {
+    return {
+      tone: 'success',
+      text: `Gesendet am ${formatDate(latest.sentAt)} an ${latest.recipients}${more}`,
+    }
+  }
+  if (latest.status === 'FAILED') {
+    return { tone: 'danger', text: `Versand fehlgeschlagen${more}` }
+  }
+  return { tone: 'neutral', text: `Wartet im Postausgang${more}` }
+}
 
 /**
  * Splits a recipient field into single addresses.

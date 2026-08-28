@@ -27,7 +27,14 @@ import {
 import { openByLineId, openByLineNumber } from '../lib/openQuantity'
 import { runsModule } from '../lib/modules'
 import { originOf, originState } from '../lib/origin'
-import { OUTBOX_MODULE, OUTBOX_PATH, OUTBOX_RIGHTS } from '../lib/outbox'
+import {
+  dispatchNote,
+  documentMailMessagesKey,
+  documentMailMessagesUrl,
+  OUTBOX_MODULE,
+  OUTBOX_PATH,
+  OUTBOX_RIGHTS,
+} from '../lib/outbox'
 import {
   ORDER_KIND,
   offerTrackingKey,
@@ -46,6 +53,7 @@ import type {
   DocumentType,
   OfferOutcome,
   OfferTracking,
+  OutboxSummary,
   SalesDocument,
   StockReversalLine,
 } from '../lib/types'
@@ -91,6 +99,13 @@ function initialTabOf(state: unknown): DocumentTab {
     return 'nachfassen'
   }
   return 'beleg'
+}
+
+/** What colour each dispatch state gets in the header. */
+const DISPATCH_TONES: Record<'success' | 'danger' | 'neutral', string> = {
+  success: 'text-success',
+  danger: 'text-danger',
+  neutral: 'text-text-secondary',
 }
 
 /** Badge tone of each outcome of an issued offer. */
@@ -449,8 +464,19 @@ function DocumentMask({
 
   // Both have to agree: the tenant runs the outbox, and this session may send. The backend
   // refuses either way — 409 for the module, 403 for the right — so this only tidies the mask.
-  const sendable =
-    runsModule(user?.tenants, user?.activeTenantId, OUTBOX_MODULE) && can(OUTBOX_RIGHTS.send)
+  const runsOutbox = runsModule(user?.tenants, user?.activeTenantId, OUTBOX_MODULE)
+  const sendable = runsOutbox && can(OUTBOX_RIGHTS.send)
+
+  // What already went out about this document. Read from the outbox and never from a column on
+  // the document: two places for the same fact drift apart on the second send (backend
+  // ADR-0085). Only for an issued one — a draft cannot have been sent.
+  const dispatched = useQuery({
+    queryKey: documentMailMessagesKey(tenantId, kind.resource, document.id),
+    queryFn: () =>
+      api.get<OutboxSummary[]>(documentMailMessagesUrl(tenantId, kind.resource, document.id)),
+    enabled: runsOutbox && can(OUTBOX_RIGHTS.read) && document.status !== 'DRAFT',
+  })
+  const dispatchLine = dispatchNote(dispatched.data ?? [])
 
   // A draft renders on the spot and comes back with a watermark; an issued document hands out
   // the PDF that was archived when it was issued, so a reprint is the same document.
@@ -546,6 +572,18 @@ function DocumentMask({
                 <GitBranch size={13} aria-hidden />
                 {successors}
               </button>
+            )}
+            {/* Whether this document already went out, and to which address. Beside the status
+                because that is the same kind of fact — and a link, because the whole story
+                (text, attachment, reason of a failure) stands in the outbox. */}
+            {dispatchLine !== null && (
+              <Link
+                to={OUTBOX_PATH}
+                className={`inline-flex items-center gap-1 text-[12px] underline-offset-2 hover:underline ${DISPATCH_TONES[dispatchLine.tone]}`}
+              >
+                <Mail size={13} aria-hidden />
+                {dispatchLine.text}
+              </Link>
             )}
           </span>
         }

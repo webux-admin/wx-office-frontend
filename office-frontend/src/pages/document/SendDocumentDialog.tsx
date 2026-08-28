@@ -102,6 +102,9 @@ export function SendDocumentDialog({
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['outbox-messages', tenantId] })
+      // The line in the document header reads this. Without it the mask would keep saying
+      // «noch nichts hinausgegangen» until somebody reloads.
+      void queryClient.invalidateQueries({ queryKey: ['document-mail-messages', tenantId] })
       onQueued()
       close()
     },
