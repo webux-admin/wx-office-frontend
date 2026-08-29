@@ -971,8 +971,11 @@ function DocumentMask({
             tenantId={tenantId}
             documentId={document.id}
             documentNumber={document.documentNumber}
+            partnerId={document.partnerId}
+            partnerName={document.recipient?.name ?? `Kunde ${document.partnerId}`}
             mayIssue={can('DUNNING_RUN')}
             mayWithdraw={can('DUNNING_WITHDRAW')}
+            mayBlock={can('DUNNING_WRITE')}
           />
         )}
 

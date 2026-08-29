@@ -1,6 +1,8 @@
 import { api } from './api'
+import { formatDate } from './format'
 import type { ApiFile } from './api'
 import type {
+  DunningBlock,
   DunningChannel,
   DunningChannelChoice,
   DunningGrouping,
@@ -695,4 +697,101 @@ export function noticeDispatchLabel(
   if (latest.status === 'SENT') return `Gesendet an ${latest.recipients}`
   if (latest.status === 'FAILED') return 'Versand fehlgeschlagen'
   return 'Wartet im Postausgang'
+}
+
+/** Path of the dunning stops within the application. */
+export const DUNNING_BLOCKS_PATH = '/mahnstopps'
+
+/** Where the dunning stops of one tenant are cached. */
+export function dunningBlocksKey(
+  tenantId: number | null,
+  partnerId?: number,
+  documentId?: number,
+): readonly unknown[] {
+  return ['dunning-blocks', tenantId, partnerId ?? 'all', documentId ?? 'all']
+}
+
+/** What the stop dialog sends. Exactly one target. */
+export type DunningBlockBody = {
+  partnerId?: number
+  documentId?: number
+  reasonId: number
+  note?: string | null
+  validUntil?: string | null
+}
+
+/**
+ * The dunning stops, newest first.
+ *
+ * <p>Without a target: every stop of the tenant. With one: the stops that bear on it — a
+ * stop on the customer holds an invoice back as surely as one set on the invoice itself.
+ */
+export function fetchDunningBlocks(
+  tenantId: number,
+  partnerId?: number,
+  documentId?: number,
+): Promise<DunningBlock[]> {
+  const query = new URLSearchParams()
+  if (partnerId !== undefined) query.set('partnerId', String(partnerId))
+  if (documentId !== undefined) query.set('documentId', String(documentId))
+  const suffix = query.size === 0 ? '' : `?${query.toString()}`
+  return api.get<DunningBlock[]>(`/api/tenants/${tenantId}/dunning/blocks${suffix}`)
+}
+
+/** Sets a dunning stop, on a customer or on one invoice. */
+export function setDunningBlock(
+  tenantId: number,
+  body: DunningBlockBody,
+): Promise<DunningBlock> {
+  return api.post<DunningBlock>(`/api/tenants/${tenantId}/dunning/blocks`, body)
+}
+
+/**
+ * Lifts a dunning stop.
+ *
+ * <p>Nothing is deleted: the stop stays on the list, struck through, with the reason it was
+ * lifted for.
+ */
+export function liftDunningBlock(
+  tenantId: number,
+  blockId: number,
+  reason: string,
+): Promise<DunningBlock> {
+  return api.post<DunningBlock>(
+    `/api/tenants/${tenantId}/dunning/blocks/${blockId}/lift`,
+    { reason },
+  )
+}
+
+/**
+ * What a stop says on one line.
+ *
+ * <p>Reason first, then until when — that is the order somebody reads it in: «warum» before
+ * «wie lange noch».
+ *
+ * @param block one stop
+ * @returns the sentence, without the note
+ */
+export function blockLabel(block: DunningBlock): string {
+  if (block.liftedAt !== undefined) return `${block.reasonName} — aufgehoben`
+  if (block.expired) return `${block.reasonName} — abgelaufen`
+  if (block.validUntil === undefined) return block.reasonName
+  return `${block.reasonName}, bis ${formatDate(block.validUntil)}`
+}
+
+/**
+ * Whether a stop is worth pointing at.
+ *
+ * <p>Only one that still holds while nothing is owed any more: the customer has paid, so
+ * the stop is doing nothing except hiding them from the work list. Lifting stays a human
+ * decision — the stop was about a customer, not about one settled invoice (backend
+ * ADR-0099).
+ */
+export function couldBeLifted(block: DunningBlock): boolean {
+  return block.holds && block.nothingOpen
+}
+
+/** The stops that still hold, newest first. */
+export function standingBlocks(blocks: DunningBlock[]): DunningBlock[] {
+  return blocks.filter((block) => block.holds)
 }

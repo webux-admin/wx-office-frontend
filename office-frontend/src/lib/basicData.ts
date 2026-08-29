@@ -41,6 +41,14 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
       'Fristen, Gebühren und Texte stehen im Mahnwesen.',
   },
   {
+    slug: 'mahnstopp-gruende',
+    list: 'dunning-block-reasons',
+    label: 'Mahnstopp-Gründe',
+    description:
+      'Warum ein Kunde oder ein Beleg nicht gemahnt wird. Ein Katalog und kein Freitext: ' +
+      '«zahlt nie» wäre ein Bonitätsurteil über eine Person.',
+  },
+  {
     slug: 'einheiten',
     list: 'units',
     label: 'Einheiten',

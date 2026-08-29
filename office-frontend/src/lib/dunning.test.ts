@@ -10,7 +10,9 @@ import {
   DUNNING_SKIP_REASONS,
   activeLevelCount,
   availableChannels,
+  blockLabel,
   channelSummary,
+  couldBeLifted,
   candidateKey,
   configurationProblems,
   dunningLevelLabel,
@@ -20,10 +22,12 @@ import {
   isWithdrawn,
   narrowedDocumentIds,
   noticeDispatchLabel,
+  standingBlocks,
   runSummary,
   singleInvoiceTokensIn,
 } from './dunning'
 import type {
+  DunningBlock,
   DunningCandidate,
   DunningChannelChoice,
   DunningGrouping,
@@ -599,3 +603,75 @@ function message(status: OutboxSummary['status']): OutboxSummary {
     createdAt: '2026-08-29T07:00:00Z',
   }
 }
+
+/** One dunning stop, with only the parts these functions look at spelled out. */
+function stop(overrides: Partial<DunningBlock> = {}): DunningBlock {
+  return {
+    id: 5,
+    partnerId: 42,
+    reasonId: 911,
+    reasonName: 'Reklamation',
+    holds: true,
+    expired: false,
+    nothingOpen: false,
+    createdAt: '2026-08-01T07:00:00Z',
+    createdBy: 'anna',
+    ...overrides,
+  }
+}
+
+describe('blockLabel', () => {
+  it('blockLabelTest', () => {
+    expect(blockLabel(stop())).toBe('Reklamation')
+  })
+
+  /** Reason first, then until when — «warum» before «wie lange noch». */
+  it('blockLabelWithAnEndDateTest', () => {
+    expect(blockLabel(stop({ validUntil: '2026-09-30' })))
+      .toBe('Reklamation, bis 30.09.2026')
+  })
+
+  it('blockLabelOfAnExpiredStopTest', () => {
+    expect(blockLabel(stop({ holds: false, expired: true, validUntil: '2026-07-01' })))
+      .toBe('Reklamation — abgelaufen')
+  })
+
+  /** Lifted wins over expired: a human took it back, and that is the more telling fact. */
+  it('blockLabelOfALiftedStopTest', () => {
+    expect(blockLabel(stop({
+      holds: false,
+      expired: true,
+      liftedAt: '2026-08-20T07:00:00Z',
+      liftedReason: 'erledigt',
+    }))).toBe('Reklamation — aufgehoben')
+  })
+})
+
+describe('couldBeLifted', () => {
+  /** Still holding while nothing is owed: the stop is only hiding a settled customer. */
+  it('couldBeLiftedTest', () => {
+    expect(couldBeLifted(stop({ nothingOpen: true }))).toBe(true)
+  })
+
+  it('couldBeLiftedWhileSomethingIsOpenTest', () => {
+    expect(couldBeLifted(stop())).toBe(false)
+  })
+
+  /** A stop that no longer holds needs no hint — there is nothing left to lift. */
+  it('couldBeLiftedOfALiftedStopTest', () => {
+    expect(couldBeLifted(stop({ holds: false, nothingOpen: true }))).toBe(false)
+  })
+})
+
+describe('standingBlocks', () => {
+  it('standingBlocksTest', () => {
+    const held = stop()
+    const gone = stop({ id: 6, holds: false })
+
+    expect(standingBlocks([held, gone])).toEqual([held])
+  })
+
+  it('standingBlocksOfNothingTest', () => {
+    expect(standingBlocks([])).toEqual([])
+  })
+})

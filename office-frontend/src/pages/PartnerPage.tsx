@@ -285,7 +285,9 @@ function PartnerMask({
             <PartnerDunningPanel
               tenantId={tenantId}
               partnerId={partner.id}
+              partnerName={partner.name}
               mayWrite={can(DUNNING_RIGHTS.configure)}
+              mayBlock={can(DUNNING_RIGHTS.write)}
             />
           </div>
         )}

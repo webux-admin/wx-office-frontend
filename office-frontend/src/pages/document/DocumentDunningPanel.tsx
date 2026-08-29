@@ -6,22 +6,27 @@ import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { EmptyState, ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
+import { DunningBlockDialog } from '../dunning/DunningBlockDialog'
 import { TextField } from '../../components/TextField'
 import {
+  blockLabel,
+  dunningBlocksKey,
   dunningDispatchKey,
   dunningNoticesKey,
   fetchDunningNoticePdf,
   fetchDunningNotices,
+  fetchDunningBlocks,
   fetchDunningDispatch,
   isWithdrawn,
   issueDunningForInvoice,
+  liftDunningBlock,
   noticeDispatchLabel,
   withdrawDunningNotice,
 } from '../../lib/dunning'
 import { showFile } from '../../lib/files'
 import { OUTBOX_PATH } from '../../lib/outbox'
 import { formatAmount, formatDate, formatDateTime } from '../../lib/format'
-import type { DunningNotice, OutboxSummary } from '../../lib/types'
+import type { DunningBlock, DunningNotice, OutboxSummary } from '../../lib/types'
 
 /**
  * Which reminders went out over one Rechnung.
@@ -35,35 +40,57 @@ import type { DunningNotice, OutboxSummary } from '../../lib/types'
  * Rechnung travelled in. The other invoices of that letter are named, because otherwise the
  * amount on the row would be unexplainable.
  *
+ * <p>The dunning stop lives here too: «warum wird hier nicht gemahnt» is asked at the
+ * invoice, and it is the same register that answers «was ist hinausgegangen».
+ *
  * @param mayIssue    whether the user holds `DUNNING_RUN`
  * @param mayWithdraw whether the user holds `DUNNING_WITHDRAW`
+ * @param mayBlock    whether the user holds `DUNNING_WRITE`
  */
 export function DocumentDunningPanel({
   tenantId,
   documentId,
   documentNumber,
+  partnerId,
+  partnerName,
   mayIssue,
   mayWithdraw,
+  mayBlock,
 }: {
   tenantId: number
   documentId: number
   documentNumber?: string
   mayIssue: boolean
   mayWithdraw: boolean
+  mayBlock: boolean
+  /** The customer of the Rechnung, so a stop can be set on them from here. */
+  partnerId: number
+  partnerName: string
 }) {
   const queryClient = useQueryClient()
   const [withdrawing, setWithdrawing] = useState<DunningNotice | null>(null)
   const [reason, setReason] = useState('')
+  const [blocking, setBlocking] = useState<'partner' | 'document' | null>(null)
+  const [lifting, setLifting] = useState<DunningBlock | null>(null)
+  const [liftReason, setLiftReason] = useState('')
 
   const notices = useQuery({
     queryKey: dunningNoticesKey(tenantId, documentId),
     queryFn: () => fetchDunningNotices(tenantId, documentId),
   })
 
+  // Both kinds together: a stop on the customer holds this Rechnung back as surely as one
+  // set on the Rechnung itself, and the reader does not care which of the two somebody set.
+  const stops = useQuery({
+    queryKey: dunningBlocksKey(tenantId, partnerId, documentId),
+    queryFn: () => fetchDunningBlocks(tenantId, partnerId, documentId),
+  })
+
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['dunning-notices'] })
     void queryClient.invalidateQueries({ queryKey: ['dunning-worklist'] })
     void queryClient.invalidateQueries({ queryKey: ['dunning-states'] })
+    void queryClient.invalidateQueries({ queryKey: ['dunning-blocks'] })
   }
 
   const issue = useMutation({
@@ -77,6 +104,16 @@ export function DocumentDunningPanel({
     onSuccess: () => {
       setWithdrawing(null)
       setReason('')
+      refresh()
+    },
+  })
+
+  const liftStop = useMutation({
+    mutationFn: (block: DunningBlock) =>
+      liftDunningBlock(tenantId, block.id, liftReason.trim()),
+    onSuccess: () => {
+      setLifting(null)
+      setLiftReason('')
       refresh()
     },
   })
@@ -111,8 +148,66 @@ export function DocumentDunningPanel({
   const refused = attempt?.skipped.at(0)
   const failure = attempt?.failed.at(0)
 
+  const blocks = stops.data ?? []
+  const standing = blocks.filter((block) => block.holds)
+
   return (
     <>
+      <Panel
+        title="Mahnstopp"
+        description="Solange ein Stopp gilt, wird nicht gemahnt. Aufgehoben wird er von Hand, nie durch eine Zahlung."
+        className="mb-6"
+        action={
+          mayBlock ? (
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setBlocking('document')}>
+                Diese Rechnung
+              </Button>
+              <Button variant="secondary" onClick={() => setBlocking('partner')}>
+                Ganzer Kunde
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {stops.error !== null && <ErrorNotice error={stops.error} />}
+        {liftStop.error !== null && <ErrorNotice error={liftStop.error} />}
+        {standing.length === 0 ? (
+          <p className="text-[13px] text-text-secondary">
+            Kein Mahnstopp. Diese Rechnung wird gemahnt, sobald sie an der Reihe ist.
+          </p>
+        ) : (
+          <div className="grid gap-2">
+            {standing.map((block) => (
+              <div key={block.id} className="flex items-start justify-between gap-4">
+                <div className="text-[13px]">
+                  <Badge tone="danger">{blockLabel(block)}</Badge>{' '}
+                  <span className="text-text-secondary">
+                    {block.partnerId !== undefined
+                      ? 'gilt für den ganzen Kunden'
+                      : 'gilt für diese Rechnung'}
+                  </span>
+                  {block.note !== undefined && (
+                    <div className="text-[12px] text-text-tertiary">{block.note}</div>
+                  )}
+                </div>
+                {mayBlock && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setLifting(block)
+                      setLiftReason('')
+                    }}
+                  >
+                    Aufheben
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
       <Panel
         title="Mahnungen"
         description="Was über diese Rechnung hinausgegangen ist. Eine Mahnung wird zurückgezogen, nie gelöscht — sie liegt beim Kunden."
@@ -290,6 +385,52 @@ export function DocumentDunningPanel({
               autoFocus
             />
             {withdraw.error !== null && <ErrorNotice error={withdraw.error} />}
+          </div>
+        </Dialog>
+      )}
+
+      {blocking !== null && (
+        <DunningBlockDialog
+          tenantId={tenantId}
+          partnerId={blocking === 'partner' ? partnerId : undefined}
+          documentId={blocking === 'document' ? documentId : undefined}
+          subject={blocking === 'partner' ? partnerName : (documentNumber ?? 'diese Rechnung')}
+          onClose={() => setBlocking(null)}
+        />
+      )}
+
+      {lifting !== null && (
+        <Dialog
+          open
+          onClose={() => setLifting(null)}
+          onSubmit={() => liftStop.mutate(lifting)}
+          title="Mahnstopp aufheben"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setLifting(null)}>
+                Abbrechen
+              </Button>
+              <Button
+                onClick={() => liftStop.mutate(lifting)}
+                disabled={liftReason.trim().length === 0 || liftStop.isPending}
+              >
+                {liftStop.isPending ? 'Wird aufgehoben ...' : 'Aufheben'}
+              </Button>
+            </>
+          }
+        >
+          <div className="grid gap-3">
+            <p className="text-[13px] text-text-secondary">
+              Der Stopp bleibt auf der Liste stehen, durchgestrichen. Ab dem nächsten
+              Mahnvorschlag wird wieder gemahnt.
+            </p>
+            <TextField
+              label="Grund"
+              value={liftReason}
+              onChange={(event) => setLiftReason(event.target.value)}
+              placeholder="Reklamation erledigt"
+              autoFocus
+            />
           </div>
         </Dialog>
       )}

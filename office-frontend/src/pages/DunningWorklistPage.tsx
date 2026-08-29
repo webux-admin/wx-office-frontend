@@ -11,7 +11,9 @@ import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
+import { Link } from 'react-router-dom'
 import {
+  DUNNING_BLOCKS_PATH,
   DUNNING_CHANNELS,
   DUNNING_CHANNEL_HINTS,
   DUNNING_NOTICES_PATH,
@@ -88,7 +90,12 @@ function Worklist({ tenantId }: { tenantId: number }) {
 
   const candidates = worklist.data ?? []
   const sending = candidates.filter((candidate) => candidate.skipReason === undefined)
-  const skipped = candidates.filter((candidate) => candidate.skipReason !== undefined)
+  // The stopped rows get a section of their own rather than sitting among «noch nicht
+  // fällig»: somebody decided this, and that is a different kind of answer from «warte ab».
+  const blocked = candidates.filter((candidate) => candidate.skipReason === 'BLOCKED')
+  const skipped = candidates.filter(
+    (candidate) => candidate.skipReason !== undefined && candidate.skipReason !== 'BLOCKED',
+  )
   const problems = configurationProblems(candidates)
 
   const toggle = (key: string) => setOpen({ ...open, [key]: open[key] !== true })
@@ -130,7 +137,8 @@ function Worklist({ tenantId }: { tenantId: number }) {
         title="Mahnvorschlag"
         subtitle={
           worklist.isSuccess
-            ? `${sending.length} Briefe zu mahnen, ${skipped.length} übersprungen`
+            ? `${sending.length} Briefe zu mahnen, ${blocked.length} gesperrt, `
+              + `${skipped.length} übersprungen`
             : undefined
         }
       >
@@ -209,6 +217,21 @@ function Worklist({ tenantId }: { tenantId: number }) {
             />
           )}
         </Panel>
+
+        {blocked.length > 0 && (
+          <Panel
+            title="Mahnstopp gesetzt"
+            description="Hier hat ein Mensch entschieden, nicht die Regel. Die Zeilen bleiben sichtbar — wer nicht gemahnt wird, soll nicht verschwinden."
+            padded={false}
+            action={
+              <Link className="text-[13px] text-accent-text" to={DUNNING_BLOCKS_PATH}>
+                Alle Mahnstopps
+              </Link>
+            }
+          >
+            <CandidateTable candidates={blocked} open={open} onToggle={toggle} skipped />
+          </Panel>
+        )}
 
         {skipped.length > 0 && (
           <Panel

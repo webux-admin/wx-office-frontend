@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Ban,
   BellRing,
   MailWarning,
   ListOrdered,
@@ -63,6 +64,7 @@ import {
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
   DUNNING_TEXTS_PATH,
+  DUNNING_BLOCKS_PATH,
   DUNNING_NOTICES_PATH,
   DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
@@ -221,6 +223,16 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: MailWarning,
         href: DUNNING_NOTICES_PATH,
         permission: DUNNING_RIGHTS.read,
+      },
+      // Who is deliberately not being chased. Under the module switch, unlike the
+      // issued reminders: a stop is a setting of the dunning, not correspondence that
+      // has to stay readable for ten years.
+      {
+        label: 'Mahnstopps',
+        icon: Ban,
+        href: DUNNING_BLOCKS_PATH,
+        permission: DUNNING_RIGHTS.read,
+        module: DUNNING_MODULE,
       },
     ],
   },
@@ -432,6 +444,7 @@ export const NAV_GROUPS: NavGroup[] = [
           },
           listEntry('verrechnungsarten', Receipt),
           listEntry('mahnarten', BellRing),
+          listEntry('mahnstopp-gruende', Ban),
         ],
       },
       {

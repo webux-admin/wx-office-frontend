@@ -25,6 +25,7 @@ export type MasterDataList =
   | 'revenue-accounts'
   | 'payment-methods'
   | 'dunning-types'
+  | 'dunning-block-reasons'
   | 'billing-types'
 
 /** One value of a selection list, as `/api/tenants/{id}/{list}` returns it. */
@@ -2473,6 +2474,39 @@ export type DunningState = {
   documentId: number
   level: number
   lastIssuedOn?: string
+}
+
+/**
+ * One dunning stop: a customer or a single invoice that is not being chased.
+ *
+ * <p>A lifted stop stays in the list. It is not deleted — that it once held, and who took
+ * it back, belongs to the history of that customer (backend ADR-0099).
+ */
+export type DunningBlock = {
+  id: number
+  /** The customer it is on, absent when it is on one invoice. */
+  partnerId?: number
+  /** The invoice it is on, absent when it is on a customer. */
+  documentId?: number
+  reasonId: number
+  reasonName: string
+  /** The single case. A fact, not a judgement. */
+  note?: string
+  /** The last day it holds. Absent means «until it is lifted». */
+  validUntil?: string
+  holds: boolean
+  /** Whether it ran out of time rather than being lifted. */
+  expired: boolean
+  liftedAt?: string
+  liftedBy?: string
+  liftedReason?: string
+  /**
+   * Whether nothing is owed any more. Then the stop **could** be lifted — it never is
+   * automatically, because a stop is about a customer and not about one settled invoice.
+   */
+  nothingOpen: boolean
+  createdAt: string
+  createdBy: string
 }
 
 /** How an issued reminder reached the customer. */

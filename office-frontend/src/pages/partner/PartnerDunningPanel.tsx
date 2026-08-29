@@ -1,10 +1,16 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '../../components/Badge'
+import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
+import { DunningBlockDialog } from '../dunning/DunningBlockDialog'
 import {
   DUNNING_GROUPINGS,
+  blockLabel,
+  dunningBlocksKey,
+  fetchDunningBlocks,
   DUNNING_GROUPING_HINTS,
   fetchPartnerDunning,
   partnerDunningKey,
@@ -23,18 +29,34 @@ const FOLLOWS_TENANT = ''
  * too. Choosing the value that happens to equal the default today would freeze them on it
  * (backend ADR-0093).
  *
- * @param mayWrite whether the user holds `DUNNING_CONFIGURE`
+ * <p>The dunning stop sits in the same panel: «wie wird gemahnt» and «wird überhaupt
+ * gemahnt» are the two questions somebody has about this customer, and they belong
+ * together (backend ADR-0099).
+ *
+ * @param mayWrite  whether the user holds `DUNNING_CONFIGURE`
+ * @param mayBlock  whether the user holds `DUNNING_WRITE`
+ * @param partnerName the customer, for the heading of the stop dialog
  */
 export function PartnerDunningPanel({
   tenantId,
   partnerId,
+  partnerName,
   mayWrite,
+  mayBlock,
 }: {
   tenantId: number
   partnerId: number
+  partnerName: string
   mayWrite: boolean
+  mayBlock: boolean
 }) {
   const queryClient = useQueryClient()
+  const [blocking, setBlocking] = useState(false)
+
+  const stops = useQuery({
+    queryKey: dunningBlocksKey(tenantId, partnerId),
+    queryFn: () => fetchDunningBlocks(tenantId, partnerId),
+  })
 
   const grouping = useQuery({
     queryKey: partnerDunningKey(tenantId, partnerId),
@@ -51,6 +73,7 @@ export function PartnerDunningPanel({
 
   const current = grouping.data
   const selected = current?.deviation === true ? current.grouping : FOLLOWS_TENANT
+  const standing = (stops.data ?? []).filter((block) => block.holds)
 
   return (
     <Panel
@@ -90,6 +113,32 @@ export function PartnerDunningPanel({
               ))}
             </SelectField>
 
+            <div className="grid gap-2 border-t border-line-subtle pt-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[13px] font-medium">Mahnstopp</span>
+                {mayBlock && standing.length === 0 && (
+                  <Button variant="secondary" onClick={() => setBlocking(true)}>
+                    Mahnstopp setzen
+                  </Button>
+                )}
+              </div>
+              {standing.length === 0 ? (
+                <p className="text-[13px] text-text-secondary">
+                  Kein Stopp. Dieser Kunde wird gemahnt.
+                </p>
+              ) : (
+                standing.map((block) => (
+                  <div key={block.id} className="text-[13px]">
+                    <Badge tone="danger">{blockLabel(block)}</Badge>
+                    {block.note !== undefined && (
+                      <div className="text-[12px] text-text-tertiary">{block.note}</div>
+                    )}
+                  </div>
+                ))
+              )}
+              {/* Aufgehoben wird auf dem eigenen Bildschirm: dort steht der Verlauf. */}
+            </div>
+
             <div>
               {current.deviation ? (
                 <Badge tone="accent">Eigene Einstellung</Badge>
@@ -106,6 +155,14 @@ export function PartnerDunningPanel({
           </p>
         )}
       </div>
+      {blocking && (
+        <DunningBlockDialog
+          tenantId={tenantId}
+          partnerId={partnerId}
+          subject={partnerName}
+          onClose={() => setBlocking(false)}
+        />
+      )}
     </Panel>
   )
 }

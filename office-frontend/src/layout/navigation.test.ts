@@ -228,6 +228,7 @@ describe('flattenNav', () => {
       MAIL_TEMPLATE_PATH,
       '/basisdaten/verrechnungsarten',
       '/basisdaten/mahnarten',
+      '/basisdaten/mahnstopp-gruende',
     ])
   })
 
