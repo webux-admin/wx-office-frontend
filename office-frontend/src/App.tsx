@@ -47,6 +47,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({
 const DunningSettingsPage = lazy(() => import('./pages/DunningSettingsPage').then((module) => ({ default: module.DunningSettingsPage })))
 const DunningLevelPage = lazy(() => import('./pages/DunningLevelPage').then((module) => ({ default: module.DunningLevelPage })))
 const DunningTextPage = lazy(() => import('./pages/DunningTextPage').then((module) => ({ default: module.DunningTextPage })))
+const DunningWorklistPage = lazy(() => import('./pages/DunningWorklistPage').then((module) => ({ default: module.DunningWorklistPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
 const StockListPage = lazy(() => import('./pages/StockListPage').then((module) => ({ default: module.StockListPage })))
 const StockShortageListPage = lazy(() => import('./pages/StockShortageListPage').then((module) => ({ default: module.StockShortageListPage })))
@@ -175,6 +176,7 @@ export default function App() {
                 <Route path="/mahnwesen-einstellungen" element={<DunningSettingsPage />} />
                 <Route path="/mahnstufen" element={<DunningLevelPage />} />
                 <Route path="/mahntexte" element={<DunningTextPage />} />
+                <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/profil" element={<ProfilePage />} />
               </Route>
 

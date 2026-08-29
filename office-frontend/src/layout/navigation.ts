@@ -62,6 +62,7 @@ import {
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
   DUNNING_TEXTS_PATH,
+  DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
@@ -200,6 +201,16 @@ export const NAV_GROUPS: NavGroup[] = [
       salesEntry('ORDER', ClipboardList),
       salesEntry('DELIVERY_NOTE', PackageCheck),
       salesEntry('INVOICE', ReceiptText),
+      // After the invoice, because that is where it follows on: what was billed and not
+      // paid. Here and not under Moduleinstellungen — chasing money is daily work, the
+      // setup of the dunning is not (backend ADR-0096).
+      {
+        label: 'Mahnvorschlag',
+        icon: BellRing,
+        href: DUNNING_WORKLIST_PATH,
+        permission: DUNNING_RIGHTS.read,
+        module: DUNNING_MODULE,
+      },
     ],
   },
   {

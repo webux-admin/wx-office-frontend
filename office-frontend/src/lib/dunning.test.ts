@@ -5,13 +5,22 @@ import {
   DUNNING_RIGHTS,
   FEE_BOOKINGS,
   FEE_VAT_MODES,
+  DUNNING_SKIP_REASONS,
   activeLevelCount,
+  candidateKey,
+  configurationProblems,
   escalationProblem,
   insertPlaceholder,
   isHighestLevel,
   singleInvoiceTokensIn,
 } from './dunning'
-import type { DunningGrouping, DunningLevel, DunningPlaceholder } from './types'
+import type {
+  DunningCandidate,
+  DunningGrouping,
+  DunningLevel,
+  DunningPlaceholder,
+  DunningSkipReason,
+} from './types'
 
 /** One level, with only the parts these functions look at spelled out. */
 function level(overrides: Partial<DunningLevel> = {}): DunningLevel {
@@ -260,5 +269,120 @@ describe('singleInvoiceTokensIn', () => {
   it('singleInvoiceTokensInWithSpacingTest', () => {
     expect(singleInvoiceTokensIn(['{{  rechnungsnummer  }}'], catalogue))
       .toEqual(['rechnungsnummer'])
+  })
+})
+
+/** One letter of the work list, with only the parts these functions look at. */
+function candidate(overrides: Partial<DunningCandidate> = {}): DunningCandidate {
+  return {
+    partnerId: 42,
+    partnerName: 'Muster AG',
+    languageCode: 'de',
+    levelNo: 1,
+    levelName: 'Zahlungserinnerung',
+    invoices: [
+      {
+        documentId: 7,
+        documentNumber: 'RE-2026-0007',
+        documentDate: '2026-06-12',
+        dueDate: '2026-07-12',
+        currency: 'CHF',
+        totalGross: 1250,
+        openAmount: 1250,
+        openBaseAmount: 1250,
+        daysOverdue: 48,
+      },
+    ],
+    openAmount: 1250,
+    currency: 'CHF',
+    oldestDueDate: '2026-07-12',
+    maxDaysOverdue: 48,
+    ...overrides,
+  }
+}
+
+describe('configurationProblems', () => {
+  /** Only what a setting fixes — telling somebody «not due yet» in a banner trains them
+   *  to ignore the banner. */
+  it('configurationProblemsTest', () => {
+    const list = [
+      candidate({ skipReason: 'FEE_ACCOUNT_MISSING' }),
+      candidate({ skipReason: 'NOT_DUE' }),
+    ]
+
+    expect(configurationProblems(list)).toEqual(['FEE_ACCOUNT_MISSING'])
+  })
+
+  it('configurationProblemsNamesEachOnceTest', () => {
+    const list = [
+      candidate({ skipReason: 'LEVEL_REMOVED' }),
+      candidate({ skipReason: 'LEVEL_REMOVED' }),
+    ]
+
+    expect(configurationProblems(list)).toEqual(['LEVEL_REMOVED'])
+  })
+
+  it('configurationProblemsOfAHealthyListTest', () => {
+    expect(configurationProblems([candidate()])).toEqual([])
+  })
+
+  it('configurationProblemsOfNothingTest', () => {
+    expect(configurationProblems([])).toEqual([])
+  })
+})
+
+describe('candidateKey', () => {
+  it('candidateKeyTest', () => {
+    expect(candidateKey(candidate())).toBe('42|1|de|7')
+  })
+
+  /** One customer can appear twice on the same level in single mode, so the documents
+   *  belong in the key. */
+  it('candidateKeyTellsTwoLettersOfOneCustomerApartTest', () => {
+    const one = candidate()
+    const other = candidate({
+      invoices: [{ ...one.invoices[0], documentId: 9, documentNumber: 'RE-2026-0009' }],
+    })
+
+    expect(candidateKey(one)).not.toBe(candidateKey(other))
+  })
+
+  it('candidateKeyOfACollectiveLetterTest', () => {
+    const collective = candidate({
+      invoices: [
+        { ...candidate().invoices[0], documentId: 7 },
+        { ...candidate().invoices[0], documentId: 9 },
+      ],
+    })
+
+    expect(candidateKey(collective)).toBe('42|1|de|7-9')
+  })
+
+  /** Two languages are two letters, even for the same customer on the same level. */
+  it('candidateKeyTellsLanguagesApartTest', () => {
+    expect(candidateKey(candidate())).not.toBe(candidateKey(candidate({ languageCode: 'fr' })))
+  })
+})
+
+describe('the skip reasons', () => {
+  /** Every reason gets a sentence: the point of the list is that a reader sees why. */
+  it('everySkipReasonHasASentenceTest', () => {
+    const reasons: DunningSkipReason[] = [
+      'BLOCKED',
+      'NO_DUE_DATE',
+      'LEVEL_REMOVED',
+      'EXHAUSTED',
+      'BELOW_MINIMUM',
+      'NOT_DUE',
+      'COOLING_OFF',
+      'NO_ADDRESS',
+      'FEE_ACCOUNT_MISSING',
+      'FEE_DOCUMENT_TYPE_MISSING',
+    ]
+
+    for (const reason of reasons) {
+      expect(DUNNING_SKIP_REASONS[reason]).toBeTruthy()
+    }
+    expect(Object.keys(DUNNING_SKIP_REASONS)).toHaveLength(reasons.length)
   })
 })

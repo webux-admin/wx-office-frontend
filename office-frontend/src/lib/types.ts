@@ -2404,3 +2404,61 @@ export type DunningTextPreview = {
   collective: DunningTextRendered
   singleInvoiceTokens: string[]
 }
+
+/** Why a Rechnung that owes money is not being chased right now. */
+export type DunningSkipReason =
+  | 'BLOCKED'
+  | 'NO_DUE_DATE'
+  | 'LEVEL_REMOVED'
+  | 'EXHAUSTED'
+  | 'BELOW_MINIMUM'
+  | 'NOT_DUE'
+  | 'COOLING_OFF'
+  | 'NO_ADDRESS'
+  | 'FEE_ACCOUNT_MISSING'
+  | 'FEE_DOCUMENT_TYPE_MISSING'
+
+/** One invoice inside a letter of the work list. */
+export type DunnableInvoice = {
+  documentId: number
+  documentNumber?: string
+  documentDate: string
+  /** Absent is a data error the row points at, not a reason to stay silent. */
+  dueDate?: string
+  currency: string
+  totalGross: number
+  openAmount: number
+  /** The same in the accounting currency — what the threshold is judged on. */
+  openBaseAmount: number
+  daysOverdue: number
+}
+
+/**
+ * One letter the dunning would send, or one it would not.
+ *
+ * <p>Always a list of invoices, even where it holds one: the single reminder is the case «list
+ * with one entry», so the mask never has to know which mode produced it (backend ADR-0096).
+ */
+export type DunningCandidate = {
+  partnerId: number
+  partnerName?: string
+  languageCode: string
+  /** The level that would be sent, 0 where the case is skipped. */
+  levelNo: number
+  levelName?: string
+  invoices: DunnableInvoice[]
+  openAmount: number
+  currency: string
+  oldestDueDate?: string
+  maxDaysOverdue: number
+  /** Absent where a letter would go out. */
+  skipReason?: DunningSkipReason
+  note?: string
+}
+
+/** How far one invoice has been chased. */
+export type DunningState = {
+  documentId: number
+  level: number
+  lastIssuedOn?: string
+}

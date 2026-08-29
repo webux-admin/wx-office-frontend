@@ -37,12 +37,17 @@ describe('NAV_GROUPS', () => {
    * Menu and routes are built from one table, and this says so: a kind of document added there
    * has to be reachable through the menu too, under its own address and behind its own read
    * right — not only by typing the path.
+   *
+   * <p>Only the document entries are held against the table, not the whole group: the group
+   * also carries screens that follow on from a document without being one — the dunning work
+   * list is the first. What this test is about is that no kind of document is missing.
    */
   it('navGroupsCoverEverySalesDocumentTest', () => {
     const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
     const entries = flattenNav(sales?.entries ?? [])
+    const paths = new Set<string>(SALES_DOCUMENT_KINDS.map((kind) => kind.path))
 
-    expect(entries.map((entry) => entry.href)).toEqual(
+    expect(entries.map((entry) => entry.href).filter((href) => paths.has(href))).toEqual(
       SALES_DOCUMENT_KINDS.map((kind) => kind.path),
     )
     for (const kind of SALES_DOCUMENT_KINDS) {
