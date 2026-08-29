@@ -5,12 +5,15 @@ import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { Dialog } from '../components/Dialog'
+import { SelectField } from '../components/SelectField'
 import { EmptyState, ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
 import {
+  DUNNING_CHANNELS,
+  DUNNING_CHANNEL_HINTS,
   DUNNING_NOTICES_PATH,
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
@@ -20,6 +23,10 @@ import {
   dunningWorklistKey,
   fetchDunningRunPdf,
   fetchDunningWorklist,
+  availableChannels,
+  channelSummary,
+  dunningSettingsKey,
+  fetchDunningSettings,
   narrowedDocumentIds,
   runDunning,
   runSummary,
@@ -27,7 +34,11 @@ import {
 import { showFile } from '../lib/files'
 import { useAuth } from '../auth/useAuth'
 import { formatAmount, formatDate, toIsoDate } from '../lib/format'
-import type { DunningCandidate, DunningRunResult } from '../lib/types'
+import type {
+  DunningCandidate,
+  DunningChannelChoice,
+  DunningRunResult,
+} from '../lib/types'
 
 /**
  * Which reminders would go out today, and why the rest would not.
@@ -58,9 +69,17 @@ function Worklist({ tenantId }: { tenantId: number }) {
   // Rechnungen desselben Briefs» has no meaning (backend ADR-0096).
   const [picked, setPicked] = useState<Record<string, boolean>>({})
   const [confirming, setConfirming] = useState(false)
+  const [channel, setChannel] = useState<DunningChannelChoice>('AUTO')
   const [result, setResult] = useState<DunningRunResult | null>(null)
   const queryClient = useQueryClient()
   const { can } = useAuth()
+
+  // Only for the channel choice: whether this tenant could mail at all, and why not.
+  const settings = useQuery({
+    queryKey: dunningSettingsKey(tenantId),
+    queryFn: () => fetchDunningSettings(tenantId),
+  })
+  const mailReady = settings.data?.mailReady === true
 
   const worklist = useQuery({
     queryKey: dunningWorklistKey(tenantId, asOf),
@@ -88,6 +107,7 @@ function Worklist({ tenantId }: { tenantId: number }) {
         // Only when a choice was made: an empty list means «everything», and sending the
         // ids of every row would freeze a decision the server is about to take again.
         documentIds: chosen.length === 0 ? undefined : narrowedDocumentIds(chosen),
+        channel: mailReady ? channel : 'PRINT',
       }),
     onSuccess: (answer) => {
       setConfirming(false)
@@ -222,6 +242,28 @@ function Worklist({ tenantId }: { tenantId: number }) {
             Es gehen <strong>{runSummary(wanted)}</strong> hinaus. Jede bekommt eine
             lückenlose Nummer und wird archiviert — zurückholen lässt sie sich nicht.
           </p>
+          {/* The channel is resolved per letter, so the numbers are two: what costs postage
+              and what does not (backend ADR-0095). */}
+          <SelectField
+            label="Weg"
+            value={mailReady ? channel : 'PRINT'}
+            onChange={(event) => setChannel(event.target.value as DunningChannelChoice)}
+            disabled={!mailReady}
+            hint={
+              mailReady
+                ? DUNNING_CHANNEL_HINTS[channel]
+                : settings.data?.mailBlockedReason
+            }
+          >
+            {availableChannels(mailReady).map((code) => (
+              <option key={code} value={code}>
+                {DUNNING_CHANNELS[code]}
+              </option>
+            ))}
+          </SelectField>
+          <p className="text-text-secondary">
+            Davon <strong>{channelSummary(wanted)}</strong>.
+          </p>
           <p className="text-text-secondary">
             Stichtag {formatDate(asOf)}. Das Ausstellungsdatum ist der heutige Tag: ein
             nummerierter Beleg darf nicht rückdatiert werden.
@@ -294,6 +336,19 @@ function RunResult({
             </span>
           </div>
         ))}
+        {result.unsent.length > 0 && (
+          <div className="grid gap-1">
+            <p className="font-medium">Ausgestellt, aber nicht versandt</p>
+            {result.unsent.map((failure) => (
+              <p key={`unsent-${failure.partnerId}-${failure.levelNo}`} className="text-text-secondary">
+                {failure.message}
+              </p>
+            ))}
+            <p className="text-[12px] text-text-tertiary">
+              Diese Briefe stehen mit Nummer und Archivkopie — sie müssen gedruckt werden.
+            </p>
+          </div>
+        )}
         {result.failed.length > 0 && (
           <div className="grid gap-1">
             <p className="font-medium">Nicht ausgestellt</p>

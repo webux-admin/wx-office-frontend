@@ -1,9 +1,12 @@
 import { api } from './api'
 import type { ApiFile } from './api'
 import type {
+  DunningChannel,
+  DunningChannelChoice,
   DunningGrouping,
   DunningNotice,
   DunningRunResult,
+  OutboxSummary,
   DunningLevel,
   DunningPlaceholder,
   DunningSettings,
@@ -104,6 +107,8 @@ export type DunningSettingsBody = {
   feeVatCategory?: string | null
   feeRevenueAccountId?: number | null
   feeDocumentTypeId?: number | null
+  attachInvoiceCopies: boolean
+  noticeBcc?: string | null
 }
 
 /** What the level dialog sends. */
@@ -474,6 +479,8 @@ export type DunningRunBody = {
   referenceDate?: string
   /** Narrows the run to the letters whose invoices are all named here. */
   documentIds?: number[]
+  /** How the reminders should go out; `AUTO` decides per letter. */
+  channel?: DunningChannelChoice
 }
 
 /**
@@ -603,4 +610,89 @@ export function isWithdrawn(notice: DunningNotice): boolean {
 export function dunningLevelLabel(state: DunningState | undefined): string | null {
   if (state === undefined || state.level === 0) return null
   return `${state.level}. Mahnung`
+}
+
+/** What each channel is called on screen. */
+export const DUNNING_CHANNELS: Record<DunningChannelChoice, string> = {
+  AUTO: 'Mail wo möglich, sonst Papier',
+  MAIL: 'Nur per Mail',
+  PRINT: 'Nur auf Papier',
+}
+
+/** What each channel means, spelled out where it is chosen. */
+export const DUNNING_CHANNEL_HINTS: Record<DunningChannelChoice, string> = {
+  AUTO: 'Je Brief entschieden. Kunden ohne Mailadresse bekommen einen Brief.',
+  MAIL: 'Kunden ohne Mailadresse werden übersprungen, nicht gedruckt.',
+  PRINT: 'Auch Kunden mit Mailadresse bekommen einen Brief.',
+}
+
+/** Where the dispatch of one reminder is cached. */
+export function dunningDispatchKey(
+  tenantId: number | null,
+  noticeId: number,
+): readonly unknown[] {
+  return ['dunning-dispatch', tenantId, noticeId]
+}
+
+/**
+ * What the outbox knows about one reminder.
+ *
+ * <p>There is no `sentAt` on the reminder itself, on purpose: the outbox already answers
+ * «ist das hinausgegangen», and a second truth would drift apart the first time it records
+ * a failure (backend ADR-0095).
+ */
+export function fetchDunningDispatch(
+  tenantId: number,
+  noticeId: number,
+): Promise<OutboxSummary[]> {
+  return api.get<OutboxSummary[]>(
+    `/api/tenants/${tenantId}/dunning/notices/${noticeId}/messages`,
+  )
+}
+
+/**
+ * How a run splits between the two ways out.
+ *
+ * <p>Both numbers, because they are the two that cost different things: a mail costs
+ * nothing, a letter costs postage and a trip to the post box. A dialog that named only the
+ * total would hide the one the user cares about.
+ *
+ * @param candidates the letters that would go out
+ */
+export function channelSummary(candidates: DunningCandidate[]): string {
+  const byMail = candidates.filter((candidate) => candidate.channel === 'MAIL').length
+  const onPaper = candidates.filter((candidate) => candidate.channel === 'PRINT').length
+  if (byMail === 0) return `${onPaper} auf Papier`
+  if (onPaper === 0) return `${byMail} per Mail`
+  return `${byMail} per Mail, ${onPaper} auf Papier`
+}
+
+/**
+ * Which channels a tenant may pick from right now.
+ *
+ * <p>Without a working outbox there is nothing to pick: everything goes on paper, and an
+ * offer of «nur per Mail» would promise something the run cannot do.
+ *
+ * @param mailReady whether the tenant could send mail at all
+ */
+export function availableChannels(mailReady: boolean): DunningChannelChoice[] {
+  return mailReady ? ['AUTO', 'MAIL', 'PRINT'] : ['PRINT']
+}
+
+/**
+ * How one reminder went out, in words.
+ *
+ * @param channel  what the reminder froze
+ * @param messages what the outbox knows about it
+ */
+export function noticeDispatchLabel(
+  channel: DunningChannel,
+  messages: OutboxSummary[],
+): string {
+  if (channel === 'PRINT') return 'Gedruckt'
+  const latest = messages[0]
+  if (latest === undefined) return 'Kein Versand protokolliert — bitte drucken'
+  if (latest.status === 'SENT') return `Gesendet an ${latest.recipients}`
+  if (latest.status === 'FAILED') return 'Versand fehlgeschlagen'
+  return 'Wartet im Postausgang'
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
@@ -7,16 +8,20 @@ import { EmptyState, ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { TextField } from '../../components/TextField'
 import {
+  dunningDispatchKey,
   dunningNoticesKey,
   fetchDunningNoticePdf,
   fetchDunningNotices,
+  fetchDunningDispatch,
   isWithdrawn,
   issueDunningForInvoice,
+  noticeDispatchLabel,
   withdrawDunningNotice,
 } from '../../lib/dunning'
 import { showFile } from '../../lib/files'
+import { OUTBOX_PATH } from '../../lib/outbox'
 import { formatAmount, formatDate, formatDateTime } from '../../lib/format'
-import type { DunningNotice } from '../../lib/types'
+import type { DunningNotice, OutboxSummary } from '../../lib/types'
 
 /**
  * Which reminders went out over one Rechnung.
@@ -82,6 +87,24 @@ export function DocumentDunningPanel({
   })
 
   const rows = notices.data ?? []
+
+  // One query per reminder rather than a column on it: the outbox already answers «ist das
+  // hinausgegangen», and a second truth on the reminder would drift apart the first time it
+  // records a failure (backend ADR-0095).
+  const dispatches = useQueries({
+    queries: rows
+      .filter((notice) => notice.channel === 'MAIL')
+      .map((notice) => ({
+        queryKey: dunningDispatchKey(tenantId, notice.id),
+        queryFn: () => fetchDunningDispatch(tenantId, notice.id),
+      })),
+  })
+  const messagesOf = (notice: DunningNotice): OutboxSummary[] => {
+    const index = rows
+      .filter((one) => one.channel === 'MAIL')
+      .findIndex((one) => one.id === notice.id)
+    return index < 0 ? [] : (dispatches[index]?.data ?? [])
+  }
   // What the run produced for exactly this Rechnung: a letter it did not send, or one that
   // failed, is stated rather than swallowed — otherwise the button looks broken.
   const attempt = issue.data
@@ -153,6 +176,7 @@ export function DocumentDunningPanel({
                   <th className="py-2 pr-4 font-medium">Ausgestellt</th>
                   <th className="py-2 pr-4 font-medium">Zahlbar bis</th>
                   <th className="py-2 pr-4 text-right font-medium">Gemahnt</th>
+                  <th className="py-2 pr-4 font-medium">Weg</th>
                   <th className="py-2 pr-4 font-medium">Brief</th>
                   <th className="py-2 pr-4" />
                 </tr>
@@ -175,6 +199,16 @@ export function DocumentDunningPanel({
                     <td className="py-2 pr-4 text-right tabular-nums">
                       {formatAmount(lineOf(notice, documentId)?.openAmount)}{' '}
                       <span className="text-text-tertiary">{notice.currency}</span>
+                    </td>
+                    <td className="py-2 pr-4 text-text-secondary">
+                      {noticeDispatchLabel(notice.channel, messagesOf(notice))}
+                      {notice.channel === 'MAIL' && (
+                        <div className="text-[12px] text-text-tertiary">
+                          <Link className="hover:underline" to={OUTBOX_PATH}>
+                            Im Postausgang ansehen
+                          </Link>
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 pr-4 text-text-secondary">
                       {notice.lines.length === 1

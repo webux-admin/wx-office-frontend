@@ -32,6 +32,8 @@ type SettingsForm = {
   feeBooking: FeeBooking
   feeVatMode: FeeVatMode
   feeRevenueAccountId: string
+  attachInvoiceCopies: boolean
+  noticeBcc: string
 }
 
 function formOf(settings: DunningSettings): SettingsForm {
@@ -44,6 +46,8 @@ function formOf(settings: DunningSettings): SettingsForm {
     feeVatMode: settings.feeVatMode,
     feeRevenueAccountId:
       settings.feeRevenueAccountId === undefined ? '' : String(settings.feeRevenueAccountId),
+    attachInvoiceCopies: settings.attachInvoiceCopies,
+    noticeBcc: settings.noticeBcc ?? '',
   }
 }
 
@@ -94,7 +98,7 @@ function Settings({ tenantId }: { tenantId: number }) {
   // typed has to give way when a save or another user rewrites the state underneath it.
   return (
     <SettingsMask
-      key={`${settings.data.numberRangeCode}-${settings.data.minimumOpenAmount}-${settings.data.grouping}-${settings.data.feeBooking}-${settings.data.feeVatMode}-${settings.data.feeRevenueAccountId ?? ''}`}
+      key={`${settings.data.numberRangeCode}-${settings.data.minimumOpenAmount}-${settings.data.grouping}-${settings.data.feeBooking}-${settings.data.feeVatMode}-${settings.data.feeRevenueAccountId ?? ''}-${settings.data.attachInvoiceCopies}-${settings.data.noticeBcc ?? ''}`}
       tenantId={tenantId}
       stored={settings.data}
     />
@@ -121,6 +125,8 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
         feeVatMode: body.feeVatMode,
         feeRevenueAccountId:
           body.feeRevenueAccountId === '' ? null : Number(body.feeRevenueAccountId),
+        attachInvoiceCopies: body.attachInvoiceCopies,
+        noticeBcc: body.noticeBcc.trim() === '' ? null : body.noticeBcc.trim(),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: dunningSettingsKey(tenantId) })
@@ -181,6 +187,33 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
               disabled={!mayConfigure}
             />
 
+            {/* Both off at delivery. The customer already has the invoice, and a collective
+                reminder over ten of them would make a mail that mailboxes refuse; the outbox
+                logs every dispatch anyway, so a blind copy is a wish, not a default
+                (backend ADR-0095). */}
+            <CheckboxField
+              label="Rechnungskopien an die Mahnung anhängen"
+              hint="Nur beim Mailversand. Schneidet die «habe ich nie erhalten»-Ausrede ab, macht die Mail aber gross."
+              checked={form.attachInvoiceCopies}
+              onChange={(event) =>
+                setForm({ ...form, attachInvoiceCopies: event.target.checked })
+              }
+              disabled={!mayConfigure || !stored.mailReady}
+            />
+
+            <TextField
+              label="Blindkopie an"
+              type="email"
+              value={form.noticeBcc}
+              onChange={(event) => setForm({ ...form, noticeBcc: event.target.value })}
+              disabled={!mayConfigure || !stored.mailReady}
+              placeholder="buchhaltung@example.ch"
+              hint={
+                stored.mailReady
+                  ? 'Leer heisst: keine. Der Postausgang protokolliert den Versand ohnehin.'
+                  : stored.mailBlockedReason
+              }
+            />
             <SelectField
               label="Gruppierung"
               value={form.grouping}

@@ -2324,10 +2324,18 @@ export type DunningSettings = {
   feeVatCategory?: string
   feeRevenueAccountId?: number
   feeDocumentTypeId?: number
+  /** Hangs the PDFs of the chased invoices onto a mailed reminder. Off by default. */
+  attachInvoiceCopies: boolean
+  /** Blind copy of every sent reminder. Empty means none. */
+  noticeBcc?: string
   /** How many levels are switched on — the answer to «wie viele Stufen hat es». */
   activeLevelCount: number
   /** Whether the settings say enough for a fee to be charged at all. */
   feeBookable: boolean
+  /** Whether reminders of this tenant could go out by mail at all. */
+  mailReady: boolean
+  /** Why not, absent while mail works. A greyed control without a sentence is a riddle. */
+  mailBlockedReason?: string
 }
 
 /**
@@ -2451,6 +2459,10 @@ export type DunningCandidate = {
   currency: string
   oldestDueDate?: string
   maxDaysOverdue: number
+  /** How it would leave the house, already resolved. Absent where the case is skipped. */
+  channel?: DunningChannel
+  /** Where a mailed reminder would go, absent where the customer has no mail address. */
+  mailAddress?: string
   /** Absent where a letter would go out. */
   skipReason?: DunningSkipReason
   note?: string
@@ -2463,8 +2475,18 @@ export type DunningState = {
   lastIssuedOn?: string
 }
 
-/** How an issued reminder reached the customer. Today always on paper. */
+/** How an issued reminder reached the customer. */
 export type DunningChannel = 'PRINT' | 'MAIL'
+
+/**
+ * What a run may be asked for.
+ *
+ * <p>`AUTO` is a request, never a record: it says «decide per letter» and is resolved
+ * before anything is written. In any real customer list some have a mail address and some
+ * do not, so one channel for a whole run would leave the others unchased (backend
+ * ADR-0095).
+ */
+export type DunningChannelChoice = DunningChannel | 'AUTO'
 
 /**
  * One invoice on an issued reminder, frozen at the moment of issuing.
@@ -2537,4 +2559,9 @@ export type DunningRunResult = {
   issued: DunningNotice[]
   skipped: DunningCandidate[]
   failed: DunningFailure[]
+  /**
+   * Letters that **were** issued but whose mail could not be queued. They stand, numbered
+   * and archived, and have to be printed (backend ADR-0095).
+   */
+  unsent: DunningFailure[]
 }

@@ -5,8 +5,12 @@ import {
   DUNNING_RIGHTS,
   FEE_BOOKINGS,
   FEE_VAT_MODES,
+  DUNNING_CHANNELS,
+  DUNNING_CHANNEL_HINTS,
   DUNNING_SKIP_REASONS,
   activeLevelCount,
+  availableChannels,
+  channelSummary,
   candidateKey,
   configurationProblems,
   dunningLevelLabel,
@@ -15,15 +19,18 @@ import {
   isHighestLevel,
   isWithdrawn,
   narrowedDocumentIds,
+  noticeDispatchLabel,
   runSummary,
   singleInvoiceTokensIn,
 } from './dunning'
 import type {
   DunningCandidate,
+  DunningChannelChoice,
   DunningGrouping,
   DunningLevel,
   DunningNotice,
   DunningPlaceholder,
+  OutboxSummary,
   DunningSkipReason,
 } from './types'
 
@@ -511,3 +518,84 @@ describe('dunningLevelLabel', () => {
     expect(dunningLevelLabel(undefined)).toBeNull()
   })
 })
+
+describe('the channel catalogues', () => {
+  /** Three ways to ask, and each one gets a sentence — a bare code teaches nobody. */
+  it('everyChannelHasAWordAndASentenceTest', () => {
+    const channels: DunningChannelChoice[] = ['AUTO', 'MAIL', 'PRINT']
+    for (const channel of channels) {
+      expect(DUNNING_CHANNELS[channel].length).toBeGreaterThan(0)
+      expect(DUNNING_CHANNEL_HINTS[channel].length).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('availableChannels', () => {
+  it('availableChannelsTest', () => {
+    expect(availableChannels(true)).toEqual(['AUTO', 'MAIL', 'PRINT'])
+  })
+
+  /** Without a working outbox «nur per Mail» would promise what the run cannot do. */
+  it('availableChannelsWithoutAnOutboxTest', () => {
+    expect(availableChannels(false)).toEqual(['PRINT'])
+  })
+})
+
+describe('channelSummary', () => {
+  it('channelSummaryTest', () => {
+    const byMail = candidate({ channel: 'MAIL' })
+    const onPaper = candidate({ partnerId: 43, channel: 'PRINT' })
+
+    expect(channelSummary([byMail, byMail, onPaper])).toBe('2 per Mail, 1 auf Papier')
+  })
+
+  it('channelSummaryOfPaperOnlyTest', () => {
+    expect(channelSummary([candidate({ channel: 'PRINT' })])).toBe('1 auf Papier')
+  })
+
+  it('channelSummaryOfMailOnlyTest', () => {
+    expect(channelSummary([candidate({ channel: 'MAIL' })])).toBe('1 per Mail')
+  })
+
+  /** Nothing to send is «0 auf Papier», not a crash and not an empty string. */
+  it('channelSummaryOfNothingTest', () => {
+    expect(channelSummary([])).toBe('0 auf Papier')
+  })
+})
+
+describe('noticeDispatchLabel', () => {
+  it('noticeDispatchLabelOfAPrintedNoticeTest', () => {
+    expect(noticeDispatchLabel('PRINT', [])).toBe('Gedruckt')
+  })
+
+  it('noticeDispatchLabelOfASentNoticeTest', () => {
+    expect(noticeDispatchLabel('MAIL', [message('SENT')]))
+      .toBe('Gesendet an kunde@example.ch')
+  })
+
+  it('noticeDispatchLabelWhileQueuedTest', () => {
+    expect(noticeDispatchLabel('MAIL', [message('QUEUED')])).toBe('Wartet im Postausgang')
+  })
+
+  it('noticeDispatchLabelAfterAFailureTest', () => {
+    expect(noticeDispatchLabel('MAIL', [message('FAILED')])).toBe('Versand fehlgeschlagen')
+  })
+
+  /** Meant for mail but nothing in the outbox: it was issued and has to be printed. */
+  it('noticeDispatchLabelWithoutAnyMessageTest', () => {
+    expect(noticeDispatchLabel('MAIL', []))
+      .toBe('Kein Versand protokolliert — bitte drucken')
+  })
+})
+
+function message(status: OutboxSummary['status']): OutboxSummary {
+  return {
+    id: 1,
+    status,
+    recipients: 'kunde@example.ch',
+    subject: 'Zahlungserinnerung MA-2026-0001',
+    attempts: 1,
+    sentAt: status === 'SENT' ? '2026-08-29T07:00:00Z' : undefined,
+    createdAt: '2026-08-29T07:00:00Z',
+  }
+}
