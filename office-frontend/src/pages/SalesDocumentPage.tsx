@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { GitBranch, Mail } from 'lucide-react'
+import { BellRing, GitBranch, Mail } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
@@ -24,6 +24,7 @@ import {
   stockIssueNotice,
   stockReversalLabel,
 } from '../lib/inventory'
+import { dunningLevelLabel, fetchDunningStates } from '../lib/dunning'
 import { openByLineId, openByLineNumber } from '../lib/openQuantity'
 import { runsModule } from '../lib/modules'
 import { originOf, originState } from '../lib/origin'
@@ -69,6 +70,7 @@ import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
 import { DocumentChainPanel } from './document/DocumentChainPanel'
 import { DocumentPrintouts } from './document/DocumentPrintouts'
 import { OfferReminders } from './document/OfferReminders'
+import { DocumentDunningPanel } from './document/DocumentDunningPanel'
 import { DocumentReceivablePanel } from './document/DocumentReceivablePanel'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
@@ -85,7 +87,7 @@ import {
 } from './document/lineForm'
 
 /** The two registers of a mask whose kind is followed up (ADR-0010). */
-type DocumentTab = 'beleg' | 'nachfassen' | 'zahlungen' | 'zusammenhaenge'
+type DocumentTab = 'beleg' | 'nachfassen' | 'zahlungen' | 'mahnungen' | 'zusammenhaenge'
 
 /**
  * Reads the register a link asked the mask to open on.
@@ -225,6 +227,7 @@ function DocumentMask({
   const activeTab: DocumentTab =
     (tab === 'nachfassen' && !kind.tracking)
       || (tab === 'zahlungen' && (!kind.receivable || document.status === 'DRAFT'))
+      || (tab === 'mahnungen' && (!kind.receivable || document.status === 'DRAFT'))
       ? 'beleg'
       : tab
 
@@ -484,6 +487,16 @@ function DocumentMask({
   })
   const dispatchLine = dispatchNote(dispatched.data ?? [])
 
+  // How far this Rechnung has been chased. Asked for the one document rather than read from
+  // a column: the dunning level lives in another module's table, and no module reads
+  // another's (backend ADR-0096).
+  const dunning = useQuery({
+    queryKey: ['dunning-states', tenantId, document.id],
+    queryFn: () => fetchDunningStates(tenantId, [document.id]),
+    enabled: kind.receivable && document.status !== 'DRAFT' && can('DUNNING_READ'),
+  })
+  const dunningLine = dunningLevelLabel(dunning.data?.[0])
+
   // A draft renders on the spot and comes back with a watermark; an issued document hands out
   // the PDF that was archived when it was issued, so a reprint is the same document.
   const print = useMutation({
@@ -590,6 +603,19 @@ function DocumentMask({
                 <Mail size={13} aria-hidden />
                 {dispatchLine.text}
               </Link>
+            )}
+            {/* How far it has been chased. Beside the status because it is the same kind of
+                fact, and a button, because what stands behind it — which letters went out,
+                and whether one was withdrawn — is the register. */}
+            {dunningLine !== null && (
+              <button
+                type="button"
+                onClick={() => setTab('mahnungen')}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[12px] text-text-primary transition-colors hover:text-accent-text"
+              >
+                <BellRing size={13} aria-hidden />
+                {dunningLine}
+              </button>
             )}
           </span>
         }
@@ -756,6 +782,12 @@ function DocumentMask({
                owes nothing, and a register that answered 400 would be a dead end. */
             ...(kind.receivable && document.status !== 'DRAFT'
               ? [{ id: 'zahlungen' as const, label: 'Zahlungen' }]
+              : []),
+            /* No module switch on the register: an issued reminder is business
+               correspondence with a ten-year retention and stays readable even when the
+               tenant switches the dunning off (backend ADR-0092). */
+            ...(kind.receivable && document.status !== 'DRAFT' && can('DUNNING_READ')
+              ? [{ id: 'mahnungen' as const, label: 'Mahnungen' }]
               : []),
             { id: 'zusammenhaenge', label: 'Zusammenhänge' },
           ]}
@@ -931,6 +963,16 @@ function DocumentMask({
             documentId={document.id}
             currency={document.currency}
             mayRecord={can('INVOICE_PAYMENT_RECORD')}
+          />
+        )}
+
+        {kind.receivable && activeTab === 'mahnungen' && (
+          <DocumentDunningPanel
+            tenantId={tenantId}
+            documentId={document.id}
+            documentNumber={document.documentNumber}
+            mayIssue={can('DUNNING_RUN')}
+            mayWithdraw={can('DUNNING_WITHDRAW')}
           />
         )}
 

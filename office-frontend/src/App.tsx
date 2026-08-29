@@ -46,6 +46,7 @@ const ProductFreeFieldPage = lazy(() => import('./pages/ProductFreeFieldPage').t
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 const DunningSettingsPage = lazy(() => import('./pages/DunningSettingsPage').then((module) => ({ default: module.DunningSettingsPage })))
 const DunningLevelPage = lazy(() => import('./pages/DunningLevelPage').then((module) => ({ default: module.DunningLevelPage })))
+const DunningNoticePage = lazy(() => import('./pages/DunningNoticePage').then((module) => ({ default: module.DunningNoticePage })))
 const DunningTextPage = lazy(() => import('./pages/DunningTextPage').then((module) => ({ default: module.DunningTextPage })))
 const DunningWorklistPage = lazy(() => import('./pages/DunningWorklistPage').then((module) => ({ default: module.DunningWorklistPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
@@ -177,6 +178,7 @@ export default function App() {
                 <Route path="/mahnstufen" element={<DunningLevelPage />} />
                 <Route path="/mahntexte" element={<DunningTextPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
+                <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/profil" element={<ProfilePage />} />
               </Route>
 

@@ -2462,3 +2462,79 @@ export type DunningState = {
   level: number
   lastIssuedOn?: string
 }
+
+/** How an issued reminder reached the customer. Today always on paper. */
+export type DunningChannel = 'PRINT' | 'MAIL'
+
+/**
+ * One invoice on an issued reminder, frozen at the moment of issuing.
+ *
+ * <p>`openAmount` is what was owed **then**, not today: the letter is with the customer and
+ * has to stay readable as it went out (backend ADR-0094).
+ */
+export type DunningNoticeLine = {
+  documentId: number
+  documentNumber?: string
+  documentDate: string
+  dueDate?: string
+  daysOverdue: number
+  totalGross: number
+  settledAmount: number
+  openAmount: number
+}
+
+/**
+ * One issued reminder: a letter with a gapless number and an archived PDF.
+ *
+ * <p>A collective reminder over three invoices is **one** notice with three lines and one
+ * number, not three notices.
+ */
+export type DunningNotice = {
+  id: number
+  /** The run it belongs to, absent for one issued on its own. */
+  runId?: number
+  noticeNumber: string
+  fiscalYear: number
+  issuedAt: string
+  /** The day it was issued — from the server clock, never from the cut-off. */
+  issuedOn: string
+  payableUntil?: string
+  partnerId: number
+  recipientName: string
+  languageCode: string
+  currency: string
+  levelNo: number
+  levelName?: string
+  /** The printed title, frozen as it went out. */
+  levelTitle: string
+  feeAmount: number
+  totalOpenAmount: number
+  channel: DunningChannel
+  /** Set once it was taken back. A withdrawn reminder is never deleted. */
+  withdrawnAt?: string
+  withdrawnBy?: string
+  withdrawnReason?: string
+  lines: DunningNoticeLine[]
+}
+
+/** One letter the rule allowed but that could not be written. */
+export type DunningFailure = {
+  partnerId: number
+  levelNo: number
+  documentIds: number[]
+  message: string
+}
+
+/**
+ * What one dunning run produced.
+ *
+ * <p>`failed` is not the same as `skipped`: a skipped case was never meant to go out, a
+ * failed one was — and every failure stayed with its own letter, the ones before it are
+ * issued (backend ADR-0094).
+ */
+export type DunningRunResult = {
+  runId?: number
+  issued: DunningNotice[]
+  skipped: DunningCandidate[]
+  failed: DunningFailure[]
+}

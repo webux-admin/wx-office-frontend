@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BellRing,
+  MailWarning,
   ListOrdered,
   Blocks,
   BookmarkCheck,
@@ -62,6 +63,7 @@ import {
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
   DUNNING_TEXTS_PATH,
+  DUNNING_NOTICES_PATH,
   DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
 import { salesDocumentFor } from '../lib/salesDocument'
@@ -210,6 +212,15 @@ export const NAV_GROUPS: NavGroup[] = [
         href: DUNNING_WORKLIST_PATH,
         permission: DUNNING_RIGHTS.read,
         module: DUNNING_MODULE,
+      },
+      // What went out, after what would go out. Without the module switch: an issued
+      // reminder is business correspondence with a ten-year retention, and a switch
+      // must not hide it (backend ADR-0092).
+      {
+        label: 'Mahnungen',
+        icon: MailWarning,
+        href: DUNNING_NOTICES_PATH,
+        permission: DUNNING_RIGHTS.read,
       },
     ],
   },

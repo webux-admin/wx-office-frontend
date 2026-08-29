@@ -9,15 +9,20 @@ import {
   activeLevelCount,
   candidateKey,
   configurationProblems,
+  dunningLevelLabel,
   escalationProblem,
   insertPlaceholder,
   isHighestLevel,
+  isWithdrawn,
+  narrowedDocumentIds,
+  runSummary,
   singleInvoiceTokensIn,
 } from './dunning'
 import type {
   DunningCandidate,
   DunningGrouping,
   DunningLevel,
+  DunningNotice,
   DunningPlaceholder,
   DunningSkipReason,
 } from './types'
@@ -174,13 +179,14 @@ describe('the catalogues', () => {
     expect(Object.keys(FEE_VAT_MODES)).toHaveLength(3)
   })
 
-  /** Four rights, and `run` among them although no screen uses it yet. */
-  it('theFourRightsTest', () => {
+  /** Five rights: issuing and withdrawing are deliberately not the same one. */
+  it('theRightsTest', () => {
     expect(Object.values(DUNNING_RIGHTS)).toEqual([
       'DUNNING_READ',
       'DUNNING_WRITE',
       'DUNNING_CONFIGURE',
       'DUNNING_RUN',
+      'DUNNING_WITHDRAW',
     ])
   })
 })
@@ -384,5 +390,124 @@ describe('the skip reasons', () => {
       expect(DUNNING_SKIP_REASONS[reason]).toBeTruthy()
     }
     expect(Object.keys(DUNNING_SKIP_REASONS)).toHaveLength(reasons.length)
+  })
+})
+
+/** One issued reminder, with only the parts these functions look at spelled out. */
+function notice(overrides: Partial<DunningNotice> = {}): DunningNotice {
+  return {
+    id: 3,
+    noticeNumber: 'MA-2026-0001',
+    fiscalYear: 2026,
+    issuedAt: '2026-08-29T07:00:00Z',
+    issuedOn: '2026-08-29',
+    payableUntil: '2026-09-08',
+    partnerId: 42,
+    recipientName: 'Muster AG',
+    languageCode: 'de',
+    currency: 'CHF',
+    levelNo: 1,
+    levelName: 'Zahlungserinnerung',
+    levelTitle: 'Zahlungserinnerung',
+    feeAmount: 0,
+    totalOpenAmount: 1250,
+    channel: 'PRINT',
+    lines: [
+      {
+        documentId: 7,
+        documentNumber: 'RE-2026-0007',
+        documentDate: '2026-06-12',
+        dueDate: '2026-07-12',
+        daysOverdue: 48,
+        totalGross: 1250,
+        settledAmount: 0,
+        openAmount: 1250,
+      },
+    ],
+    ...overrides,
+  }
+}
+
+describe('narrowedDocumentIds', () => {
+  it('narrowedDocumentIdsTest', () => {
+    const collective = candidate({
+      invoices: [
+        { ...candidate().invoices[0], documentId: 7 },
+        { ...candidate().invoices[0], documentId: 9 },
+      ],
+    })
+
+    expect(narrowedDocumentIds([collective])).toEqual([7, 9])
+  })
+
+  /** All invoices of a letter travel together — never some of them. */
+  it('narrowedDocumentIdsOfSeveralLettersTest', () => {
+    const other = candidate({
+      partnerId: 43,
+      invoices: [{ ...candidate().invoices[0], documentId: 11 }],
+    })
+
+    expect(narrowedDocumentIds([candidate(), other])).toEqual([7, 11])
+  })
+
+  /** The same invoice can only be in one letter, but a duplicate must not double it. */
+  it('narrowedDocumentIdsWithoutDuplicatesTest', () => {
+    expect(narrowedDocumentIds([candidate(), candidate()])).toEqual([7])
+  })
+
+  it('narrowedDocumentIdsOfNothingTest', () => {
+    expect(narrowedDocumentIds([])).toEqual([])
+  })
+})
+
+describe('runSummary', () => {
+  /** Letters and invoices are two numbers as soon as the tenant chases per customer. */
+  it('runSummaryTest', () => {
+    const collective = candidate({
+      invoices: [
+        { ...candidate().invoices[0], documentId: 7 },
+        { ...candidate().invoices[0], documentId: 9 },
+        { ...candidate().invoices[0], documentId: 11 },
+      ],
+    })
+    const other = candidate({
+      partnerId: 43,
+      invoices: [{ ...candidate().invoices[0], documentId: 13 }],
+    })
+
+    expect(runSummary([collective, other])).toBe('2 Mahnungen über 4 Rechnungen')
+  })
+
+  it('runSummaryOfOneLetterTest', () => {
+    expect(runSummary([candidate()])).toBe('1 Mahnung über 1 Rechnung')
+  })
+
+  it('runSummaryOfNothingTest', () => {
+    expect(runSummary([])).toBe('0 Mahnungen über 0 Rechnungen')
+  })
+})
+
+describe('isWithdrawn', () => {
+  it('isWithdrawnTest', () => {
+    expect(isWithdrawn(notice({ withdrawnAt: '2026-08-30T07:00:00Z' }))).toBe(true)
+  })
+
+  it('isWithdrawnOfAStandingNoticeTest', () => {
+    expect(isWithdrawn(notice())).toBe(false)
+  })
+})
+
+describe('dunningLevelLabel', () => {
+  it('dunningLevelLabelTest', () => {
+    expect(dunningLevelLabel({ documentId: 7, level: 2 })).toBe('2. Mahnung')
+  })
+
+  /** Level 0 shows nothing at all — an invoice that was never chased says so by silence. */
+  it('dunningLevelLabelOfAnUnchasedInvoiceTest', () => {
+    expect(dunningLevelLabel({ documentId: 7, level: 0 })).toBeNull()
+  })
+
+  it('dunningLevelLabelWhileLoadingTest', () => {
+    expect(dunningLevelLabel(undefined)).toBeNull()
   })
 })

@@ -1,6 +1,9 @@
 import { api } from './api'
+import type { ApiFile } from './api'
 import type {
   DunningGrouping,
+  DunningNotice,
+  DunningRunResult,
   DunningLevel,
   DunningPlaceholder,
   DunningSettings,
@@ -33,16 +36,18 @@ export const DUNNING_SETTINGS_PATH = '/mahnwesen-einstellungen'
 export const DUNNING_LEVELS_PATH = '/mahnstufen'
 
 /**
- * The four rights of the module.
+ * The five rights of the module.
  *
- * <p>`run` is not used by these screens — issuing a reminder arrives with issue 5/9. It stands
- * here so the whole set is in one place and nobody invents a fifth spelling later.
+ * <p>`run` and `withdraw` are deliberately not the same right: chasing a customer and
+ * declaring a letter they already read invalid are different responsibilities (backend
+ * ADR-0094).
  */
 export const DUNNING_RIGHTS = {
   read: 'DUNNING_READ',
   write: 'DUNNING_WRITE',
   configure: 'DUNNING_CONFIGURE',
   run: 'DUNNING_RUN',
+  withdraw: 'DUNNING_WITHDRAW',
 } as const
 
 /** What each grouping is called on screen. */
@@ -450,4 +455,152 @@ export function configurationProblems(candidates: DunningCandidate[]): DunningSk
 export function candidateKey(candidate: DunningCandidate): string {
   const documents = candidate.invoices.map((invoice) => invoice.documentId).join('-')
   return `${candidate.partnerId}|${candidate.levelNo}|${candidate.languageCode}|${documents}`
+}
+
+/** Path of the issued reminders within the application. */
+export const DUNNING_NOTICES_PATH = '/mahnungen'
+
+/** Where the issued reminders of one tenant are cached. */
+export function dunningNoticesKey(
+  tenantId: number | null,
+  documentId?: number,
+): readonly unknown[] {
+  return ['dunning-notices', tenantId, documentId ?? 'all']
+}
+
+/** What the run dialog sends. */
+export type DunningRunBody = {
+  /** The business cut-off. **Not** the issuing date — that always comes from the clock. */
+  referenceDate?: string
+  /** Narrows the run to the letters whose invoices are all named here. */
+  documentIds?: number[]
+}
+
+/**
+ * Issues reminders.
+ *
+ * <p><b>The server decides what goes out, this only narrows it.</b> A selection made in the
+ * browser and applied minutes later would chase a customer who paid in between, so the
+ * proposal is worked out again on the server and the ids merely restrict it (backend
+ * ADR-0094).
+ */
+export function runDunning(
+  tenantId: number,
+  body: DunningRunBody,
+): Promise<DunningRunResult> {
+  return api.post<DunningRunResult>(`/api/tenants/${tenantId}/dunning/run`, body)
+}
+
+/** Issues the one reminder that covers a given invoice. */
+export function issueDunningForInvoice(
+  tenantId: number,
+  documentId: number,
+  asOf?: string,
+): Promise<DunningRunResult> {
+  const query = asOf === undefined ? '' : `?asOf=${asOf}`
+  return api.post<DunningRunResult>(
+    `/api/tenants/${tenantId}/dunning/notices/for-invoice/${documentId}${query}`,
+  )
+}
+
+/**
+ * Takes an issued reminder back.
+ *
+ * <p>Nothing is deleted: the letter and its PDF stay, only its effect on the dunning level
+ * is undone. A reason is compulsory.
+ */
+export function withdrawDunningNotice(
+  tenantId: number,
+  noticeId: number,
+  reason: string,
+): Promise<DunningNotice> {
+  return api.post<DunningNotice>(
+    `/api/tenants/${tenantId}/dunning/notices/${noticeId}/withdraw`,
+    { reason },
+  )
+}
+
+/**
+ * The issued reminders, newest first.
+ *
+ * @param documentId only the reminders naming this invoice; omit for all of them
+ */
+export function fetchDunningNotices(
+  tenantId: number,
+  documentId?: number,
+): Promise<DunningNotice[]> {
+  const query = documentId === undefined ? '' : `?documentId=${documentId}`
+  return api.get<DunningNotice[]>(`/api/tenants/${tenantId}/dunning/notices${query}`)
+}
+
+/** The archived PDF of one reminder — the same bytes that went out. */
+export function fetchDunningNoticePdf(
+  tenantId: number,
+  noticeId: number,
+): Promise<ApiFile> {
+  return api.file(`/api/tenants/${tenantId}/dunning/notices/${noticeId}/pdf`)
+}
+
+/**
+ * Every letter of one run as a single PDF.
+ *
+ * <p>One document, not nine downloads: what comes out of a run is a stack that goes into
+ * envelopes.
+ */
+export function fetchDunningRunPdf(tenantId: number, runId: number): Promise<ApiFile> {
+  return api.file(`/api/tenants/${tenantId}/dunning/runs/${runId}/pdf`)
+}
+
+/**
+ * The document ids a narrowed run has to name for the given letters.
+ *
+ * <p><b>All invoices of a letter, never some.</b> The server issues a letter only when every
+ * one of its invoices is named — «two of the three invoices of this letter» has no meaning.
+ *
+ * @param candidates the letters that are ticked
+ * @returns their invoice ids, without duplicates
+ */
+export function narrowedDocumentIds(candidates: DunningCandidate[]): number[] {
+  const ids = new Set<number>()
+  for (const candidate of candidates) {
+    for (const invoice of candidate.invoices) ids.add(invoice.documentId)
+  }
+  return [...ids]
+}
+
+/**
+ * What the confirmation before a run says.
+ *
+ * <p>Letters and invoices are two different numbers as soon as the tenant chases per
+ * customer, and a dialog that names only one of them is the dialog that gets clicked away.
+ *
+ * @param candidates the letters that would go out
+ */
+export function runSummary(candidates: DunningCandidate[]): string {
+  const letters = candidates.length
+  const invoices = narrowedDocumentIds(candidates).length
+  const lettersText = letters === 1 ? '1 Mahnung' : `${letters} Mahnungen`
+  const invoicesText = invoices === 1 ? '1 Rechnung' : `${invoices} Rechnungen`
+  return `${lettersText} über ${invoicesText}`
+}
+
+/**
+ * Whether a reminder still stands.
+ *
+ * <p>Its own function because «withdrawn» is the one thing that decides whether a row is
+ * struck through and whether the dunning level still counts it.
+ */
+export function isWithdrawn(notice: DunningNotice): boolean {
+  return notice.withdrawnAt !== undefined
+}
+
+/**
+ * How a dunning level reads beside an invoice.
+ *
+ * @param state what the server answered for that invoice, `undefined` while it is loading
+ * @returns the label, or `null` where nothing should be shown at all
+ */
+export function dunningLevelLabel(state: DunningState | undefined): string | null {
+  if (state === undefined || state.level === 0) return null
+  return `${state.level}. Mahnung`
 }

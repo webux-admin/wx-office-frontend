@@ -1,31 +1,41 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '../components/Badge'
+import { Button } from '../components/Button'
+import { CheckboxField } from '../components/CheckboxField'
+import { Dialog } from '../components/Dialog'
 import { EmptyState, ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
 import {
+  DUNNING_NOTICES_PATH,
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
   DUNNING_SKIP_REASONS,
   candidateKey,
   configurationProblems,
   dunningWorklistKey,
+  fetchDunningRunPdf,
   fetchDunningWorklist,
+  narrowedDocumentIds,
+  runDunning,
+  runSummary,
 } from '../lib/dunning'
+import { showFile } from '../lib/files'
+import { useAuth } from '../auth/useAuth'
 import { formatAmount, formatDate, toIsoDate } from '../lib/format'
-import type { DunningCandidate } from '../lib/types'
+import type { DunningCandidate, DunningRunResult } from '../lib/types'
 
 /**
  * Which reminders would go out today, and why the rest would not.
  *
- * <p><b>Nothing is issued here.</b> The proposal is a query; sending is a deliberate release
- * with a right of its own, and it arrives with the next issue. With payments entered by hand
- * the data is only as fresh as the last entry, and an automatic run would chase customers who
- * paid yesterday (backend ADR-0096).
+ * <p><b>Nothing goes out on its own.</b> The proposal is a query; issuing is a deliberate
+ * release with a right of its own. With payments entered by hand the data is only as fresh as
+ * the last entry, and an automatic run would chase customers who paid yesterday (backend
+ * ADR-0096).
  *
  * <p>One row is <b>one letter</b>, never one invoice: in collective mode a row opens to the
  * invoices it covers. Selecting invoices and getting letters would mean two different numbers
@@ -44,6 +54,13 @@ function Worklist({ tenantId }: { tenantId: number }) {
   // for what falls due later, because that would only make the list longer.
   const [asOf, setAsOf] = useState(() => toIsoDate())
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  // Ticked letters, by the key that identifies one. Whole letters only — «zwei der drei
+  // Rechnungen desselben Briefs» has no meaning (backend ADR-0096).
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
+  const [confirming, setConfirming] = useState(false)
+  const [result, setResult] = useState<DunningRunResult | null>(null)
+  const queryClient = useQueryClient()
+  const { can } = useAuth()
 
   const worklist = useQuery({
     queryKey: dunningWorklistKey(tenantId, asOf),
@@ -56,6 +73,36 @@ function Worklist({ tenantId }: { tenantId: number }) {
   const problems = configurationProblems(candidates)
 
   const toggle = (key: string) => setOpen({ ...open, [key]: open[key] !== true })
+  const pick = (key: string) => setPicked({ ...picked, [key]: picked[key] !== true })
+
+  // Nothing ticked means «alles, was die Regel zulässt» — the ordinary case, and one click
+  // less than ticking every row first.
+  const chosen = sending.filter((candidate) => picked[candidateKey(candidate)] === true)
+  const wanted = chosen.length === 0 ? sending : chosen
+  const mayRun = can(DUNNING_RIGHTS.run)
+
+  const issue = useMutation({
+    mutationFn: () =>
+      runDunning(tenantId, {
+        referenceDate: asOf,
+        // Only when a choice was made: an empty list means «everything», and sending the
+        // ids of every row would freeze a decision the server is about to take again.
+        documentIds: chosen.length === 0 ? undefined : narrowedDocumentIds(chosen),
+      }),
+    onSuccess: (answer) => {
+      setConfirming(false)
+      setPicked({})
+      setResult(answer)
+      void queryClient.invalidateQueries({ queryKey: ['dunning-worklist'] })
+      void queryClient.invalidateQueries({ queryKey: ['dunning-notices'] })
+      void queryClient.invalidateQueries({ queryKey: ['dunning-states'] })
+    },
+  })
+
+  const openRunPdf = useMutation({
+    mutationFn: (runId: number) => fetchDunningRunPdf(tenantId, runId),
+    onSuccess: showFile,
+  })
 
   return (
     <>
@@ -73,10 +120,27 @@ function Worklist({ tenantId }: { tenantId: number }) {
           value={asOf}
           onChange={(event) => setAsOf(event.target.value)}
         />
+        {mayRun && (
+          <Button onClick={() => setConfirming(true)} disabled={sending.length === 0}>
+            {chosen.length === 0
+              ? 'Alle mahnen'
+              : `${chosen.length === 1 ? '1 Brief' : `${chosen.length} Briefe`} mahnen`}
+          </Button>
+        )}
       </PageHeader>
 
       <div className="grid gap-6 px-8 pb-12">
         {worklist.error !== null && <ErrorNotice error={worklist.error} />}
+        {openRunPdf.error !== null && <ErrorNotice error={openRunPdf.error} />}
+
+        {result !== null && (
+          <RunResult
+            result={result}
+            onPrint={(runId) => openRunPdf.mutate(runId)}
+            printing={openRunPdf.isPending}
+            onDismiss={() => setResult(null)}
+          />
+        )}
 
         {problems.length > 0 && (
           <Panel title="Die Einstellungen sind unvollständig">
@@ -120,6 +184,8 @@ function Worklist({ tenantId }: { tenantId: number }) {
               candidates={sending}
               open={open}
               onToggle={toggle}
+              picked={mayRun ? picked : undefined}
+              onPick={mayRun ? pick : undefined}
             />
           )}
         </Panel>
@@ -134,7 +200,115 @@ function Worklist({ tenantId }: { tenantId: number }) {
           </Panel>
         )}
       </div>
+
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        onSubmit={() => issue.mutate()}
+        title="Mahnungen ausstellen"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={() => issue.mutate()} disabled={issue.isPending}>
+              {issue.isPending ? 'Wird ausgestellt ...' : 'Ausstellen'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-3 text-[13px]">
+          <p>
+            Es gehen <strong>{runSummary(wanted)}</strong> hinaus. Jede bekommt eine
+            lückenlose Nummer und wird archiviert — zurückholen lässt sie sich nicht.
+          </p>
+          <p className="text-text-secondary">
+            Stichtag {formatDate(asOf)}. Das Ausstellungsdatum ist der heutige Tag: ein
+            nummerierter Beleg darf nicht rückdatiert werden.
+          </p>
+          <p className="text-text-secondary">
+            Was tatsächlich hinausgeht, entscheidet der Server im Moment des Ausstellens
+            neu. Eine Rechnung, die inzwischen bezahlt wurde, wird nicht gemahnt.
+          </p>
+          {issue.error !== null && <ErrorNotice error={issue.error} />}
+        </div>
+      </Dialog>
     </>
+  )
+}
+
+/**
+ * What a run produced, right where it was started.
+ *
+ * <p><b>One PDF, not nine downloads.</b> What comes out of a run is a stack of letters that
+ * goes into envelopes; handing it over as one file per letter would leave the paper way
+ * unfinished (backend ADR-0094).
+ */
+function RunResult({
+  result,
+  onPrint,
+  printing,
+  onDismiss,
+}: {
+  result: DunningRunResult
+  onPrint: (runId: number) => void
+  printing: boolean
+  onDismiss: () => void
+}) {
+  const issued = result.issued.length
+  return (
+    <Panel
+      title={issued === 0 ? 'Es ging nichts hinaus' : `${issued} Mahnungen ausgestellt`}
+      description={
+        issued === 0
+          ? undefined
+          : 'Alle Briefe dieses Laufs als ein PDF — zum Drucken und Kuvertieren.'
+      }
+      action={
+        <div className="flex gap-2">
+          {issued > 0 && result.runId !== undefined && (
+            <Button onClick={() => onPrint(result.runId as number)} disabled={printing}>
+              {printing ? 'Wird geholt ...' : 'Sammel-PDF'}
+            </Button>
+          )}
+          <a
+            className="self-center text-[13px] text-accent-text"
+            href={DUNNING_NOTICES_PATH}
+          >
+            Alle Mahnungen
+          </a>
+          <Button variant="ghost" onClick={onDismiss}>
+            Schliessen
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid gap-2 text-[13px]">
+        {result.issued.map((notice) => (
+          <div key={notice.id} className="flex gap-2">
+            <span className="font-mono text-[12px]">{notice.noticeNumber}</span>
+            <span>{notice.recipientName}</span>
+            <span className="text-text-tertiary">
+              {notice.levelName ?? `Stufe ${notice.levelNo}`}
+              {notice.lines.length > 1 && ` · ${notice.lines.length} Rechnungen`}
+            </span>
+          </div>
+        ))}
+        {result.failed.length > 0 && (
+          <div className="grid gap-1">
+            <p className="font-medium">Nicht ausgestellt</p>
+            {result.failed.map((failure) => (
+              <p key={`${failure.partnerId}-${failure.levelNo}`} className="text-text-secondary">
+                {failure.message}
+              </p>
+            ))}
+            <p className="text-[12px] text-text-tertiary">
+              Jeder Fehler blieb bei seinem Brief — die davor sind ausgestellt und bleiben es.
+            </p>
+          </div>
+        )}
+      </div>
+    </Panel>
   )
 }
 
@@ -142,18 +316,25 @@ function CandidateTable({
   candidates,
   open,
   onToggle,
+  picked,
+  onPick,
   skipped = false,
 }: {
   candidates: DunningCandidate[]
   open: Record<string, boolean>
   onToggle: (key: string) => void
+  /** Ticked letters; absent where the user may not issue anything. */
+  picked?: Record<string, boolean>
+  onPick?: (key: string) => void
   skipped?: boolean
 }) {
+  const selectable = picked !== undefined && onPick !== undefined
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left text-[12px] text-text-tertiary">
+            {selectable && <th className="w-[36px] py-2 pl-4" />}
             <th className="w-[36px] py-2 pl-4" />
             <th className="py-2 pr-4 font-medium">Kunde</th>
             <th className="py-2 pr-4 font-medium">{skipped ? 'Grund' : 'Stufe'}</th>
@@ -171,6 +352,16 @@ function CandidateTable({
             return (
               <>
                 <tr key={key}>
+                  {selectable && (
+                    <td className="py-2 pl-4">
+                      <CheckboxField
+                        label=""
+                        checked={picked[key] === true}
+                        onChange={() => onPick(key)}
+                        aria-label={`${candidate.partnerName ?? `Kunde ${candidate.partnerId}`} mahnen`}
+                      />
+                    </td>
+                  )}
                   <td className="py-2 pl-4">
                     {expandable && (
                       <button
@@ -221,6 +412,7 @@ function CandidateTable({
                 {expanded
                   && candidate.invoices.map((invoice) => (
                     <tr key={`${key}-${invoice.documentId}`} className="text-text-secondary">
+                      {selectable && <td />}
                       <td />
                       <td className="py-1.5 pr-4 pl-4 font-mono text-[12px]">
                         {invoice.documentNumber}
