@@ -18,6 +18,7 @@ import {
   FileText,
   FileType2,
   Globe,
+  Eraser,
   HandCoins,
   Hash,
   Languages,
@@ -44,6 +45,7 @@ import {
   UserCog,
   UserRound,
   Users,
+  Wallet,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react'
@@ -51,6 +53,7 @@ import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { SECURITY_PATH } from '../lib/loginPolicy'
 import { MODULE_PATH, MODULE_RIGHTS } from '../lib/modules'
+import { OPEN_ITEM_PATH, OPEN_ITEM_RIGHTS, WRITE_OFF_RUN_PATH } from '../lib/openItem'
 import {
   MAIL_TEMPLATE_PATH,
   OUTBOX_ACCOUNT_PATH,
@@ -205,6 +208,23 @@ export const NAV_GROUPS: NavGroup[] = [
       salesEntry('ORDER', ClipboardList),
       salesEntry('DELIVERY_NOTE', PackageCheck),
       salesEntry('INVOICE', ReceiptText),
+      // Straight after the invoice: «was ist noch offen» is the next question after «was
+      // haben wir geschrieben», and it is asked every day. Without a module switch — the
+      // open item hangs on `document` and there is nothing to switch off (backend ADR-0091).
+      {
+        label: 'Offene Posten',
+        icon: Wallet,
+        href: OPEN_ITEM_PATH,
+        permission: OPEN_ITEM_RIGHTS.read,
+      },
+      // And below it what is done with the small ones. Its own entry rather than a button on
+      // the list: a run over a whole page is a piece of work, not a detail of a list.
+      {
+        label: 'Kleindifferenzen',
+        icon: Eraser,
+        href: WRITE_OFF_RUN_PATH,
+        permission: OPEN_ITEM_RIGHTS.read,
+      },
       // After the invoice, because that is where it follows on: what was billed and not
       // paid. Here and not under Moduleinstellungen — chasing money is daily work, the
       // setup of the dunning is not (backend ADR-0096).

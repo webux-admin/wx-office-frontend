@@ -66,24 +66,53 @@ describe('stillCounts', () => {
 })
 
 describe('the kind catalogue', () => {
-  /** The picker offers every kind, or one of them could never be chosen. */
-  it('paymentKindOrderCoversEveryKindTest', () => {
+  /**
+   * Every kind has a name, or a settlement line would show up unnamed.
+   *
+   * <p>The picker is a shorter list than the catalogue and has to stay one: the three kinds
+   * a write-off produces — Bankspesen, Kursdifferenz and eine einbehaltene Überzahlung —
+   * arise from the write-off dialog and never from recording a payment (backend ADR-0101).
+   */
+  it('paymentKindsNameEveryKindTest', () => {
     const named = Object.keys(PAYMENT_KINDS) as PaymentKind[]
 
-    expect([...PAYMENT_KIND_ORDER].sort()).toEqual([...named].sort())
+    for (const kind of PAYMENT_KIND_ORDER) expect(named).toContain(kind)
+    expect(named).toContain('BANK_CHARGE')
+    expect(named).toContain('EXCHANGE_DIFFERENCE')
+    expect(named).toContain('OVERPAYMENT_KEPT')
+  })
+
+  it('paymentKindOrderLeavesTheWriteOffKindsOutTest', () => {
+    expect(PAYMENT_KIND_ORDER).not.toContain('BANK_CHARGE')
+    expect(PAYMENT_KIND_ORDER).not.toContain('EXCHANGE_DIFFERENCE')
+    expect(PAYMENT_KIND_ORDER).not.toContain('OVERPAYMENT_KEPT')
   })
 
   it('paymentKindOrderStartsWithTheEverydayCaseTest', () => {
     expect(PAYMENT_KIND_ORDER[0]).toBe('PAYMENT')
   })
 
-  /** The three that carry a VAT consequence this application does not book. */
+  /**
+   * The kinds that carry a VAT consequence under MWSTG Art. 41.
+   *
+   * <p>`ROUNDING` is among them since the write-off was built: Swiss law knows no statutory
+   * threshold in francs, and a later exemption removes rows while a correction caught up
+   * afterwards has to invent them (backend ADR-0101).
+   */
   it('reducesConsiderationTest', () => {
-    expect([...REDUCES_CONSIDERATION].sort()).toEqual(['CREDIT', 'DISCOUNT', 'WRITE_OFF'])
+    expect([...REDUCES_CONSIDERATION].sort()).toEqual([
+      'CREDIT',
+      'DISCOUNT',
+      'OVERPAYMENT_KEPT',
+      'ROUNDING',
+      'WRITE_OFF',
+    ])
   })
 
-  it('reducesConsiderationExcludesMoneyAndRoundingTest', () => {
+  /** Money that arrived, and the two that close the item without touching the price. */
+  it('reducesConsiderationExcludesMoneyAndFeesTest', () => {
     expect(REDUCES_CONSIDERATION).not.toContain('PAYMENT')
-    expect(REDUCES_CONSIDERATION).not.toContain('ROUNDING')
+    expect(REDUCES_CONSIDERATION).not.toContain('BANK_CHARGE')
+    expect(REDUCES_CONSIDERATION).not.toContain('EXCHANGE_DIFFERENCE')
   })
 })

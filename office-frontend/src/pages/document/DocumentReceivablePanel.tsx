@@ -18,7 +18,9 @@ import {
   recordPayment,
   reversePayment,
 } from '../../lib/receivable'
+import { openItemsKey } from '../../lib/openItem'
 import { receivableKey, salesDocumentListKey } from '../../lib/salesDocument'
+import { WriteOffDialog } from '../openitem/WriteOffDialog'
 import type { SalesDocumentKind } from '../../lib/salesDocument'
 import type { Payment, PaymentKind } from '../../lib/types'
 
@@ -52,7 +54,13 @@ function proposedForm(open: number | undefined): PaymentForm {
  * booking that leaves both readable — the database refuses the other way round anyway, so an
  * edit button would only produce an error one layer down.
  *
- * @param mayRecord whether the user holds `INVOICE_PAYMENT_RECORD`
+ * <p><b>Recording a payment and giving the rest up are two buttons, not two kinds in one
+ * picker.</b> A payment carries a value date and may exceed what is open; a write-off carries
+ * a booking date that decides the period of the tax correction and never exceeds the
+ * remainder. Two operations, two rights, two dialogs (backend ADR-0101).
+ *
+ * @param mayRecord  whether the user holds `INVOICE_PAYMENT_RECORD`
+ * @param mayWriteOff whether the user holds `INVOICE_WRITE_OFF`
  */
 export function DocumentReceivablePanel({
   tenantId,
@@ -60,6 +68,7 @@ export function DocumentReceivablePanel({
   documentId,
   currency,
   mayRecord,
+  mayWriteOff,
 }: {
   tenantId: number
   kind: SalesDocumentKind
@@ -67,9 +76,11 @@ export function DocumentReceivablePanel({
   /** Currency of the Rechnung; a settlement has to be in it. */
   currency: string
   mayRecord: boolean
+  mayWriteOff: boolean
 }) {
   const queryClient = useQueryClient()
   const [recording, setRecording] = useState(false)
+  const [writingOff, setWritingOff] = useState(false)
   const [reversing, setReversing] = useState<Payment | null>(null)
   const [form, setForm] = useState<PaymentForm>(() => proposedForm(undefined))
   const [reason, setReason] = useState('')
@@ -90,6 +101,7 @@ export function DocumentReceivablePanel({
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: key })
     void queryClient.invalidateQueries({ queryKey: salesDocumentListKey(kind, tenantId) })
+    void queryClient.invalidateQueries({ queryKey: openItemsKey(tenantId) })
   }
 
   const record = useMutation({
@@ -136,10 +148,24 @@ export function DocumentReceivablePanel({
       title="Zahlungen"
       description="Was auf diese Rechnung eingegangen ist. Der offene Betrag wird gerechnet, nicht gespeichert."
       action={
-        mayRecord ? (
-          <Button variant="secondary" onClick={openCreate}>
-            Zahlung erfassen
-          </Button>
+        mayRecord || mayWriteOff ? (
+          <span className="flex items-center gap-2">
+            {mayRecord && (
+              <Button variant="secondary" onClick={openCreate}>
+                Zahlung erfassen
+              </Button>
+            )}
+            {mayWriteOff && (
+              <Button
+                variant="secondary"
+                onClick={() => setWritingOff(true)}
+                disabled={state !== 'open'}
+                title={state === 'open' ? undefined : 'Es ist nichts mehr offen.'}
+              >
+                Ausbuchen
+              </Button>
+            )}
+          </span>
         ) : undefined
       }
     >
@@ -210,6 +236,12 @@ export function DocumentReceivablePanel({
         {!mayRecord && (
           <p className="text-[13px] text-text-secondary">
             Zum Erfassen fehlt das Recht «Zahlung erfassen».
+          </p>
+        )}
+
+        {!mayWriteOff && (
+          <p className="text-[13px] text-text-secondary">
+            Zum Ausbuchen fehlt das Recht «Forderung ausbuchen».
           </p>
         )}
 
@@ -285,6 +317,17 @@ export function DocumentReceivablePanel({
           {record.error !== null && <ErrorNotice error={record.error} />}
         </div>
       </Dialog>
+
+      <WriteOffDialog
+        open={writingOff}
+        tenantId={tenantId}
+        documentId={documentId}
+        documentNumber={undefined}
+        currency={currency}
+        openAmount={item?.open}
+        onClose={() => setWritingOff(false)}
+        onWritten={refresh}
+      />
 
       <Dialog
         open={reversing !== null}

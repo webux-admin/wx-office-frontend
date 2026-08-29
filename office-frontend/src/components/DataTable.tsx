@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MouseEvent, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CheckboxField } from './CheckboxField'
 import { formatCount } from '../lib/format'
 import type { OriginState } from '../lib/origin'
 import { pageRange, sortDirection, toggleSort } from '../lib/paging'
@@ -80,6 +81,28 @@ type DataTableProps<T> = {
   /** The sort in force, as `field,direction`. Enables the control on sortable columns. */
   sort?: string
   onSortChange?: (sort: string) => void
+  /**
+   * The rows that are ticked, by their key; shows a checkbox column as the first one.
+   *
+   * <p>A prop pair and not a column with a `render` function, because a column has a
+   * `header: string` and the head is drawn by this component — a checkbox in the table head
+   * is simply not reachable through the column API. And a selection every mask built for
+   * itself would repeat the same twenty lines and define `keyOf` twice (ADR-0030).
+   */
+  selected?: ReadonlySet<string | number>
+  onSelectedChange?: (next: Set<string | number>) => void
+  /**
+   * Which rows may be ticked at all; the others show no box.
+   *
+   * <p>Left out every row may be ticked.
+   */
+  selectableRow?: (row: T) => boolean
+  /**
+   * What a screen reader is told the box stands for — «Rechnung R-2026-0142 markieren».
+   *
+   * <p>Left out the key is read out, which is a number and says nothing.
+   */
+  selectionLabel?: (row: T) => string
 }
 
 /**
@@ -107,6 +130,10 @@ export function DataTable<T>({
   onPageChange,
   sort,
   onSortChange,
+  selected,
+  onSelectedChange,
+  selectableRow,
+  selectionLabel,
 }: DataTableProps<T>) {
   const navigate = useNavigate()
 
@@ -132,6 +159,34 @@ export function DataTable<T>({
       return
     }
     onRowOpen?.(row)
+  }
+
+  const selecting = selected !== undefined && onSelectedChange !== undefined
+  const selectableRows = selecting ? rows.filter((row) => selectableRow?.(row) ?? true) : []
+  const selectedOnPage = selectableRows.filter((row) => selected?.has(keyOf(row))).length
+  const allOnPage = selectableRows.length > 0 && selectedOnPage === selectableRows.length
+
+  /** Ticks or unticks one row, leaving every other page's rows where they are. */
+  const toggleRow = (row: T, on: boolean) => {
+    const next = new Set(selected)
+    if (on) next.add(keyOf(row))
+    else next.delete(keyOf(row))
+    onSelectedChange?.(next)
+  }
+
+  /**
+   * Ticks every row of **this page**, and only of this page.
+   *
+   * <p>The table holds one page and cannot know what is on the others, so «alle» could only
+   * ever mean «alle hier». Unticking takes this page back out and leaves the rest standing.
+   */
+  const toggleAllOnPage = (on: boolean) => {
+    const next = new Set(selected)
+    for (const row of selectableRows) {
+      if (on) next.add(keyOf(row))
+      else next.delete(keyOf(row))
+    }
+    onSelectedChange?.(next)
   }
 
   if (error) {
@@ -160,6 +215,18 @@ export function DataTable<T>({
         >
           <thead>
             <tr className="border-b border-line-subtle">
+              {selecting && (
+                <th scope="col" className="w-10 px-5 py-2.5">
+                  <CheckboxField
+                    label="Alle auf dieser Seite markieren"
+                    labelHidden
+                    checked={allOnPage}
+                    indeterminate={selectedOnPage > 0 && !allOnPage}
+                    disabled={selectableRows.length === 0}
+                    onChange={(event) => toggleAllOnPage(event.target.checked)}
+                  />
+                </th>
+              )}
               {columns.map((column) => {
                 const sortable = Boolean(column.sortKey && onSortChange)
                 const direction = column.sortKey
@@ -219,6 +286,18 @@ export function DataTable<T>({
                     opens ? 'cursor-pointer hover:bg-sunken' : 'hover:bg-sunken/60'
                   }`}
                 >
+                  {selecting && (
+                    <td className="w-10 px-5 py-2.5 align-middle">
+                      {(selectableRow?.(row) ?? true) && (
+                        <CheckboxField
+                          label={selectionLabel?.(row) ?? `Zeile ${keyOf(row)} markieren`}
+                          labelHidden
+                          checked={selected?.has(keyOf(row)) === true}
+                          onChange={(event) => toggleRow(row, event.target.checked)}
+                        />
+                      )}
+                    </td>
+                  )}
                   {columns.map((column) => (
                     <td
                       key={column.key}

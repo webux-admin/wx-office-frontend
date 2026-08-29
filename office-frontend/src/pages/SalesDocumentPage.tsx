@@ -25,6 +25,7 @@ import {
   stockReversalLabel,
 } from '../lib/inventory'
 import { dunningLevelLabel, fetchDunningStates } from '../lib/dunning'
+import { OPEN_ITEM_RIGHTS } from '../lib/openItem'
 import { openByLineId, openByLineNumber } from '../lib/openQuantity'
 import { runsModule } from '../lib/modules'
 import { originOf, originState } from '../lib/origin'
@@ -963,6 +964,7 @@ function DocumentMask({
             documentId={document.id}
             currency={document.currency}
             mayRecord={can('INVOICE_PAYMENT_RECORD')}
+            mayWriteOff={can(OPEN_ITEM_RIGHTS.writeOff)}
           />
         )}
 

@@ -17,6 +17,9 @@ export const PAYMENT_KINDS: Record<PaymentKind, string> = {
   DISCOUNT: 'Skonto',
   WRITE_OFF: 'Debitorenverlust',
   ROUNDING: 'Rundung',
+  BANK_CHARGE: 'Bankspesen',
+  EXCHANGE_DIFFERENCE: 'Kursdifferenz',
+  OVERPAYMENT_KEPT: 'Überzahlung einbehalten',
 }
 
 /**
@@ -32,13 +35,24 @@ export const PAYMENT_KIND_ORDER: PaymentKind[] = [
 ]
 
 /**
- * The three kinds that reduce the agreed consideration rather than settling it.
+ * The kinds that reduce the agreed consideration rather than settling it.
  *
- * <p>They carry a VAT consequence under MWSTG Art. 41 that this application does not book —
- * it keeps no general ledger. The mask says so where they are chosen, so nobody takes the
- * closed open item for a finished tax matter.
+ * <p>They carry a VAT consequence under MWSTG Art. 41. Recorded as a plain settlement it is
+ * not held anywhere — that is what the write-off does instead, with reason, period and the
+ * consequence per rate. The dialog says so where such a kind is chosen, so nobody takes the
+ * closed open item for a finished tax matter (backend ADR-0101).
+ *
+ * <p>`ROUNDING` counts among them, deliberately conservative: Swiss law knows no statutory
+ * threshold in francs, and a later exemption removes rows while a correction caught up
+ * afterwards has to invent them.
  */
-export const REDUCES_CONSIDERATION: PaymentKind[] = ['CREDIT', 'DISCOUNT', 'WRITE_OFF']
+export const REDUCES_CONSIDERATION: PaymentKind[] = [
+  'CREDIT',
+  'DISCOUNT',
+  'WRITE_OFF',
+  'ROUNDING',
+  'OVERPAYMENT_KEPT',
+]
 
 /** What one settlement to record looks like on the wire. */
 export type RecordPaymentBody = {

@@ -10,6 +10,7 @@ import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { SECURITY_PATH } from './lib/loginPolicy'
 import { MODULE_PATH } from './lib/modules'
+import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
@@ -50,6 +51,8 @@ const DunningBlockPage = lazy(() => import('./pages/DunningBlockPage').then((mod
 const DunningNoticePage = lazy(() => import('./pages/DunningNoticePage').then((module) => ({ default: module.DunningNoticePage })))
 const DunningTextPage = lazy(() => import('./pages/DunningTextPage').then((module) => ({ default: module.DunningTextPage })))
 const DunningWorklistPage = lazy(() => import('./pages/DunningWorklistPage').then((module) => ({ default: module.DunningWorklistPage })))
+const OpenItemListPage = lazy(() => import('./pages/OpenItemListPage').then((module) => ({ default: module.OpenItemListPage })))
+const WriteOffRunPage = lazy(() => import('./pages/WriteOffRunPage').then((module) => ({ default: module.WriteOffRunPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
 const StockListPage = lazy(() => import('./pages/StockListPage').then((module) => ({ default: module.StockListPage })))
 const StockShortageListPage = lazy(() => import('./pages/StockShortageListPage').then((module) => ({ default: module.StockShortageListPage })))
@@ -178,6 +181,8 @@ export default function App() {
                 <Route path="/mahnwesen-einstellungen" element={<DunningSettingsPage />} />
                 <Route path="/mahnstufen" element={<DunningLevelPage />} />
                 <Route path="/mahntexte" element={<DunningTextPage />} />
+                <Route path={OPEN_ITEM_PATH} element={<OpenItemListPage />} />
+                <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/mahnstopps" element={<DunningBlockPage />} />

@@ -2246,8 +2246,22 @@ export type RecoveryCodes = {
   codes: string[]
 }
 
-/** How an open item was settled. Only `PAYMENT` is money that arrived. */
-export type PaymentKind = 'PAYMENT' | 'CREDIT' | 'DISCOUNT' | 'WRITE_OFF' | 'ROUNDING'
+/**
+ * How an open item was settled. Only `PAYMENT` is money that arrived.
+ *
+ * <p>The last three close the item without money arriving either, and two of them without
+ * touching the agreed consideration at all: bank charges and an exchange difference are not
+ * a reduction of the price (backend ADR-0101).
+ */
+export type PaymentKind =
+  | 'PAYMENT'
+  | 'CREDIT'
+  | 'DISCOUNT'
+  | 'WRITE_OFF'
+  | 'ROUNDING'
+  | 'BANK_CHARGE'
+  | 'EXCHANGE_DIFFERENCE'
+  | 'OVERPAYMENT_KEPT'
 
 /** Whether a human or a statement import wrote a settlement line. */
 export type PaymentSource = 'MANUAL' | 'IMPORT'
@@ -2297,6 +2311,130 @@ export type OpenItem = {
   /** Days past the due day, 0 while it is not overdue. */
   daysOverdue: number
 }
+
+/**
+ * Why a receivable is being given up.
+ *
+ * <p>A closed catalogue and not a free text: OR Art. 957a Abs. 2 asks for a Belegnachweis and
+ * for Nachprüfbarkeit, and «Rest» in a note field is neither (backend ADR-0101).
+ */
+export type WriteOffReason =
+  | 'SKONTO'
+  | 'SKONTO_UNBERECHTIGT'
+  | 'KLEINDIFFERENZ'
+  | 'DEBITORENVERLUST'
+  | 'BANKSPESEN'
+  | 'KURSDIFFERENZ'
+  | 'UEBERZAHLUNG'
+
+/** How a tenant settles its VAT: on agreed or on collected consideration (MWSTG Art. 39). */
+export type VatAccountingBasis = 'AGREED_CONSIDERATION' | 'COLLECTED_CONSIDERATION'
+
+/** What one write-off does to the tax of one category and rate. */
+export type WriteOffVatLine = {
+  vatCategory: string
+  /** The rate of the **original invoice**, not today's. */
+  vatRate: number
+  grossShare: number
+  netShare: number
+  vatAmount: number
+}
+
+/**
+ * One write-off: a receivable reduced without money arriving.
+ *
+ * <p>Held, not booked. This application keeps no general ledger; what it holds is the tax
+ * consequence per rate, so an evaluation can fill in the VAT return (backend ADR-0101).
+ */
+export type WriteOff = {
+  id: number
+  documentId: number
+  /** The settlement line it hangs on. */
+  paymentId: number
+  reason: WriteOffReason
+  /** The period the tax correction takes effect in — not the value date beside it. */
+  bookingDate: string
+  grossAmount: number
+  currency: string
+  /** Absent where the tenant was not liable for VAT. */
+  accountingBasis?: VatAccountingBasis
+  vatMethod?: VatMethod
+  evidence?: string
+  note?: string
+  /** Set on a counter entry: the write-off it takes back. */
+  reversesWriteOffId?: number
+  correctedVat: number
+  vatLines: WriteOffVatLine[]
+  createdAt: string
+  createdBy: string
+}
+
+/** One open item a write-off run would give up. Reading it writes nothing. */
+export type WriteOffCandidate = {
+  documentId: number
+  documentNumber?: string
+  documentDate: string
+  dueDate?: string
+  daysOverdue: number
+  partnerId: number
+  partnerNumber?: string
+  partnerName?: string
+  currency: string
+  totalGross: number
+  /** Everything already set against it — what the percentage form is measured against. */
+  settled: number
+  open: number
+  /** The most this item may give up under the tolerance of the run. */
+  limit: number
+  /** What would be booked: the whole remainder. */
+  writeOffAmount: number
+}
+
+/**
+ * A proposal with the three figures a reader checks before ticking anything.
+ *
+ * <p>`largestWriteOff` is the one that matters: one percent of a large invoice is no longer a
+ * small difference, and without it «1 %» quietly becomes a hundred francs on one line.
+ */
+export type WriteOffProposal = {
+  count: number
+  total: number
+  largestWriteOff: number
+  currency: string
+  candidates: WriteOffCandidate[]
+}
+
+/** One item a run gave up, with the settlement line it produced. */
+export type WriteOffPosted = {
+  documentId: number
+  documentNumber?: string
+  amount: number
+  paymentId: number
+}
+
+/** One item a run did not give up, with the reason in plain German. */
+export type WriteOffSkipped = {
+  documentId: number
+  documentNumber?: string
+  message: string
+}
+
+/**
+ * What one write-off run produced.
+ *
+ * <p>Three lists rather than one status: a run of three hundred items is almost never wholly
+ * one thing, and «teilweise gebucht» is the answer a user has to be able to read.
+ */
+export type WriteOffRunResult = {
+  runId: number
+  postedCount: number
+  skippedCount: number
+  postedTotal: number
+  posted: WriteOffPosted[]
+  skipped: WriteOffSkipped[]
+  failed: WriteOffSkipped[]
+}
+
 
 /** Whether a customer gets one reminder per invoice or one letter for all of them. */
 export type DunningGrouping = 'PER_INVOICE' | 'PER_PARTNER'
