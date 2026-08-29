@@ -2,7 +2,10 @@ import { api } from './api'
 import type {
   DunningGrouping,
   DunningLevel,
+  DunningPlaceholder,
   DunningSettings,
+  DunningText,
+  DunningTextPreview,
   FeeBooking,
   FeeVatMode,
   PartnerDunningGrouping,
@@ -222,4 +225,123 @@ export function escalationProblem(levels: DunningLevel[]): string | null {
 /** How many levels are switched on — the figure that answers «wie viele Stufen hat es». */
 export function activeLevelCount(levels: DunningLevel[]): number {
   return levels.filter((level) => level.active).length
+}
+
+/** Path of the dunning text screen within the application. */
+export const DUNNING_TEXTS_PATH = '/mahntexte'
+
+/** Where the texts of one level are cached. */
+export function dunningTextsKey(
+  tenantId: number | null,
+  levelId: number,
+): readonly unknown[] {
+  return ['dunning-texts', tenantId, levelId]
+}
+
+/** Where the placeholder catalogue is cached. It is the same for every tenant. */
+export function dunningPlaceholdersKey(tenantId: number | null): readonly unknown[] {
+  return ['dunning-placeholders', tenantId]
+}
+
+/** What the text mask sends. */
+export type DunningTextBody = {
+  title: string
+  introText?: string
+  closingText?: string
+  mailSubject?: string
+  mailBody?: string
+}
+
+export function fetchDunningPlaceholders(tenantId: number): Promise<DunningPlaceholder[]> {
+  return api.get<DunningPlaceholder[]>(`/api/tenants/${tenantId}/dunning/placeholders`)
+}
+
+export function fetchDunningTexts(tenantId: number, levelId: number): Promise<DunningText[]> {
+  return api.get<DunningText[]>(`/api/tenants/${tenantId}/dunning/levels/${levelId}/texts`)
+}
+
+export function saveDunningText(
+  tenantId: number,
+  levelId: number,
+  language: string,
+  body: DunningTextBody,
+): Promise<DunningText> {
+  return api.put<DunningText>(
+    `/api/tenants/${tenantId}/dunning/levels/${levelId}/texts/${language}`,
+    body,
+  )
+}
+
+export function resetDunningText(
+  tenantId: number,
+  levelId: number,
+  language: string,
+): Promise<DunningText> {
+  return api.post<DunningText>(
+    `/api/tenants/${tenantId}/dunning/levels/${levelId}/texts/${language}/reset`,
+  )
+}
+
+export function fetchDunningTextPreview(
+  tenantId: number,
+  levelId: number,
+  language: string,
+): Promise<DunningTextPreview> {
+  return api.get<DunningTextPreview>(
+    `/api/tenants/${tenantId}/dunning/levels/${levelId}/texts/${language}/preview`,
+  )
+}
+
+/**
+ * Inserts a placeholder at the cursor of a text field.
+ *
+ * <p>At the cursor and not at the end, because a placeholder belongs in the middle of the
+ * sentence somebody is writing. Returns the new text and where the cursor should land after
+ * it, so the caller can put it back.
+ *
+ * @param text  what stands in the field
+ * @param token the placeholder name, without the braces
+ * @param start where the selection begins
+ * @param end   where it ends; equal to `start` when nothing is selected
+ */
+export function insertPlaceholder(
+  text: string,
+  token: string,
+  start: number,
+  end: number,
+): { text: string; cursor: number } {
+  const inserted = `{{${token}}}`
+  const safeStart = Math.max(0, Math.min(start, text.length))
+  const safeEnd = Math.max(safeStart, Math.min(end, text.length))
+  return {
+    text: text.slice(0, safeStart) + inserted + text.slice(safeEnd),
+    cursor: safeStart + inserted.length,
+  }
+}
+
+/**
+ * Which placeholders of a text a collective reminder would leave empty.
+ *
+ * <p>Worked out in the browser as well so the mask can warn **while** somebody types, not only
+ * after saving. The server answers the same question on every read; this is the same rule, not
+ * a second one.
+ *
+ * @param texts        the fields of the mask
+ * @param placeholders the catalogue as the server sent it
+ */
+export function singleInvoiceTokensIn(
+  texts: (string | undefined)[],
+  placeholders: DunningPlaceholder[],
+): string[] {
+  const risky = new Set(
+    placeholders.filter((entry) => !entry.availableWhenCollective).map((entry) => entry.token),
+  )
+  const used = new Set<string>()
+  for (const text of texts) {
+    if (text === undefined) continue
+    for (const match of text.matchAll(/\{\{\s*([a-z]+)\s*}}/g)) {
+      if (risky.has(match[1])) used.add(match[1])
+    }
+  }
+  return [...used]
 }

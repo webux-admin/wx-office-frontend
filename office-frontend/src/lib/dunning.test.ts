@@ -7,9 +7,11 @@ import {
   FEE_VAT_MODES,
   activeLevelCount,
   escalationProblem,
+  insertPlaceholder,
   isHighestLevel,
+  singleInvoiceTokensIn,
 } from './dunning'
-import type { DunningGrouping, DunningLevel } from './types'
+import type { DunningGrouping, DunningLevel, DunningPlaceholder } from './types'
 
 /** One level, with only the parts these functions look at spelled out. */
 function level(overrides: Partial<DunningLevel> = {}): DunningLevel {
@@ -171,5 +173,92 @@ describe('the catalogues', () => {
       'DUNNING_CONFIGURE',
       'DUNNING_RUN',
     ])
+  })
+})
+
+describe('insertPlaceholder', () => {
+  it('insertPlaceholderTest', () => {
+    const result = insertPlaceholder('Guten Tag ', 'kunde', 10, 10)
+
+    expect(result.text).toBe('Guten Tag {{kunde}}')
+    expect(result.cursor).toBe(19)
+  })
+
+  /** At the cursor, not at the end: a placeholder belongs inside the sentence. */
+  it('insertPlaceholderInTheMiddleTest', () => {
+    const result = insertPlaceholder('Guten Tag , wie geht es?', 'kunde', 10, 10)
+
+    expect(result.text).toBe('Guten Tag {{kunde}}, wie geht es?')
+  })
+
+  it('insertPlaceholderReplacesTheSelectionTest', () => {
+    const result = insertPlaceholder('Guten Tag NAME', 'kunde', 10, 14)
+
+    expect(result.text).toBe('Guten Tag {{kunde}}')
+  })
+
+  it('insertPlaceholderIntoAnEmptyFieldTest', () => {
+    expect(insertPlaceholder('', 'kunde', 0, 0).text).toBe('{{kunde}}')
+  })
+
+  /** A stale cursor from a field that shrank must not throw or lose text. */
+  it('insertPlaceholderWithAnOutOfRangeCursorTest', () => {
+    const result = insertPlaceholder('kurz', 'kunde', 99, 120)
+
+    expect(result.text).toBe('kurz{{kunde}}')
+  })
+
+  it('insertPlaceholderWithAnInvertedSelectionTest', () => {
+    const result = insertPlaceholder('Guten Tag', 'kunde', 5, 2)
+
+    expect(result.text).toBe('Guten{{kunde}} Tag')
+  })
+})
+
+describe('singleInvoiceTokensIn', () => {
+  const catalogue: DunningPlaceholder[] = [
+    { token: 'kunde', availableWhenCollective: true },
+    { token: 'gesamtoffenerbetrag', availableWhenCollective: true },
+    { token: 'rechnungsnummer', availableWhenCollective: false },
+    { token: 'offenerbetrag', availableWhenCollective: false },
+  ]
+
+  it('singleInvoiceTokensInTest', () => {
+    const used = singleInvoiceTokensIn(
+      ['Ihre Rechnung {{rechnungsnummer}}', 'Offen {{offenerbetrag}}'],
+      catalogue,
+    )
+
+    expect(used.sort()).toEqual(['offenerbetrag', 'rechnungsnummer'])
+  })
+
+  /** A text that only uses the always-available ones survives a collective letter. */
+  it('singleInvoiceTokensInACollectiveSafeTextTest', () => {
+    expect(singleInvoiceTokensIn(['{{kunde}} schuldet {{gesamtoffenerbetrag}}'], catalogue))
+      .toEqual([])
+  })
+
+  it('singleInvoiceTokensInNothingTest', () => {
+    expect(singleInvoiceTokensIn([], catalogue)).toEqual([])
+    expect(singleInvoiceTokensIn([undefined, ''], catalogue)).toEqual([])
+  })
+
+  it('singleInvoiceTokensInNamesEachOnceTest', () => {
+    const used = singleInvoiceTokensIn(
+      ['{{rechnungsnummer}}', '{{rechnungsnummer}} noch einmal'],
+      catalogue,
+    )
+
+    expect(used).toEqual(['rechnungsnummer'])
+  })
+
+  it('singleInvoiceTokensInIgnoresAnUnknownOneTest', () => {
+    expect(singleInvoiceTokensIn(['{{quatsch}}'], catalogue)).toEqual([])
+  })
+
+  /** Spaces inside the braces are how the backend reads them too. */
+  it('singleInvoiceTokensInWithSpacingTest', () => {
+    expect(singleInvoiceTokensIn(['{{  rechnungsnummer  }}'], catalogue))
+      .toEqual(['rechnungsnummer'])
   })
 })

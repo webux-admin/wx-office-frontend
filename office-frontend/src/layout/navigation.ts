@@ -61,6 +61,7 @@ import {
   DUNNING_MODULE,
   DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
+  DUNNING_TEXTS_PATH,
 } from '../lib/dunning'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
@@ -432,6 +433,14 @@ export const NAV_GROUPS: NavGroup[] = [
             label: 'Mahnstufen',
             icon: ListOrdered,
             href: DUNNING_LEVELS_PATH,
+            permission: DUNNING_RIGHTS.read,
+            module: DUNNING_MODULE,
+          },
+          // Directly below the levels: a text belongs to a level, and the mask opens on one.
+          {
+            label: 'Mahntexte',
+            icon: FileText,
+            href: DUNNING_TEXTS_PATH,
             permission: DUNNING_RIGHTS.read,
             module: DUNNING_MODULE,
           },

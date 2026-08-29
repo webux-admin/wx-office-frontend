@@ -2356,3 +2356,51 @@ export type PartnerDunningGrouping = {
   /** False means the answer is the tenant's default and will move with it. */
   deviation: boolean
 }
+
+/** One placeholder of the closed dunning catalogue. */
+export type DunningPlaceholder = {
+  /** The name as it is written in a text, without the braces. */
+  token: string
+  /**
+   * Whether it carries a value in a collective reminder too. `false` means the mask has to
+   * say so before somebody builds a sentence around it (backend ADR-0097).
+   */
+  availableWhenCollective: boolean
+}
+
+/** The text of one dunning level in one language. */
+export type DunningText = {
+  dunningLevelId: number
+  levelNo: number
+  /** The language this text is **in**. */
+  languageCode: string
+  /** The language that was asked for; differs when the text was borrowed. */
+  requestedLanguage: string
+  /** Whether the asked-for language had no text and this one stands in for it. */
+  borrowed: boolean
+  /** Whether this is still the text delivered with the application. */
+  shipped: boolean
+  title: string
+  introText?: string
+  closingText?: string
+  mailSubject?: string
+  mailBody?: string
+  /** Placeholders used here that a collective reminder leaves empty. */
+  singleInvoiceTokens: string[]
+}
+
+/** One dunning text with its placeholders filled in. */
+export type DunningTextRendered = {
+  title: string
+  introText: string
+  closingText: string
+  mailSubject: string
+  mailBody: string
+}
+
+/** What a dunning text looks like filled, in both operating modes. */
+export type DunningTextPreview = {
+  singleInvoice: DunningTextRendered
+  collective: DunningTextRendered
+  singleInvoiceTokens: string[]
+}
