@@ -1714,6 +1714,15 @@ export type DocumentSummary = {
    * backend against its clock — the browser never compares dates itself.
    */
   offerExpired?: boolean
+  /**
+   * Only on Rechnungen that carry a receivable: what the customer still owes, worked out by
+   * the backend and never stored. Negative means the customer overpaid. Absent — not zero —
+   * on a draft, a reversed Rechnung, the counter document of a reversal, and every other
+   * category (backend ADR-0091).
+   */
+  openAmount?: number
+  /** Only where `openAmount` is: whether money is open and the due day has passed. */
+  overdue?: boolean
 }
 
 /** How an issued offer went: still waiting, turned into business, or turned down. */
@@ -2234,4 +2243,56 @@ export type SecondFactorEnrolment = {
  */
 export type RecoveryCodes = {
   codes: string[]
+}
+
+/** How an open item was settled. Only `PAYMENT` is money that arrived. */
+export type PaymentKind = 'PAYMENT' | 'CREDIT' | 'DISCOUNT' | 'WRITE_OFF' | 'ROUNDING'
+
+/** Whether a human or a statement import wrote a settlement line. */
+export type PaymentSource = 'MANUAL' | 'IMPORT'
+
+/**
+ * One settlement line on a Rechnung.
+ *
+ * <p>Append only: a line is never changed and never deleted, it is taken back by a counter
+ * line that carries the opposite amount (backend ADR-0091).
+ */
+export type Payment = {
+  id: number
+  documentId: number
+  kind: PaymentKind
+  /** Positive reduces the open item, negative is a counter line. */
+  amount: number
+  currency: string
+  /** The day the money was valued, not the day somebody typed it. */
+  valueDate: string
+  source: PaymentSource
+  /** Set on a counter line: the line it takes back. */
+  reversesPaymentId?: number
+  /** Set on a line that was taken back: the counter line that did it. */
+  reversedByPaymentId?: number
+  note?: string
+  recordedAt: string
+  recordedBy: string
+}
+
+/** What one Rechnung still owes. Every figure is worked out, none of it is stored. */
+export type OpenItem = {
+  documentId: number
+  documentNumber?: string
+  documentDate: string
+  /** Absent when no payment term was printed on the Rechnung. */
+  dueDate?: string
+  partnerId: number
+  partnerNumber?: string
+  partnerName?: string
+  currency: string
+  totalGross: number
+  /** Everything set against it: payments, credits, Skonto, write-offs. */
+  settled: number
+  /** Total minus settled. Negative means the customer overpaid. */
+  open: number
+  overdue: boolean
+  /** Days past the due day, 0 while it is not overdue. */
+  daysOverdue: number
 }

@@ -53,6 +53,14 @@ export type SalesDocumentKind = {
    * kind that gains a follow-up names it here and nowhere else.
    */
   tracking: boolean
+  /**
+   * Whether an issued document of this kind can owe money, and therefore carries the
+   * «Zahlungen» register and an open amount in the list.
+   *
+   * <p>Only the Rechnung does. The screens ask this flag, never the category, so a second
+   * kind that gains a receivable names it here and nowhere else (backend ADR-0091).
+   */
+  receivable: boolean
 }
 
 /**
@@ -65,6 +73,7 @@ export type SalesDocumentKind = {
  * @param plural    what several of them are called
  * @param gender    gender of the German name
  * @param tracking  whether the fate of an issued document is followed up
+ * @param receivable whether an issued document of this kind can owe money
  */
 function kind(
   category: DocumentCategory,
@@ -74,6 +83,7 @@ function kind(
   plural: string,
   gender: Gender,
   tracking = false,
+  receivable = false,
 ): SalesDocumentKind {
   return {
     category,
@@ -83,6 +93,7 @@ function kind(
     plural,
     gender,
     tracking,
+    receivable,
     rights: {
       read: `${category}_READ`,
       write: `${category}_WRITE`,
@@ -124,7 +135,8 @@ export const SALES_DOCUMENT_KINDS: SalesDocumentKind[] = [
   ORDER_KIND,
   kind('DELIVERY_NOTE', '/lieferscheine', 'delivery-notes', 'Lieferschein', 'Lieferscheine',
     'masculine'),
-  kind('INVOICE', '/rechnungen', 'invoices', 'Rechnung', 'Rechnungen', 'feminine'),
+  kind('INVOICE', '/rechnungen', 'invoices', 'Rechnung', 'Rechnungen', 'feminine', false,
+    true),
 ]
 
 /**
@@ -158,6 +170,9 @@ const DUE_OFFER_REMINDERS = 'due-offer-reminders'
 /** What one draft would be short of if it were issued now. */
 const STOCK_CHECK = 'sales-document-stock-check'
 
+/** The settlement lines and the open item of one Rechnung. */
+const RECEIVABLE = 'sales-document-receivable'
+
 /**
  * Where everything about sales documents is cached, whatever kind and whatever tenant.
  *
@@ -165,6 +180,10 @@ const STOCK_CHECK = 'sales-document-stock-check'
  * them is on the other end — a partner, whose address a draft follows (ADR-0040). The
  * follow-up keys stand here for the same reason: the due list names the partner of every
  * offer it shows.
+ *
+ * <p>`RECEIVABLE` is deliberately **not** here. A partner change cannot reach it: an issued
+ * Rechnung carries a frozen snapshot of the recipient, and a draft — which does follow the
+ * partner — owes nothing at all (backend ADR-0091).
  */
 export const SALES_DOCUMENT_CACHE_ROOTS: readonly string[] = [
   DOCUMENT,
@@ -330,4 +349,19 @@ export function indefiniteArticle(
  */
 export function newDocumentTitle(entry: SalesDocumentKind): string {
   return `${entry.gender === 'feminine' ? 'Neue' : 'Neuer'} ${entry.singular}`
+}
+
+/**
+ * Where the settlements and the open item of one Rechnung are cached.
+ *
+ * @param entry      the kind of document
+ * @param tenantId   the tenant, null while none is chosen
+ * @param documentId the Rechnung; left out to reach every Rechnung of that kind
+ */
+export function receivableKey(
+  entry: SalesDocumentKind,
+  tenantId: number | null,
+  documentId?: string | number,
+): unknown[] {
+  return cacheKey(RECEIVABLE, entry, tenantId, documentId)
 }

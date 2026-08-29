@@ -57,6 +57,11 @@ type DocumentFilter = {
    * everywhere else, so the other chips carry no `expired=false` in their query strings.
    */
   expired?: boolean
+  /**
+   * Asks the server for Rechnungen that still owe money past their due day. Left undefined
+   * everywhere else, for the same reason as `expired`.
+   */
+  overdue?: boolean
 }
 
 const FILTERS: DocumentFilter[] = [
@@ -83,6 +88,22 @@ const TRACKING_FILTERS: DocumentFilter[] = [
 ]
 
 /**
+ * The chips of a kind that can owe money: «Ausgestellt» gains a narrowing for the ones
+ * somebody has to chase.
+ *
+ * <p>«Überfällig» is a narrowing of «Ausgestellt», not a slice out of it: the issued chip
+ * keeps showing the overdue ones too — an overdue Rechnung is still an issued Rechnung
+ * (backend ADR-0091).
+ */
+const RECEIVABLE_FILTERS: DocumentFilter[] = [
+  { id: 'alle', label: 'Alle' },
+  { id: 'DRAFT', label: 'Entwürfe', status: 'DRAFT' },
+  { id: 'FINALISED', label: 'Ausgestellt', status: 'FINALISED' },
+  { id: 'OVERDUE', label: 'Überfällig', status: 'FINALISED', overdue: true },
+  { id: 'CANCELLED', label: 'Storniert', status: 'CANCELLED' },
+]
+
+/**
  * The documents of one kind belonging to the tenant.
  *
  * <p>Status, order and count come from the server. The rows are heads without lines: what a
@@ -102,7 +123,11 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
   const statusLabel = useCatalogueLabel(tenantId, 'document-status')
   const outcomeLabel = useCatalogueLabel(tenantId, 'offer-outcome')
   const { can } = useAuth()
-  const filters = kind.tracking ? TRACKING_FILTERS : FILTERS
+  const filters = kind.tracking
+    ? TRACKING_FILTERS
+    : kind.receivable
+      ? RECEIVABLE_FILTERS
+      : FILTERS
   const [filterId, setFilterId] = useState('alle')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('documentDate,desc')
@@ -117,6 +142,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
     status: filter.status === undefined ? undefined : [filter.status],
     outcome: filter.outcome,
     expired: filter.expired,
+    overdue: filter.overdue,
     page,
     size: PAGE_SIZE,
     sort,
@@ -202,6 +228,18 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       ),
     },
   ]
+
+  // Only where money can be owed. The column is absent, not empty, on the other three
+  // kinds — a «Offen» column full of dashes would suggest the question had been asked.
+  if (kind.receivable) {
+    columns.push({
+      key: 'open',
+      header: 'Offen',
+      align: 'right',
+      width: 'w-[140px]',
+      render: (row) => <OpenCell row={row} />,
+    })
+  }
 
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -354,5 +392,34 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
         onCreated={openCreated}
       />
     </>
+  )
+}
+
+/**
+ * What one Rechnung of the list still owes.
+ *
+ * <p>Three answers and not one number: an overdue debt is what the reader is looking for,
+ * a settled Rechnung should stop drawing the eye, and a negative amount is a credit the
+ * customer is owed — printed as «-0.20 offen» it would read as a debt of minus twenty
+ * rappen. A document that carries no receivable at all shows nothing, not a zero.
+ */
+function OpenCell({ row }: { row: DocumentSummary }) {
+  if (row.openAmount === undefined || row.openAmount === null) {
+    return <span className="text-text-tertiary">–</span>
+  }
+  if (row.openAmount === 0) {
+    return <Badge tone="success">bezahlt</Badge>
+  }
+  if (row.openAmount < 0) {
+    return (
+      <span className="text-text-secondary">
+        {formatAmount(-row.openAmount)} <span className="text-text-tertiary">Guthaben</span>
+      </span>
+    )
+  }
+  return (
+    <span className={row.overdue === true ? 'font-medium text-danger' : 'font-medium'}>
+      {formatAmount(row.openAmount)}
+    </span>
   )
 }

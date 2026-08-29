@@ -69,6 +69,7 @@ import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
 import { DocumentChainPanel } from './document/DocumentChainPanel'
 import { DocumentPrintouts } from './document/DocumentPrintouts'
 import { OfferReminders } from './document/OfferReminders'
+import { DocumentReceivablePanel } from './document/DocumentReceivablePanel'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
 import { useOpenQuantities } from './document/useOpenQuantities'
@@ -84,7 +85,7 @@ import {
 } from './document/lineForm'
 
 /** The two registers of a mask whose kind is followed up (ADR-0010). */
-type DocumentTab = 'beleg' | 'nachfassen' | 'zusammenhaenge'
+type DocumentTab = 'beleg' | 'nachfassen' | 'zahlungen' | 'zusammenhaenge'
 
 /**
  * Reads the register a link asked the mask to open on.
@@ -219,8 +220,13 @@ function DocumentMask({
   // The mask instance survives a route change between the categories, so a leftover
   // 'nachfassen' from an offer would blank an order. Clamped rather than reset, because a
   // reset would also throw away the register somebody deliberately opened.
+  // Reopening an issued Rechnung takes the «Zahlungen» register away again, so the same
+  // clamp covers it: a register that is no longer offered would otherwise render nothing.
   const activeTab: DocumentTab =
-    tab === 'nachfassen' && !kind.tracking ? 'beleg' : tab
+    (tab === 'nachfassen' && !kind.tracking)
+      || (tab === 'zahlungen' && (!kind.receivable || document.status === 'DRAFT'))
+      ? 'beleg'
+      : tab
 
   const editable = document.status === 'DRAFT' && can(kind.rights.write)
   // Two reasons keep a section read-only, and they are not the same thing. An issued
@@ -746,6 +752,11 @@ function DocumentMask({
             ...(kind.tracking
               ? [{ id: 'nachfassen' as const, label: 'Nachfassen' }]
               : []),
+            /* Only where money can be owed, and only once the document is issued: a draft
+               owes nothing, and a register that answered 400 would be a dead end. */
+            ...(kind.receivable && document.status !== 'DRAFT'
+              ? [{ id: 'zahlungen' as const, label: 'Zahlungen' }]
+              : []),
             { id: 'zusammenhaenge', label: 'Zusammenhänge' },
           ]}
           active={activeTab}
@@ -912,6 +923,16 @@ function DocumentMask({
               </div>
             </div>
           ) : null)}
+
+        {kind.receivable && activeTab === 'zahlungen' && (
+          <DocumentReceivablePanel
+            tenantId={tenantId}
+            kind={kind}
+            documentId={document.id}
+            currency={document.currency}
+            mayRecord={can('INVOICE_PAYMENT_RECORD')}
+          />
+        )}
 
         {activeTab === 'zusammenhaenge' && (
           <DocumentChainPanel
