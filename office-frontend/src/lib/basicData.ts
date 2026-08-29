@@ -36,7 +36,9 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
     slug: 'mahnarten',
     list: 'dunning-types',
     label: 'Mahnarten',
-    description: 'Die Stufen eines Mahnlaufs, von der Erinnerung bis zur Betreibungsandrohung.',
+    description:
+      'Die Bezeichnungen der Mahnstufen, von der Erinnerung bis zur Betreibungsandrohung. ' +
+      'Fristen, Gebühren und Texte stehen im Mahnwesen.',
   },
   {
     slug: 'einheiten',

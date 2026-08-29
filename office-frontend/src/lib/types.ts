@@ -2296,3 +2296,63 @@ export type OpenItem = {
   /** Days past the due day, 0 while it is not overdue. */
   daysOverdue: number
 }
+
+/** Whether a customer gets one reminder per invoice or one letter for all of them. */
+export type DunningGrouping = 'PER_INVOICE' | 'PER_PARTNER'
+
+/** How a dunning fee reaches the books. Stored now, evaluated from issue 8/9. */
+export type FeeBooking = 'SEPARATE_INVOICE' | 'ON_DUNNING_ONLY'
+
+/**
+ * How a dunning fee is treated for VAT.
+ *
+ * <p>The application does not decide the question, it carries the answer: whether a fee is
+ * taxable consideration or damages under MWSTG Art. 18 Abs. 2 is disputed, and the tenant
+ * follows its Treuhänder (backend ADR-0093).
+ */
+export type FeeVatMode = 'FOLLOWS_INVOICE' | 'FIXED_RATE' | 'NON_CONSIDERATION'
+
+/** How a tenant runs its dunning. */
+export type DunningSettings = {
+  numberRangeCode: string
+  /** Below this nothing is chased, in the accounting currency. 0 chases every rappen. */
+  minimumOpenAmount: number
+  showPaymentPart: boolean
+  grouping: DunningGrouping
+  feeBooking: FeeBooking
+  feeVatMode: FeeVatMode
+  feeVatCategory?: string
+  feeRevenueAccountId?: number
+  feeDocumentTypeId?: number
+  /** How many levels are switched on — the answer to «wie viele Stufen hat es». */
+  activeLevelCount: number
+  /** Whether the settings say enough for a fee to be charged at all. */
+  feeBookable: boolean
+}
+
+/**
+ * One step of the dunning: when it falls due, how long it grants, and what it costs.
+ *
+ * <p>`dunningTypeName` is the name **in the administration**, from the catalogue
+ * *Mahnarten*. The printed title per language is something else and arrives with issue 3/9.
+ */
+export type DunningLevel = {
+  id: number
+  levelNo: number
+  dunningTypeId: number
+  dunningTypeName?: string
+  daysAfterDue: number
+  paymentDays: number
+  minDaysSincePrevious: number
+  /** 0.00 unless agreed by contract: Swiss law knows no statutory dunning fee. */
+  feeAmount: number
+  active: boolean
+}
+
+/** How one customer is chased, and whether that is their own setting or the default. */
+export type PartnerDunningGrouping = {
+  partnerId: number
+  grouping: DunningGrouping
+  /** False means the answer is the tenant's default and will move with it. */
+  deviation: boolean
+}

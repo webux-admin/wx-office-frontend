@@ -33,6 +33,10 @@ const CONSEQUENCES: Record<string, string> = {
   OUTBOX:
     'Belege lassen sich danach nicht mehr per E-Mail versenden, und was in der Warteschlange ' +
     'steht, bleibt dort liegen. Gesendete Nachrichten bleiben lesbar — gelöscht wird nichts.',
+  DUNNING:
+    'Es lässt sich danach nicht mehr gemahnt werden, und die Mahnstufen sind nicht mehr ' +
+    'änderbar. Mahnstufen, Einstellungen und ausgestellte Mahnungen bleiben erhalten und ' +
+    'lesbar — gelöscht wird nichts.',
 }
 
 /** The neutral sentence, for a module nobody wrote one for. */

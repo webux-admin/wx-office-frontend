@@ -13,6 +13,8 @@ import { TextAreaField } from '../components/TextAreaField'
 import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
+import { DUNNING_MODULE, DUNNING_RIGHTS } from '../lib/dunning'
+import { runsModule } from '../lib/modules'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf } from '../lib/origin'
@@ -24,6 +26,7 @@ import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
 import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
+import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
 import {
@@ -89,7 +92,7 @@ function PartnerMask({
   partner: Partner | null
   wording: RoleWording
 }) {
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const origin = originOf(useLocation().state, {
@@ -269,6 +272,22 @@ function PartnerMask({
             partnerId={partner.id}
             mayWrite={can('DOCUMENT_TYPE_WRITE')}
           />
+        )}
+
+        {/* Beside the per-customer printout deviations, because it is the same kind of thing:
+            what this one customer does differently. Only where the tenant runs the module —
+            a panel for a module nobody switched on would answer 409 (backend ADR-0092). */}
+        {tab === 'dokumente'
+          && partner
+          && can(DUNNING_RIGHTS.read)
+          && runsModule(user?.tenants, tenantId, DUNNING_MODULE) && (
+          <div className="mt-6">
+            <PartnerDunningPanel
+              tenantId={tenantId}
+              partnerId={partner.id}
+              mayWrite={can(DUNNING_RIGHTS.configure)}
+            />
+          </div>
         )}
 
         {/* No permission check: the server narrows the rows to what the reader may see and

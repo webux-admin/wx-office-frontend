@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BellRing,
+  ListOrdered,
   Blocks,
   BookmarkCheck,
   BookOpen,
@@ -55,6 +56,12 @@ import {
   OUTBOX_PATH,
   OUTBOX_RIGHTS,
 } from '../lib/outbox'
+import {
+  DUNNING_LEVELS_PATH,
+  DUNNING_MODULE,
+  DUNNING_RIGHTS,
+  DUNNING_SETTINGS_PATH,
+} from '../lib/dunning'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -69,7 +76,7 @@ import type { DocumentCategory } from '../lib/types'
  * key and backend code was weighed and dropped: it would be the second place where somebody
  * forgets a module (ADR-0018).
  */
-export type NavModule = 'INVENTORY' | 'OUTBOX'
+export type NavModule = 'INVENTORY' | 'OUTBOX' | 'DUNNING'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -402,6 +409,32 @@ export const NAV_GROUPS: NavGroup[] = [
           },
           listEntry('verrechnungsarten', Receipt),
           listEntry('mahnarten', BellRing),
+        ],
+      },
+      {
+        // What a tenant chases with. Its own folder rather than a line under «Belege»: the
+        // dunning is a module of its own and vanishes with its switch, while the Belegarten
+        // beside it do not (backend ADR-0092).
+        label: 'Mahnwesen',
+        icon: BellRing,
+        module: DUNNING_MODULE,
+        children: [
+          {
+            label: 'Einstellungen',
+            icon: BellRing,
+            href: DUNNING_SETTINGS_PATH,
+            permission: DUNNING_RIGHTS.read,
+            module: DUNNING_MODULE,
+          },
+          // Below the settings, because a level only means something once the run around it
+          // is set up.
+          {
+            label: 'Mahnstufen',
+            icon: ListOrdered,
+            href: DUNNING_LEVELS_PATH,
+            permission: DUNNING_RIGHTS.read,
+            module: DUNNING_MODULE,
+          },
         ],
       },
       {
