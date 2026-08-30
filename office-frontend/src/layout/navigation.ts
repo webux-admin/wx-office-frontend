@@ -214,19 +214,30 @@ export const NAV_GROUPS: NavGroup[] = [
       // Straight after the invoice: «was ist noch offen» is the next question after «was
       // haben wir geschrieben», and it is asked every day. Without a module switch — the
       // open item hangs on `document` and there is nothing to switch off (backend ADR-0091).
+      //
+      // A folder rather than two rows, and the collective run keeps its own screen: it is a
+      // piece of work, not a detail of the list. What it gets is a roof — the folder is the
+      // register strip above both screens, so neither is harder to find than before
+      // (ADR-0031). No permission on the head: each child carries its own right.
       {
         label: 'Offene Posten',
         icon: Wallet,
-        href: OPEN_ITEM_PATH,
-        permission: OPEN_ITEM_RIGHTS.read,
-      },
-      // And below it what is done with the small ones. Its own entry rather than a button on
-      // the list: a run over a whole page is a piece of work, not a detail of a list.
-      {
-        label: 'Kleindifferenzen',
-        icon: Eraser,
-        href: WRITE_OFF_RUN_PATH,
-        permission: OPEN_ITEM_RIGHTS.read,
+        children: [
+          {
+            label: 'Offene Posten',
+            icon: Wallet,
+            href: OPEN_ITEM_PATH,
+            permission: OPEN_ITEM_RIGHTS.read,
+          },
+          // INVOICE_READ, not the run right: reading the proposal is a read — only booking
+          // it needs INVOICE_WRITE_OFF_RUN, and the screen asks for that at its button.
+          {
+            label: 'Kleindifferenzen',
+            icon: Eraser,
+            href: WRITE_OFF_RUN_PATH,
+            permission: OPEN_ITEM_RIGHTS.read,
+          },
+        ],
       },
       // After the invoice, because that is where it follows on: what was billed and not
       // paid. Here and not under Moduleinstellungen — chasing money is daily work, the

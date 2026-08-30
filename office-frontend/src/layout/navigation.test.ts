@@ -7,6 +7,7 @@ import {
   OUTBOX_RIGHTS,
 } from '../lib/outbox'
 import { SECURITY_PATH } from '../lib/loginPolicy'
+import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from '../lib/openItem'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
 import {
   flattenNav,
@@ -428,5 +429,55 @@ describe('folderFor', () => {
   /** Nothing to show, nothing to hang a strip on. */
   it('folderForWithoutAnyPermissionTest', () => {
     expect(folderFor('/zahlungskonditionen', none, runsAll)).toBeNull()
+  })
+})
+
+/**
+ * The open items and the collective write-off are one row in the menu and two screens.
+ *
+ * <p>The run keeps its own screen — «a run over a whole page is a piece of work, not a detail
+ * of a list». What it gains is a roof (ADR-0031).
+ */
+describe('the open items folder', () => {
+  const all = () => true
+  const runsAll = () => true
+
+  function openItems() {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    return sales?.entries.find(
+      (node): node is Extract<typeof node, { children: unknown }> =>
+        isFolder(node) && node.label === 'Offene Posten',
+    )
+  }
+
+  it('navGroupsFoldTheOpenItemsTest', () => {
+    const folder = openItems()
+
+    expect(folder?.children.map((child) => child.href)).toEqual([
+      OPEN_ITEM_PATH,
+      WRITE_OFF_RUN_PATH,
+    ])
+    // INVOICE_READ on both: reading the proposal is a read. Only booking it needs the run
+    // right, and the screen asks for that at its button.
+    expect(folder?.children.every((child) => child.permission === 'INVOICE_READ')).toBe(true)
+  })
+
+  /** No module switch: the open item hangs on `document`, and there is nothing to switch off. */
+  it('navGroupsLeaveTheOpenItemsUnswitchedTest', () => {
+    const folder = openItems()
+
+    expect(folder?.module).toBeUndefined()
+    expect(folder?.children.every((child) => child.module === undefined)).toBe(true)
+  })
+
+  /** The proof test: an old bookmark on the run lands in the same folder as the list. */
+  it('folderForHoldsTheOpenItemsTest', () => {
+    const fromRun = folderFor(WRITE_OFF_RUN_PATH, all, runsAll)
+    const fromList = folderFor(OPEN_ITEM_PATH, all, runsAll)
+
+    expect(fromRun?.label).toBe('Offene Posten')
+    expect(fromRun?.children.map((child) => child.href)).toEqual(
+      fromList?.children.map((child) => child.href),
+    )
   })
 })

@@ -4,7 +4,6 @@ import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
-import { LinkButton } from '../components/LinkButton'
 import { EmptyState } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -16,7 +15,6 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { formatAmount, formatDate } from '../lib/format'
 import {
   OPEN_ITEM_RIGHTS,
-  WRITE_OFF_RUN_PATH,
   fetchOpenItems,
   openItemQuery,
   openItemsKey,
@@ -192,11 +190,6 @@ function OpenItems({ tenantId }: { tenantId: number }) {
         title="Offene Posten"
         subtitle="Was Kunden noch schulden. Jede Zahl wird gerechnet, keine ist gespeichert."
       >
-        {can(OPEN_ITEM_RIGHTS.run) && (
-          <LinkButton to={WRITE_OFF_RUN_PATH} variant="secondary">
-            Kleindifferenzen ausbuchen
-          </LinkButton>
-        )}
       </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">

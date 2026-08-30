@@ -14,7 +14,6 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { formatAmount, formatDate, toIsoDate } from '../lib/format'
 import {
-  OPEN_ITEM_PATH,
   OPEN_ITEM_RIGHTS,
   WRITE_OFF_REASONS,
   WRITE_OFF_REASON_HINTS,
@@ -187,7 +186,6 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
       <PageHeader
         title="Kleindifferenzen ausbuchen"
         subtitle="Restbeträge unter einer Toleranz auf einmal aufgeben. Je Posten entsteht eine eigene Buchung."
-        back={{ to: OPEN_ITEM_PATH, label: 'Offene Posten' }}
       >
         {selectedCount > 0 && (
           <span className="text-[13px] text-text-secondary" aria-live="polite">
