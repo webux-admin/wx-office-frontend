@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
@@ -5,7 +6,9 @@ import { EmptyState, ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { RequireTenant } from '../layout/RequireTenant'
+import { useRunsModule } from '../lib/modules'
 import {
+  DUNNING_MODULE,
   DUNNING_RIGHTS,
   dunningNoticesKey,
   fetchDunningNoticePdf,
@@ -15,6 +18,7 @@ import {
 import { showFile } from '../lib/files'
 import { formatAmount, formatDate } from '../lib/format'
 import type { DunningNotice } from '../lib/types'
+import { DunningRunDialog } from './dunning/DunningRunDialog'
 
 /**
  * Every reminder this tenant has issued, newest first.
@@ -36,6 +40,9 @@ export function DunningNoticePage() {
 }
 
 function Notices({ tenantId }: { tenantId: number }) {
+  const runs = useRunsModule()
+  const [running, setRunning] = useState(false)
+
   const notices = useQuery({
     queryKey: dunningNoticesKey(tenantId),
     queryFn: () => fetchDunningNotices(tenantId),
@@ -58,7 +65,17 @@ function Notices({ tenantId }: { tenantId: number }) {
             ? `${standing} von ${rows.length} Mahnungen stehen`
             : undefined
         }
-      />
+      >
+        {/* Only where the tenant runs the dunning: this list stays readable without it,
+            but there is nothing to chase (backend ADR-0092). */}
+        {runs(DUNNING_MODULE) && (
+          <Button variant="secondary" onClick={() => setRunning(true)}>
+            Neuer Mahnlauf erstellen
+          </Button>
+        )}
+      </PageHeader>
+
+      <DunningRunDialog open={running} onClose={() => setRunning(false)} />
 
       <div className="grid gap-6 px-8 pb-12">
         {notices.error !== null && <ErrorNotice error={notices.error} />}

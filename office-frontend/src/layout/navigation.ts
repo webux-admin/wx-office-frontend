@@ -241,32 +241,42 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       // After the invoice, because that is where it follows on: what was billed and not
       // paid. Here and not under Moduleinstellungen — chasing money is daily work, the
-      // setup of the dunning is not (backend ADR-0096).
-      {
-        label: 'Mahnvorschlag',
-        icon: BellRing,
-        href: DUNNING_WORKLIST_PATH,
-        permission: DUNNING_RIGHTS.read,
-        module: DUNNING_MODULE,
-      },
-      // What went out, after what would go out. Without the module switch: an issued
-      // reminder is business correspondence with a ten-year retention, and a switch
-      // must not hide it (backend ADR-0092).
+      // setup of the dunning is not (backend ADR-0096). The setup itself stays over there;
+      // this folder holds the three screens somebody works in (ADR-0033).
+      //
+      // NO MODULE ON THE FOLDER, and the switch sits on the children instead. What went out
+      // is business correspondence with a ten-year retention, and a switch must not hide it
+      // (backend ADR-0092) — so «Mahnungen» comes first and is what the folder head opens.
+      // A tenant without the dunning keeps exactly that one register.
       {
         label: 'Mahnungen',
         icon: MailWarning,
-        href: DUNNING_NOTICES_PATH,
         permission: DUNNING_RIGHTS.read,
-      },
-      // Who is deliberately not being chased. Under the module switch, unlike the
-      // issued reminders: a stop is a setting of the dunning, not correspondence that
-      // has to stay readable for ten years.
-      {
-        label: 'Mahnstopps',
-        icon: Ban,
-        href: DUNNING_BLOCKS_PATH,
-        permission: DUNNING_RIGHTS.read,
-        module: DUNNING_MODULE,
+        children: [
+          {
+            label: 'Mahnungen',
+            icon: MailWarning,
+            href: DUNNING_NOTICES_PATH,
+            permission: DUNNING_RIGHTS.read,
+          },
+          {
+            label: 'Mahnvorschlag',
+            icon: BellRing,
+            href: DUNNING_WORKLIST_PATH,
+            permission: DUNNING_RIGHTS.read,
+            module: DUNNING_MODULE,
+          },
+          // Who is deliberately not being chased. Under the module switch, unlike the
+          // issued reminders: a stop is a setting of the dunning, not correspondence that
+          // has to stay readable for ten years.
+          {
+            label: 'Mahnstopps',
+            icon: Ban,
+            href: DUNNING_BLOCKS_PATH,
+            permission: DUNNING_RIGHTS.read,
+            module: DUNNING_MODULE,
+          },
+        ],
       },
     ],
   },

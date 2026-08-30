@@ -1,5 +1,5 @@
 import { api } from './api'
-import { formatDate } from './format'
+import { formatDate, isCompleteIsoDate, toIsoDate } from './format'
 import type { ApiFile } from './api'
 import type {
   DunningBlock,
@@ -363,6 +363,31 @@ export function singleInvoiceTokensIn(
 
 /** Path of the work list within the application. */
 export const DUNNING_WORKLIST_PATH = '/mahnvorschlag'
+
+/**
+ * Name of the search parameter carrying the reference day into the work list.
+ *
+ * <p>In the address and not in `location.state`, unlike the register a document mask is
+ * opened on: a reference day that does not survive a reload is a day somebody has to type
+ * twice. It stays a preview either way — the list is recomputed for it, nothing is stored
+ * (ADR-0033).
+ */
+export const DUNNING_AS_OF_PARAM = 'stichtag'
+
+/**
+ * Reads the reference day out of a query string.
+ *
+ * <p>Anything that is not a whole ISO day is today: a hand-edited address must not put the
+ * work list into a state it cannot compute. The backend would refuse it anyway, but the
+ * screen should not have to ask.
+ *
+ * @param search the query string of the address, with or without its leading `?`
+ * @returns the day as `yyyy-MM-dd`, today when none was named or it is unreadable
+*/
+export function asOfFrom(search: string): string {
+  const named = new URLSearchParams(search).get(DUNNING_AS_OF_PARAM)
+  return named !== null && isCompleteIsoDate(named) ? named : toIsoDate()
+}
 
 /** Where the work list of one tenant is cached. */
 export function dunningWorklistKey(

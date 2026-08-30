@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { toIsoDate } from './format'
 import {
+  asOfFrom,
   DUNNING_GROUPINGS,
   DUNNING_GROUPING_HINTS,
   DUNNING_RIGHTS,
@@ -673,5 +675,27 @@ describe('standingBlocks', () => {
 
   it('standingBlocksOfNothingTest', () => {
     expect(standingBlocks([])).toEqual([])
+  })
+})
+
+/**
+ * The reference day travels in the address, so a reload keeps it and a link carries it.
+ */
+describe('asOfFrom', () => {
+  it('asOfFromTest', () => {
+    expect(asOfFrom('stichtag=2026-06-30')).toBe('2026-06-30')
+    expect(asOfFrom('?stichtag=2026-06-30&x=1')).toBe('2026-06-30')
+  })
+
+  it('asOfFromWithoutTheParameterTest', () => {
+    expect(asOfFrom('')).toBe(toIsoDate())
+    expect(asOfFrom('x=1')).toBe(toIsoDate())
+  })
+
+  /** A hand-edited address must not put the work list into a state it cannot compute. */
+  it('asOfFromWithRubbishTest', () => {
+    expect(asOfFrom('stichtag=gestern')).toBe(toIsoDate())
+    expect(asOfFrom('stichtag=2026-6-3')).toBe(toIsoDate())
+    expect(asOfFrom('stichtag=')).toBe(toIsoDate())
   })
 })

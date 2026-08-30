@@ -11,8 +11,9 @@ import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
+  DUNNING_AS_OF_PARAM,
   DUNNING_BLOCKS_PATH,
   DUNNING_CHANNELS,
   DUNNING_CHANNEL_HINTS,
@@ -25,6 +26,7 @@ import {
   dunningWorklistKey,
   fetchDunningRunPdf,
   fetchDunningWorklist,
+  asOfFrom,
   availableChannels,
   channelSummary,
   dunningSettingsKey,
@@ -34,8 +36,9 @@ import {
   runSummary,
 } from '../lib/dunning'
 import { showFile } from '../lib/files'
+import { DunningRunDialog } from './dunning/DunningRunDialog'
 import { useAuth } from '../auth/useAuth'
-import { formatAmount, formatDate, toIsoDate } from '../lib/format'
+import { formatAmount, formatDate } from '../lib/format'
 import type {
   DunningCandidate,
   DunningChannelChoice,
@@ -65,7 +68,18 @@ export function DunningWorklistPage() {
 function Worklist({ tenantId }: { tenantId: number }) {
   // The reference day is also the way to look ahead: there is no second, unselectable section
   // for what falls due later, because that would only make the list longer.
-  const [asOf, setAsOf] = useState(() => toIsoDate())
+  //
+  // It starts from the address, so the run dialog can hand one over and a reload keeps it.
+  // Changing the field writes it back — the field stays the master, the parameter only
+  // carries it here (ADR-0033).
+  const [search, setSearch] = useSearchParams()
+  const asOf = asOfFrom(search.toString())
+  const setAsOf = (next: string) => {
+    const params = new URLSearchParams(search)
+    params.set(DUNNING_AS_OF_PARAM, next)
+    setSearch(params, { replace: true })
+  }
+  const [running, setRunning] = useState(false)
   const [open, setOpen] = useState<Record<string, boolean>>({})
   // Ticked letters, by the key that identifies one. Whole letters only — «zwei der drei
   // Rechnungen desselben Briefs» has no meaning (backend ADR-0096).
@@ -148,6 +162,9 @@ function Worklist({ tenantId }: { tenantId: number }) {
           value={asOf}
           onChange={(event) => setAsOf(event.target.value)}
         />
+        <Button variant="secondary" onClick={() => setRunning(true)}>
+          Neuer Mahnlauf erstellen
+        </Button>
         {mayRun && (
           <Button onClick={() => setConfirming(true)} disabled={sending.length === 0}>
             {chosen.length === 0
@@ -156,6 +173,8 @@ function Worklist({ tenantId }: { tenantId: number }) {
           </Button>
         )}
       </PageHeader>
+
+      <DunningRunDialog open={running} onClose={() => setRunning(false)} />
 
       <div className="grid gap-6 px-8 pb-12">
         {worklist.error !== null && <ErrorNotice error={worklist.error} />}

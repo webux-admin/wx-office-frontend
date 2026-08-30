@@ -19,6 +19,7 @@ import {
 } from '../lib/dunning'
 import { formatDate, formatDateTime } from '../lib/format'
 import type { DunningBlock } from '../lib/types'
+import { DunningRunDialog } from './dunning/DunningRunDialog'
 
 /**
  * Every dunning stop of this tenant, standing and lifted.
@@ -40,6 +41,7 @@ export function DunningBlockPage() {
 }
 
 function Blocks({ tenantId }: { tenantId: number }) {
+  const [running, setRunning] = useState(false)
   const { can } = useAuth()
   const queryClient = useQueryClient()
   const mayWrite = can(DUNNING_RIGHTS.write)
@@ -76,7 +78,15 @@ function Blocks({ tenantId }: { tenantId: number }) {
             ? `${standing.length} von ${rows.length} gelten`
             : undefined
         }
-      />
+      >
+        {/* Setting a stop still happens where the customer is; this is the way to the work
+            list, not a second way to set one (ADR-0029). */}
+        <Button variant="secondary" onClick={() => setRunning(true)}>
+          Neuer Mahnlauf erstellen
+        </Button>
+      </PageHeader>
+
+      <DunningRunDialog open={running} onClose={() => setRunning(false)} />
 
       <div className="grid gap-6 px-8 pb-12">
         {blocks.error !== null && <ErrorNotice error={blocks.error} />}

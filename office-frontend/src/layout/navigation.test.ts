@@ -6,6 +6,11 @@ import {
   OUTBOX_PATH,
   OUTBOX_RIGHTS,
 } from '../lib/outbox'
+import {
+  DUNNING_BLOCKS_PATH,
+  DUNNING_NOTICES_PATH,
+  DUNNING_WORKLIST_PATH,
+} from '../lib/dunning'
 import { SECURITY_PATH } from '../lib/loginPolicy'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from '../lib/openItem'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
@@ -479,5 +484,50 @@ describe('the open items folder', () => {
     expect(fromRun?.children.map((child) => child.href)).toEqual(
       fromList?.children.map((child) => child.href),
     )
+  })
+})
+
+/**
+ * The three dunning screens are one row, and the switch sits on the registers.
+ *
+ * <p>What went out is business correspondence with a ten-year retention; a module switch must
+ * not hide it (backend ADR-0092). That is why «Mahnungen» comes first and carries no module —
+ * it is what the folder head opens, and what a tenant without the dunning keeps.
+ */
+describe('the dunning folder', () => {
+  function dunning() {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    return sales?.entries.find((node) => isFolder(node) && node.label === 'Mahnungen')
+  }
+
+  it('navGroupsHoldTheDunningFolderTest', () => {
+    const folder = dunning()
+
+    expect(folder && isFolder(folder) && folder.children.map((child) => child.href)).toEqual([
+      DUNNING_NOTICES_PATH,
+      DUNNING_WORKLIST_PATH,
+      DUNNING_BLOCKS_PATH,
+    ])
+  })
+
+  /** The retention rule, in a test for the first time. */
+  it('navGroupsLeaveTheIssuedNoticesUnswitchedTest', () => {
+    const folder = dunning()
+    if (!folder || !isFolder(folder)) throw new Error('folder missing')
+
+    expect(folder.module).toBeUndefined()
+    expect(folder.children.map((child) => child.module)).toEqual([
+      undefined,
+      'DUNNING',
+      'DUNNING',
+    ])
+  })
+
+  /** Without the module exactly one register is left — and it is the one that has to stay. */
+  it('folderForKeepsTheNoticesWithoutTheModuleTest', () => {
+    const folder = folderFor(DUNNING_NOTICES_PATH, () => true, () => false)
+
+    expect(folder?.children.map((child) => child.href)).toEqual([DUNNING_NOTICES_PATH])
+    expect(folderFor(DUNNING_WORKLIST_PATH, () => true, () => false)).toBeNull()
   })
 })
