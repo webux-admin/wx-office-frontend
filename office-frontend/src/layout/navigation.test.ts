@@ -651,3 +651,57 @@ describe('the values folder', () => {
     ])
   })
 })
+
+/**
+ * The last two folds of the settings — and the one row that must not fold.
+ */
+describe('the tenant and access folders', () => {
+  function systemEntries() {
+    return NAV_GROUPS.find((group) => group.title === 'Systemeinstellungen')?.entries ?? []
+  }
+
+  function folder(label: string) {
+    const node = systemEntries().find((entry) => isFolder(entry) && entry.label === label)
+    if (!node || !isFolder(node)) throw new Error(`folder ${label} missing`)
+    return node
+  }
+
+  it('navGroupsHoldTheTenantFolderTest', () => {
+    const tenant = folder('Mandant')
+
+    expect(tenant.children.map((child) => child.href)).toEqual([
+      '/mandanten',
+      OUTBOX_ACCOUNT_PATH,
+    ])
+    // The switch stays on the child: on the head it would take the master data with it.
+    expect(tenant.module).toBeUndefined()
+    expect(tenant.children.map((child) => child.module)).toEqual([undefined, 'OUTBOX'])
+  })
+
+  it('navGroupsHoldTheAccessFolderTest', () => {
+    const access = folder('Zugang')
+
+    expect(access.children.map((child) => child.href)).toEqual([
+      '/benutzer',
+      '/rollen',
+      SECURITY_PATH,
+    ])
+    // No permission on the head — see visibleNavGroupsGrantsNothingElseToASuperuserTest.
+    expect(access.permission).toBeUndefined()
+  })
+
+  /**
+   * The four top rows, and «Module» flat among them.
+   *
+   * <p>A folder may carry a module, and `allowed` then throws the whole folder away. The one
+   * screen that governs the switches must never be able to go down with one of them
+   * (ADR-0018, ADR-0036).
+   */
+  it('navGroupsKeepTheModuleScreenFlatBetweenTheFoldersTest', () => {
+    const labels = systemEntries().map((entry) => entry.label)
+
+    expect(labels).toEqual(['Werte', 'Mandant', 'Module', 'Zugang'])
+    const module = systemEntries()[2]
+    expect(isFolder(module)).toBe(false)
+  })
+})

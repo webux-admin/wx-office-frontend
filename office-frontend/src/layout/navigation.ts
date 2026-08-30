@@ -416,32 +416,62 @@ export const NAV_GROUPS: NavGroup[] = [
           },
         ],
       },
-      { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
-      // Between «Mandanten» and «Module»: the mail account is an operating setting of the
-      // tenant, like its address — not a value a module reads (backend ADR-0082). It carries
-      // the module, so a tenant that does not send sees no way to set up sending.
+      // The firm, and the server its post goes out over. The mail account is an operating
+      // setting of the tenant, like its address — not a value a module reads (backend
+      // ADR-0082).
+      //
+      // THE MODULE SWITCH STAYS ON THE CHILD. On the folder it would take «Mandanten» with
+      // it, and a tenant that does not send mail would lose its master data (ADR-0036).
       {
-        label: 'Postausgang',
-        icon: Mail,
-        href: OUTBOX_ACCOUNT_PATH,
-        permission: OUTBOX_RIGHTS.read,
-        module: OUTBOX_MODULE,
+        label: 'Mandant',
+        icon: Building2,
+        permission: 'TENANT_READ',
+        children: [
+          {
+            label: 'Mandanten',
+            icon: Building2,
+            href: '/mandanten',
+            permission: 'TENANT_READ',
+          },
+          {
+            label: 'Postausgang',
+            icon: Mail,
+            href: OUTBOX_ACCOUNT_PATH,
+            permission: OUTBOX_RIGHTS.read,
+            module: OUTBOX_MODULE,
+          },
+        ],
       },
-      // Beside «Mandanten» and not under Moduleinstellungen: the sorting rule of ADR-0011 is
+      // Beside «Mandant» and not under Moduleinstellungen: the sorting rule of ADR-0011 is
       // «how many modules read the value» — the module switch is read by every one of them.
       // It carries no `module` field of its own, on purpose: a screen that hides itself once
       // somebody switches everything off leaves no way back but psql (ADR-0018).
+      //
+      // AND IT STAYS FLAT, for the same reason. A folder may carry a module, and then
+      // `allowed` throws the whole folder away — the one screen that governs the switches
+      // would go down with one of them. Its place between «Mandant» and «Zugang» is kept:
+      // `flattenNav` replaces a folder by its children where it stands (ADR-0036).
       { label: 'Module', icon: Blocks, href: MODULE_PATH, permission: MODULE_RIGHTS.read },
-      { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
-      { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
-      // Last in the group and the only entry in it that belongs to no tenant: it decides how
-      // the whole installation logs in. Shown to superusers alone — everybody else could read
-      // the state and change nothing, and a screen with no button on it is a dead end.
+      // Who gets in, with what, and how. NO PERMISSION ON THE HEAD: «Sicherheit» belongs to
+      // no tenant and hangs on the superuser flag alone, so a right here would either let a
+      // rightless session through to the other two or shut a superuser out of their own
+      // screen (backend ADR-0090, ADR-0036).
       {
-        label: 'Sicherheit',
-        icon: ShieldAlert,
-        href: SECURITY_PATH,
-        superuser: true,
+        label: 'Zugang',
+        icon: UserCog,
+        children: [
+          { label: 'Benutzer', icon: UserCog, href: '/benutzer', permission: 'USER_READ' },
+          { label: 'Rollen', icon: ShieldCheck, href: '/rollen', permission: 'USER_READ' },
+          // The only entry in the group that belongs to no tenant: it decides how the whole
+          // installation logs in. Shown to superusers alone — everybody else could read the
+          // state and change nothing, and a screen with no button on it is a dead end.
+          {
+            label: 'Sicherheit',
+            icon: ShieldAlert,
+            href: SECURITY_PATH,
+            superuser: true,
+          },
+        ],
       },
     ],
   },
