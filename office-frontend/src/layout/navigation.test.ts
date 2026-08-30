@@ -397,11 +397,16 @@ describe('folderFor', () => {
   })
 
   /**
-   * Three of the maintained lists stand outside any folder although ten others share their
-   * route. The strip is chosen by the address, which is why wrapping that route is harmless.
+   * Eleven maintained lists share one route and sit in three different folders.
+   *
+   * <p>The strip is chosen by the ADDRESS and not by the route — which is why wrapping
+   * `/basisdaten/:liste` once is enough, and why the units and the dunning types get
+   * different siblings out of the same route (ADR-0031, ADR-0035).
    */
-  it('folderForOnAFlatListEntryTest', () => {
-    expect(folderFor('/basisdaten/einheiten', all, runsAll)).toBeNull()
+  it('folderForOnAListEntryTest', () => {
+    expect(folderFor('/basisdaten/einheiten', all, runsAll)?.label).toBe('Werte')
+    expect(folderFor('/basisdaten/mahnarten', all, runsAll)?.label).toBe('Belege')
+    expect(folderFor('/basisdaten/ertragskonten', all, runsAll)?.label).toBe('Produkte')
     expect(labels('/basisdaten/sprachen')).toContain('/basisdaten/laender')
   })
 
@@ -583,6 +588,66 @@ describe('the products folder', () => {
       '/produkte',
       '/preisgruppen',
       '/preise-erfassen',
+    ])
+  })
+})
+
+/**
+ * Every value the tenant maintains stands in one row, and none of them got harder to find.
+ *
+ * <p>ADR-0004 abolished a collective mask whose registers had no address and no name in the
+ * menu. These have both — which is why it stays in force (ADR-0035).
+ */
+describe('the values folder', () => {
+  function systemEntries() {
+    const group = NAV_GROUPS.find((g) => g.title === 'Systemeinstellungen')
+    return group?.entries ?? []
+  }
+
+  /**
+   * The proof test: nine addresses, in this order, and the folder stands first.
+   *
+   * <p>The only test that goes red on a wrong order, a forgotten child or a folder in second
+   * place. `navGroupsCoverEveryBasicDataListTest` cannot see any of the three — it flattens.
+   */
+  it('flattenNavHoldsTheValuesFolderTest', () => {
+    const flat = flattenNav(systemEntries()).map((entry) => entry.href)
+
+    expect(flat.slice(0, 9)).toEqual([
+      '/basisdaten/zahlungsarten',
+      '/basisdaten/einheiten',
+      '/basisdaten/waehrungen',
+      '/basisdaten/sprachen',
+      '/basisdaten/laender',
+      '/basisdaten/rechtsformen',
+      '/basisdaten/anreden',
+      '/feste-werte',
+      '/mehrwertsteuer',
+    ])
+    expect(flat[9]).toBe('/mandanten')
+  })
+
+  it('navGroupsHoldTheValuesFolderFirstTest', () => {
+    const first = systemEntries()[0]
+
+    expect(first && isFolder(first) && first.label).toBe('Werte')
+  })
+
+  /**
+   * The VAT rates run on PRODUCT_READ, not on MASTERDATA_READ — the rates are federal.
+   *
+   * <p>This survives the folding because `allowed()` applies the permission to entries and
+   * filters children one by one; the permission on the folder head is not read. Whoever one
+   * day «corrects» that gets this test red, and then takes the right off the head rather than
+   * the register out of the folder.
+   */
+  it('visibleNavGroupsKeepsTheVatRegisterWithoutTheMasterDataRightTest', () => {
+    const visible = visibleNavGroups((permission) => permission === 'PRODUCT_READ', () => true)
+    const group = visible.find((g) => g.title === 'Systemeinstellungen')
+    const folder = group?.entries.find((node) => isFolder(node) && node.label === 'Werte')
+
+    expect(folder && isFolder(folder) && folder.children.map((child) => child.href)).toEqual([
+      '/mehrwertsteuer',
     ])
   })
 })

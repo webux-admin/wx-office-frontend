@@ -14,7 +14,6 @@ import {
   ClipboardList,
   Coins,
   CreditCard,
-  Ellipsis,
   FileText,
   FileType2,
   Globe,
@@ -22,6 +21,7 @@ import {
   HandCoins,
   Hash,
   Languages,
+  ListChecks,
   LayoutGrid,
   LayoutTemplate,
   Lock,
@@ -384,23 +384,36 @@ export const NAV_GROUPS: NavGroup[] = [
     // Values more than one module reads. What only one module reads sits one group lower.
     title: 'Systemeinstellungen',
     entries: [
-      listEntry('zahlungsarten', CreditCard),
-      listEntry('einheiten', Ruler),
-      listEntry('waehrungen', Coins),
-      // Not a maintained list: the rates are federal, carry no tenant and are read only.
-      { label: 'MWST-Sätze', icon: Percent, href: '/mehrwertsteuer', permission: 'PRODUCT_READ' },
-      // The structural values: renamable and hideable, but never added to or deleted.
-      { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: MASTER_DATA },
+      // Every value the tenant maintains, in one row. «Weitere Werte» is gone: it could not
+      // answer why the languages sat one fold deeper than the currencies, and both are set
+      // up once and then left alone.
+      //
+      // Nothing becomes harder to find — each list keeps its name in the menu, its own
+      // address and its own symbol in the folded rail (ADR-0035). The permission on the head
+      // says whom the folder belongs to; the children are filtered one by one.
       {
-        // Set up once and then left alone, so they sit one fold deeper than the rest.
-        label: 'Weitere Werte',
-        icon: Ellipsis,
+        label: 'Werte',
+        icon: ListChecks,
         permission: MASTER_DATA,
         children: [
+          listEntry('zahlungsarten', CreditCard),
+          listEntry('einheiten', Ruler),
+          listEntry('waehrungen', Coins),
           listEntry('sprachen', Languages),
           listEntry('laender', Globe),
           listEntry('rechtsformen', Scale),
           listEntry('anreden', UserRound),
+          // The structural values: renamable and hideable, but never added to or deleted.
+          { label: 'Feste Werte', icon: Lock, href: '/feste-werte', permission: MASTER_DATA },
+          // Not a maintained list: the rates are federal, carry no tenant and are read only —
+          // which is why this one runs on PRODUCT_READ. It belongs here all the same: it and
+          // «Feste Werte» point at each other, and a rate is a value like any other.
+          {
+            label: 'MWST-Sätze',
+            icon: Percent,
+            href: '/mehrwertsteuer',
+            permission: 'PRODUCT_READ',
+          },
         ],
       },
       { label: 'Mandanten', icon: Building2, href: '/mandanten', permission: 'TENANT_READ' },
