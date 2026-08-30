@@ -218,9 +218,9 @@ describe('flattenNav', () => {
       '/kunden',
       '/lieferanten',
       '/produkte',
-      '/zahlungskonditionen',
       '/preisgruppen',
       '/preise-erfassen',
+      '/zahlungskonditionen',
     ])
   })
 
@@ -382,12 +382,13 @@ describe('folderFor', () => {
   it('folderForTest', () => {
     const folder = folderFor('/preisgruppen', all, runsAll)
 
-    expect(folder?.label).toBe('Verkaufskonditionen')
+    expect(folder?.label).toBe('Produkte')
     // In menu order, not in the order the addresses were asked for.
     expect(folder?.children.map((child) => child.href)).toEqual([
-      '/zahlungskonditionen',
+      '/produkte',
       '/preisgruppen',
       '/preise-erfassen',
+      '/zahlungskonditionen',
     ])
   })
 
@@ -409,6 +410,11 @@ describe('folderFor', () => {
 
     expect(labels('/zahlungskonditionen', only('MASTERDATA_READ'))).toEqual([
       '/zahlungskonditionen',
+    ])
+    expect(labels('/produkte', only('PRODUCT_READ'))).toEqual([
+      '/produkte',
+      '/preisgruppen',
+      '/preise-erfassen',
     ])
   })
 
@@ -529,5 +535,54 @@ describe('the dunning folder', () => {
 
     expect(folder?.children.map((child) => child.href)).toEqual([DUNNING_NOTICES_PATH])
     expect(folderFor(DUNNING_WORKLIST_PATH, () => true, () => false)).toBeNull()
+  })
+})
+
+/**
+ * The article, its price and the terms it is paid on stand together.
+ *
+ * <p>«Verkaufskonditionen» is gone as a level of its own — two clicks behind a word that
+ * stands on no screen is not in the menu any more (ADR-0034).
+ */
+describe('the products folder', () => {
+  function stammdaten() {
+    return NAV_GROUPS.find((group) => group.title === 'Stammdaten')
+  }
+
+  /** The proof test. */
+  it('navGroupsFoldTheSalesConditionsUnderProductsTest', () => {
+    const group = stammdaten()
+    const folder = group?.entries[2]
+
+    expect(group?.entries).toHaveLength(3)
+    expect(folder && isFolder(folder)).toBe(true)
+    if (!folder || !isFolder(folder)) throw new Error('folder missing')
+    expect(folder.label).toBe('Produkte')
+    expect(folder.permission).toBeUndefined()
+    expect(folder.module).toBeUndefined()
+    expect(folder.children.map((child) => child.href)).toEqual([
+      '/produkte',
+      '/preisgruppen',
+      '/preise-erfassen',
+      '/zahlungskonditionen',
+    ])
+  })
+
+  /**
+   * No permission on the head, so the payment terms stay reachable for a session that may
+   * read master data and no product.
+   */
+  it('visibleNavGroupsKeepsThePaymentTermForMasterDataOnlyTest', () => {
+    const only = (permission: string) => (asked: string) => asked === permission
+
+    const forMasterData = folderFor('/zahlungskonditionen', only('MASTERDATA_READ'), () => true)
+    expect(forMasterData?.children.map((child) => child.href)).toEqual(['/zahlungskonditionen'])
+
+    const forProducts = folderFor('/produkte', only('PRODUCT_READ'), () => true)
+    expect(forProducts?.children.map((child) => child.href)).toEqual([
+      '/produkte',
+      '/preisgruppen',
+      '/preise-erfassen',
+    ])
   })
 })

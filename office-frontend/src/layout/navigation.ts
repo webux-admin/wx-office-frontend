@@ -344,19 +344,16 @@ export const NAV_GROUPS: NavGroup[] = [
     entries: [
       { label: 'Kunden', icon: Users, href: '/kunden', permission: 'PARTNER_READ' },
       { label: 'Lieferanten', icon: Truck, href: '/lieferanten', permission: 'PARTNER_READ' },
-      { label: 'Produkte', icon: Package, href: '/produkte', permission: 'PRODUCT_READ' },
+      // The article, its price, and the terms it is paid on — in that order, because that is
+      // the order they come into being. «Verkaufskonditionen» is gone as a level of its own:
+      // two clicks behind a word that stands on no screen is not in the menu any more
+      // (ADR-0034). No permission on the head; the children carry theirs, so a session with
+      // only MASTERDATA_READ still finds the payment terms here.
       {
-        // What is agreed with a buyer: when they pay, and at which price. Two screens,
-        // because a payment term and a price group have nothing in common but the purpose.
-        label: 'Verkaufskonditionen',
-        icon: HandCoins,
+        label: 'Produkte',
+        icon: Package,
         children: [
-          {
-            label: 'Zahlungskonditionen',
-            icon: HandCoins,
-            href: '/zahlungskonditionen',
-            permission: MASTER_DATA,
-          },
+          { label: 'Produkte', icon: Package, href: '/produkte', permission: 'PRODUCT_READ' },
           {
             label: 'Preisgruppen',
             icon: Tags,
@@ -364,12 +361,20 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: 'PRODUCT_READ',
           },
           // Prices over the whole catalogue rather than one product at a time: the way a
-          // price round is actually worked through (see ADR-0059 of the backend).
+          // price round is actually worked through (see ADR-0059 of the backend). After the
+          // price groups, because it is what fills them.
           {
             label: 'Schnellerfassung',
             icon: TableProperties,
             href: '/preise-erfassen',
             permission: 'PRODUCT_READ',
+          },
+          // Last: what is agreed with a buyer once there is a price — when they pay.
+          {
+            label: 'Zahlungskonditionen',
+            icon: HandCoins,
+            href: '/zahlungskonditionen',
+            permission: MASTER_DATA,
           },
         ],
       },
