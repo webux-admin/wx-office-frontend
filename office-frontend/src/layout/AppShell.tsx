@@ -286,6 +286,12 @@ function SidebarButton({
  * follows the location rather than being decided once at mount. A click overrules that for as
  * long as the session lasts; beyond that the fold remembers nothing, because it is a way to
  * look and not a setting.
+ *
+ * <p><b>The name leads somewhere, the chevron only folds.</b> Since a folder is also the
+ * register strip of its screens, its first screen is the natural thing to open — and a row
+ * that reads like a heading but does nothing when clicked is the row everybody clicks first.
+ * The address is never stored on the folder: it is whichever child this session may see
+ * (ADR-0031).
  */
 function NavFolderItem({ folder }: { folder: NavFolder }) {
   const { pathname } = useLocation()
@@ -301,27 +307,37 @@ function NavFolderItem({ folder }: { folder: NavFolder }) {
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => setToggled(!open)}
-        aria-expanded={open}
-        className={`flex h-[34px] w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 text-[13px] transition-colors ${
+      <div
+        className={`flex h-[34px] w-full items-center rounded-[var(--radius-md)] pr-1 text-[13px] transition-colors ${
           holdsCurrent && !open
             ? 'text-text-inverse'
             : 'text-text-inverse-muted hover:bg-ink-hover/60 hover:text-text-inverse'
         }`}
       >
-        <folder.icon size={16} aria-hidden className="shrink-0" />
-        <span className="flex-1 truncate text-left">{folder.label}</span>
-        <motion.span
-          animate={{ rotate: open ? 0 : -90 }}
-          initial={false}
-          transition={fold}
-          className="grid shrink-0 place-items-center"
+        <Link
+          to={folder.children[0].href}
+          className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5"
         >
-          <ChevronDown size={14} aria-hidden />
-        </motion.span>
-      </button>
+          <folder.icon size={16} aria-hidden className="shrink-0" />
+          <span className="truncate text-left">{folder.label}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setToggled(!open)}
+          aria-expanded={open}
+          aria-label={`${folder.label} ${open ? 'zuklappen' : 'aufklappen'}`}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-[var(--radius-sm)] hover:bg-ink-hover"
+        >
+          <motion.span
+            animate={{ rotate: open ? 0 : -90 }}
+            initial={false}
+            transition={fold}
+            className="grid place-items-center"
+          >
+            <ChevronDown size={14} aria-hidden />
+          </motion.span>
+        </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {open && (

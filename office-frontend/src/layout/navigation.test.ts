@@ -8,7 +8,15 @@ import {
 } from '../lib/outbox'
 import { SECURITY_PATH } from '../lib/loginPolicy'
 import { SALES_DOCUMENT_KINDS } from '../lib/salesDocument'
-import { flattenNav, isFolder, NAV_GROUPS, visibleNavGroups, type NavEntry } from './navigation'
+import {
+  flattenNav,
+  folderFor,
+  isFolder,
+  NAV_GROUPS,
+  visibleNavGroups,
+  type NavEntry,
+  type NavModule,
+} from './navigation'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -342,5 +350,83 @@ describe('visibleNavGroups', () => {
     const asSuperuser = hrefs(visibleNavGroups(none, () => true, true))
 
     expect(asSuperuser).toEqual([...asUser, SECURITY_PATH])
+  })
+})
+
+/**
+ * The register strip of a screen is the folder its menu entry sits in.
+ *
+ * <p>Derived, never maintained: the strip cannot disagree with the menu, and bundling a
+ * screen into a folder stops making it harder to find (ADR-0031).
+ */
+describe('folderFor', () => {
+  const all = () => true
+  const none = () => false
+  const runsAll = () => true
+
+  function labels(
+    pathname: string,
+    can: (permission: string) => boolean = all,
+    runs: (module: NavModule) => boolean = runsAll,
+    superuser = false,
+  ) {
+    return folderFor(pathname, can, runs, superuser)?.children.map((child) => child.href)
+  }
+
+  it('folderForTest', () => {
+    const folder = folderFor('/preisgruppen', all, runsAll)
+
+    expect(folder?.label).toBe('Verkaufskonditionen')
+    // In menu order, not in the order the addresses were asked for.
+    expect(folder?.children.map((child) => child.href)).toEqual([
+      '/zahlungskonditionen',
+      '/preisgruppen',
+      '/preise-erfassen',
+    ])
+  })
+
+  it('folderForOutsideAnyFolderTest', () => {
+    expect(folderFor('/kunden', all, runsAll)).toBeNull()
+  })
+
+  /**
+   * Three of the maintained lists stand outside any folder although ten others share their
+   * route. The strip is chosen by the address, which is why wrapping that route is harmless.
+   */
+  it('folderForOnAFlatListEntryTest', () => {
+    expect(folderFor('/basisdaten/einheiten', all, runsAll)).toBeNull()
+    expect(labels('/basisdaten/sprachen')).toContain('/basisdaten/laender')
+  })
+
+  it('folderForHidesWhatThePermissionForbidsTest', () => {
+    const only = (permission: string) => (asked: string) => asked === permission
+
+    expect(labels('/zahlungskonditionen', only('MASTERDATA_READ'))).toEqual([
+      '/zahlungskonditionen',
+    ])
+  })
+
+  it('folderForHidesASwitchedOffModuleTest', () => {
+    const withoutOutbox = (module: string) => module !== 'OUTBOX'
+
+    const hrefs = labels('/belegarten', all, withoutOutbox) ?? []
+    expect(hrefs).toContain('/belegarten')
+    expect(hrefs).not.toContain(OUTBOX_PATH)
+    expect(hrefs).not.toContain(MAIL_TEMPLATE_PATH)
+  })
+
+  /**
+   * The proof test: a folder is compared exactly, not by prefix the way the sidebar folds.
+   *
+   * <p>A full mask of one record is not one of the siblings; it is what the sibling led to.
+   */
+  it('folderForOnADetailRouteTest', () => {
+    expect(folderFor('/belegarten/42', all, runsAll)).toBeNull()
+    expect(folderFor('/belegarten', all, runsAll)?.label).toBe('Belege')
+  })
+
+  /** Nothing to show, nothing to hang a strip on. */
+  it('folderForWithoutAnyPermissionTest', () => {
+    expect(folderFor('/zahlungskonditionen', none, runsAll)).toBeNull()
   })
 })

@@ -576,6 +576,42 @@ export function visibleNavGroups(
 }
 
 /**
+ * The folder one screen sits in, filtered for this session.
+ *
+ * <p><b>The register strip of a screen is its folder.</b> A folder is no route of its own —
+ * its children are, and they are the screens that belong together. Deriving the strip from
+ * the menu means it can never disagree with the menu, and bundling a screen into a folder
+ * stops making it harder to find (ADR-0031).
+ *
+ * <p>Compared <b>exactly</b>, not with `startsWith` the way the sidebar folds: `/belegarten`
+ * carries the strip, `/belegarten/42` does not. A full mask of one record is not one of the
+ * siblings; it is what the sibling led to.
+ *
+ * <p>Filtered through {@link visibleNavGroups}, so the strip shows exactly the screens the
+ * sidebar shows — one predicate, not a second copy of it.
+ *
+ * @param pathname  the address on display
+ * @param can       answers whether the session holds a permission
+ * @param runs      answers whether this tenant runs a switchable module
+ * @param superuser whether the session belongs to a superuser
+ * @returns the folder holding that address, or `null` for a screen that stands on its own
+ */
+export function folderFor(
+  pathname: string,
+  can: (permission: string) => boolean,
+  runs: (module: NavModule) => boolean,
+  superuser = false,
+): NavFolder | null {
+  for (const group of visibleNavGroups(can, runs, superuser)) {
+    for (const node of group.entries) {
+      if (!isFolder(node)) continue
+      if (node.children.some((child) => child.href === pathname)) return node
+    }
+  }
+  return null
+}
+
+/**
  * Every entry of the menu, folders resolved.
  *
  * <p>The folded rail has no room to open anything, so it shows the entries themselves.

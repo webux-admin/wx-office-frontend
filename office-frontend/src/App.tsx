@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppShell } from './layout/AppShell'
+import { RegisterGroupLayout } from './layout/RegisterGroupLayout'
 import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
 import { firstBasicDataPath } from './lib/basicData'
@@ -118,14 +119,11 @@ export default function App() {
                 <Route path="/produkte" element={<ProductListPage />} />
                 <Route path="/produkte/:id" element={<ProductPage />} />
 
-                <Route path="/preisgruppen" element={<PriceGroupPage />} />
-                <Route path="/preise-erfassen" element={<PriceEntryPage />} />
 
                 <Route path="/bestand" element={<StockListPage />} />
                 <Route path="/unterdeckung" element={<StockShortageListPage />} />
                 <Route path="/reservierungen" element={<StockReservationListPage />} />
                 <Route path="/lagerbewegungen" element={<StockMovementListPage />} />
-                <Route path="/lagerorte" element={<StockLocationListPage />} />
                 <Route path="/inventuren" element={<StocktakeListPage />} />
                 <Route path="/inventuren/:id" element={<StocktakePage />} />
                 {/* The neighbours above write their path out, this one takes it from
@@ -133,7 +131,6 @@ export default function App() {
                     read the same one so neither can move without the other. */}
                 <Route path={STOCK_AS_OF_PATH} element={<StockAsOfPage />} />
 
-                <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
 
                 {/* Offerte, Auftrag, Lieferschein and Rechnung share one list and one mask,
                     so their routes come out of the same table the menu is built from. Written
@@ -147,26 +144,18 @@ export default function App() {
 
                 {/* Every maintained list is a screen of its own, so it can be linked and
                     bookmarked. The old collective address stays and points at the first one. */}
-                <Route path="/basisdaten/:liste" element={<MasterDataPage />} />
                 <Route
                   path="/auswahllisten"
                   element={<Navigate to={firstBasicDataPath()} replace />}
                 />
 
                 <Route path="/feste-werte" element={<CataloguePage />} />
-                <Route path="/zahlungskonditionen" element={<PaymentTermPage />} />
                 <Route path="/mehrwertsteuer" element={<VatPage />} />
-                <Route path="/belegarten" element={<DocumentTypeListPage />} />
                 <Route path="/belegarten/:id" element={<DocumentTypePage />} />
-                <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
                 <Route path="/druckvorlagen/:id" element={<PrintLayoutPage />} />
-                <Route path="/drucker" element={<PrinterListPage />} />
-                <Route path="/nummernkreise" element={<NumberRangePage />} />
                 {/* Like the module screen, these take their address from the building block
                     the menu reads, so neither can move without the other. */}
                 <Route path={OUTBOX_ACCOUNT_PATH} element={<OutboxAccountPage />} />
-                <Route path={OUTBOX_PATH} element={<OutboxListPage />} />
-                <Route path={MAIL_TEMPLATE_PATH} element={<OutboxTemplatePage />} />
 
                 <Route path="/mandanten" element={<TenantListPage />} />
                 <Route path={MODULE_PATH} element={<ModulePage />} />
@@ -178,14 +167,44 @@ export default function App() {
                 <Route path={SECURITY_PATH} element={<SecurityPolicyPage />} />
 
                 <Route path="/rollen" element={<RolePage />} />
-                <Route path="/mahnwesen-einstellungen" element={<DunningSettingsPage />} />
-                <Route path="/mahnstufen" element={<DunningLevelPage />} />
-                <Route path="/mahntexte" element={<DunningTextPage />} />
                 <Route path={OPEN_ITEM_PATH} element={<OpenItemListPage />} />
                 <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/mahnstopps" element={<DunningBlockPage />} />
+                {/* The screens whose menu entry sits in a folder. The folder is their
+                    register strip, drawn by the layout above them — no address changes, and
+                    a screen that stands in no folder simply gets no strip (ADR-0031).
+
+                    Detail masks stay outside on purpose: /belegarten carries the strip,
+                    /belegarten/42 does not. They stand where they always stood; only these
+                    fifteen were pulled together, and React Router picks by specificity
+                    rather than by order. */}
+                <Route element={<RegisterGroupLayout />}>
+                  <Route path="/zahlungskonditionen" element={<PaymentTermPage />} />
+                  <Route path="/preisgruppen" element={<PriceGroupPage />} />
+                  <Route path="/preise-erfassen" element={<PriceEntryPage />} />
+
+                  {/* Ten of the maintained lists sit in one of three folders; three do not,
+                      and share this very route. Wrapping it is harmless: the strip is chosen
+                      by the address, not by the route. */}
+                  <Route path="/basisdaten/:liste" element={<MasterDataPage />} />
+
+                  <Route path="/belegarten" element={<DocumentTypeListPage />} />
+                  <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
+                  <Route path="/drucker" element={<PrinterListPage />} />
+                  <Route path="/nummernkreise" element={<NumberRangePage />} />
+                  <Route path={OUTBOX_PATH} element={<OutboxListPage />} />
+                  <Route path={MAIL_TEMPLATE_PATH} element={<OutboxTemplatePage />} />
+
+                  <Route path="/mahnwesen-einstellungen" element={<DunningSettingsPage />} />
+                  <Route path="/mahnstufen" element={<DunningLevelPage />} />
+                  <Route path="/mahntexte" element={<DunningTextPage />} />
+
+                  <Route path="/lagerorte" element={<StockLocationListPage />} />
+                  <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
+                </Route>
+
                 <Route path="/profil" element={<ProfilePage />} />
               </Route>
 
