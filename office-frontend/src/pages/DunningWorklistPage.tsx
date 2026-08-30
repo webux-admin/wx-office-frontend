@@ -17,7 +17,7 @@ import {
   DUNNING_CHANNELS,
   DUNNING_CHANNEL_HINTS,
   DUNNING_NOTICES_PATH,
-  DUNNING_RIGHTS,
+  DUNNING_MODULE, DUNNING_RIGHTS,
   DUNNING_SETTINGS_PATH,
   DUNNING_SKIP_REASONS,
   candidateKey,
@@ -56,7 +56,7 @@ import type {
  */
 export function DunningWorklistPage() {
   return (
-    <RequireTenant permission={DUNNING_RIGHTS.read}>
+    <RequireTenant permission={DUNNING_RIGHTS.read} module={DUNNING_MODULE}>
       {(tenantId) => <Worklist tenantId={tenantId} />}
     </RequireTenant>
   )

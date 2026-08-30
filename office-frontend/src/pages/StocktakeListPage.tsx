@@ -15,7 +15,7 @@ import { api } from '../lib/api'
 import { formatDate, formatQuantity } from '../lib/format'
 import {
   countProgress,
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   STOCKTAKE_PATH,
   stocktakeListKey,
   stocktakesUrl,
@@ -39,7 +39,7 @@ const ORIGIN = originState(STOCKTAKE_PATH, 'Inventuren')
  */
 export function StocktakeListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StocktakeList tenantId={tenantId} />}
     </RequireTenant>
   )

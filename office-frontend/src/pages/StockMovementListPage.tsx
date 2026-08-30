@@ -17,7 +17,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount, formatDate, formatQuantity } from '../lib/format'
 import {
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   isReversible,
   stockLocationsKey,
   stockLocationsUrl,
@@ -39,7 +39,7 @@ import { ReverseMovementDialog } from './inventory/ReverseMovementDialog'
  */
 export function StockMovementListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StockMovements tenantId={tenantId} />}
     </RequireTenant>
   )

@@ -10,7 +10,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import {
-  DUNNING_RIGHTS,
+  DUNNING_MODULE, DUNNING_RIGHTS,
   blockLabel,
   couldBeLifted,
   dunningBlocksKey,
@@ -33,7 +33,7 @@ import type { DunningBlock } from '../lib/types'
  */
 export function DunningBlockPage() {
   return (
-    <RequireTenant permission={DUNNING_RIGHTS.read}>
+    <RequireTenant permission={DUNNING_RIGHTS.read} module={DUNNING_MODULE}>
       {(tenantId) => <Blocks tenantId={tenantId} />}
     </RequireTenant>
   )

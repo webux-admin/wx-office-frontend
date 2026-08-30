@@ -21,7 +21,7 @@ import { showFile } from '../lib/files'
 import { formatAmount, formatDate, formatQuantity, toIsoDate } from '../lib/format'
 import {
   backdatedMovementsText,
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   missingAsOfDateNote,
   showsLocationChoice,
   STOCK_AS_OF_PATH,
@@ -59,7 +59,7 @@ const ORIGIN = originState(STOCK_AS_OF_PATH, 'Inventar')
  */
 export function StockAsOfPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StockAsOf tenantId={tenantId} />}
     </RequireTenant>
   )

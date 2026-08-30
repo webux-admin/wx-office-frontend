@@ -18,7 +18,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount, formatQuantity } from '../lib/format'
 import {
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   shortageCauseLabel,
   shortageCauseTone,
   showsLocationChoice,
@@ -46,7 +46,7 @@ const ORIGIN = originState('/bestand', 'Bestand')
  */
 export function StockListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StockList tenantId={tenantId} />}
     </RequireTenant>
   )

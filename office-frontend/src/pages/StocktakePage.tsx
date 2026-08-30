@@ -17,7 +17,7 @@ import {
   countLineUrl,
   countProgress,
   countProgressText,
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   STOCK_MOVEMENT_PATH,
   STOCKTAKE_PATH,
   stockMovementListKey,
@@ -73,7 +73,7 @@ const CHIPS = [
 export function StocktakePage() {
   const { id } = useParams()
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StocktakeMask tenantId={tenantId} stocktakeId={Number(id)} />}
     </RequireTenant>
   )

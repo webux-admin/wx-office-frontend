@@ -52,7 +52,7 @@ import {
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { SECURITY_PATH } from '../lib/loginPolicy'
-import { MODULE_PATH, MODULE_RIGHTS } from '../lib/modules'
+import { MODULE_PATH, MODULE_RIGHTS, type LicensedModuleCode } from '../lib/modules'
 import { OPEN_ITEM_PATH, OPEN_ITEM_RIGHTS, WRITE_OFF_RUN_PATH } from '../lib/openItem'
 import {
   MAIL_TEMPLATE_PATH,
@@ -84,8 +84,11 @@ import type { DocumentCategory } from '../lib/types'
  * <p>The values are the backend codes, spelling included. A translation table between menu
  * key and backend code was weighed and dropped: it would be the second place where somebody
  * forgets a module (ADR-0018).
+ *
+ * <p>Defined in `lib/modules.ts` and only named again here: the sidebar was the first place
+ * that needed the list, the masks are the second, and one of the two would drift (ADR-0032).
  */
-export type NavModule = 'INVENTORY' | 'OUTBOX' | 'DUNNING'
+export type NavModule = LicensedModuleCode
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {

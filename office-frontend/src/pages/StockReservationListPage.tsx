@@ -16,7 +16,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount, formatDate, formatQuantity } from '../lib/format'
 import {
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   reservationStatusLabel,
   reservationStatusTone,
   reservesStock,
@@ -79,7 +79,7 @@ const FILTERS: ReservationFilterChip[] = [
  */
 export function StockReservationListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <ReservationList tenantId={tenantId} />}
     </RequireTenant>
   )

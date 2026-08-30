@@ -19,6 +19,9 @@ import type {
   StockShortfall,
 } from './types'
 
+/** Name of the backend `LicensedModule` value. */
+export const INVENTORY_MODULE = 'INVENTORY'
+
 /**
  * The rights that guard the inventory, as
  * {@code ch.webux.office.user.Permission} spells them.

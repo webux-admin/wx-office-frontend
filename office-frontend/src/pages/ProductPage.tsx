@@ -12,6 +12,8 @@ import { Tabs } from '../components/Tabs'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
+import { INVENTORY_MODULE } from '../lib/inventory'
+import { useRunsModule } from '../lib/modules'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatPercent } from '../lib/format'
@@ -91,6 +93,7 @@ function ProductLoader({ tenantId }: { tenantId: number }) {
 
 function ProductMask({ tenantId, product }: { tenantId: number; product: Product | null }) {
   const { can } = useAuth()
+  const runs = useRunsModule()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const origin = originOf(useLocation().state, LIST)
@@ -128,14 +131,25 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   // Only the ones the tenant shows. A field switched off keeps its value but leaves the mask.
   const freeFields = (freeFieldDefinitions.data ?? []).filter((field) => field.active !== false)
 
-  // Two registers appear only where there is something in them: the stock, which a session
-  // without INVENTORY_READ has no business seeing, and the free fields of a tenant that
-  // defined none.
+  // Two registers appear only where there is something in them: the stock, and the free
+  // fields of a tenant that defined none.
+  //
+  // The stock needs BOTH answers. The right says who may look, the switch says whether this
+  // tenant keeps stock at all — and a tenant that does not has no stock to show, however
+  // many rights the session holds (backend ADR-0060, ADR-0032).
   const registers = [
     ...REGISTERS,
-    ...(can('INVENTORY_READ') ? [{ id: 'lager' as const, label: 'Lager' }] : []),
+    ...(runs(INVENTORY_MODULE) && can('INVENTORY_READ')
+      ? [{ id: 'lager' as const, label: 'Lager' }]
+      : []),
     ...(freeFields.length === 0 ? [] : [{ id: 'freifelder' as const, label: 'Freifelder' }]),
   ]
+
+  // Which register is actually shown. Derived rather than corrected in an effect: a register
+  // can disappear under the mask — the module gets switched off in another tab, the last free
+  // field is deactivated — and a chosen tab that is no longer offered would leave the page
+  // blank. Falling back never touches the stored product; only what is drawn.
+  const shownTab: Register = registers.some((entry) => entry.id === tab) ? tab : 'hauptdaten'
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['product', tenantId] })
@@ -213,7 +227,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
       </PageHeader>
 
       <div className="px-8 pb-12">
-        <Tabs tabs={registers} active={tab} onChange={setTab} label="Register" />
+        <Tabs tabs={registers} active={shownTab} onChange={setTab} label="Register" />
 
         {(complaint !== null || save.error !== null) && (
           <div className="mb-6">
@@ -221,7 +235,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           </div>
         )}
 
-        {tab === 'hauptdaten' && (
+        {shownTab === 'hauptdaten' && (
           <Panel title="Stammdaten">
             <div className="grid gap-4 sm:grid-cols-2">
               <TextField
@@ -326,7 +340,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           </Panel>
         )}
 
-        {tab === 'preise' && (
+        {shownTab === 'preise' && (
           <ProductPrices
             tenantId={tenantId}
             rows={prices}
@@ -335,7 +349,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           />
         )}
 
-        {tab === 'freifelder' && (
+        {shownTab === 'freifelder' && (
           <ProductFreeFields
             fields={freeFields}
             values={form.freeFields}
@@ -349,7 +363,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           />
         )}
 
-        {tab === 'lager' && (
+        {shownTab === 'lager' && (
           <Panel
             title="Einrichtung"
             description="Ob und wie genau der Bestand dieses Produkts geführt wird."
@@ -400,13 +414,13 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
 
         {/* Only for an article that is saved and followed: a new one has no stock, and one
             without the flag has none by definition. */}
-        {tab === 'lager' && product !== null && form.stockManaged && (
+        {shownTab === 'lager' && product !== null && form.stockManaged && (
           <div className="mt-6">
             <ProductStock tenantId={tenantId} product={product} />
           </div>
         )}
 
-        {tab === 'buchhaltung' && (
+        {shownTab === 'buchhaltung' && (
           <Panel title="Steuer und Konto">
             <div className="grid gap-4 sm:grid-cols-2">
               <CatalogueSelect

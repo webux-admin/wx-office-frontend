@@ -1,5 +1,7 @@
-import { AlertTriangle, Inbox, Lock } from 'lucide-react'
+import { AlertTriangle, Blocks, Inbox, Lock } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { MODULE_NAMES, MODULE_PATH, type LicensedModuleCode } from '../lib/modules'
 import { Spinner } from './Spinner'
 
 /**
@@ -104,6 +106,32 @@ export function ForbiddenNotice({ permission }: { permission: string }) {
       <p className="mx-auto mt-1 max-w-[52ch] text-[13px] text-text-secondary">
         Für diesen Bereich fehlt das Recht <span className="font-mono text-[12px]">{permission}</span>.
         Eine Administratorin oder ein Administrator kann es erteilen.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Shown instead of a screen whose module the tenant does not run.
+ *
+ * <p><b>Not {@link ForbiddenNotice}.</b> The right says who may, the switch says whether the
+ * tenant operates the module at all — and «Für diesen Bereich fehlt das Recht INVENTORY_READ»
+ * would send an administrator looking for a right that was granted long ago (backend
+ * ADR-0060). So this names the module and the way to its switch.
+ */
+export function ModuleOffNotice({ module }: { module: LicensedModuleCode }) {
+  return (
+    <div className="px-6 py-16 text-center">
+      <span className="mx-auto grid h-11 w-11 place-items-center rounded-[var(--radius-full)] bg-sunken text-text-tertiary">
+        <Blocks size={18} aria-hidden />
+      </span>
+      <h2 className="mt-3.5 text-[14px] font-semibold">Modul nicht eingeschaltet</h2>
+      <p className="mx-auto mt-1 max-w-[52ch] text-[13px] text-text-secondary">
+        {MODULE_NAMES[module]} ist für diesen Mandanten nicht eingeschaltet. Unter{' '}
+        <Link to={MODULE_PATH} className="text-accent-text underline-offset-2 hover:underline">
+          Systemeinstellungen → Module
+        </Link>{' '}
+        lässt es sich einschalten.
       </p>
     </div>
   )

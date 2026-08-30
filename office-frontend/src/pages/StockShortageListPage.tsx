@@ -12,7 +12,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount, formatQuantity } from '../lib/format'
 import {
-  INVENTORY_RIGHTS,
+  INVENTORY_MODULE, INVENTORY_RIGHTS,
   shortageCauseLabel,
   shortageCauseTone,
   showsLocationChoice,
@@ -54,7 +54,7 @@ const FILTERS: CauseFilter[] = [
  */
 export function StockShortageListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <ShortageList tenantId={tenantId} />}
     </RequireTenant>
   )

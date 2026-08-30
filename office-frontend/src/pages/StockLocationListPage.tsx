@@ -16,7 +16,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
-import { INVENTORY_RIGHTS, stockLocationsKey, stockLocationsUrl } from '../lib/inventory'
+import { INVENTORY_MODULE, INVENTORY_RIGHTS, stockLocationsKey, stockLocationsUrl } from '../lib/inventory'
 import type { NegativeStockPolicy, StockLocation } from '../lib/types'
 import {
   belongsToCode,
@@ -39,7 +39,7 @@ import {
  */
 export function StockLocationListPage() {
   return (
-    <RequireTenant permission={INVENTORY_RIGHTS.read}>
+    <RequireTenant permission={INVENTORY_RIGHTS.read} module={INVENTORY_MODULE}>
       {(tenantId) => <StockLocations tenantId={tenantId} />}
     </RequireTenant>
   )

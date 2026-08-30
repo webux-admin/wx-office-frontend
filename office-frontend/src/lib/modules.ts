@@ -1,3 +1,4 @@
+import { useAuth } from '../auth/useAuth'
 import type { TenantAccess } from './types'
 
 /**
@@ -10,6 +11,30 @@ import type { TenantAccess } from './types'
 
 /** Path of the module screen within the application. */
 export const MODULE_PATH = '/module'
+
+/**
+ * The switchable modules, by the code the backend spells them with.
+ *
+ * <p>Closed on purpose: a module without a name here cannot slip through, because every
+ * place that names one reads {@link MODULE_NAMES} and TypeScript insists it is complete. The
+ * sidebar's `NavModule` is this type (ADR-0018 wanted one list, not two).
+ */
+export type LicensedModuleCode = 'INVENTORY' | 'OUTBOX' | 'DUNNING'
+
+/**
+ * What each module is called on screen.
+ *
+ * <p>The one source of the word. The backend has two wordings for the same thing — «Das
+ * Lager ist für diesen Mandanten nicht eingeschaltet. Es lässt sich unter
+ * «Systemeinstellungen → Module» einschalten» against «Der Mandant betreibt das Mahnwesen
+ * nicht» — and the second does not name the way to the switch. Copying either would make the
+ * mask's sentence depend on which module it happens to be about.
+ */
+export const MODULE_NAMES: Record<LicensedModuleCode, string> = {
+  INVENTORY: 'Lager',
+  OUTBOX: 'Postausgang',
+  DUNNING: 'Mahnwesen',
+}
 
 /**
  * The rights the module screen runs on.
@@ -58,4 +83,18 @@ export function runsModule(
   if (activeTenantId === null || activeTenantId === undefined) return false
   const active = tenants?.find((tenant) => tenant.id === activeTenantId)
   return active?.modules.includes(module) ?? false
+}
+
+/**
+ * Asks the session whether the tenant runs a module — the same shape as `can`.
+ *
+ * <p>A screen should not have to reach into `user?.tenants` to find out; that is four
+ * arguments of ceremony around one question, and it is the reason the check was skipped in
+ * eleven masks. Costs no request: the module list travels with the session (ADR-0018).
+ *
+ * @returns a predicate over the module code
+ */
+export function useRunsModule(): (module: LicensedModuleCode) => boolean {
+  const { user } = useAuth()
+  return (module) => runsModule(user?.tenants, user?.activeTenantId, module)
 }
