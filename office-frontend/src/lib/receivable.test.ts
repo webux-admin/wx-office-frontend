@@ -17,6 +17,10 @@ function line(overrides: Partial<Payment> = {}): Payment {
     amount: 100,
     currency: 'CHF',
     valueDate: '2026-08-20',
+    originalAmount: 100,
+    originalCurrency: 'CHF',
+    exchangeRate: 1,
+    exchangeRateUnit: 1,
     source: 'MANUAL',
     recordedAt: '2026-08-20T09:15:00Z',
     recordedBy: 'anna',
@@ -82,10 +86,26 @@ describe('the kind catalogue', () => {
     expect(named).toContain('OVERPAYMENT_KEPT')
   })
 
-  it('paymentKindOrderLeavesTheWriteOffKindsOutTest', () => {
-    expect(PAYMENT_KIND_ORDER).not.toContain('BANK_CHARGE')
-    expect(PAYMENT_KIND_ORDER).not.toContain('EXCHANGE_DIFFERENCE')
+  /**
+   * Two kinds became choosable with the foreign-currency payment, and two stayed out.
+   *
+   * <p>`BANK_CHARGE` and `EXCHANGE_DIFFERENCE` close what a conversion leaves over — the
+   * bank keeps its fee on the way, and the rate moves between invoice and payment. Neither
+   * reduces the agreed consideration (MWSTV Art. 45 and Art. 46), which is why they are
+   * offered here and still absent from `REDUCES_CONSIDERATION` (backend ADR-0106).
+   *
+   * <p>`OVERPAYMENT_KEPT` and `ADVANCE_APPLIED` stay out: the first is a decision with a
+   * ceiling and belongs in the write-off dialog (ADR-0039), the second comes into being only
+   * through the credit screen (backend ADR-0104).
+   */
+  it('paymentKindOrderOffersWhatAConversionLeavesTest', () => {
+    expect(PAYMENT_KIND_ORDER).toContain('BANK_CHARGE')
+    expect(PAYMENT_KIND_ORDER).toContain('EXCHANGE_DIFFERENCE')
     expect(PAYMENT_KIND_ORDER).not.toContain('OVERPAYMENT_KEPT')
+    expect(PAYMENT_KIND_ORDER).not.toContain('ADVANCE_APPLIED')
+    // And neither of the two newcomers ever became an Entgeltsminderung.
+    expect(REDUCES_CONSIDERATION).not.toContain('BANK_CHARGE')
+    expect(REDUCES_CONSIDERATION).not.toContain('EXCHANGE_DIFFERENCE')
   })
 
   it('paymentKindOrderStartsWithTheEverydayCaseTest', () => {

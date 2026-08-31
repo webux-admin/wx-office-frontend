@@ -2294,6 +2294,18 @@ export type Payment = {
   currency: string
   /** The day the money was valued, not the day somebody typed it. */
   valueDate: string
+  /**
+   * What the bank actually moved, in its own currency — the evidence beside the settled
+   * amount. Equal to `amount` where nothing was converted (backend ADR-0106).
+   */
+  originalAmount: number
+  originalCurrency: string
+  /** Converts the original amount into the currency of the invoice. */
+  exchangeRate: number
+  /** How many units the rate refers to: 1 or 100. */
+  exchangeRateUnit: number
+  /** The day of the rate; absent where nothing was converted. */
+  exchangeRateDate?: string
   source: PaymentSource
   /** Set on a counter line: the line it takes back. */
   reversesPaymentId?: number

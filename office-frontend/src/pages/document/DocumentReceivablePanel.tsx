@@ -30,7 +30,23 @@ import type { SalesDocumentKind } from '../../lib/salesDocument'
 import type { Payment, PaymentKind } from '../../lib/types'
 
 /** What the record dialog edits. */
-type PaymentForm = { kind: PaymentKind; amount: string; valueDate: string; note: string }
+/**
+ * What the dialog edits.
+ *
+ * <p>`currency` is the currency of what <b>arrived</b>, not of the invoice. Where the two
+ * differ, the three rate fields turn one into the other — and the server works out what the
+ * invoice settles (backend ADR-0106).
+ */
+type PaymentForm = {
+  kind: PaymentKind
+  amount: string
+  currency: string
+  valueDate: string
+  exchangeRate: string
+  exchangeRateUnit: string
+  exchangeRateDate: string
+  note: string
+}
 
 /**
  * What a new settlement starts as: a payment, valued today, for whatever is still open.
@@ -40,11 +56,17 @@ type PaymentForm = { kind: PaymentKind; amount: string; valueDate: string; note:
  * typed out every time. Pre-filled only when something is actually open — never with a
  * negative amount from an overpayment.
  */
-function proposedForm(open: number | undefined): PaymentForm {
+function proposedForm(open: number | undefined, currency = 'CHF'): PaymentForm {
   return {
     kind: 'PAYMENT',
     amount: open !== undefined && open > 0 ? open.toFixed(2) : '',
+    // Pre-filled with the currency of the invoice: paying in another one is the exception,
+    // and the three rate fields stay out of sight until somebody chooses it.
+    currency,
     valueDate: toIsoDate(),
+    exchangeRate: '',
+    exchangeRateUnit: '1',
+    exchangeRateDate: '',
     note: '',
   }
 }
@@ -88,7 +110,7 @@ export function DocumentReceivablePanel({
   const [keepingSurplus, setKeepingSurplus] = useState(false)
   const [writingOff, setWritingOff] = useState(false)
   const [reversing, setReversing] = useState<Payment | null>(null)
-  const [form, setForm] = useState<PaymentForm>(() => proposedForm(undefined))
+  const [form, setForm] = useState<PaymentForm>(() => proposedForm(undefined, currency))
   const [reason, setReason] = useState('')
 
   const key = receivableKey(kind, tenantId, documentId)
@@ -115,8 +137,14 @@ export function DocumentReceivablePanel({
       recordPayment(tenantId, documentId, {
         kind: form.kind,
         amount: Number(form.amount.replace(',', '.')),
-        currency,
+        currency: form.currency,
         valueDate: form.valueDate,
+        // Only where something is actually converted: a rate on a payment in the currency
+        // of the invoice is a claim about a conversion that did not happen, and the server
+        // refuses it.
+        exchangeRate: converts ? Number(form.exchangeRate.replace(',', '.')) : undefined,
+        exchangeRateUnit: converts ? Number(form.exchangeRateUnit) : undefined,
+        exchangeRateDate: converts ? form.exchangeRateDate : undefined,
         note: form.note.trim() === '' ? undefined : form.note.trim(),
       }),
     onSuccess: () => {
@@ -153,13 +181,25 @@ export function DocumentReceivablePanel({
 
   const openCreate = () => {
     record.reset()
-    setForm(proposedForm(item?.open))
+    setForm(proposedForm(item?.open, currency))
     setRecording(true)
   }
 
   const amountValue = Number(form.amount.replace(',', '.'))
   const amountInvalid =
     form.amount.trim() === '' || Number.isNaN(amountValue) || amountValue === 0
+
+  // The three rate fields appear only when they are needed, so the everyday dialog stays
+  // exactly as it was.
+  const converts = form.currency !== currency
+  const rateValue = Number(form.exchangeRate.replace(',', '.'))
+  const rateInvalid = converts
+    && (form.exchangeRate.trim() === '' || !(rateValue > 0)
+      || form.exchangeRateDate === '')
+  // Shown, not sent: the server works the settled amount out itself.
+  const settled = converts && !rateInvalid && !amountInvalid
+    ? (amountValue * rateValue) / Number(form.exchangeRateUnit)
+    : undefined
 
   return (
     <Panel
@@ -308,7 +348,7 @@ export function DocumentReceivablePanel({
         open={recording}
         onClose={() => setRecording(false)}
         title="Zahlung erfassen"
-        description={`Beträge in ${currency}, wie die Rechnung. Das Valutadatum ist der Tag der Wertstellung, nicht der Tag der Erfassung.`}
+        description={`Die Rechnung lautet auf ${currency}. Eine Zahlung in einer anderen Währung braucht Kurs und Kursdatum. Das Valutadatum ist der Tag der Wertstellung, nicht der Tag der Erfassung.`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setRecording(false)}>
@@ -317,7 +357,7 @@ export function DocumentReceivablePanel({
             <Button
               onClick={() => record.mutate()}
               busy={record.isPending}
-              disabled={amountInvalid || form.valueDate === ''}
+              disabled={amountInvalid || rateInvalid || form.valueDate === ''}
             >
               Erfassen
             </Button>
@@ -347,14 +387,75 @@ export function DocumentReceivablePanel({
             />
           </div>
 
-          <TextField
-            label={`Betrag in ${currency}`}
-            value={form.amount}
-            onChange={(event) => setForm({ ...form, amount: event.target.value })}
-            inputMode="decimal"
-            numeric
-            hint={overpaymentHint(advice.data, currency)}
-          />
+          <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+            <TextField
+              label="Betrag"
+              value={form.amount}
+              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              inputMode="decimal"
+              numeric
+              hint={converts ? undefined : overpaymentHint(advice.data, currency)}
+            />
+            <TextField
+              label="Währung"
+              value={form.currency}
+              onChange={(event) =>
+                setForm({ ...form, currency: event.target.value.toUpperCase() })}
+              maxLength={3}
+              hint={`Rechnung: ${currency}`}
+            />
+          </div>
+
+          {/* Only where something is actually converted. In the everyday case the dialog
+              stays exactly as it was — the rate comes from the payment itself, from the bank
+              advice or the statement, never from the invoice (backend ADR-0106). */}
+          {converts && (
+            <div className="grid gap-4 rounded-[var(--radius-lg)] border border-line-subtle p-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <TextField
+                  label="Kurs"
+                  value={form.exchangeRate}
+                  onChange={(event) =>
+                    setForm({ ...form, exchangeRate: event.target.value })}
+                  inputMode="decimal"
+                  numeric
+                  hint={`${form.currency} → ${currency}`}
+                />
+                <SelectField
+                  label="Kurs je"
+                  value={form.exchangeRateUnit}
+                  onChange={(event) =>
+                    setForm({ ...form, exchangeRateUnit: event.target.value })}
+                  hint="Manche Währungen werden je 100 notiert."
+                >
+                  <option value="1">1 Einheit</option>
+                  <option value="100">100 Einheiten</option>
+                </SelectField>
+                <TextField
+                  label="Kursdatum"
+                  type="date"
+                  value={form.exchangeRateDate}
+                  onChange={(event) =>
+                    setForm({ ...form, exchangeRateDate: event.target.value })}
+                />
+              </div>
+
+              {settled !== undefined && (
+                <p className="text-[13px]" aria-live="polite">
+                  {formatAmount(amountValue)} {form.currency} × {form.exchangeRate}
+                  {form.exchangeRateUnit === '100' ? ' ÷ 100' : ''} ={' '}
+                  <span className="font-medium">
+                    {formatAmount(settled)} {currency}
+                  </span>
+                </p>
+              )}
+              <p className="text-[12px] text-text-secondary">
+                Ausgeglichen wird in {currency}; gerechnet wird auf dem Server. Was übrig
+                bleibt, ist die Kursdifferenz und wird als eigene Zeile geschlossen — sie
+                mindert das Entgelt nicht (MWSTV Art. 45).
+              </p>
+            </div>
+          )}
 
           {REDUCES_CONSIDERATION.includes(form.kind) && (
             <p className="text-[12px] text-text-secondary">
@@ -507,7 +608,20 @@ function PaymentRow({
         )}
       </td>
       <td className="py-1.5 pr-4 text-right tabular-nums">
-        {formatAmount(payment.amount)} {payment.currency}
+        <span className="grid">
+          <span>
+            {formatAmount(payment.amount)} {payment.currency}
+          </span>
+          {/* What arrived, where it differs from what the invoice settles: the evidence
+              beside the figure (backend ADR-0106). */}
+          {payment.originalCurrency !== payment.currency && (
+            <span className="text-[12px] text-text-tertiary no-underline">
+              {formatAmount(payment.originalAmount)} {payment.originalCurrency}
+              {' '}× {payment.exchangeRate}
+              {payment.exchangeRateUnit === 100 ? ' ÷ 100' : ''}
+            </span>
+          )}
+        </span>
       </td>
       <td className="py-1.5 pr-4">{payment.note ?? ''}</td>
       <td className="py-1.5 pr-4">

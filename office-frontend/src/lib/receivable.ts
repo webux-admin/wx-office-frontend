@@ -27,6 +27,10 @@ export const PAYMENT_KINDS: Record<PaymentKind, string> = {
  * The kinds in the order the picker offers them: the everyday one first, the one that gives
  * money up last.
  *
+ * <p>`BANK_CHARGE` and `EXCHANGE_DIFFERENCE` are here since a payment may be converted: the
+ * rest a conversion leaves has to be closable, and neither of the two reduces the agreed
+ * consideration (MWSTV Art. 45 and Art. 46, backend ADR-0106).
+ *
  * <p><b>`ADVANCE_APPLIED` is deliberately not here.</b> It comes into being only through the
  * credit screen, where a customer credit is set against an invoice — never by somebody
  * choosing it in the payment dialog. Offering it would let a settlement claim a prepayment
@@ -37,6 +41,8 @@ export const PAYMENT_KIND_ORDER: PaymentKind[] = [
   'DISCOUNT',
   'CREDIT',
   'ROUNDING',
+  'BANK_CHARGE',
+  'EXCHANGE_DIFFERENCE',
   'WRITE_OFF',
 ]
 
@@ -63,9 +69,22 @@ export const REDUCES_CONSIDERATION: PaymentKind[] = [
 /** What one settlement to record looks like on the wire. */
 export type RecordPaymentBody = {
   kind: PaymentKind
+  /** What arrived, in the currency below — not what the invoice settles. */
   amount: number
   currency: string
   valueDate: string
+  /**
+   * Converts the amount into the currency of the invoice.
+   *
+   * <p>Required where the two currencies differ, refused where they are the same. The
+   * settled amount is worked out by the server: two figures sent together could contradict
+   * each other, and the row is unchangeable once written (backend ADR-0106).
+   */
+  exchangeRate?: number
+  /** How many units the rate refers to: 1 or 100. Left out counts as 1. */
+  exchangeRateUnit?: number
+  /** The day of the rate; required together with the rate. */
+  exchangeRateDate?: string
   note?: string
 }
 

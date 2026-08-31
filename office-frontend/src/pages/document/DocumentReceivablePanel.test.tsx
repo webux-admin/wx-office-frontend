@@ -176,7 +176,7 @@ describe('DocumentReceivablePanel', () => {
     await settle()
 
     await act(async () => {
-      type(field('Betrag in CHF')!, '1297.60')
+      type(field('Betrag')!, '1297.60')
     })
     await settle()
 
@@ -200,7 +200,7 @@ describe('DocumentReceivablePanel', () => {
     })
     await settle()
     await act(async () => {
-      type(field('Betrag in CHF')!, '100000.00')
+      type(field('Betrag')!, '100000.00')
     })
     await settle()
 
@@ -217,7 +217,7 @@ describe('DocumentReceivablePanel', () => {
     })
     await settle()
     await act(async () => {
-      type(field('Betrag in CHF')!, '1297.25')
+      type(field('Betrag')!, '1297.25')
     })
     await settle()
 
@@ -255,5 +255,99 @@ describe('DocumentReceivablePanel', () => {
     await render()
 
     expect(text()).not.toContain('zu viel bezahlt')
+  })
+  // --- a payment in another currency (backend ADR-0106) ----------------------
+
+  /**
+   * The three rate fields stay out of sight until they are needed.
+   *
+   * <p>Paying in the currency of the invoice is the everyday case, and the dialog for it is
+   * exactly what it was.
+   */
+  it('documentReceivablePanelHidesTheRateFieldsByDefaultTest', async () => {
+    await render()
+    await act(async () => {
+      button('Zahlung erfassen')?.click()
+    })
+    await settle()
+
+    expect(field('Kurs')).toBeUndefined()
+    expect(field('Kursdatum')).toBeUndefined()
+    expect(field('Währung')?.value).toBe('CHF')
+  })
+
+  /** Another currency: the fields appear, and the preview says what will be settled. */
+  it('documentReceivablePanelShowsTheRateFieldsForAnotherCurrencyTest', async () => {
+    await render()
+    await act(async () => {
+      button('Zahlung erfassen')?.click()
+    })
+    await settle()
+
+    await act(async () => {
+      type(field('Währung')!, 'EUR')
+    })
+    await settle()
+
+    expect(field('Kurs')).toBeDefined()
+    expect(field('Kursdatum')).toBeDefined()
+    expect(text()).toContain('MWSTV Art. 45')
+  })
+
+  /** Without a rate and a rate date the button stays shut: the server would refuse anyway. */
+  it('documentReceivablePanelBlocksAConversionWithoutARateTest', async () => {
+    await render()
+    await act(async () => {
+      button('Zahlung erfassen')?.click()
+    })
+    await settle()
+    await act(async () => {
+      type(field('Betrag')!, '940.00')
+    })
+    await act(async () => {
+      type(field('Währung')!, 'EUR')
+    })
+    await settle()
+
+    expect(button('Erfassen')?.disabled).toBe(true)
+
+    await act(async () => {
+      type(field('Kurs')!, '1.060900')
+    })
+    await act(async () => {
+      type(field('Kursdatum')!, '2026-04-17')
+    })
+    await settle()
+
+    expect(button('Erfassen')?.disabled).toBe(false)
+    // The preview is shown, not sent: the server works the settled amount out itself.
+    expect(text()).toContain('997.25')
+  })
+
+  /** The history shows what arrived beside what the invoice settled. */
+  it('documentReceivablePanelShowsTheEvidenceOnAConvertedLineTest', async () => {
+    payments = [
+      {
+        id: 1,
+        documentId: DOCUMENT,
+        kind: 'PAYMENT',
+        amount: 997.246,
+        currency: 'EUR',
+        valueDate: '2026-04-17',
+        originalAmount: 940,
+        originalCurrency: 'CHF',
+        exchangeRate: 1.0609,
+        exchangeRateUnit: 1,
+        exchangeRateDate: '2026-04-17',
+        source: 'MANUAL',
+        recordedAt: '2026-04-17T09:12:00Z',
+        recordedBy: 'muster',
+      },
+    ]
+
+    await render()
+
+    expect(text()).toContain('997.25 EUR')
+    expect(text()).toContain('940.00 CHF')
   })
 })
