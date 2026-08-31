@@ -112,6 +112,85 @@ describe('api.post', () => {
   })
 })
 
+describe('api.upload', () => {
+  function xmlFile(): File {
+    return new File(['<Document/>'], 'camt054.xml', { type: 'application/xml' })
+  }
+
+  it('uploadTest', async () => {
+    const calls = stubFetch(json(201, { id: 7, state: 'RECEIVED' }))
+
+    await expect(
+      api.upload('/api/tenants/1/bank-statements', xmlFile()),
+    ).resolves.toEqual({ id: 7, state: 'RECEIVED' })
+    expect(calls[0].init.method).toBe('POST')
+    expect(calls[0].init.credentials).toBe('include')
+  })
+
+  // The one thing this verb exists for: the browser has to set the Content-Type itself,
+  // because only it knows the boundary it just generated. Setting it by hand is the classic
+  // way to a 500 nobody can explain.
+  it('uploadSetsNoContentTypeTest', async () => {
+    const calls = stubFetch(json(201, {}))
+
+    await api.upload('/api/tenants/1/bank-statements', xmlFile())
+
+    expect(headerOf(calls[0], 'Content-Type')).toBeUndefined()
+    expect(calls[0].init.body).toBeInstanceOf(FormData)
+  })
+
+  it('uploadSendsTheFileAsThePartTest', async () => {
+    const calls = stubFetch(json(201, {}))
+
+    await api.upload('/api/tenants/1/bank-statements', xmlFile())
+
+    const sent = (calls[0].init.body as FormData).get('file') as File
+    expect(sent.name).toBe('camt054.xml')
+  })
+
+  it('uploadWithAnotherPartNameTest', async () => {
+    const calls = stubFetch(json(201, {}))
+
+    await api.upload('/api/import', xmlFile(), 'datei')
+
+    expect((calls[0].init.body as FormData).get('datei')).not.toBeNull()
+  })
+
+  // An upload is a write like any other, so it carries the token like any other.
+  it('uploadCarriesTheCsrfTokenTest', async () => {
+    document.cookie = 'XSRF-TOKEN=abc-123'
+    const calls = stubFetch(json(201, {}))
+
+    await api.upload('/api/tenants/1/bank-statements', xmlFile())
+
+    expect(headerOf(calls[0], 'X-XSRF-TOKEN')).toBe('abc-123')
+  })
+
+  it('uploadWithARejectedFileTest', async () => {
+    stubFetch(json(400, { detail: 'Für die IBAN CH44… ist kein Bankkonto erfasst' }))
+
+    await expect(api.upload('/api/tenants/1/bank-statements', xmlFile())).rejects.toThrow(
+      'Für die IBAN CH44… ist kein Bankkonto erfasst',
+    )
+  })
+
+  it('uploadWithoutASessionTest', async () => {
+    stubFetch(json(401, undefined))
+
+    await expect(
+      api.upload('/api/tenants/1/bank-statements', xmlFile()),
+    ).rejects.toBeInstanceOf(UnauthorizedError)
+  })
+
+  // 409 means the tenant does not run the module; the message has to reach the mask.
+  it('uploadWithTheModuleOffTest', async () => {
+    stubFetch(json(409, { detail: 'Der Mandant betreibt den Bankauszug nicht' }))
+
+    await expect(
+      api.upload('/api/tenants/1/bank-statements', xmlFile()),
+    ).rejects.toBeInstanceOf(ApiError)
+  })
+})
 describe('api.file', () => {
   function pdf(status: number, disposition?: string): Response {
     const headers: Record<string, string> = { 'Content-Type': 'application/pdf' }

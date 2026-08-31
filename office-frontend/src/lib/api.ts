@@ -159,6 +159,44 @@ async function requestFile(path: string, body?: unknown): Promise<ApiFile> {
 }
 
 /**
+ * Sends a file the other way, as `multipart/form-data`.
+ *
+ * <p>Deliberately not through {@link request}: that one sets `Content-Type: application/json`
+ * and stringifies the body. A multipart request must set <b>no</b> `Content-Type` at all —
+ * the browser has to add it itself, because only it knows the boundary it just generated.
+ * Setting the header by hand is the classic way to a 500 nobody can explain.
+ *
+ * <p>The CSRF token travels the same way as on any other write, and so does the session
+ * cookie: an upload is a write like any other.
+ *
+ * @param path the endpoint that takes the file
+ * @param file what to send
+ * @param field name of the form part, `file` unless the endpoint says otherwise
+ * @returns what the backend answered
+ */
+async function upload<T>(path: string, file: File, field = 'file'): Promise<T> {
+  const form = new FormData()
+  form.append(field, file)
+
+  const headers: Record<string, string> = {}
+  const csrfToken = readCookie('XSRF-TOKEN')
+  if (csrfToken) headers['X-XSRF-TOKEN'] = decodeURIComponent(csrfToken)
+
+  const response = await fetch(path, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: form,
+  })
+
+  if (response.status === 401) throw new UnauthorizedError()
+  const payload = await readPayload(response)
+  if (!response.ok) {
+    throw new ApiError(response.status, messageFor(response.status, payload), payload)
+  }
+  return payload as T
+}
+/**
  * Reads the file name out of the `Content-Disposition` header.
  *
  * @param disposition the header, `null` when the backend sent none
@@ -176,6 +214,7 @@ export const api = {
   get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   file: (path: string, body?: unknown) => requestFile(path, body),
   post: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+  upload: <T,>(path: string, file: File, field?: string) => upload<T>(path, file, field),
   put: <T,>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
 }

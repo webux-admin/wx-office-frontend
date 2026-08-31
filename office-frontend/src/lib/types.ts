@@ -2923,3 +2923,139 @@ export type DunningRunResult = {
    */
   unsent: DunningFailure[]
 }
+
+// --- Bankauszug (Modul banking, backend ADR-0107) ---------------------------------------
+
+/** Where an imported statement file stands. */
+export type ImportState = 'RECEIVED' | 'PARSED' | 'FAILED'
+
+/** Where a single payment off a statement stands. */
+export type TransactionState = 'NEW' | 'MATCHED' | 'POSTED' | 'UNMATCHED' | 'IGNORED'
+
+/**
+ * What kind of reference a bank statement item carries, decided by its format.
+ *
+ * <p>Not the same as {@link ReferenceType} above, which is the tenant's setting for the
+ * payment part of a document. That one says what we ask for; this one says what came back —
+ * and it knows two more answers, because a bank delivers whatever the payer typed.
+ */
+export type BankReferenceType = 'QRR' | 'SCOR' | 'OTHER' | 'NONE'
+
+/** A bank account the tenant receives statements for. */
+export type BankAccount = {
+  id: number
+  iban: string
+  currency: string
+  label: string
+  /** Whether invoicing on this account uses a QR reference. Information only. */
+  qrAccount: boolean
+  active: boolean
+}
+
+/** What a client sends to add or change a bank account. */
+export type BankAccountRequest = {
+  /** Left out to add one. */
+  id?: number
+  /** Only read when adding — stored bookings point at it. */
+  iban?: string
+  /** Only read when adding. */
+  currency?: string
+  label: string
+  qrAccount: boolean
+  active: boolean
+}
+
+/**
+ * One imported statement file.
+ *
+ * <p>`duplicateCount` is not a failure: the same payment arrives once as a camt.054 advice
+ * and again inside the camt.053 that resolves the batch.
+ */
+export type BankStatementImport = {
+  id: number
+  accountId?: number
+  accountLabel?: string
+  fileName: string
+  byteCount: number
+  messageType: string
+  messageId?: string
+  messageCreatedAt?: string
+  accountIban?: string
+  accountCurrency?: string
+  electronicSequenceNumber?: number
+  /** `DUPL`, `COPY` or `CODU` where the bank says this is a repeat. Warns, never refuses. */
+  copyDuplicateIndicator?: string
+  statementCount: number
+  entryCount: number
+  transactionCount: number
+  storedCount: number
+  duplicateCount: number
+  skippedCount: number
+  state: ImportState
+  /** Plain text for a person, never a stack trace. */
+  failureReason?: string
+  /** What the statement numbers say is missing. A note, never a refusal. */
+  sequenceGap?: string
+  createdAt: string
+  createdBy: string
+}
+
+/** One booking on the statement, as the bank wrote it. */
+export type BankEntry = {
+  id: number
+  entryReference?: string
+  amount: number
+  currency: string
+  creditDebit: 'CRDT' | 'DBIT'
+  /** Only `BOOK` is money that moved; `PDNG` may still be withdrawn. */
+  status: 'BOOK' | 'PDNG' | 'INFO'
+  bookingDate?: string
+  valueDate?: string
+  reversalIndicator: boolean
+  bankTransactionCode?: string
+  chargesTotal?: number
+  /** Whether the charge is already inside `amount`. Without it, it is counted twice or not. */
+  chargesIncluded?: boolean
+  counterValueAmount?: number
+  transactionCount: number
+  /** The items actually read, summed. A gap to `amount` is meant to be visible. */
+  transactionSum?: number
+  additionalEntryInformation?: string
+}
+
+/** One payment off a statement — what a later step will try to match to an invoice. */
+export type BankTransaction = {
+  id: number
+  entryId: number
+  importId: number
+  accountIban: string
+  /** The bank's own reference. The key against a double credit. */
+  accountServicerReference: string
+  endToEndId?: string
+  amount: number
+  /** Read off this item, not inherited from the account. */
+  currency: string
+  inAccountCurrency: boolean
+  instructedAmount?: number
+  instructedCurrency?: string
+  exchangeRate?: number
+  exchangeUnitCurrency?: string
+  /** 1 or 100 — settled at import, because no field in the file names it. */
+  exchangeUnitCount?: number
+  creditDebit: 'CRDT' | 'DBIT'
+  bookingDate?: string
+  valueDate?: string
+  referenceType: BankReferenceType
+  reference?: string
+  /** Whether the reference passes its own check digit. */
+  referenceValid: boolean
+  remittanceStructured?: string
+  remittanceUnstructured?: string
+  /** On a return this is still the party of the original payment. */
+  debtorName?: string
+  ultimateDebtorName?: string
+  debtorIban?: string
+  returnReasonCode?: string
+  returnInformation?: string
+  state: TransactionState
+}

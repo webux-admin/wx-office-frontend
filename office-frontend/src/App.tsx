@@ -14,6 +14,11 @@ import { MODULE_PATH } from './lib/modules'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
 import { CUSTOMER_CREDIT_PATH } from './lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
+import {
+  BANK_ACCOUNT_PATH,
+  BANK_STATEMENT_PATH,
+  BANK_TRANSACTION_PATH,
+} from './lib/banking'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
@@ -56,6 +61,10 @@ const DunningTextPage = lazy(() => import('./pages/DunningTextPage').then((modul
 const DunningWorklistPage = lazy(() => import('./pages/DunningWorklistPage').then((module) => ({ default: module.DunningWorklistPage })))
 const CustomerCreditPage = lazy(() => import('./pages/CustomerCreditPage').then((module) => ({ default: module.CustomerCreditPage })))
 const PaymentReceiptListPage = lazy(() => import('./pages/PaymentReceiptListPage').then((module) => ({ default: module.PaymentReceiptListPage })))
+const BankStatementListPage = lazy(() => import('./pages/BankStatementListPage').then((module) => ({ default: module.BankStatementListPage })))
+const BankStatementDetailPage = lazy(() => import('./pages/BankStatementDetailPage').then((module) => ({ default: module.BankStatementDetailPage })))
+const BankTransactionListPage = lazy(() => import('./pages/BankTransactionListPage').then((module) => ({ default: module.BankTransactionListPage })))
+const BankAccountPage = lazy(() => import('./pages/BankAccountPage').then((module) => ({ default: module.BankAccountPage })))
 const OpenItemListPage = lazy(() => import('./pages/OpenItemListPage').then((module) => ({ default: module.OpenItemListPage })))
 const WriteOffRunPage = lazy(() => import('./pages/WriteOffRunPage').then((module) => ({ default: module.WriteOffRunPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
@@ -174,6 +183,13 @@ export default function App() {
                 <Route path={PAYMENT_RECEIPT_PATH} element={<PaymentReceiptListPage />} />
                 <Route path={CUSTOMER_CREDIT_PATH} element={<CustomerCreditPage />} />
                 <Route path={OPEN_ITEM_PATH} element={<OpenItemListPage />} />
+                <Route path={BANK_STATEMENT_PATH} element={<BankStatementListPage />} />
+                <Route
+                  path={`${BANK_STATEMENT_PATH}/:importId`}
+                  element={<BankStatementDetailPage />}
+                />
+                <Route path={BANK_TRANSACTION_PATH} element={<BankTransactionListPage />} />
+                <Route path={BANK_ACCOUNT_PATH} element={<BankAccountPage />} />
                 <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />

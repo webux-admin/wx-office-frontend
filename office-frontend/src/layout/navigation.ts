@@ -1,4 +1,5 @@
 import {
+  ArrowDownToLine,
   ArrowLeftRight,
   Ban,
   Banknote,
@@ -21,6 +22,7 @@ import {
   Eraser,
   HandCoins,
   Hash,
+  Landmark,
   Languages,
   ListChecks,
   LayoutGrid,
@@ -56,6 +58,13 @@ import { SECURITY_PATH } from '../lib/loginPolicy'
 import { MODULE_PATH, MODULE_RIGHTS, type LicensedModuleCode } from '../lib/modules'
 import { OPEN_ITEM_PATH, OPEN_ITEM_RIGHTS, WRITE_OFF_RUN_PATH } from '../lib/openItem'
 import { CUSTOMER_CREDIT_PATH, CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
+import {
+  BANKING_MODULE,
+  BANKING_RIGHTS,
+  BANK_ACCOUNT_PATH,
+  BANK_STATEMENT_PATH,
+  BANK_TRANSACTION_PATH,
+} from '../lib/banking'
 import { PAYMENT_RECEIPT_PATH, PAYMENT_RECEIPT_RIGHTS } from '../lib/paymentReceipt'
 import {
   MAIL_TEMPLATE_PATH,
@@ -271,6 +280,41 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: Eraser,
             href: WRITE_OFF_RUN_PATH,
             permission: OPEN_ITEM_RIGHTS.read,
+          },
+        ],
+      },
+      // Right after the open items: a bank statement is where the answer to «ist das
+      // bezahlt» comes from. Here and not under Moduleinstellungen — feeding statements in
+      // is daily work.
+      //
+      // NO MODULE ON THE FOLDER, and the switch sits on the account master data alone. An
+      // imported statement is a booking voucher with a ten-year retention, and a switch must
+      // not hide it (backend ADR-0107) — the same reading as the issued reminders below.
+      {
+        label: 'Bank',
+        icon: Landmark,
+        permission: BANKING_RIGHTS.read,
+        children: [
+          {
+            label: 'Bankauszüge',
+            icon: Landmark,
+            href: BANK_STATEMENT_PATH,
+            permission: BANKING_RIGHTS.read,
+          },
+          {
+            label: 'Bankposten',
+            icon: ArrowDownToLine,
+            href: BANK_TRANSACTION_PATH,
+            permission: BANKING_RIGHTS.read,
+          },
+          // Under the switch, unlike the two above: which accounts we receive statements
+          // for is a setting, not correspondence that has to stay readable.
+          {
+            label: 'Bankkonten',
+            icon: CreditCard,
+            href: BANK_ACCOUNT_PATH,
+            permission: BANKING_RIGHTS.importFile,
+            module: BANKING_MODULE,
           },
         ],
       },
