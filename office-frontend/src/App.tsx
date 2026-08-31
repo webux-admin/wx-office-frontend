@@ -12,6 +12,7 @@ import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { SECURITY_PATH } from './lib/loginPolicy'
 import { MODULE_PATH } from './lib/modules'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
+import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
@@ -52,6 +53,7 @@ const DunningBlockPage = lazy(() => import('./pages/DunningBlockPage').then((mod
 const DunningNoticePage = lazy(() => import('./pages/DunningNoticePage').then((module) => ({ default: module.DunningNoticePage })))
 const DunningTextPage = lazy(() => import('./pages/DunningTextPage').then((module) => ({ default: module.DunningTextPage })))
 const DunningWorklistPage = lazy(() => import('./pages/DunningWorklistPage').then((module) => ({ default: module.DunningWorklistPage })))
+const PaymentReceiptListPage = lazy(() => import('./pages/PaymentReceiptListPage').then((module) => ({ default: module.PaymentReceiptListPage })))
 const OpenItemListPage = lazy(() => import('./pages/OpenItemListPage').then((module) => ({ default: module.OpenItemListPage })))
 const WriteOffRunPage = lazy(() => import('./pages/WriteOffRunPage').then((module) => ({ default: module.WriteOffRunPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
@@ -167,6 +169,7 @@ export default function App() {
                 <Route path={SECURITY_PATH} element={<SecurityPolicyPage />} />
 
                 <Route path="/rollen" element={<RolePage />} />
+                <Route path={PAYMENT_RECEIPT_PATH} element={<PaymentReceiptListPage />} />
                 <Route path={OPEN_ITEM_PATH} element={<OpenItemListPage />} />
                 <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />

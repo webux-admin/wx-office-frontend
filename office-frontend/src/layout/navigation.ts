@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Ban,
+  Banknote,
   BellRing,
   MailWarning,
   ListOrdered,
@@ -54,6 +55,7 @@ import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { SECURITY_PATH } from '../lib/loginPolicy'
 import { MODULE_PATH, MODULE_RIGHTS, type LicensedModuleCode } from '../lib/modules'
 import { OPEN_ITEM_PATH, OPEN_ITEM_RIGHTS, WRITE_OFF_RUN_PATH } from '../lib/openItem'
+import { PAYMENT_RECEIPT_PATH, PAYMENT_RECEIPT_RIGHTS } from '../lib/paymentReceipt'
 import {
   MAIL_TEMPLATE_PATH,
   OUTBOX_ACCOUNT_PATH,
@@ -211,6 +213,29 @@ export const NAV_GROUPS: NavGroup[] = [
       salesEntry('ORDER', ClipboardList),
       salesEntry('DELIVERY_NOTE', PackageCheck),
       salesEntry('INVOICE', ReceiptText),
+      // Straight after the invoice, and before the two roofs that ask about a state: in the
+      // order a sale runs through them, what is offered, ordered, delivered, billed and then
+      // **paid**. «Was ist noch offen» only becomes answerable once the money is recorded.
+      //
+      // No module switch — the receipt hangs on `document` and there is nothing to switch
+      // off, the same reason the folder below carries none (backend ADR-0103).
+      //
+      // A folder with one child today: the statement import and the clarification basket
+      // belong under the same roof and become registers of this one. A flat row now would
+      // mean rebuilding the menu twice and moving it the second time, after people learnt
+      // where it was (ADR-0037).
+      {
+        label: 'Zahlungen',
+        icon: Banknote,
+        children: [
+          {
+            label: 'Zahlungseingänge',
+            icon: Banknote,
+            href: PAYMENT_RECEIPT_PATH,
+            permission: PAYMENT_RECEIPT_RIGHTS.read,
+          },
+        ],
+      },
       // Straight after the invoice: «was ist noch offen» is the next question after «was
       // haben wir geschrieben», and it is asked every day. Without a module switch — the
       // open item hangs on `document` and there is nothing to switch off (backend ADR-0091).

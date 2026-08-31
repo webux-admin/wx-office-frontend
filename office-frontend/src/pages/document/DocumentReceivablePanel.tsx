@@ -407,6 +407,16 @@ function PaymentRow({
           {PAYMENT_KINDS[payment.kind]}
           {isCounter && ' (Storno)'}
         </span>
+        {/*
+          Where the line came from, so the two views do not look as if they contradicted each
+          other: this register and the screen «Zahlungen» call the same endpoints, and a line
+          out of a bank credit is spread there, not entered here (backend ADR-0103).
+        */}
+        {payment.receiptId !== undefined && (
+          <span className="ml-2 no-underline">
+            <Badge tone="muted">aus Zahlungseingang</Badge>
+          </span>
+        )}
       </td>
       <td className="py-1.5 pr-4 text-right tabular-nums">
         {formatAmount(payment.amount)} {payment.currency}

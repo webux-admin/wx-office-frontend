@@ -23,6 +23,7 @@ import {
   type NavEntry,
   type NavModule,
 } from './navigation'
+import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -454,6 +455,66 @@ describe('folderFor', () => {
  * <p>The run keeps its own screen — «a run over a whole page is a piece of work, not a detail
  * of a list». What it gains is a roof (ADR-0031).
  */
+/**
+ * The payment receipt gets a folder of its own, today with a single child.
+ *
+ * <p>The statement import and the clarification basket belong under the same roof and become
+ * registers of this one. A flat row now would mean rebuilding the menu twice and moving it the
+ * second time, after people learnt where it was (ADR-0037).
+ */
+describe('the payments folder', () => {
+  const all = () => true
+  const runsAll = () => true
+
+  function payments() {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    return sales?.entries.find(
+      (node): node is Extract<typeof node, { children: unknown }> =>
+        isFolder(node) && node.label === 'Zahlungen',
+    )
+  }
+
+  it('navGroupsFoldThePaymentsTest', () => {
+    const folder = payments()
+
+    expect(folder?.children.map((child) => child.href)).toEqual([PAYMENT_RECEIPT_PATH])
+    expect(folder?.children.every((child) => child.permission === 'INVOICE_READ')).toBe(true)
+  })
+
+  /**
+   * No module switch: the receipt hangs on `document`, and there is nothing to switch off —
+   * the same reason the open items carry none.
+   */
+  it('navGroupsLeaveThePaymentsUnswitchedTest', () => {
+    const folder = payments()
+
+    expect(folder?.module).toBeUndefined()
+    expect(folder?.children.every((child) => child.module === undefined)).toBe(true)
+  })
+
+  /**
+   * The proof test: in the order a sale runs through them — billed, then paid, and only then
+   * the roofs that ask about a state.
+   */
+  it('navGroupsPutThePaymentsAfterTheInvoiceTest', () => {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    const labels = (sales?.entries ?? []).map((entry) => entry.label)
+
+    expect(labels.indexOf('Zahlungen')).toBe(labels.indexOf('Rechnungen') + 1)
+    expect(labels.indexOf('Zahlungen')).toBeLessThan(labels.indexOf('Offene Posten'))
+  })
+
+  it('folderForHoldsThePaymentsTest', () => {
+    const folder = folderFor(PAYMENT_RECEIPT_PATH, all, runsAll)
+
+    expect(folder?.label).toBe('Zahlungen')
+  })
+
+  /** A viewer without INVOICE_READ never sees the roof either. */
+  it('folderForHidesThePaymentsWithoutTheRightTest', () => {
+    expect(folderFor(PAYMENT_RECEIPT_PATH, () => false, runsAll)).toBeNull()
+  })
+})
 describe('the open items folder', () => {
   const all = () => true
   const runsAll = () => true

@@ -2286,11 +2286,67 @@ export type Payment = {
   reversesPaymentId?: number
   /** Set on a line that was taken back: the counter line that did it. */
   reversedByPaymentId?: number
+  /**
+   * The receipt this line was assigned out of.
+   *
+   * <p>Absent on a line that was recorded at the Rechnung itself, and on every line
+   * written before the receipt existed — those are not a forgotten migration, they are
+   * what they say they are (backend ADR-0103).
+   */
+  receiptId?: number
   note?: string
   recordedAt: string
   recordedBy: string
 }
 
+/**
+ * What is left to do with a payment receipt.
+ *
+ * <p>Worked out from amount, assigned sum and counter receipt — never stored. A reversed
+ * receipt is reversed whatever its figures say: how much of it had been spread before it was
+ * taken back is a question about the past (backend ADR-0103).
+ */
+export type ReceiptState = 'OPEN' | 'PARTIAL' | 'ASSIGNED' | 'REVERSED'
+
+/**
+ * Money that arrived, before it belongs to any Rechnung.
+ *
+ * <p>Append only, like the settlement lines it feeds: a receipt entered wrongly is taken back
+ * by a counter receipt, never changed and never deleted (OR Art. 957a Abs. 2).
+ */
+export type PaymentReceipt = {
+  id: number
+  /** Who paid. Absent while that is not known — an unread reference is the normal case. */
+  partnerId?: number
+  partnerNumber?: string
+  payerName?: string
+  /** What arrived. Negative only on a counter receipt. */
+  amount: number
+  currency: string
+  /** The day the money was valued, not the day somebody typed it. */
+  valueDate: string
+  source: PaymentSource
+  /** The reference exactly as it arrived, unnormalised. */
+  payerReference?: string
+  /** `QRR`, `SCOR`, `NON`, or absent where it could not be told. */
+  referenceType?: string
+  /** What the bank calls this entry. Empty until a statement import fills it. */
+  externalReference?: string
+  note?: string
+  /** What of it is already spread over Rechnungen. */
+  assigned: number
+  /** What is left to spread. Never negative — more than arrived cannot be assigned. */
+  unassigned: number
+  state: ReceiptState
+  /** The settlement lines it produced. Empty on the list, filled on the single receipt. */
+  assignments: Payment[]
+  /** Set on a counter receipt: the receipt it takes back. */
+  reversesReceiptId?: number
+  /** Set on a receipt that was taken back: the counter receipt that did it. */
+  reversedByReceiptId?: number
+  recordedAt: string
+  recordedBy: string
+}
 /** What one Rechnung still owes. Every figure is worked out, none of it is stored. */
 export type OpenItem = {
   documentId: number
