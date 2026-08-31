@@ -3171,3 +3171,137 @@ export type LearnedAccount = {
   hitCount: number
   lastSeenAt?: string
 }
+
+// --- Klaerungskorb (Modul banking, backend ADR-0109) ------------------------------------
+
+/**
+ * One line of the clearing basket: a bank movement and what the cascade made of it.
+ *
+ * @remarks `remittanceUnstructured` is never shortened. Somebody often decides on exactly the
+ * text no automation understood, and a truncated field forces a trip into the e-banking.
+ */
+export type WorklistRow = {
+  id: number
+  importId: number
+  accountIban: string
+  amount: number
+  currencyCode: string
+  valueDate?: string
+  bookingDate?: string
+  debtorName?: string
+  ultimateDebtorName?: string
+  debtorIban?: string
+  reference?: string
+  referenceType: BankReferenceType
+  referenceValid: boolean
+  remittanceStructured?: string
+  /** The free text, in full. */
+  remittanceUnstructured?: string
+  state: TransactionState
+  /** «Clarify later» — blocks nothing, filters only. */
+  toCheck: boolean
+  toCheckNote?: string
+  bestDocumentId?: number
+  bestDocumentNumber?: string
+  bestPartnerId?: number
+  bestPartnerName?: string
+  bestConfidence?: Confidence
+  bestReason?: string
+  bestRemainder?: number
+  /** More than one means nothing was chosen. */
+  proposalCount: number
+  /** High confidence, no review flag, nothing left over. */
+  safe: boolean
+}
+
+/**
+ * The figures behind the badge in the navigation and the warning in the dunning work list.
+ *
+ * @remarks One source for both: a badge saying four and a warning saying five would be two
+ * answers to one question.
+ */
+export type WorklistCount = {
+  open: number
+  toCheck: number
+  oldestValueDate?: string
+  unassignedAmount: number
+  currencyCode?: string
+}
+
+/** One line of an assignment: this much of the payment settles this invoice. */
+export type AssignmentLine = {
+  documentId: number
+  amount: number
+  note?: string
+}
+
+/** What a client sends to assign one bank movement. */
+export type AssignmentBody = {
+  lines: AssignmentLine[]
+  note?: string
+}
+
+/** A settlement line an assignment produced. */
+export type AssignedPayment = {
+  id: number
+  documentId: number
+  amount: number
+  currencyCode: string
+  valueDate?: string
+  /** Set on a counter entry: a correction always stands as a pair. */
+  reversesPaymentId?: number
+  note?: string
+}
+
+/** What a collective run would book. Writes nothing. */
+export type MatchRunProposal = {
+  count: number
+  total: number
+  /** The biggest single amount — what decides whether somebody looks twice. */
+  largest: number
+  currencyCode?: string
+  minConfidence: Confidence
+  lines: WorklistRow[]
+}
+
+/** What a collective run did with one movement. */
+export type MatchRunLine = {
+  transactionId: number
+  outcome: 'POSTED' | 'SKIPPED' | 'FAILED'
+  documentId?: number
+  documentNumber?: string
+  paymentId?: number
+  amount?: number
+  confidence?: Confidence
+  message?: string
+}
+
+/**
+ * What a collective run did.
+ *
+ * @remarks Three lists and not one number: a run opens one transaction per movement, so
+ * «40 gebucht» is never the whole story.
+ */
+export type MatchRunResult = {
+  runId: number
+  postedAmount: number
+  currencyCode: string
+  posted: MatchRunLine[]
+  skipped: MatchRunLine[]
+  failed: MatchRunLine[]
+}
+
+/**
+ * What withdrawing an assignment would mean for the dunning.
+ *
+ * @remarks `AUSGESTELLT` is the heavier case: a reminder is a numbered, archived letter that
+ * can be withdrawn but never deleted.
+ */
+export type DunningConflict = {
+  documentId: number
+  documentNumber: string
+  kind: 'UNTERBLIEBEN' | 'AUSGESTELLT'
+  level: number
+  since?: string
+  message: string
+}

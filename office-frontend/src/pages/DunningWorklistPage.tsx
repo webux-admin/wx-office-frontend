@@ -6,7 +6,7 @@ import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { Dialog } from '../components/Dialog'
 import { SelectField } from '../components/SelectField'
-import { EmptyState, ErrorNotice } from '../components/Notice'
+import { EmptyState, ErrorNotice, WarningNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
@@ -39,6 +39,14 @@ import { showFile } from '../lib/files'
 import { DunningRunDialog } from './dunning/DunningRunDialog'
 import { useAuth } from '../auth/useAuth'
 import { formatAmount, formatDate } from '../lib/format'
+import { BANKING_MODULE } from '../lib/banking'
+import { useRunsModule } from '../lib/modules'
+import {
+  CLEARING_RIGHTS,
+  fetchWorklistCount,
+  shouldWarnDunning,
+  worklistCountKey,
+} from '../lib/clearing'
 import type {
   DunningCandidate,
   DunningChannelChoice,
@@ -89,6 +97,7 @@ function Worklist({ tenantId }: { tenantId: number }) {
   const [result, setResult] = useState<DunningRunResult | null>(null)
   const queryClient = useQueryClient()
   const { can } = useAuth()
+  const runsBanking = useRunsModule()(BANKING_MODULE)
 
   // Only for the channel choice: whether this tenant could mail at all, and why not.
   const settings = useQuery({
@@ -101,6 +110,16 @@ function Worklist({ tenantId }: { tenantId: number }) {
     queryKey: dunningWorklistKey(tenantId, asOf),
     queryFn: () => fetchDunningWorklist(tenantId, asOf),
   })
+
+  // Read straight from banking, so no module edge exists for a hint. With the module off
+  // the call answers 403 or 409 and the mask simply says nothing (ADR-0043).
+  const unassignedQuery = useQuery({
+    queryKey: worklistCountKey(tenantId),
+    queryFn: () => fetchWorklistCount(tenantId),
+    enabled: runsBanking && can(CLEARING_RIGHTS.read),
+    retry: false,
+  })
+  const unassigned = unassignedQuery.data
 
   const candidates = worklist.data ?? []
   const sending = candidates.filter((candidate) => candidate.skipReason === undefined)
@@ -177,6 +196,18 @@ function Worklist({ tenantId }: { tenantId: number }) {
       <DunningRunDialog open={running} onClose={() => setRunning(false)} />
 
       <div className="grid gap-6 px-8 pb-12">
+        {/* Warning, never blocking — the same line this list already follows: it is a query,
+            and issuing a reminder is a deliberate release (backend ADR-0096). The mask asks
+            the banking endpoint itself; the dunning module learns nothing about it, so no
+            module edge exists for a hint (ADR-0043). */}
+        {shouldWarnDunning(unassigned) && (
+          <WarningNotice>
+            {`Es liegen ${unassigned?.open} nicht zugeordnete Zahlungseingänge über zusammen `}
+            {`${formatAmount(unassigned?.unassignedAmount ?? 0)} ${unassigned?.currencyCode ?? ""}, `}
+            {`der älteste vom ${formatDate(unassigned?.oldestValueDate)}. `}
+            Darunter kann Geld eines Kunden sein, den diese Liste mahnen will.
+          </WarningNotice>
+        )}
         {worklist.error !== null && <ErrorNotice error={worklist.error} />}
         {openRunPdf.error !== null && <ErrorNotice error={openRunPdf.error} />}
 

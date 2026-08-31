@@ -66,6 +66,7 @@ import {
   BANK_TRANSACTION_PATH,
 } from '../lib/banking'
 import { MATCHING_RIGHTS, MATCH_RULE_PATH } from '../lib/matching'
+import { CLEARING_PATH, CLEARING_RIGHTS } from '../lib/clearing'
 import { PAYMENT_RECEIPT_PATH, PAYMENT_RECEIPT_RIGHTS } from '../lib/paymentReceipt'
 import {
   MAIL_TEMPLATE_PATH,
@@ -103,6 +104,14 @@ import type { DocumentCategory } from '../lib/types'
  */
 export type NavModule = LicensedModuleCode
 
+/**
+ * Which counter an entry shows beside its label.
+ *
+ * <p>A closed list, so an entry cannot name a source that does not exist. The test in
+ * `navigation.test.ts` holds it against the sources the shell knows (ADR-0043).
+ */
+export type NavCounterKey = 'CLEARING'
+
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
   label: string
@@ -112,6 +121,13 @@ export type NavEntry = {
   permission?: string
   /** Set where the entry belongs to a module the tenant may have switched off. */
   module?: NavModule
+  /**
+   * Set where the entry carries a number beside its label.
+   *
+   * <p>The most reliable of the three ways somebody is told about unassigned money, because
+   * it is still there the next morning (ADR-0043).
+   */
+  counter?: NavCounterKey
   /**
    * Set where the screen decides something for the whole installation.
    *
@@ -307,6 +323,16 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: ArrowDownToLine,
             href: BANK_TRANSACTION_PATH,
             permission: BANKING_RIGHTS.read,
+          },
+          // Under the module switch, and with the number beside it: whoever imported a
+          // statement on Friday has to see on Monday that 29 payments are still waiting.
+          {
+            label: 'Klärung',
+            icon: ListChecks,
+            href: CLEARING_PATH,
+            permission: CLEARING_RIGHTS.read,
+            module: BANKING_MODULE,
+            counter: 'CLEARING',
           },
           // Under the switch, unlike the two above: which accounts we receive statements
           // for is a setting, not correspondence that has to stay readable.

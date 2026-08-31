@@ -12,10 +12,12 @@ import {
   PanelLeftOpen,
   Sun,
 } from 'lucide-react'
+import { Badge } from '../components/Badge'
 import { BrandMark } from '../components/BrandMark'
 import { useAuth } from '../auth/useAuth'
 import { initialsOf } from '../lib/format'
 import { runsModule } from '../lib/modules'
+import { useNavCounters } from '../lib/clearing'
 import {
   flattenNav,
   isFolder,
@@ -360,6 +362,13 @@ function NavFolderItem({ folder }: { folder: NavFolder }) {
 }
 
 function NavItem({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) {
+  const { user } = useAuth()
+  // Asked only where the entry is visible at all: right and module switch are already
+  // decided by the caller, so a user without the right never triggers the request.
+  const counts = useNavCounters(user?.activeTenantId, entry.counter !== undefined)
+  const number = entry.counter === undefined ? undefined : counts?.open
+  const shows = number !== undefined && number > 0
+
   return (
     <li>
       <NavLink
@@ -381,6 +390,19 @@ function NavItem({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) 
         <entry.icon size={16} aria-hidden className="shrink-0" />
         {!collapsed && <span className="truncate">{entry.label}</span>}
         {collapsed && <span className="sr-only">{entry.label}</span>}
+        {/* Collapsed the number has no room, so a dot marks the spot and the count stays
+            in the accessible name. A badge nobody can read is decoration. */}
+        {shows && !collapsed && (
+          <span className="ml-auto">
+            <Badge tone="accent">{number}</Badge>
+          </span>
+        )}
+        {shows && collapsed && (
+          <>
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+            <span className="sr-only">{`${number} offen`}</span>
+          </>
+        )}
       </NavLink>
     </li>
   )

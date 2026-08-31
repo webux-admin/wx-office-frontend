@@ -85,16 +85,28 @@ export const REFERENCE_TYPES: Record<BankReferenceType, string> = {
 }
 
 /**
+ * What carries a reference and the verdict on it.
+ *
+ * <p>Narrower than {@link BankTransaction} on purpose: the clearing basket shows the same
+ * sentence about a row that is not a full statement item.
+ */
+export type ReferenceBearing = {
+  referenceType: BankReferenceType
+  referenceValid: boolean
+}
+
+/**
  * What one item says about its reference, in one sentence.
  *
  * <p>Two fields, not one: a QR reference whose check digit fails is a different problem from
  * a free text, and whoever hunts it is hunting a transposed digit. The list has to show the
  * difference (backend ADR-0107).
  *
- * @param transaction one item
+ * @param transaction anything that carries a reference and its verdict — the item off a
+ *                    statement, or one row of the clearing basket
  * @returns the sentence, ready to print
  */
-export function referenceLabel(transaction: BankTransaction): string {
+export function referenceLabel(transaction: ReferenceBearing): string {
   const kind = REFERENCE_TYPES[transaction.referenceType]
   if (transaction.referenceType === 'NONE') return kind
   if (transaction.referenceValid) return kind
@@ -107,7 +119,7 @@ export function referenceLabel(transaction: BankTransaction): string {
  * <p>Not «has no reference»: an unstructured payment is ordinary. What is worth a mark is a
  * reference that looks like one and is not.
  */
-export function referenceIsBroken(transaction: BankTransaction): boolean {
+export function referenceIsBroken(transaction: ReferenceBearing): boolean {
   return transaction.referenceType !== 'NONE' && !transaction.referenceValid
 }
 
