@@ -27,6 +27,7 @@ import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
 import { PartnerCreditNotice } from './partner/PartnerCreditNotice'
+import { PartnerPayerAccounts } from './partner/PartnerPayerAccounts'
 import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
 import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
@@ -281,6 +282,16 @@ function PartnerMask({
             should see it without going looking (backend ADR-0104). */}
         {tab === 'dokumente' && partner && can(CUSTOMER_CREDIT_RIGHTS.read) && (
           <PartnerCreditNotice tenantId={tenantId} partnerId={partner.id} />
+        )}
+
+        {/* Shown so it can be removed: a learned payer IBAN is a personal datum on the
+            master record, and revDSG Art. 25 needs a place that shows it and a button that
+            erases it. The component decides for itself whether there is anything to show
+            (backend ADR-0108). */}
+        {tab === 'dokumente' && partner && (
+          <div className="mt-6">
+            <PartnerPayerAccounts tenantId={tenantId} partnerId={partner.id} />
+          </div>
         )}
 
         {/* Beside the per-customer printout deviations, because it is the same kind of thing:

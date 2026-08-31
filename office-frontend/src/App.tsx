@@ -19,6 +19,7 @@ import {
   BANK_STATEMENT_PATH,
   BANK_TRANSACTION_PATH,
 } from './lib/banking'
+import { MATCH_RULE_PATH } from './lib/matching'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
 import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
@@ -65,6 +66,7 @@ const BankStatementListPage = lazy(() => import('./pages/BankStatementListPage')
 const BankStatementDetailPage = lazy(() => import('./pages/BankStatementDetailPage').then((module) => ({ default: module.BankStatementDetailPage })))
 const BankTransactionListPage = lazy(() => import('./pages/BankTransactionListPage').then((module) => ({ default: module.BankTransactionListPage })))
 const BankAccountPage = lazy(() => import('./pages/BankAccountPage').then((module) => ({ default: module.BankAccountPage })))
+const MatchRulePage = lazy(() => import('./pages/MatchRulePage').then((module) => ({ default: module.MatchRulePage })))
 const OpenItemListPage = lazy(() => import('./pages/OpenItemListPage').then((module) => ({ default: module.OpenItemListPage })))
 const WriteOffRunPage = lazy(() => import('./pages/WriteOffRunPage').then((module) => ({ default: module.WriteOffRunPage })))
 const RolePage = lazy(() => import('./pages/RolePage').then((module) => ({ default: module.RolePage })))
@@ -190,6 +192,7 @@ export default function App() {
                 />
                 <Route path={BANK_TRANSACTION_PATH} element={<BankTransactionListPage />} />
                 <Route path={BANK_ACCOUNT_PATH} element={<BankAccountPage />} />
+                <Route path={MATCH_RULE_PATH} element={<MatchRulePage />} />
                 <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />

@@ -65,6 +65,7 @@ import {
   BANK_STATEMENT_PATH,
   BANK_TRANSACTION_PATH,
 } from '../lib/banking'
+import { MATCHING_RIGHTS, MATCH_RULE_PATH } from '../lib/matching'
 import { PAYMENT_RECEIPT_PATH, PAYMENT_RECEIPT_RIGHTS } from '../lib/paymentReceipt'
 import {
   MAIL_TEMPLATE_PATH,
@@ -314,6 +315,17 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: CreditCard,
             href: BANK_ACCOUNT_PATH,
             permission: BANKING_RIGHTS.importFile,
+            module: BANKING_MODULE,
+          },
+          // Beside the accounts, because both answer «wie kommt eine Zahlung an ihre
+          // Rechnung»: the accounts say which statements are accepted, the rules say what
+          // is made of them. Under the module switch — a rule without statements decides
+          // nothing (backend ADR-0108).
+          {
+            label: 'Zuordnungsregeln',
+            icon: ListChecks,
+            href: MATCH_RULE_PATH,
+            permission: MATCHING_RIGHTS.read,
             module: BANKING_MODULE,
           },
         ],

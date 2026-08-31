@@ -3059,3 +3059,115 @@ export type BankTransaction = {
   returnInformation?: string
   state: TransactionState
 }
+
+// --- Zuordnungskaskade (Modul banking, backend ADR-0108) --------------------------------
+
+/** How sure the cascade is about who paid. `EGAL` only ever appears in a rule. */
+export type PartyMatch = 'VOLL' | 'TEILWEISE' | 'NEIN' | 'EGAL'
+
+/** What the reference or the document number said. `EGAL` only ever appears in a rule. */
+export type ReferenceMatch = 'EINDEUTIG' | 'MEHRDEUTIG' | 'NEIN' | 'EGAL'
+
+/** How the amount fits. `EGAL` only ever appears in a rule. */
+export type AmountMatch = 'KEINER' | 'EINER' | 'MEHRERE' | 'NICHT_BETRACHTET' | 'EGAL'
+
+/**
+ * How much the cascade is prepared to claim.
+ *
+ * <p>Three named steps and never a percentage: a score cannot be explained to an audit, a
+ * sentence can (backend ADR-0108).
+ */
+export type Confidence = 'HOCH' | 'MITTEL' | 'TIEF'
+
+/** Where a proposal stands. */
+export type MatchStatus = 'OFFEN' | 'ANGENOMMEN' | 'VERWORFEN' | 'ZURUECKGEZOGEN'
+
+/**
+ * One assignment proposal.
+ *
+ * @remarks The `reason` is the point of this record, not the numbers beside it.
+ */
+export type MatchProposal = {
+  id: number
+  transactionId: number
+  /** 1 is the best candidate; the alternatives follow. */
+  rank: number
+  documentId?: number
+  documentNumber?: string
+  partnerId?: number
+  partnerName?: string
+  proposedAmount: number
+  currencyCode: string
+  /** Positive: the invoice stays partly open. Negative: more arrived than was owed. */
+  remainder: number
+  /** Which step of the cascade found it, 1 to 8. */
+  stage: number
+  confidence: Confidence
+  reviewRequired: boolean
+  partyMatch: Exclude<PartyMatch, 'EGAL'>
+  referenceMatch: Exclude<ReferenceMatch, 'EGAL'>
+  amountMatch: Exclude<AmountMatch, 'EGAL'>
+  /** The name similarity, absent outside the name step. */
+  nameScore?: number
+  /** How far the best name beat the second best. */
+  nameMargin?: number
+  reason: string
+  status: MatchStatus
+  /** High confidence, no review flag, nothing left over. */
+  safe: boolean
+}
+
+/** One line of the confidence catalogue. */
+export type MatchRule = {
+  id: number
+  /** Lower wins. */
+  priority: number
+  partyMatch: PartyMatch
+  referenceMatch: ReferenceMatch
+  amountMatch: AmountMatch
+  confidence: Confidence
+  reviewRequired: boolean
+  active: boolean
+}
+
+/** What a client sends to add or change a rule. */
+export type MatchRuleBody = {
+  id?: number
+  priority: number
+  /** Only read when adding: a rule that answers a different question is a different rule. */
+  partyMatch?: PartyMatch
+  referenceMatch?: ReferenceMatch
+  amountMatch?: AmountMatch
+  confidence: Confidence
+  reviewRequired: boolean
+  active: boolean
+}
+
+/**
+ * What the matching runs on.
+ *
+ * @remarks The tolerance writes nothing — it decides only whether a proposal comes into being.
+ */
+export type MatchSettings = {
+  toleranceAmount: number
+  /** Never together with an amount. */
+  tolerancePercent?: number
+  toleranceMaximum: number
+  learnPayerAccounts: boolean
+}
+
+/**
+ * A payer account learned for a party.
+ *
+ * @remarks Shown so it can be removed: revDSG Art. 25 applies to it, and a datum nobody can
+ * see is a right nobody can exercise.
+ */
+export type LearnedAccount = {
+  id: number
+  partnerId: number
+  debtorIban: string
+  learnedAt: string
+  learnedBy: string
+  hitCount: number
+  lastSeenAt?: string
+}
