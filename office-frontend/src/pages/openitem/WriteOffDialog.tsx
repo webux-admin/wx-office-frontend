@@ -43,6 +43,9 @@ export function WriteOffDialog({
   documentNumber,
   currency,
   openAmount,
+  keepLimit,
+  keepMaximum,
+  initialReason,
   onClose,
   onWritten,
 }: {
@@ -52,21 +55,28 @@ export function WriteOffDialog({
   documentNumber?: string
   currency: string
   openAmount: number | undefined
+  /** Above this a kept overpayment needs a note; the server refuses it without one. */
+  keepLimit?: number
+  /** Above this a kept overpayment is refused outright. */
+  keepMaximum?: number
+  /** What the dialog starts on; the overpayment case opens straight on its reason. */
+  initialReason?: WriteOffReason
   onClose: () => void
   onWritten: () => void
 }) {
-  const [form, setForm] = useState<WriteOffForm>(() => proposedWriteOff(openAmount))
+  const [form, setForm] = useState<WriteOffForm>(
+    () => proposedWriteOff(openAmount, undefined, initialReason))
   const today = toIsoDate()
 
   // Adjusted while rendering rather than in an effect: what the dialog shows follows the
   // Rechnung it was opened on, and that is decided outside. A dialog reopened on another
   // Rechnung must not keep the first one's amount — the pre-fill is the whole point of
   // pre-filling. Same technique as PartnerQuickSearch.
-  const opened = open ? `${documentId}:${openAmount ?? ''}` : null
+  const opened = open ? `${documentId}:${openAmount ?? ''}:${initialReason ?? ''}` : null
   const [shown, setShown] = useState<string | null>(opened)
   if (opened !== shown) {
     setShown(opened)
-    if (opened !== null) setForm(proposedWriteOff(openAmount))
+    if (opened !== null) setForm(proposedWriteOff(openAmount, undefined, initialReason))
   }
 
   const write = useMutation({
@@ -77,7 +87,7 @@ export function WriteOffDialog({
     },
   })
 
-  const complaint = writeOffComplaint(form, openAmount, today)
+  const complaint = writeOffComplaint(form, openAmount, today, keepLimit, keepMaximum)
 
   return (
     <Dialog
@@ -107,7 +117,9 @@ export function WriteOffDialog({
           onChange={(event) =>
             setForm({ ...form, reason: event.target.value as WriteOffReason })
           }
-          hint={WRITE_OFF_REASON_HINTS[form.reason]}
+          hint={form.reason === 'UEBERZAHLUNG' && keepMaximum !== undefined
+            ? `${WRITE_OFF_REASON_HINTS[form.reason]} Höchstens ${formatAmount(keepMaximum)} ${currency} — darüber bleibt der Überschuss ein Guthaben des Kunden.`
+            : WRITE_OFF_REASON_HINTS[form.reason]}
         >
           {WRITE_OFF_REASON_ORDER.map((code) => (
             <option key={code} value={code}>

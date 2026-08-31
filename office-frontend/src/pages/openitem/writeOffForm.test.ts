@@ -110,4 +110,61 @@ describe('writeOffForm', () => {
     expect(payload.evidence).toBeUndefined()
     expect(payload.note).toBeUndefined()
   })
+  // --- the three zones of an overpayment (backend ADR-0105) ------------------
+
+  /**
+   * The one reason that moves the other way.
+   *
+   * <p>A negative open amount <b>is</b> the surplus, so a kept overpayment is proposed with
+   * it — while every other reason still refuses to pre-fill a negative figure.
+   */
+  it('proposedWriteOffOnAnOverpaymentTest', () => {
+    expect(proposedWriteOff(-0.4, TODAY, 'UEBERZAHLUNG').amount).toBe('0.40')
+    expect(proposedWriteOff(-0.4, TODAY, 'UEBERZAHLUNG').reason).toBe('UEBERZAHLUNG')
+    // Nothing overpaid: nothing to keep.
+    expect(proposedWriteOff(0.4, TODAY, 'UEBERZAHLUNG').amount).toBe('')
+  })
+
+  /**
+   * Above the ceiling a keep is refused: «aufgerundet» stops being plausible, and a mistyped
+   * transfer is a mistake under OR Art. 63 Abs. 1 the recipient may not decide about alone.
+   */
+  it('writeOffComplaintAboveTheKeepCeilingTest', () => {
+    const form = { ...proposedWriteOff(-7, TODAY, 'UEBERZAHLUNG') }
+
+    expect(writeOffComplaint(form, -7, TODAY, 1, 5)).toContain('Guthaben des Kunden')
+  })
+
+  /** The ceiling itself is still allowed — with the note the zone above 1.00 asks for. */
+  it('writeOffComplaintAtTheKeepCeilingTest', () => {
+    const form = { ...proposedWriteOff(-5, TODAY, 'UEBERZAHLUNG'), note: 'aufgerundet' }
+
+    expect(writeOffComplaint(form, -5, TODAY, 1, 5)).toBeNull()
+    // A rappen more and it is refused outright, note or not.
+    expect(writeOffComplaint({ ...form, amount: '5.01' }, -5.01, TODAY, 1, 5))
+      .toContain('Guthaben des Kunden')
+  })
+
+  /** Above the proposal limit «aufgerundet» is a claim, and a claim needs a text. */
+  it('writeOffComplaintWithoutTheRequiredNoteTest', () => {
+    const form = { ...proposedWriteOff(-2, TODAY, 'UEBERZAHLUNG') }
+
+    expect(writeOffComplaint(form, -2, TODAY, 1, 5)).toContain('Bemerkung')
+    expect(writeOffComplaint({ ...form, note: 'Kunde hat aufgerundet' }, -2, TODAY, 1, 5))
+      .toBeNull()
+  })
+
+  /** Under the proposal limit no text is asked for; forty rappen explain themselves. */
+  it('writeOffComplaintUnderTheProposalLimitTest', () => {
+    const form = { ...proposedWriteOff(-0.4, TODAY, 'UEBERZAHLUNG') }
+
+    expect(writeOffComplaint(form, -0.4, TODAY, 1, 5)).toBeNull()
+  })
+
+  /** Without the limits the mask says nothing about them; the server still refuses. */
+  it('writeOffComplaintWithoutTheLimitsTest', () => {
+    const form = { ...proposedWriteOff(-7, TODAY, 'UEBERZAHLUNG') }
+
+    expect(writeOffComplaint(form, -7, TODAY)).toBeNull()
+  })
 })

@@ -80,6 +80,9 @@ type TenantForm = {
   defaultPaymentTerm: string
   cashRoundingEnabled: boolean
   cashRoundingIncrement: string
+  overpaymentRoundingLimit: string
+  overpaymentKeepLimit: string
+  overpaymentKeepMaximum: string
   defaultRevenueAccount: string
   invoiceFooterText: string
 }
@@ -114,6 +117,9 @@ function initial(tenant: Tenant | null): TenantForm {
     defaultPaymentTerm: tenant?.defaultPaymentTerm ?? '',
     cashRoundingEnabled: tenant?.cashRoundingEnabled === true,
     cashRoundingIncrement: tenant?.cashRoundingIncrement?.toString() ?? '0.05',
+    overpaymentRoundingLimit: tenant?.overpaymentRoundingLimit?.toString() ?? '0.05',
+    overpaymentKeepLimit: tenant?.overpaymentKeepLimit?.toString() ?? '1.00',
+    overpaymentKeepMaximum: tenant?.overpaymentKeepMaximum?.toString() ?? '5.00',
     defaultRevenueAccount: tenant?.defaultRevenueAccount ?? '',
     invoiceFooterText: tenant?.invoiceFooterText ?? '',
   }
@@ -184,6 +190,9 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     cashRoundingIncrement: form.cashRoundingEnabled
       ? (parseDecimal(form.cashRoundingIncrement) ?? undefined)
       : undefined,
+    overpaymentRoundingLimit: parseDecimal(form.overpaymentRoundingLimit) ?? undefined,
+    overpaymentKeepLimit: parseDecimal(form.overpaymentKeepLimit) ?? undefined,
+    overpaymentKeepMaximum: parseDecimal(form.overpaymentKeepMaximum) ?? undefined,
     defaultRevenueAccount: form.defaultRevenueAccount || undefined,
     invoiceFooterText: form.invoiceFooterText.trim() || undefined,
     // Neither the module switch nor the two count thresholds are sent any more. They live on
@@ -538,6 +547,46 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 />
               )}
             </div>
+
+            {/* Beside the cash rounding because it is the same family, and a field of its
+                own because it answers a different question: cash rounding applies to a cash
+                total, this one to a bank transfer — 12.33 can be transferred exactly
+                (backend ADR-0105). */}
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <TextField
+                label="Überzahlung: Rundung bis"
+                value={form.overpaymentRoundingLimit}
+                onChange={(event) => set('overpaymentRoundingLimit', event.target.value)}
+                disabled={!mayWrite}
+                inputMode="decimal"
+                numeric
+                hint="Bis hierher gilt zu viel Geld als Rundung. 0 heisst: nie."
+              />
+              <TextField
+                label="Einbehalt vorschlagen bis"
+                value={form.overpaymentKeepLimit}
+                onChange={(event) => set('overpaymentKeepLimit', event.target.value)}
+                disabled={!mayWrite}
+                inputMode="decimal"
+                numeric
+                hint="Darüber verlangt ein Einbehalt eine Bemerkung."
+              />
+              <TextField
+                label="Einbehalt höchstens"
+                value={form.overpaymentKeepMaximum}
+                onChange={(event) => set('overpaymentKeepMaximum', event.target.value)}
+                disabled={!mayWrite}
+                inputMode="decimal"
+                numeric
+                hint="Darüber gar nicht mehr wählbar: der Überschuss bleibt ein Guthaben des Kunden."
+              />
+            </div>
+
+            <p className="mt-2 text-[12px] text-text-secondary">
+              Absolute Beträge, kein Prozentsatz — ein Tippfehler wächst nicht mit der
+              Rechnungshöhe. Die drei müssen aufsteigend sein. Verglichen wird in der Währung
+              des Belegs, ohne Umrechnung.
+            </p>
 
             <TextAreaField
               label="Fusstext auf Rechnungen"

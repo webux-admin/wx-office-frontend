@@ -33,13 +33,21 @@ export const MAX_TEXT_LENGTH = 500
  * time. <b>Never with a negative amount</b>: an overpayment is a credit the customer is owed,
  * and it is kept with its own reason rather than written off.
  *
- * @param open  what is still open, `undefined` while it is not known yet
+ * @param open  what is still open, `undefined` while it is not known yet. Negative means
+ *              the customer overpaid, and that is what a kept surplus is proposed with
  * @param today the day to book on, as `yyyy-MM-dd`
+ * @param reason the reason to start on; the overpayment case pre-fills the other way
  */
-export function proposedWriteOff(open: number | undefined, today = toIsoDate()): WriteOffForm {
+export function proposedWriteOff(open: number | undefined, today = toIsoDate(),
+                                 reason: WriteOffReason = 'KLEINDIFFERENZ'): WriteOffForm {
+  // The one reason that moves the other way: an overpayment kept is proposed with the
+  // surplus, which is what a negative open amount is (backend ADR-0105).
+  const proposed = reason === 'UEBERZAHLUNG'
+    ? (open !== undefined && open < 0 ? (-open).toFixed(2) : '')
+    : (open !== undefined && open > 0 ? open.toFixed(2) : '')
   return {
-    reason: 'KLEINDIFFERENZ',
-    amount: open !== undefined && open > 0 ? open.toFixed(2) : '',
+    reason,
+    amount: proposed,
     bookingDate: today,
     evidence: '',
     note: '',
@@ -56,12 +64,16 @@ export function proposedWriteOff(open: number | undefined, today = toIsoDate()):
  * @param form  what is typed
  * @param open  what is still open on the Rechnung
  * @param today the day the mask runs on, as `yyyy-MM-dd`
+ * @param keepLimit above which a kept overpayment needs a note
+ * @param keepMaximum above which a kept overpayment is refused outright
  * @returns the German complaint, or `null` when nothing is obviously wrong
  */
 export function writeOffComplaint(
   form: WriteOffForm,
   open: number | undefined,
   today = toIsoDate(),
+  keepLimit?: number,
+  keepMaximum?: number,
 ): string | null {
   const amount = parseDecimal(form.amount)
   if (form.amount.trim() === '' || amount === null) {
@@ -76,9 +88,18 @@ export function writeOffComplaint(
   if (form.bookingDate > today) {
     return 'Das Buchungsdatum darf nicht in der Zukunft liegen.'
   }
-  // An overpayment kept is the one reason that moves the other way, so it has no ceiling
-  // here: it is additional consideration, not a remainder being given up.
-  if (form.reason !== 'UEBERZAHLUNG' && open !== undefined && amount > open) {
+  // An overpayment kept moves the other way, so what limits it is not the open amount but
+  // the tenant's ceiling: above it the surplus stays a credit of the customer, because a
+  // mistyped transfer is a mistake under OR Art. 63 Abs. 1 that the recipient may not
+  // decide about alone (backend ADR-0105).
+  if (form.reason === 'UEBERZAHLUNG') {
+    if (keepMaximum !== undefined && amount > keepMaximum) {
+      return `Über ${formatAmount(keepMaximum)} lässt sich eine Überzahlung nicht einbehalten; sie bleibt ein Guthaben des Kunden.`
+    }
+    if (keepLimit !== undefined && amount > keepLimit && form.note.trim() === '') {
+      return `Über ${formatAmount(keepLimit)} braucht ein Einbehalt eine Bemerkung; «aufgerundet» ist dann eine Behauptung.`
+    }
+  } else if (open !== undefined && amount > open) {
     return `Es sind nur ${formatAmount(open)} offen; mehr lässt sich nicht ausbuchen.`
   }
   if (form.evidence.length > MAX_TEXT_LENGTH || form.note.length > MAX_TEXT_LENGTH) {

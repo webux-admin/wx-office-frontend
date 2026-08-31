@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
@@ -13,12 +14,16 @@ import {
   PAYMENT_KIND_ORDER,
   REDUCES_CONSIDERATION,
   fetchOpenItem,
+  fetchOverpaymentAdvice,
+  type OverpaymentAdvice,
   fetchPayments,
   openState,
   recordPayment,
   reversePayment,
 } from '../../lib/receivable'
+import { CUSTOMER_CREDIT_PATH } from '../../lib/customerCredit'
 import { openItemsKey } from '../../lib/openItem'
+import { useDebouncedValue } from '../../components/useDebouncedValue'
 import { receivableKey, salesDocumentListKey } from '../../lib/salesDocument'
 import { WriteOffDialog } from '../openitem/WriteOffDialog'
 import type { SalesDocumentKind } from '../../lib/salesDocument'
@@ -80,6 +85,7 @@ export function DocumentReceivablePanel({
 }) {
   const queryClient = useQueryClient()
   const [recording, setRecording] = useState(false)
+  const [keepingSurplus, setKeepingSurplus] = useState(false)
   const [writingOff, setWritingOff] = useState(false)
   const [reversing, setReversing] = useState<Payment | null>(null)
   const [form, setForm] = useState<PaymentForm>(() => proposedForm(undefined))
@@ -129,9 +135,21 @@ export function DocumentReceivablePanel({
     },
   })
 
+  // Debounced, so a typed amount does not send one request per digit. The answer is the
+  // server's: the same rule has to hold when a statement import asks it, and two
+  // implementations of one limit drift apart (backend ADR-0105).
+  const typedAmount = useDebouncedValue(form.amount)
+  const typed = Number(typedAmount.replace(',', '.'))
+  const advice = useQuery({
+    queryKey: [...key, 'overpayment-advice', typed],
+    queryFn: () => fetchOverpaymentAdvice(tenantId, documentId, typed),
+    enabled: recording && Number.isFinite(typed) && typed > 0,
+  })
+
   const item = openItem.data
   const rows = payments.data ?? []
   const state = openState(item?.open)
+  const surplus = item === undefined || item.open >= 0 ? 0 : -item.open
 
   const openCreate = () => {
     record.reset()
@@ -193,6 +211,44 @@ export function DocumentReceivablePanel({
                 {state === 'credit' && <Badge tone="accent">überzahlt</Badge>}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Three ways out, and «stehen lassen» is the one that needs no click: until
+            somebody keeps it the surplus belongs to the customer (OR Art. 62). Nothing here
+            books by itself (backend ADR-0105). */}
+        {surplus > 0 && (
+          <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
+            <p className="text-[13px]">
+              <span className="font-medium">
+                {formatAmount(surplus)} {currency} zu viel bezahlt.
+              </span>{' '}
+              Der Betrag bleibt als Guthaben des Kunden stehen, solange niemand etwas anderes
+              entscheidet.
+            </p>
+            <span className="flex flex-wrap items-center gap-2">
+              {mayWriteOff && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setKeepingSurplus(true)
+                    setWritingOff(true)
+                  }}
+                >
+                  Einbehalten
+                </Button>
+              )}
+              <Link
+                className="text-[13px] underline"
+                to={`${CUSTOMER_CREDIT_PATH}`}
+              >
+                Zurückzahlen
+              </Link>
+            </span>
+            <p className="text-[12px] text-text-secondary">
+              Ein einbehaltener Überschuss ist zusätzliches Entgelt (MWSTG Art. 24 Abs. 1) —
+              kein steuerfreies Trinkgeld.
+            </p>
           </div>
         )}
 
@@ -297,7 +353,7 @@ export function DocumentReceivablePanel({
             onChange={(event) => setForm({ ...form, amount: event.target.value })}
             inputMode="decimal"
             numeric
-            hint="Mehr als offen ist erlaubt: die Überzahlung wird als Guthaben ausgewiesen."
+            hint={overpaymentHint(advice.data, currency)}
           />
 
           {REDUCES_CONSIDERATION.includes(form.kind) && (
@@ -325,7 +381,13 @@ export function DocumentReceivablePanel({
         documentNumber={undefined}
         currency={currency}
         openAmount={item?.open}
-        onClose={() => setWritingOff(false)}
+        keepLimit={advice.data?.keepLimit}
+        keepMaximum={advice.data?.keepMaximum}
+        initialReason={keepingSurplus ? 'UEBERZAHLUNG' : undefined}
+        onClose={() => {
+          setWritingOff(false)
+          setKeepingSurplus(false)
+        }}
         onWritten={refresh}
       />
 
@@ -363,6 +425,32 @@ export function DocumentReceivablePanel({
 }
 
 /** One figure of the summary line. */
+/**
+ * What the amount field says while somebody types.
+ *
+ * <p><b>It warns and never blocks.</b> A customer who transfers twenty rappen too much must
+ * not become an error dialog — that is ADR-0091 and it stays. What changed is that the
+ * sentence now names a figure and says what will happen (backend ADR-0105).
+ *
+ * @param advice   what the server worked out, absent while nothing was typed
+ * @param currency the currency of the Rechnung
+ */
+function overpaymentHint(advice: OverpaymentAdvice | undefined, currency: string): string {
+  if (advice === undefined || advice.difference <= 0) {
+    return 'Mehr als offen ist erlaubt: die Überzahlung wird als Guthaben ausgewiesen.'
+  }
+  const tooMuch = `${formatAmount(advice.difference)} ${currency} zu viel.`
+  if (advice.zone === 'ROUNDING') {
+    return `${tooMuch} Das ist eine Rundung.`
+  }
+  if (advice.zone === 'KEEP_PROPOSED') {
+    return `${tooMuch} Vorschlag: einbehalten — das ist zusätzliches Entgelt.`
+  }
+  return advice.keepAllowed
+    ? `${tooMuch} Der Betrag bleibt ein Guthaben des Kunden; einbehalten geht nur mit Bemerkung.`
+    : `${tooMuch} Über ${formatAmount(advice.keepMaximum)} ${currency} lässt sich nichts einbehalten — der Betrag bleibt ein Guthaben des Kunden.`
+}
+
 function Figure({
   label,
   value,

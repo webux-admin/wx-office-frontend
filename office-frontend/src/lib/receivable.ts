@@ -80,6 +80,51 @@ export function fetchPayments(tenantId: number, documentId: number): Promise<Pay
 }
 
 /**
+ * The three zones a payment that is too large falls into.
+ *
+ * <p>Worked out on the server, not here: the same rule has to hold when a statement import
+ * asks it, and two implementations of one limit drift apart (backend ADR-0105).
+ */
+export type OverpaymentZone = 'ROUNDING' | 'KEEP_PROPOSED' | 'CREDIT_ONLY'
+
+/**
+ * What would happen if this amount were recorded.
+ *
+ * <p>It writes nothing. The mask <b>warns and does not block</b> — a customer who transfers
+ * twenty rappen too much must not become an error dialog.
+ */
+export type OverpaymentAdvice = {
+  zone: OverpaymentZone
+  /** How much too much; zero or negative means it is not an overpayment. */
+  difference: number
+  currency: string
+  openAmount: number
+  /** Whether a keep of this size may be chosen at all. */
+  keepAllowed: boolean
+  /** Whether a keep of this size has to say why. */
+  noteRequired: boolean
+  /** Above this a keep needs a note — «aufgerundet» is then a claim. */
+  keepLimit: number
+  keepMaximum: number
+}
+
+/**
+ * Asks what would happen if this amount were recorded on this Rechnung.
+ *
+ * @param tenantId   the tenant
+ * @param documentId the Rechnung
+ * @param amount     what would be recorded
+ */
+export function fetchOverpaymentAdvice(
+  tenantId: number,
+  documentId: number,
+  amount: number,
+): Promise<OverpaymentAdvice> {
+  return api.get<OverpaymentAdvice>(
+    `/api/tenants/${tenantId}/invoices/${documentId}/overpayment-advice?amount=${amount}`,
+  )
+}
+/**
  * What one Rechnung still owes.
  *
  * <p>Answers 400 for a document that carries no receivable at all — a draft, a reversed

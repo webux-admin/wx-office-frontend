@@ -38,6 +38,9 @@ const SESSION: AuthState = {
 /** The label of the two fields under test, as the user reads them. */
 const PERCENT = 'Begründungspflicht ab'
 const MINIMUM = 'Untergrenze der Begründungspflicht'
+const ROUNDING_LIMIT = 'Überzahlung: Rundung bis'
+const KEEP_LIMIT = 'Einbehalt vorschlagen bis'
+const KEEP_MAXIMUM = 'Einbehalt höchstens'
 
 /**
  * The tenant the mask reads.
@@ -59,6 +62,9 @@ function tenant(overrides: Partial<Tenant> = {}): Tenant {
     cashRoundingIncrement: 0.05,
     stocktakeReasonPercent: 12.5,
     stocktakeReasonMinimum: 3,
+    overpaymentRoundingLimit: 0.1,
+    overpaymentKeepLimit: 2,
+    overpaymentKeepMaximum: 20,
     ...overrides,
   }
 }
@@ -182,5 +188,31 @@ describe('TenantPage', () => {
     expect(Object.keys(written[0].body)).not.toContain('inventoryEnabled')
     expect(written[0].body.stocktakeReasonPercent).toBeUndefined()
     expect(written[0].body.stocktakeReasonMinimum).toBeUndefined()
+  })
+  // --- the three zones of an overpayment (backend ADR-0105) ------------------
+
+  /**
+   * The three limits are read from the tenant, not from the shipped defaults.
+   *
+   * <p>The fixture is deliberately away from 0.05 / 1.00 / 5.00: a field that showed the
+   * default whatever the tenant stored would pass a test built on the default.
+   */
+  it('tenantPageReadsTheOverpaymentZonesTest', async () => {
+    await render()
+
+    expect(field(ROUNDING_LIMIT)?.value).toBe('0.1')
+    expect(field(KEEP_LIMIT)?.value).toBe('2')
+    expect(field(KEEP_MAXIMUM)?.value).toBe('20')
+  })
+
+  /** Unlike the count thresholds they do travel: this form is where they are edited. */
+  it('tenantPageSendsTheOverpaymentZonesTest', async () => {
+    await render()
+
+    await save()
+
+    expect(written[0].body.overpaymentRoundingLimit).toBe(0.1)
+    expect(written[0].body.overpaymentKeepLimit).toBe(2)
+    expect(written[0].body.overpaymentKeepMaximum).toBe(20)
   })
 })

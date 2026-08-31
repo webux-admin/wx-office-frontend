@@ -307,6 +307,18 @@ export type Tenant = {
    * written explanation, and explanations that are always demanded stop being read.
    */
   stocktakeReasonMinimum?: number
+  /**
+   * Up to this difference a payment that is too large counts as a rounding.
+   *
+   * <p>An absolute amount, never a percentage: one percent of an invoice of 50’000.00 is
+   * 500 francs of somebody else’s money, and a typing mistake does not scale with the
+   * invoice (backend ADR-0105).
+   */
+  overpaymentRoundingLimit?: number
+  /** Above this a keep needs a note — «aufgerundet» is then a claim. */
+  overpaymentKeepLimit?: number
+  /** The hard ceiling: above it a keep cannot be chosen at all. */
+  overpaymentKeepMaximum?: number
   createdAt?: string
   changedAt?: string
 }
