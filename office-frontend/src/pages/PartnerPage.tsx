@@ -13,6 +13,7 @@ import { TextAreaField } from '../components/TextAreaField'
 import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
+import { CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
 import { DUNNING_MODULE, DUNNING_RIGHTS } from '../lib/dunning'
 import { runsModule } from '../lib/modules'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -25,6 +26,7 @@ import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
 import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
+import { PartnerCreditNotice } from './partner/PartnerCreditNotice'
 import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
 import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
@@ -272,6 +274,13 @@ function PartnerMask({
             partnerId={partner.id}
             mayWrite={can('DOCUMENT_TYPE_WRITE')}
           />
+        )}
+
+        {/* A hint and not a register: as long as it is one number per currency it belongs
+            beside the customer. Whoever writes an invoice for somebody who has already paid
+            should see it without going looking (backend ADR-0104). */}
+        {tab === 'dokumente' && partner && can(CUSTOMER_CREDIT_RIGHTS.read) && (
+          <PartnerCreditNotice tenantId={tenantId} partnerId={partner.id} />
         )}
 
         {/* Beside the per-customer printout deviations, because it is the same kind of thing:

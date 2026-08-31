@@ -41,6 +41,7 @@ const RECORDER = session(['INVOICE_READ', 'INVOICE_PAYMENT_RECORD'])
 function receipt(overrides: Partial<PaymentReceipt> = {}): PaymentReceipt {
   return {
     id: 31,
+    kind: 'PAYMENT',
     partnerId: 1,
     partnerNumber: 'K-1',
     payerName: 'Druckerei Meier AG',

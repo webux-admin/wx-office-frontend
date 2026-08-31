@@ -2262,6 +2262,7 @@ export type PaymentKind =
   | 'BANK_CHARGE'
   | 'EXCHANGE_DIFFERENCE'
   | 'OVERPAYMENT_KEPT'
+  | 'ADVANCE_APPLIED'
 
 /** Whether a human or a statement import wrote a settlement line. */
 export type PaymentSource = 'MANUAL' | 'IMPORT'
@@ -2300,6 +2301,100 @@ export type Payment = {
 }
 
 /**
+ * Where money that arrived came from.
+ *
+ * <p>The kind says where it came from, never what became of it: a prepayment that is fully
+ * assigned keeps its kind and drops out of the credit balance through the calculated
+ * remainder (backend ADR-0104).
+ */
+export type ReceiptKind = 'PAYMENT' | 'ADVANCE' | 'OVERPAYMENT' | 'UNALLOCATED'
+
+/** How a customer credit disappears without an invoice. */
+export type CreditUseKind = 'REFUNDED' | 'RELEASED'
+
+/**
+ * Why a customer credit is being used up without an invoice.
+ *
+ * <p>A closed catalogue and not a free text: OR Art. 957a Abs. 2 asks for a Belegnachweis and
+ * for Nachprüfbarkeit, and «zurückbezahlt» in a note field is neither.
+ */
+export type CreditUseReason =
+  | 'REFUND_ON_REQUEST'
+  | 'REFUND_NO_CONTRACT'
+  | 'REFUND_DUPLICATE_PAYMENT'
+  | 'RELEASE_TIME_BARRED'
+  | 'RELEASE_UNCLAIMED'
+
+/**
+ * One way a customer credit went out without an invoice.
+ *
+ * <p>Append only: an entry is never changed and never deleted, it is taken back by a counter
+ * entry carrying the opposite amount.
+ */
+export type CreditUse = {
+  id: number
+  receiptId: number
+  useKind: CreditUseKind
+  reason: CreditUseReason
+  /** Negative on a counter entry. */
+  amount: number
+  currency: string
+  /** The day it was decided, separate from the value date of the money. */
+  bookingDate: string
+  /** Where the money went; absent on a release, which pays nothing out. */
+  refundIban?: string
+  note?: string
+  reversesUseId?: number
+  reversedByUseId?: number
+  recordedAt: string
+  recordedBy: string
+}
+
+/**
+ * One customer credit: a payment receipt with something left over.
+ *
+ * <p>Every figure is worked out and none of it is stored — `remaining` is what arrived minus
+ * everything assigned to invoices minus everything refunded or released.
+ */
+export type CustomerCredit = {
+  receiptId: number
+  kind: ReceiptKind
+  /** Who paid. A prepayment always names one; an unclear receipt may not. */
+  partnerId?: number
+  partnerNumber?: string
+  payerName?: string
+  amount: number
+  applied: number
+  used: number
+  /** What the tenant still owes on this receipt. */
+  remaining: number
+  currency: string
+  valueDate: string
+  /** Days since the value date, so a credit cannot grow old unnoticed. */
+  ageDays: number
+  note?: string
+  /** Empty on the list, filled on one credit. */
+  uses: CreditUse[]
+}
+
+/**
+ * What one customer is owed, in one currency.
+ *
+ * <p><b>One row per customer *and* currency.</b> The currency is part of the group key, never
+ * summed across — this is the figure that goes on account 2030 «Erhaltene Anzahlungen», and it
+ * is never netted against the open items (OR Art. 958c Abs. 1 Ziff. 7).
+ */
+export type CustomerCreditBalance = {
+  partnerId?: number
+  partnerNumber?: string
+  partnerName?: string
+  currency: string
+  balance: number
+  /** The value date of the oldest receipt still carrying something. */
+  oldestValueDate?: string
+  receiptCount: number
+}
+/**
  * What is left to do with a payment receipt.
  *
  * <p>Worked out from amount, assigned sum and counter receipt — never stored. A reversed
@@ -2316,6 +2411,8 @@ export type ReceiptState = 'OPEN' | 'PARTIAL' | 'ASSIGNED' | 'REVERSED'
  */
 export type PaymentReceipt = {
   id: number
+  /** Where the money came from — not what became of it. */
+  kind: ReceiptKind
   /** Who paid. Absent while that is not known — an unread reference is the normal case. */
   partnerId?: number
   partnerNumber?: string
@@ -2661,6 +2758,15 @@ export type DunningCandidate = {
   /** Absent where a letter would go out. */
   skipReason?: DunningSkipReason
   note?: string
+  /**
+   * What this customer is owed, in the currency of this letter. Absent where nothing is.
+   *
+   * <p>The list <b>warns</b> and never hides the row: a prepayment can be earmarked, and
+   * whether it settles this invoice is a declaration under OR Art. 120 ff. that belongs to a
+   * person (backend ADR-0104).
+   */
+  partnerCreditBalance?: number
+  partnerCreditCurrency?: string
 }
 
 /** How far one invoice has been chased. */

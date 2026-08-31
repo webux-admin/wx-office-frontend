@@ -23,6 +23,7 @@ import {
   type NavEntry,
   type NavModule,
 } from './navigation'
+import { CUSTOMER_CREDIT_PATH } from '../lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
 
 /** Every screen the menu links to, across all groups. */
@@ -477,8 +478,23 @@ describe('the payments folder', () => {
   it('navGroupsFoldThePaymentsTest', () => {
     const folder = payments()
 
-    expect(folder?.children.map((child) => child.href)).toEqual([PAYMENT_RECEIPT_PATH])
+    expect(folder?.children.map((child) => child.href)).toEqual([
+      PAYMENT_RECEIPT_PATH,
+      CUSTOMER_CREDIT_PATH,
+    ])
+    // INVOICE_READ on both: what came in and what we owe are two sides of the same books,
+    // and whoever may read one must read the other (backend ADR-0104).
     expect(folder?.children.every((child) => child.permission === 'INVOICE_READ')).toBe(true)
+  })
+
+  /** The credit is a register of the same folder, so an old bookmark lands beside it. */
+  it('folderForHoldsTheCreditTest', () => {
+    const folder = folderFor(CUSTOMER_CREDIT_PATH, all, runsAll)
+
+    expect(folder?.label).toBe('Zahlungen')
+    expect(folder?.children.map((child) => child.href)).toEqual(
+      folderFor(PAYMENT_RECEIPT_PATH, all, runsAll)?.children.map((child) => child.href),
+    )
   })
 
   /**

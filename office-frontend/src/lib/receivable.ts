@@ -20,11 +20,17 @@ export const PAYMENT_KINDS: Record<PaymentKind, string> = {
   BANK_CHARGE: 'Bankspesen',
   EXCHANGE_DIFFERENCE: 'Kursdifferenz',
   OVERPAYMENT_KEPT: 'Überzahlung einbehalten',
+  ADVANCE_APPLIED: 'Vorauszahlung verrechnet',
 }
 
 /**
  * The kinds in the order the picker offers them: the everyday one first, the one that gives
  * money up last.
+ *
+ * <p><b>`ADVANCE_APPLIED` is deliberately not here.</b> It comes into being only through the
+ * credit screen, where a customer credit is set against an invoice — never by somebody
+ * choosing it in the payment dialog. Offering it would let a settlement claim a prepayment
+ * that does not exist (backend ADR-0104).
  */
 export const PAYMENT_KIND_ORDER: PaymentKind[] = [
   'PAYMENT',

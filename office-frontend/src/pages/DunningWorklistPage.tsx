@@ -471,7 +471,22 @@ function CandidateTable({
                       </button>
                     )}
                   </td>
-                  <td className="py-2 pr-4">{candidate.partnerName ?? `Kunde ${candidate.partnerId}`}</td>
+                  <td className="py-2 pr-4">
+                    <span className="grid">
+                      <span>{candidate.partnerName ?? `Kunde ${candidate.partnerId}`}</span>
+                      {/* Chasing 500 while 800 of the customer’s money is sitting here is how
+                          a customer is lost. It warns and never hides the row: a prepayment can
+                          be earmarked, and setting it against this invoice is a declaration
+                          under OR Art. 120 ff. that belongs to a person (backend ADR-0104). */}
+                      {candidate.partnerCreditBalance !== undefined
+                        && candidate.partnerCreditBalance > 0 && (
+                        <span className="text-[12px] text-danger">
+                          {formatAmount(candidate.partnerCreditBalance)}{' '}
+                          {candidate.partnerCreditCurrency} Guthaben bei diesem Kunden
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="py-2 pr-4">
                     {candidate.skipReason === undefined ? (
                       <Badge tone="accent">

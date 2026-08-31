@@ -55,6 +55,7 @@ import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { SECURITY_PATH } from '../lib/loginPolicy'
 import { MODULE_PATH, MODULE_RIGHTS, type LicensedModuleCode } from '../lib/modules'
 import { OPEN_ITEM_PATH, OPEN_ITEM_RIGHTS, WRITE_OFF_RUN_PATH } from '../lib/openItem'
+import { CUSTOMER_CREDIT_PATH, CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH, PAYMENT_RECEIPT_RIGHTS } from '../lib/paymentReceipt'
 import {
   MAIL_TEMPLATE_PATH,
@@ -233,6 +234,15 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: Banknote,
             href: PAYMENT_RECEIPT_PATH,
             permission: PAYMENT_RECEIPT_RIGHTS.read,
+          },
+          // INVOICE_READ, not a right of its own: the credit balance is the other side of
+          // the open items, and whoever may see the debtor list must see the liability
+          // side — otherwise they read half the truth (backend ADR-0104).
+          {
+            label: 'Guthaben',
+            icon: HandCoins,
+            href: CUSTOMER_CREDIT_PATH,
+            permission: CUSTOMER_CREDIT_RIGHTS.read,
           },
         ],
       },
