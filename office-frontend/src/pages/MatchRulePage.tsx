@@ -466,7 +466,7 @@ function SettingsDialog({
           label="Zahlungskonten lernen"
           checked={learn}
           onChange={(event) => setLearn(event.target.checked)}
-          hint="Nur aus bestätigten Zuordnungen. Eine gelernte IBAN ist ein Personendatum am Stammsatz und am Partner einzeln löschbar (revDSG Art. 25)."
+          hint="Nur aus bestätigten Zuordnungen. Eine gelernte IBAN ist ein Personendatum am Stammsatz und am Partner einzeln löschbar (revDSG Art. 6 Abs. 4)."
         />
         <p className="text-[13px] text-text-tertiary">
           Diese Toleranz schreibt nichts — sie entscheidet nur, ob ein Vorschlag entsteht und

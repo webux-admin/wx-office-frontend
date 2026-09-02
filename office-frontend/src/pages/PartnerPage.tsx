@@ -285,8 +285,8 @@ function PartnerMask({
         )}
 
         {/* Shown so it can be removed: a learned payer IBAN is a personal datum on the
-            master record, and revDSG Art. 25 needs a place that shows it and a button that
-            erases it. The component decides for itself whether there is anything to show
+            master record: revDSG Art. 25 needs a place that shows it, and Art. 6 Abs. 4 a
+            button that erases it. The component decides for itself whether there is anything to show
             (backend ADR-0108). */}
         {tab === 'dokumente' && partner && (
           <div className="mt-6">

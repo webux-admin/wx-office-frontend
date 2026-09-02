@@ -18,8 +18,9 @@ import {
  * The bank accounts this customer has been seen to pay from.
  *
  * <p><b>Shown so it can be removed.</b> A learned IBAN is a new personal datum on the master
- * record: the right of access under revDSG Art. 25 needs a place that shows it, and the right
- * of erasure a button that removes it. A datum nobody can see is a right nobody can exercise
+ * record: the right of access under revDSG Art. 25 needs a place that shows it, and the duty
+ * to erase under Art. 6 Abs. 4 — enforceable through Art. 32 Abs. 2 Bst. c — a button that
+ * removes it. A datum nobody can see is a right nobody can exercise
  * (backend ADR-0108).
  *
  * <p>The same IBAN in the archived bank statement stays for ten years (OR Art. 958f) — master

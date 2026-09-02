@@ -284,7 +284,8 @@ export function fetchPayerAccounts(
 /**
  * Deletes one learned payer account, really.
  *
- * <p>revDSG Art. 25: a learned IBAN is a personal datum on the master record. The same IBAN in
+ * <p>revDSG Art. 6 Abs. 4: a learned IBAN is a personal datum on the master record and has to
+ * go once it is no longer needed. The same IBAN in
  * the archived statement stays for ten years.
  */
 export function forgetPayerAccount(

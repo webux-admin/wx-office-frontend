@@ -3159,7 +3159,8 @@ export type MatchSettings = {
 /**
  * A payer account learned for a party.
  *
- * @remarks Shown so it can be removed: revDSG Art. 25 applies to it, and a datum nobody can
+ * @remarks Shown so it can be removed: the right of access under revDSG Art. 25 and the duty
+ * to erase under Art. 6 Abs. 4 both apply to it, and a datum nobody can
  * see is a right nobody can exercise.
  */
 export type LearnedAccount = {

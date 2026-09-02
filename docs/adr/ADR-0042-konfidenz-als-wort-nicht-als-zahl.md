@@ -69,10 +69,17 @@ Ausbuchungstoleranz und zur Überzahlungsschwelle, und er wird sonst verwechselt
 Ein Abschnitt im Register *Dokumente* des Partners, mit IBAN, Datum, Herkunft und
 Bestätigungszahl.
 
-**Das ist keine Bequemlichkeit, sondern revDSG Art. 25.** Eine gelernte IBAN ist ein
-Personendatum am Stammsatz: das Auskunftsrecht braucht einen Ort, der es zeigt, und das
-Löschrecht eine Schaltfläche, die es entfernt. **Ein Datum, das niemand sehen kann, ist ein
+**Das ist keine Bequemlichkeit, sondern das revDSG.** Eine gelernte IBAN ist ein
+Personendatum am Stammsatz: das **Auskunftsrecht nach Art. 25** braucht einen Ort, der es
+zeigt, und die **Löschpflicht nach Art. 6 Abs. 4** — durchsetzbar über Art. 32 Abs. 2 Bst. c —
+eine Schaltfläche, die es entfernt. **Ein Datum, das niemand sehen kann, ist ein
 Recht, das niemand ausüben kann.**
+
+> **Zitatkorrektur, nachgetragen am 2026-09-02 (Backend-Issue #87).** Dieser Absatz nannte
+> für beide Rechte Art. 25 DSG. Das ist allein das Auskunftsrecht; die Löschpflicht steht in
+> Art. 6 Abs. 4. **Die Entscheidung ändert sich dadurch nicht** — nur die Norm, aus der sie
+> folgt. Deshalb kein neues ADR, sondern eine gekennzeichnete Richtigstellung an Ort und
+> Stelle, gleich behandelt wie Backend-ADR-0108.
 
 Der Abschnitt **verschwindet ganz**, wenn der Mandant das Modul nicht betreibt oder nichts
 gelernt wurde — ein leerer Kasten mit einer Erklärung wäre Lärm an einem Bildschirm, der ohnehin
