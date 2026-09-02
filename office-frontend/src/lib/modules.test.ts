@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MODULE_NAMES,
   MODULE_PATH,
   MODULE_RIGHTS,
   runsModule,
@@ -36,6 +37,16 @@ describe('MODULE_PATH', () => {
     expect(MODULE_PATH).toBe('/module')
     expect(MODULE_RIGHTS.read).toBe('TENANT_READ')
     expect(MODULE_RIGHTS.write).toBe('TENANT_WRITE')
+  })
+})
+
+describe('MODULE_NAMES', () => {
+  /**
+   * The widened union itself is checked by the compiler: a module without a name here is a type
+   * error in the record. What this holds is the word — «Buchhaltung» and not «Accounting».
+   */
+  it('moduleNamesCoverAccountingTest', () => {
+    expect(MODULE_NAMES.ACCOUNTING).toBe('Buchhaltung')
   })
 })
 

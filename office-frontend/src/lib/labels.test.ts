@@ -19,6 +19,49 @@ describe('labelOf', () => {
   })
 })
 
+describe('PERMISSION_MODULES', () => {
+  /**
+   * Every module of the backend catalogue has a German word here.
+   *
+   * <p>The list is `Permission.Module` of the backend, in its order. Three of them showed their
+   * raw code in the rights matrix until the accounting was added — a module the frontend has
+   * not learned yet stays visible, which is right, but a permanent raw code is a defect nobody
+   * reports until a tenant asks what OUTBOX means.
+   */
+  it('permissionModulesCoverEveryBackendModuleTest', () => {
+    const modules = [
+      'TENANT',
+      'NUMBERING',
+      'MASTERDATA',
+      'PARTNER',
+      'PRODUCT',
+      'DOCUMENT',
+      'OFFER',
+      'ORDER',
+      'DELIVERY_NOTE',
+      'INVOICE',
+      'CREDIT_NOTE',
+      'INVENTORY',
+      'OUTBOX',
+      'DUNNING',
+      'BANKING',
+      'ACCOUNTING',
+      'SUBSCRIPTION',
+      'USER',
+      'REPORT',
+    ]
+
+    for (const module of modules) {
+      expect(labelOf(PERMISSION_MODULES, module)).not.toBe(module)
+    }
+    expect(labelOf(PERMISSION_MODULES, 'ACCOUNTING')).toBe('Buchhaltung')
+    expect(labelOf(PERMISSION_MODULES, 'INVENTORY')).toBe('Lager')
+    expect(labelOf(PERMISSION_MODULES, 'OUTBOX')).toBe('Postausgang')
+    expect(labelOf(PERMISSION_MODULES, 'BANKING')).toBe('Bankauszug')
+    expect(Object.keys(PERMISSION_MODULES)).toHaveLength(modules.length)
+  })
+})
+
 describe('permissionAction', () => {
   it('permissionActionTest', () => {
     expect(permissionAction('PARTNER_WRITE')).toBe('Bearbeiten')
@@ -44,6 +87,18 @@ describe('permissionAction', () => {
     // Sits next to PRODUCT_WRITE in the same module group: a bare "Bearbeiten" twice over
     // would leave nobody knowing which box maintains the federal rates.
     expect(permissionAction('VAT_RATE_WRITE')).toBe('MwSt-Sätze pflegen')
+  })
+
+  /**
+   * Posting is not «Bearbeiten»: after it nothing is correctable any more, and a right that
+   * reads the same as the draft right gets granted along with it.
+   */
+  it('permissionActionForPostTest', () => {
+    expect(permissionAction('ACCOUNTING_POST')).toBe('Verbuchen')
+  })
+
+  it('permissionActionForCloseTest', () => {
+    expect(permissionAction('ACCOUNTING_CLOSE')).toBe('Abschliessen')
   })
 
   it('permissionActionWithUnknownVerbTest', () => {

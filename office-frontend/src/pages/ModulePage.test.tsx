@@ -45,6 +45,8 @@ function session(permissions: string[], activeTenantId: number | null = TENANT):
 }
 
 const BOTH = session(['TENANT_READ', 'TENANT_WRITE'])
+/** The administrator who switches a module on and may also look at the roles of the tenant. */
+const WITH_ROLES = session(['TENANT_READ', 'TENANT_WRITE', 'USER_READ'])
 const READ_ONLY = session(['TENANT_READ'])
 const NOTHING = session([])
 
@@ -64,6 +66,10 @@ let root: Root
 let modules: TenantModule[]
 /** Every write the mask sent: address, method and body per request. */
 let written: { url: string; method: string; body: Record<string, unknown> }[]
+/** Every address the mask read, so a test can say what was *not* fetched. */
+let read: string[]
+/** What the role endpoint answers; only the accounting hint asks for it. */
+let roles: { permissions: string[] }[]
 
 function inventory(overrides: Partial<TenantModule> = {}): TenantModule {
   return {
@@ -80,6 +86,16 @@ function outbox(overrides: Partial<TenantModule> = {}): TenantModule {
     code: 'OUTBOX',
     label: 'Postausgang',
     description: 'E-Mail-Versand von Belegen, Mailkonto, Textvorlagen und Versandprotokoll.',
+    active: false,
+    ...overrides,
+  }
+}
+
+function accounting(overrides: Partial<TenantModule> = {}): TenantModule {
+  return {
+    code: 'ACCOUNTING',
+    label: 'Buchhaltung',
+    description: 'Kontenplan, Journal, Bilanz und Erfolgsrechnung.',
     active: false,
     ...overrides,
   }
@@ -107,7 +123,9 @@ function stubFetch() {
       })
       return url.includes('/modules') ? json(modules) : json(TENANT_DATA)
     }
+    read.push(url)
     if (url.includes('/modules')) return json(modules)
+    if (url.endsWith('/roles')) return json(roles)
     if (url.endsWith(`/api/tenants/${TENANT}`)) return json(TENANT_DATA)
     return json([])
   })
@@ -115,6 +133,8 @@ function stubFetch() {
 
 beforeEach(() => {
   modules = [inventory()]
+  roles = []
+  read = []
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -344,6 +364,50 @@ describe('ModulePage', () => {
 
     expect(box('Lager verwenden')).toBeUndefined()
     expect(container.textContent).toContain('Recht')
+  })
+
+  /**
+   * The heaviest of the consequence sentences, and the reason it must not fall back to the
+   * neutral one: switching the books off means issued documents stop producing a posting.
+   */
+  it('modulePageWarnsAboutTheBooksWhenAccountingGoesOffTest', async () => {
+    modules = [accounting({ active: true, usage: '115 Konten, 2 Geschäftsjahre' })]
+    await render()
+
+    await toggle('Buchhaltung verwenden', false)
+
+    expect(container.textContent).toContain('MWSTG Art. 79')
+    expect(container.textContent).toContain('Buchhaltung → Archiv')
+    expect(container.textContent).not.toContain('Was im Modul liegt, bleibt erhalten')
+  })
+
+  /**
+   * The migration granted the five accounting rights to no role, not even to the administrator.
+   * Whoever has just switched the module on holds nothing, and this is the screen they are
+   * standing on (backend ADR-0119).
+   */
+  it('modulePageShowsTheMissingRightsHintAfterSwitchingAccountingOnTest', async () => {
+    roles = [{ permissions: ['INVOICE_READ'] }]
+    modules = [accounting()]
+    await render(WITH_ROLES)
+    expect(container.textContent).not.toContain('Buchhaltungsrechte')
+
+    await toggle('Buchhaltung verwenden', true)
+
+    expect(container.textContent).toContain(
+      'Keine Rolle dieses Mandanten trägt die Buchhaltungsrechte.',
+    )
+  })
+
+  /** No key, no lock: whoever may not read the roles cannot change them either. */
+  it('modulePageHidesTheMissingRightsHintWithoutUserReadTest', async () => {
+    modules = [accounting()]
+    await render(BOTH)
+
+    await toggle('Buchhaltung verwenden', true)
+
+    expect(container.textContent).not.toContain('Buchhaltungsrechte')
+    expect(read.some((url) => url.endsWith('/roles'))).toBe(false)
   })
 
   it('modulePageWithoutTenantTest', async () => {

@@ -39,7 +39,11 @@ export const PERMISSION_MODULES: Record<string, string> = {
   DELIVERY_NOTE: 'Lieferscheine',
   INVOICE: 'Rechnungen',
   CREDIT_NOTE: 'Gutschriften',
+  INVENTORY: 'Lager',
+  OUTBOX: 'Postausgang',
   DUNNING: 'Mahnwesen',
+  BANKING: 'Bankauszug',
+  ACCOUNTING: 'Buchhaltung',
   SUBSCRIPTION: 'Abonnemente',
   USER: 'Benutzer',
   REPORT: 'Auswertungen',
@@ -61,6 +65,11 @@ const PERMISSION_VERBS: Record<string, string> = {
   CONFIGURE: 'Einrichten',
   MANAGE: 'Verwalten',
   RUN: 'Ausführen',
+  // Its own verb beside «Bearbeiten»: after posting nothing is correctable any more, and a
+  // right that reads «Bearbeiten» would be granted to whoever captures a draft.
+  POST: 'Verbuchen',
+  // The act at the fiscal year — locking a period, closing and reopening a year.
+  CLOSE: 'Abschliessen',
   VIEW: 'Ansehen',
   EXPORT: 'Exportieren',
 }

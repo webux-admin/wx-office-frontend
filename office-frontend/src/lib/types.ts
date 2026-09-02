@@ -3306,3 +3306,38 @@ export type DunningConflict = {
   since?: string
   message: string
 }
+
+// --- Buchhaltung (Modul accounting, backend ADR-0110) -----------------------------------
+
+/**
+ * How the equity is laid out on the balance sheet.
+ *
+ * <p>Pre-filled from the legal form of the tenant, and asked outright once the setup assistant
+ * exists: the legal form is a maintained list and is no sound sole source (backend ADR-0112).
+ */
+export type EquityLayout = 'JURISTIC' | 'SOLE_PROPRIETOR' | 'PARTNERSHIP'
+
+/** Which form the profit and loss statement takes (OR Art. 959b Abs. 2). */
+export type ProfitAndLossForm = 'PRODUCTION'
+
+/**
+ * The bookkeeping settings of one tenant.
+ *
+ * <p>Answered with 200 even where the tenant cannot keep books here at all. `blocker` then
+ * carries the sentence saying why, and every other field is empty — the state screen is exactly
+ * the place that explanation belongs, and a 400 would put a red error page there instead
+ * (backend ADR-0110).
+ */
+export type AccountingSettings = {
+  /** Always `CHF` while there is a row: the books are kept in francs and in nothing else. */
+  ledgerCurrency?: string
+  /** The soft bolt: nothing is posted before that day. */
+  postingsLockedUntil?: string
+  postingStartsOn?: string
+  equityLayout?: EquityLayout
+  carryForwardAccount?: string
+  chartSource?: string
+  profitAndLossForm?: ProfitAndLossForm
+  /** Why this tenant cannot keep books here, in German. Empty where it can. */
+  blocker?: string
+}

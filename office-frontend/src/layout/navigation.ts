@@ -52,6 +52,11 @@ import {
   Warehouse,
   type LucideIcon,
 } from 'lucide-react'
+import {
+  ACCOUNTING_MODULE,
+  ACCOUNTING_RIGHTS,
+  ACCOUNTING_SETTINGS_PATH,
+} from '../lib/accounting'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
 import { SECURITY_PATH } from '../lib/loginPolicy'
@@ -654,6 +659,34 @@ export const NAV_GROUPS: NavGroup[] = [
           listEntry('verrechnungsarten', Receipt),
           listEntry('mahnarten', BellRing),
           listEntry('mahnstopp-gruende', Ban),
+        ],
+      },
+      {
+        // What becomes of the documents. Its own folder for the same reason as the dunning
+        // below: the bookkeeping is a module of its own and vanishes with its switch.
+        //
+        // THE SWITCH SITS ON THE HEAD AND ON THE CHILD, unlike the dunning: nothing here has
+        // to survive the switch. The archive entry that does is the one of #94, and there is
+        // nothing posted yet it could show (backend ADR-0119).
+        //
+        // A folder with a single child today, and no group «Buchhaltung» anywhere: a group
+        // whose entries point at nothing would be a promise this delivery does not keep. It
+        // comes once there is something to post and a journal to read it back in.
+        //
+        // The entry is called «Zustand» and will be called «Einstellungen» once the fiscal
+        // year gives it something to set. The address stays as it is — a label is cheap to
+        // change, an address people have learnt is not (ADR-0037 read it the same way).
+        label: 'Buchhaltung',
+        icon: BookOpen,
+        module: ACCOUNTING_MODULE,
+        children: [
+          {
+            label: 'Zustand',
+            icon: BookOpen,
+            href: ACCOUNTING_SETTINGS_PATH,
+            permission: ACCOUNTING_RIGHTS.read,
+            module: ACCOUNTING_MODULE,
+          },
         ],
       },
       {

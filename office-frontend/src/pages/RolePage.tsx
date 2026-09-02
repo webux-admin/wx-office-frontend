@@ -15,6 +15,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
 import { PERMISSION_MODULES, labelOf, permissionAction } from '../lib/labels'
+import { rolesKey, rolesUrl } from '../lib/roles'
 import type { PermissionCatalogue, Role } from '../lib/types'
 
 /**
@@ -43,8 +44,8 @@ function Roles({ tenantId }: { tenantId: number }) {
   const [permissions, setPermissions] = useState<string[]>([])
 
   const roles = useQuery({
-    queryKey: ['roles', tenantId],
-    queryFn: () => api.get<Role[]>(`/api/tenants/${tenantId}/roles`),
+    queryKey: rolesKey(tenantId),
+    queryFn: () => api.get<Role[]>(rolesUrl(tenantId)),
   })
 
   const catalogue = useQuery({
@@ -52,7 +53,7 @@ function Roles({ tenantId }: { tenantId: number }) {
     queryFn: () => api.get<PermissionCatalogue>(`/api/tenants/${tenantId}/roles/permissions`),
   })
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['roles', tenantId] })
+  const refresh = () => queryClient.invalidateQueries({ queryKey: rolesKey(tenantId) })
 
   const save = useMutation({
     mutationFn: () => {

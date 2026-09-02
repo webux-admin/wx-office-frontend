@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { Dialog } from '../components/Dialog'
+import { MissingAccountingRightsNotice } from '../components/MissingAccountingRightsNotice'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -37,6 +38,12 @@ const CONSEQUENCES: Record<string, string> = {
     'Es lässt sich danach nicht mehr gemahnt werden, und die Mahnstufen sind nicht mehr ' +
     'änderbar. Mahnstufen, Einstellungen und ausgestellte Mahnungen bleiben erhalten und ' +
     'lesbar — gelöscht wird nichts.',
+  ACCOUNTING:
+    'Es lässt sich nichts mehr buchen und nichts mehr verbuchen; Kontenplan, Steuercodes und ' +
+    'Geschäftsjahre sind gesperrt. Ausgestellte Belege erzeugen keine Buchung mehr — eine ' +
+    'unvollständige Buchführung berechtigt die ESTV zur Ermessenseinschätzung (MWSTG ' +
+    'Art. 79). Alles bereits Gebuchte bleibt gespeichert und unter Buchhaltung → Archiv ' +
+    'lesbar.',
 }
 
 /** The neutral sentence, for a module nobody wrote one for. */
@@ -195,6 +202,15 @@ function Modules({ tenantId }: { tenantId: number }) {
               <p className="mt-2 text-[12px] text-text-secondary">
                 Im Modul liegen bereits: {module.usage}.
               </p>
+            )}
+            {/* The sentence that has to be said here and nowhere else at this moment: the
+                migration granted the five accounting rights to no role, not even to the
+                administrator, so whoever switches the module on holds nothing yet. The
+                administrator is already standing here (backend ADR-0119). */}
+            {module.code === 'ACCOUNTING' && stored(module) && (
+              <div className="mt-4 empty:hidden">
+                <MissingAccountingRightsNotice tenantId={tenantId} />
+              </div>
             )}
             {module.code === 'INVENTORY' && runsInventory && (
               <>

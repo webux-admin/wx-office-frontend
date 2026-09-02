@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ACCOUNTING_RIGHTS, ACCOUNTING_SETTINGS_PATH } from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
 import {
   MAIL_TEMPLATE_PATH,
@@ -780,5 +781,67 @@ describe('the tenant and access folders', () => {
     expect(labels).toEqual(['Werte', 'Mandant', 'Module', 'Zugang'])
     const module = systemEntries()[2]
     expect(isFolder(module)).toBe(false)
+  })
+})
+
+/**
+ * The bookkeeping is one folder under «Moduleinstellungen» with one entry — and no group of
+ * its own.
+ *
+ * <p>A group «Buchhaltung» would need entries pointing at screens that do not exist yet; it
+ * comes with the first screen that posts something and the journal that reads it back
+ * (frontend ADR-0044, backend ADR-0119).
+ */
+describe('the accounting folder', () => {
+  const all = () => true
+
+  function accounting() {
+    const module = NAV_GROUPS.find((group) => group.title === 'Moduleinstellungen')
+    return module?.entries.find((node) => isFolder(node) && node.label === 'Buchhaltung')
+  }
+
+  it('accountingFolderNeedsAccountingReadTest', () => {
+    const folder = accounting()
+    if (!folder || !isFolder(folder)) throw new Error('folder missing')
+
+    // The switch sits on the head AND on the child: nothing here has to survive it. The
+    // archive entry that does belongs to a later delivery.
+    expect(folder.module).toBe('ACCOUNTING')
+    expect(folder.children.map((child) => child.href)).toEqual([ACCOUNTING_SETTINGS_PATH])
+    expect(folder.children.map((child) => child.label)).toEqual(['Zustand'])
+    expect(folder.children.map((child) => child.permission)).toEqual([ACCOUNTING_RIGHTS.read])
+    expect(folder.children.map((child) => child.module)).toEqual(['ACCOUNTING'])
+
+    const withoutTheRight = visibleNavGroups(
+      (permission) => permission !== ACCOUNTING_RIGHTS.read,
+      all,
+    )
+    expect(
+      withoutTheRight
+        .flatMap((group) => flattenNav(group.entries))
+        .map((entry) => entry.href),
+    ).not.toContain(ACCOUNTING_SETTINGS_PATH)
+  })
+
+  it('accountingFolderVanishesWithoutTheModuleTest', () => {
+    const withoutAccounting = visibleNavGroups(all, (module) => module !== 'ACCOUNTING')
+    const module = withoutAccounting.find((group) => group.title === 'Moduleinstellungen')
+
+    expect(module?.entries.some((node) => isFolder(node) && node.label === 'Buchhaltung')).toBe(
+      false,
+    )
+    expect(
+      withoutAccounting
+        .flatMap((group) => flattenNav(group.entries))
+        .map((entry) => entry.href),
+    ).not.toContain(ACCOUNTING_SETTINGS_PATH)
+    // The typed address is caught by RequireTenant, not by the menu — this only tidies it.
+    expect(folderFor(ACCOUNTING_SETTINGS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
+  })
+
+  /** In this state there is nothing to post and nothing to read back. */
+  it('accountingHasNoOwnGroupYetTest', () => {
+    expect(NAV_GROUPS.map((group) => group.title)).not.toContain('Buchhaltung')
+    expect(visibleNavGroups(all, all).map((group) => group.title)).not.toContain('Buchhaltung')
   })
 })

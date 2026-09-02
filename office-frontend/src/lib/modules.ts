@@ -19,7 +19,12 @@ export const MODULE_PATH = '/module'
  * place that names one reads {@link MODULE_NAMES} and TypeScript insists it is complete. The
  * sidebar's `NavModule` is this type (ADR-0018 wanted one list, not two).
  */
-export type LicensedModuleCode = 'INVENTORY' | 'OUTBOX' | 'DUNNING' | 'BANKING'
+export type LicensedModuleCode =
+  | 'INVENTORY'
+  | 'OUTBOX'
+  | 'DUNNING'
+  | 'BANKING'
+  | 'ACCOUNTING'
 
 /**
  * What each module is called on screen.
@@ -35,6 +40,7 @@ export const MODULE_NAMES: Record<LicensedModuleCode, string> = {
   OUTBOX: 'Postausgang',
   DUNNING: 'Mahnwesen',
   BANKING: 'Bankauszug',
+  ACCOUNTING: 'Buchhaltung',
 }
 
 /**
