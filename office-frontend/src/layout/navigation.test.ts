@@ -3,6 +3,7 @@ import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
   CHART_OF_ACCOUNTS_PATH,
+  TAX_CODES_PATH,
 } from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
 import {
@@ -810,17 +811,28 @@ describe('the accounting folder', () => {
     // The switch sits on the head AND on the child: nothing here has to survive it. The
     // archive entry that does belongs to a later delivery.
     expect(folder.module).toBe('ACCOUNTING')
-    // The chart of accounts stands first: it is what a tenant lays out on the first day.
+    // The chart of accounts stands first: it is what a tenant lays out on the first day. The
+    // tax codes follow it, because a copy from a template lays out both in one step.
     expect(folder.children.map((child) => child.href)).toEqual([
       CHART_OF_ACCOUNTS_PATH,
+      TAX_CODES_PATH,
       ACCOUNTING_SETTINGS_PATH,
     ])
-    expect(folder.children.map((child) => child.label)).toEqual(['Kontenplan', 'Zustand'])
+    expect(folder.children.map((child) => child.label)).toEqual([
+      'Kontenplan',
+      'Steuercodes',
+      'Zustand',
+    ])
     expect(folder.children.map((child) => child.permission)).toEqual([
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
     ])
-    expect(folder.children.map((child) => child.module)).toEqual(['ACCOUNTING', 'ACCOUNTING'])
+    expect(folder.children.map((child) => child.module)).toEqual([
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+    ])
 
     const withoutTheRight = visibleNavGroups(
       (permission) => permission !== ACCOUNTING_RIGHTS.read,
@@ -831,6 +843,7 @@ describe('the accounting folder', () => {
       .map((entry) => entry.href)
     expect(reachable).not.toContain(ACCOUNTING_SETTINGS_PATH)
     expect(reachable).not.toContain(CHART_OF_ACCOUNTS_PATH)
+    expect(reachable).not.toContain(TAX_CODES_PATH)
   })
 
   it('accountingFolderVanishesWithoutTheModuleTest', () => {
@@ -845,9 +858,11 @@ describe('the accounting folder', () => {
       .map((entry) => entry.href)
     expect(reachable).not.toContain(ACCOUNTING_SETTINGS_PATH)
     expect(reachable).not.toContain(CHART_OF_ACCOUNTS_PATH)
+    expect(reachable).not.toContain(TAX_CODES_PATH)
     // The typed address is caught by RequireTenant, not by the menu — this only tidies it.
     expect(folderFor(ACCOUNTING_SETTINGS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
     expect(folderFor(CHART_OF_ACCOUNTS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
+    expect(folderFor(TAX_CODES_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
   })
 
   /** In this state there is nothing to post and nothing to read back. */

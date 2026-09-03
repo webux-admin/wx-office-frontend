@@ -18,6 +18,7 @@ import type {
   Page,
   PositionHint,
   SystemKey,
+  TaxCodeCatalogue,
 } from './types'
 
 /** Name of the backend `LicensedModule` value. */
@@ -427,4 +428,48 @@ export const ACCOUNT_CLASS_TITLES: Record<number, string> = {
  */
 export function accountClassTitle(accountClass: number): string {
   return ACCOUNT_CLASS_TITLES[accountClass] ?? `Klasse ${accountClass}`
+}
+
+// --- die Steuercodes -----------------------------------------------------------------------
+
+/**
+ * Path of the tax code screen within the application.
+ *
+ * <p>Under `/buchhaltung/` beside the chart of accounts although its menu entry sits in the
+ * module settings: the codes are read by everything that posts, and their address should not
+ * move when the group «Buchhaltung» appears (ADR-0044).
+ */
+export const TAX_CODES_PATH = '/buchhaltung/steuercodes'
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the tax codes of that tenant
+ */
+export function taxCodesUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/tax-codes`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the tax codes of that tenant
+ */
+export function taxCodesKey(tenantId: number): readonly unknown[] {
+  return ['accounting-tax-codes', tenantId]
+}
+
+/**
+ * The tax codes of one tenant, unpaged and in the one business order.
+ *
+ * <p>Answers while the module is off: which code posts on which account under which digit
+ * belongs to the bookkeeping and is kept for ten years (OR Art. 958f).
+ *
+ * <p>**Where the list is empty, `emptyReason` says why.** The screen never works that out
+ * itself — the VAT position of the tenant is read with a right this screen does not require
+ * (backend ADR-0118).
+ *
+ * @param tenantId the tenant
+ * @returns the catalogue, empty with a reason where the tenant has none
+ */
+export function fetchTaxCodes(tenantId: number): Promise<TaxCodeCatalogue> {
+  return api.get<TaxCodeCatalogue>(taxCodesUrl(tenantId))
 }

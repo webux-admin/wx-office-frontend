@@ -58,6 +58,7 @@ import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
   CHART_OF_ACCOUNTS_PATH,
+  TAX_CODES_PATH,
 } from '../lib/accounting'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
@@ -688,6 +689,16 @@ export const NAV_GROUPS: NavGroup[] = [
             label: 'Kontenplan',
             icon: ListTree,
             href: CHART_OF_ACCOUNTS_PATH,
+            permission: ACCOUNTING_RIGHTS.read,
+            module: ACCOUNTING_MODULE,
+          },
+          // Straight after the chart, because that is where they come from: a copy from a
+          // template lays out the accounts and the codes in one step, and reading them apart
+          // from it would hide that connection.
+          {
+            label: 'Steuercodes',
+            icon: Percent,
+            href: TAX_CODES_PATH,
             permission: ACCOUNTING_RIGHTS.read,
             module: ACCOUNTING_MODULE,
           },

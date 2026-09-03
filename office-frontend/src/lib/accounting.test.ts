@@ -9,6 +9,7 @@ import {
   CHART_OF_ACCOUNTS_PATH,
   COMPUTED_POSITIONS,
   POSITION_PREFIXES,
+  TAX_CODES_PATH,
   accountClassOf,
   accountClassTitle,
   accountTypeLabel,
@@ -24,6 +25,8 @@ import {
   someRoleHoldsAccounting,
   systemKeysKey,
   systemKeysUrl,
+  taxCodesKey,
+  taxCodesUrl,
 } from './accounting'
 
 /** A role of the tenant, reduced to what the question is about. */
@@ -262,5 +265,28 @@ describe('accountClassTitle', () => {
   /** Class 0 is allowed by the number check and has no name of its own. */
   it('accountClassTitleWithoutTitleTest', () => {
     expect(accountClassTitle(0)).toBe('Klasse 0')
+  })
+})
+
+describe('taxCodesUrl', () => {
+  it('taxCodesUrlTest', () => {
+    expect(taxCodesUrl(7)).toBe('/api/tenants/7/accounting/tax-codes')
+  })
+
+  /** The screen lives beside the chart of accounts; both are read by everything that posts. */
+  it('taxCodesPathTest', () => {
+    expect(TAX_CODES_PATH).toBe('/buchhaltung/steuercodes')
+  })
+})
+
+describe('taxCodesKey', () => {
+  it('taxCodesKeyTest', () => {
+    expect(taxCodesKey(7)).toEqual(['accounting-tax-codes', 7])
+  })
+
+  it('taxCodesKeyIsPerTenantTest', () => {
+    // Two tenants must not share one cache entry: the codes point at the accounts of one
+    // tenant, and after a switch the list would name accounts of the tenant left behind.
+    expect(taxCodesKey(7)).not.toEqual(taxCodesKey(8))
   })
 })

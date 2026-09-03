@@ -3528,3 +3528,82 @@ export type PositionHint = {
   /** The template account the proposal was read from, so the dialog can say why. */
   basedOn: string
 }
+
+// --- Steuercodes (Modul accounting, backend ADR-0118) --------------------------------------
+
+/**
+ * Which side of the VAT return a tax code belongs to.
+ *
+ * <p>Output tax is owed to the federal tax administration, input tax is claimed back from it.
+ * There is deliberately no third value for the fallback code: a direction that is only decided
+ * while posting is no column value, so the fallback comes as two codes (backend ADR-0118).
+ */
+export type TaxDirection = 'OUTPUT' | 'INPUT'
+
+/**
+ * What a tax code does to the consideration it is booked on.
+ *
+ * <p>A reduction lowers the consideration **and the tax** (MWSTG Art. 41 Abs. 1) and therefore
+ * carries a rate of its own; an increase belongs to the taxable base (Art. 24 Abs. 1).
+ */
+export type TaxKind = 'NORMAL' | 'REDUCTION' | 'INCREASE'
+
+/**
+ * Why a tenant has no tax codes at all.
+ *
+ * <p>**The screen never works this out itself.** Reading the VAT position of the tenant needs
+ * `TENANT_READ`, which a bookkeeper holding `ACCOUNTING_READ` does not have to hold — a screen
+ * that needs a foreign module right for its own explanation is a permission trap (backend
+ * ADR-0118).
+ */
+export type TaxCodeEmptyReason = 'NOT_VAT_LIABLE' | 'SALDO' | 'NO_CHART' | 'NOT_COPIED'
+
+/**
+ * One tax code of a tenant, as `GET /accounting/tax-codes` returns it.
+ *
+ * <p>Flat on purpose: the account behind the code arrives as number **and** name, so the list
+ * shows «2200 Umsatzsteuer (MWST)» without a second request.
+ */
+export type TaxCode = {
+  id: number
+  /** The short name a bookkeeper types — `UST81`, `VSM81`, `USTMIN81`. Unique per tenant. */
+  code: string
+  name: string
+  direction: TaxDirection
+  kind: TaxKind
+  /**
+   * The percentage, three decimals.
+   *
+   * <p>`0` for the zero-rate cases **and** for the two fallback codes, whose rate comes from
+   * the entry line instead. Both are shown as «—», never as «0.0 %»: no rate and a rate of
+   * nothing are two statements.
+   */
+  rate: number
+  /** Absent where a zero-rate code needs no account. */
+  taxAccountNumber?: string | null
+  /** What the tenant calls that account; absent together with the number. */
+  taxAccountName?: string | null
+  /** The digit of the VAT return, absent for the two fallback codes. */
+  estvDigit?: string | null
+  /** Part of the turnover total of digit 200. Derived by the backend, never an opinion here. */
+  inTurnoverTotal: boolean
+  validFrom: string
+  /** The last day the code may be booked on, absent while it is the current one. */
+  validTo?: string | null
+  /** An inactive code stays in every report: it was posted with. */
+  active: boolean
+  /** Output before input, current rates before old ones, the fallback last. */
+  sortOrder: number
+}
+
+/**
+ * The tax codes of one tenant together with the reason there are none.
+ *
+ * <p>An object and not a bare array: an empty array carries no reason, and the screen has to
+ * tell four states apart (backend ADR-0118).
+ */
+export type TaxCodeCatalogue = {
+  codes: TaxCode[]
+  /** Absent or `null` while there are codes. */
+  emptyReason?: TaxCodeEmptyReason | null
+}
