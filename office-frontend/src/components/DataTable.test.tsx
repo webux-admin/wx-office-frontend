@@ -163,3 +163,33 @@ describe('DataTable', () => {
     expect([...selected]).toEqual([11])
   })
 })
+
+describe('DataTable sections', () => {
+  /**
+   * A rule wherever the answer changes, and none where it stays — the chart of accounts reads
+   * in blocks, and a heading above every row would be noise.
+   */
+  it('dataTableDrawsASectionRuleTest', async () => {
+    await render({ sectionTitle: (row) => (row.closed === true ? 'Erledigt' : 'Offen') })
+
+    const headings = [...container.querySelectorAll('tbody th')].map((cell) => cell.textContent)
+
+    expect(headings).toEqual(['Offen', 'Erledigt'])
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5)
+  })
+
+  /** Left out, the table looks exactly as it always did. */
+  it('dataTableWithoutSectionsTest', async () => {
+    await render()
+
+    expect(container.querySelectorAll('tbody th')).toHaveLength(0)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
+  /** A row the caller has no heading for opens no block. */
+  it('dataTableWithoutASectionTitleForARowTest', async () => {
+    await render({ sectionTitle: () => undefined })
+
+    expect(container.querySelectorAll('tbody th')).toHaveLength(0)
+  })
+})

@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { MouseEvent, ReactNode } from 'react'
+import { Fragment, type MouseEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckboxField } from './CheckboxField'
 import { formatCount } from '../lib/format'
@@ -71,6 +71,18 @@ type DataTableProps<T> = {
   /** Called instead of navigating, for a table whose records open in a dialog. */
   onRowOpen?: (row: T) => void
   /**
+   * The heading of the block a row belongs to, drawn as a rule across the whole table.
+   *
+   * <p>A rule appears wherever the answer changes from one row to the next, so the blocks only
+   * hold together while the list is sorted by the thing they group — the chart of accounts
+   * groups by the class of the account number and drops the rules as soon as somebody sorts by
+   * name. **They are presentation and no group in the data**: the table holds one page and
+   * cannot know that the block continues on the next one.
+   *
+   * <p>Left out, the table draws no rules, which is what every other list wants.
+   */
+  sectionTitle?: (row: T) => string | undefined
+  /**
    * The page the rows came from; shows the pager and the count below the table.
    *
    * <p>Leave it out for a list the server answers in one piece — selection lists, catalogues
@@ -134,6 +146,7 @@ export function DataTable<T>({
   onSelectedChange,
   selectableRow,
   selectionLabel,
+  sectionTitle,
 }: DataTableProps<T>) {
   const navigate = useNavigate()
 
@@ -275,12 +288,27 @@ export function DataTable<T>({
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="divide-y divide-line-subtle"
           >
-            {rows.map((row) => {
+            {rows.map((row, index) => {
               // Asked once per row, not once per use: rowTo is the caller's function.
               const opens = Boolean(rowTo?.(row) || onRowOpen)
+              const section = sectionTitle?.(row)
+              const opensSection =
+                section !== undefined
+                && (index === 0 || sectionTitle?.(rows[index - 1]) !== section)
               return (
+                <Fragment key={keyOf(row)}>
+                {opensSection && (
+                  <tr className="bg-sunken/60">
+                    <th
+                      scope="colgroup"
+                      colSpan={columns.length + (selecting ? 1 : 0)}
+                      className="text-overline px-5 py-1.5 text-left font-medium text-text-tertiary"
+                    >
+                      {section}
+                    </th>
+                  </tr>
+                )}
                 <tr
-                  key={keyOf(row)}
                   onClick={opens ? (event) => openRow(row, event) : undefined}
                   className={`transition-colors ${
                     opens ? 'cursor-pointer hover:bg-sunken' : 'hover:bg-sunken/60'
@@ -309,6 +337,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                 </tr>
+                </Fragment>
               )
             })}
           </motion.tbody>

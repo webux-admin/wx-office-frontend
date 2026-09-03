@@ -77,6 +77,11 @@ export type CatalogueName =
   | 'movement-source-kind'
   | 'product-tracking'
   | 'stocktake-status'
+  | 'account-type'
+  // German only, and on purpose: the label of a position **is** the wording of OR Art.
+  // 959a/959b, and a self-made French one would end up on a signed annual account. `labels`
+  // stays empty until the official versions have been checked line by line (backend ADR-0112).
+  | 'or-position'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -3334,10 +3339,192 @@ export type AccountingSettings = {
   /** The soft bolt: nothing is posted before that day. */
   postingsLockedUntil?: string
   postingStartsOn?: string
+  /**
+   * How the equity is broken down, as it stands in the settings row.
+   *
+   * <p>**Always filled while there is a row**, because the column is `NOT NULL` and the row is
+   * written on the first read with `JURISTIC` where nothing else is known (backend ADR-0110).
+   * Nothing may be pre-selected from it — for that there is `suggestedEquityLayout`.
+   */
   equityLayout?: EquityLayout
+  /**
+   * What the legal form in the tenant master record points at — and empty where it points at
+   * nothing.
+   *
+   * <p>Empty for a legal form somebody added themselves and for a tenant with none set. The
+   * template dialog pre-selects from this one and pre-selects **nothing** where it is empty: a
+   * pre-selected `JURISTIC` somebody clicks past gives an association the account «Aktien-,
+   * Stamm-, Anteilschein- oder Stiftungskapital» (backend ADR-0112).
+   */
+  suggestedEquityLayout?: EquityLayout
   carryForwardAccount?: string
   chartSource?: string
   profitAndLossForm?: ProfitAndLossForm
   /** Why this tenant cannot keep books here, in German. Empty where it can. */
   blocker?: string
+}
+
+// --- Kontenplan (Modul accounting, backend ADR-0112) --------------------------------------
+
+/**
+ * What an account holds — the one selector the reports read.
+ *
+ * <p>Never derived from the number: the class of the number is presentation and nothing else.
+ * Four OR positions name expense and income in one line, so the position cannot tell the two
+ * apart either (backend ADR-0112).
+ */
+export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE' | 'CLOSING'
+
+/**
+ * The closed catalogue of positions of the minimum breakdown, in the order of the law.
+ *
+ * <p>Thirty-nine values, declared in the order of OR Art. 959a and 959b. They are named here so
+ * that a position the backend does not know cannot be sent; their **labels** never live in this
+ * frontend, they come from the catalogue `or-position` and are the wording of the law.
+ */
+export type OrPositionCode =
+  | 'UV_FLUESSIGE_MITTEL'
+  | 'UV_FORDERUNGEN_LL'
+  | 'UV_UEBRIGE_FORDERUNGEN'
+  | 'UV_VORRAETE'
+  | 'UV_AKTIVE_ABGRENZUNG'
+  | 'AV_FINANZANLAGEN'
+  | 'AV_BETEILIGUNGEN'
+  | 'AV_SACHANLAGEN'
+  | 'AV_IMMATERIELLE'
+  | 'AV_NICHT_EINBEZAHLTES_KAPITAL'
+  | 'KFK_VERBINDLICHKEITEN_LL'
+  | 'KFK_VERZINSLICH'
+  | 'KFK_UEBRIGE'
+  | 'KFK_PASSIVE_ABGRENZUNG'
+  | 'LFK_VERZINSLICH'
+  | 'LFK_UEBRIGE'
+  | 'LFK_RUECKSTELLUNGEN'
+  | 'EK_GRUNDKAPITAL'
+  | 'EK_GESETZLICHE_KAPITALRESERVE'
+  | 'EK_GESETZLICHE_GEWINNRESERVE'
+  | 'EK_FREIWILLIGE_GEWINNRESERVEN'
+  | 'EK_EIGENE_KAPITALANTEILE'
+  | 'EK_GEWINNVORTRAG'
+  | 'EK_JAHRESERGEBNIS'
+  | 'EK_KAPITAL_INHABER'
+  | 'EK_PRIVAT'
+  | 'ER_NETTOERLOESE'
+  | 'ER_BESTANDESAENDERUNGEN'
+  | 'ER_MATERIALAUFWAND'
+  | 'ER_PERSONALAUFWAND'
+  | 'ER_UEBRIGER_BETRIEBSAUFWAND'
+  | 'ER_BETRIEBLICHER_NEBENERFOLG'
+  | 'ER_ABSCHREIBUNGEN'
+  | 'ER_FINANZERFOLG'
+  | 'ER_BETRIEBSFREMD'
+  | 'ER_AUSSERORDENTLICH'
+  | 'ER_DIREKTE_STEUERN'
+  | 'ER_JAHRESERGEBNIS'
+  | 'ABSCHLUSS'
+
+/**
+ * One account of the chart, as `/api/tenants/{id}/accounting/accounts` returns it.
+ *
+ * <p>`systemKey` and `directPostingAllowed` are read only. The key moves through
+ * `PUT /accounts/system-key/{key}` and nowhere else, and it appears on no screen — a tenant
+ * could read none of the twenty-four values (backend ADR-0112).
+ */
+export type Account = {
+  id: number
+  /** Text, not a number: leading zeros survive and `1020.1` is a number a tenant may file under. */
+  accountNumber: string
+  name: string
+  accountType: AccountType
+  orPosition: OrPositionCode
+  /** Set on the accounts the software finds by key; they can be neither switched off nor deleted. */
+  systemKey?: string
+  /** False on an account only the closing posts to, shown as a mark and on no form. */
+  directPostingAllowed: boolean
+  /** The tax code proposed for this account. Always absent until the tax codes arrive. */
+  defaultTaxCodeId?: number
+  note?: string
+  active: boolean
+}
+
+/**
+ * What the account form sends.
+ *
+ * <p>Neither `systemKey` nor `directPostingAllowed` is in here: a save leaves the stored key
+ * exactly where it is.
+ */
+export type AccountRequest = {
+  accountNumber: string
+  name: string
+  accountType: AccountType
+  orPosition: OrPositionCode
+  /** `null` clears the remark; the endpoint reads a missing field the same way. */
+  note?: string | null
+  active?: boolean
+}
+
+/**
+ * One shipped chart template.
+ *
+ * <p>The list may hold one template or none, and both are states the screen renders. **It names
+ * no template of its own**: which ones are shipped is decided by the migration, and a sentence
+ * that names one would be wrong the moment it is not shipped (backend ADR-0112).
+ */
+export type ChartTemplate = {
+  code: string
+  name: string
+  edition: string
+  /** The source note, printed in the footer of the chart screen. */
+  sourceNote: string
+  /** Where it stands in the dialog; the smallest is preselected. */
+  sortOrder: number
+  /**
+   * How many accounts a copy produces, per equity layout.
+   *
+   * <p>Not the row count of the template: a copy takes the lines every legal form gets plus
+   * those of the one layout picked, so the same template answers three numbers. A layout no
+   * line applies to is missing from the map.
+   */
+  accountCount: Partial<Record<EquityLayout, number>>
+}
+
+/** What the button «Aus der Vorlage anlegen» sends. */
+export type ChartCopyRequest = { templateCode: string; equityLayout: EquityLayout }
+
+/** What the copy from a template produced. `taxCodesCreated` stays 0 until the tax codes arrive. */
+export type ChartCopyResult = {
+  accountsCreated: number
+  taxCodesCreated: number
+  chartSource?: string
+}
+
+/**
+ * One system key with its question and the account that answers it.
+ *
+ * <p>**The question comes from the backend.** A second copy of the twenty-four questions in the
+ * client would drift, and the screen would then ask something the validation does not check.
+ */
+export type SystemKey = {
+  /** The constant name. It travels so the client can address the endpoint, and is shown nowhere. */
+  key: string
+  question: string
+  hint: string
+  /** The account types this key accepts; the picker filters by them. */
+  allowedTypes: AccountType[]
+  /** The account carrying the key, absent while nobody has assigned it. */
+  account?: Account
+}
+
+/**
+ * What the account dialog offers for the position while somebody types a number.
+ *
+ * <p>A proposal, and marked as one on screen. It stores nothing — where there is none the
+ * endpoint answers 204 and the field stays empty and compulsory, which is better than a
+ * proposal that is wrong.
+ */
+export type PositionHint = {
+  accountType: AccountType
+  orPosition: OrPositionCode
+  /** The template account the proposal was read from, so the dialog can say why. */
+  basedOn: string
 }

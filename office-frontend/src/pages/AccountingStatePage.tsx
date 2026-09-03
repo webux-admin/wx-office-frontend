@@ -13,6 +13,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
+  CHART_OF_ACCOUNTS_PATH,
   accountingSettingsKey,
   accountingSettingsUrl,
 } from '../lib/accounting'
@@ -203,11 +204,18 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         )}
       </Panel>
 
-      {/* The honest sentence of a foundation delivery: the switch is there, the books are not. */}
+      {/* The honest sentence of this stage: the chart is there, the postings are not. */}
       <Panel title="Als Nächstes">
         <p className="text-[13px] leading-[20px] text-text-secondary">
-          Einen Kontenplan anlegen. Der Bildschirm dafür kommt mit der nächsten Auslieferung.
-          Bis dahin lässt sich hier nichts buchen — das ist so gewollt.
+          Einen{' '}
+          <Link
+            to={CHART_OF_ACCOUNTS_PATH}
+            className="text-accent-text underline-offset-2 hover:underline"
+          >
+            Kontenplan
+          </Link>{' '}
+          anlegen — aus einer Vorlage oder von Hand. Gebucht wird noch nichts; das kommt mit dem
+          Geschäftsjahr, und das ist so gewollt.
         </p>
       </Panel>
     </>

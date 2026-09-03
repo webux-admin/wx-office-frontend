@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { ACCOUNTING_RIGHTS, ACCOUNTING_SETTINGS_PATH } from '../lib/accounting'
+import {
+  ACCOUNTING_RIGHTS,
+  ACCOUNTING_SETTINGS_PATH,
+  CHART_OF_ACCOUNTS_PATH,
+} from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
 import {
   MAIL_TEMPLATE_PATH,
@@ -785,8 +789,7 @@ describe('the tenant and access folders', () => {
 })
 
 /**
- * The bookkeeping is one folder under «Moduleinstellungen» with one entry — and no group of
- * its own.
+ * The bookkeeping is one folder under «Moduleinstellungen» — and no group of its own.
  *
  * <p>A group «Buchhaltung» would need entries pointing at screens that do not exist yet; it
  * comes with the first screen that posts something and the journal that reads it back
@@ -807,20 +810,27 @@ describe('the accounting folder', () => {
     // The switch sits on the head AND on the child: nothing here has to survive it. The
     // archive entry that does belongs to a later delivery.
     expect(folder.module).toBe('ACCOUNTING')
-    expect(folder.children.map((child) => child.href)).toEqual([ACCOUNTING_SETTINGS_PATH])
-    expect(folder.children.map((child) => child.label)).toEqual(['Zustand'])
-    expect(folder.children.map((child) => child.permission)).toEqual([ACCOUNTING_RIGHTS.read])
-    expect(folder.children.map((child) => child.module)).toEqual(['ACCOUNTING'])
+    // The chart of accounts stands first: it is what a tenant lays out on the first day.
+    expect(folder.children.map((child) => child.href)).toEqual([
+      CHART_OF_ACCOUNTS_PATH,
+      ACCOUNTING_SETTINGS_PATH,
+    ])
+    expect(folder.children.map((child) => child.label)).toEqual(['Kontenplan', 'Zustand'])
+    expect(folder.children.map((child) => child.permission)).toEqual([
+      ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
+    ])
+    expect(folder.children.map((child) => child.module)).toEqual(['ACCOUNTING', 'ACCOUNTING'])
 
     const withoutTheRight = visibleNavGroups(
       (permission) => permission !== ACCOUNTING_RIGHTS.read,
       all,
     )
-    expect(
-      withoutTheRight
-        .flatMap((group) => flattenNav(group.entries))
-        .map((entry) => entry.href),
-    ).not.toContain(ACCOUNTING_SETTINGS_PATH)
+    const reachable = withoutTheRight
+      .flatMap((group) => flattenNav(group.entries))
+      .map((entry) => entry.href)
+    expect(reachable).not.toContain(ACCOUNTING_SETTINGS_PATH)
+    expect(reachable).not.toContain(CHART_OF_ACCOUNTS_PATH)
   })
 
   it('accountingFolderVanishesWithoutTheModuleTest', () => {
@@ -830,13 +840,14 @@ describe('the accounting folder', () => {
     expect(module?.entries.some((node) => isFolder(node) && node.label === 'Buchhaltung')).toBe(
       false,
     )
-    expect(
-      withoutAccounting
-        .flatMap((group) => flattenNav(group.entries))
-        .map((entry) => entry.href),
-    ).not.toContain(ACCOUNTING_SETTINGS_PATH)
+    const reachable = withoutAccounting
+      .flatMap((group) => flattenNav(group.entries))
+      .map((entry) => entry.href)
+    expect(reachable).not.toContain(ACCOUNTING_SETTINGS_PATH)
+    expect(reachable).not.toContain(CHART_OF_ACCOUNTS_PATH)
     // The typed address is caught by RequireTenant, not by the menu — this only tidies it.
     expect(folderFor(ACCOUNTING_SETTINGS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
+    expect(folderFor(CHART_OF_ACCOUNTS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
   })
 
   /** In this state there is nothing to post and nothing to read back. */

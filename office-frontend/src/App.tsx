@@ -7,7 +7,7 @@ import { AppShell } from './layout/AppShell'
 import { RegisterGroupLayout } from './layout/RegisterGroupLayout'
 import { LoadingBlock } from './components/Notice'
 import { UnauthorizedError } from './lib/api'
-import { ACCOUNTING_SETTINGS_PATH } from './lib/accounting'
+import { ACCOUNTING_SETTINGS_PATH, CHART_OF_ACCOUNTS_PATH } from './lib/accounting'
 import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { SECURITY_PATH } from './lib/loginPolicy'
@@ -37,6 +37,7 @@ import { LoginPage } from './pages/LoginPage'
  * sees, and a chunk for it would only add a round trip before the password field appears.
  */
 const AccountingStatePage = lazy(() => import('./pages/AccountingStatePage').then((module) => ({ default: module.AccountingStatePage })))
+const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const CataloguePage = lazy(() => import('./pages/CataloguePage').then((module) => ({ default: module.CataloguePage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const DocumentTypeListPage = lazy(() => import('./pages/DocumentTypeListPage').then((module) => ({ default: module.DocumentTypeListPage })))
@@ -231,9 +232,9 @@ export default function App() {
                   <Route path="/mahnstufen" element={<DunningLevelPage />} />
                   <Route path="/mahntexte" element={<DunningTextPage />} />
 
-                  {/* Its menu entry sits in the folder «Buchhaltung», so the folder is its
-                      register strip — the same as the storage locations below, which are a
-                      folder with a single child too. */}
+                  {/* Their menu entries sit in the folder «Buchhaltung», so the folder is their
+                      register strip. */}
+                  <Route path={CHART_OF_ACCOUNTS_PATH} element={<ChartOfAccountsPage />} />
                   <Route path={ACCOUNTING_SETTINGS_PATH} element={<AccountingStatePage />} />
 
                   <Route path="/lagerorte" element={<StockLocationListPage />} />

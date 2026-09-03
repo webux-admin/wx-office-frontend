@@ -25,6 +25,7 @@ import {
   Landmark,
   Languages,
   ListChecks,
+  ListTree,
   LayoutGrid,
   LayoutTemplate,
   Lock,
@@ -56,6 +57,7 @@ import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  CHART_OF_ACCOUNTS_PATH,
 } from '../lib/accounting'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
@@ -669,9 +671,9 @@ export const NAV_GROUPS: NavGroup[] = [
         // to survive the switch. The archive entry that does is the one of #94, and there is
         // nothing posted yet it could show (backend ADR-0119).
         //
-        // A folder with a single child today, and no group «Buchhaltung» anywhere: a group
-        // whose entries point at nothing would be a promise this delivery does not keep. It
-        // comes once there is something to post and a journal to read it back in.
+        // Still no group «Buchhaltung» anywhere: a group whose entries point at nothing would
+        // be a promise this delivery does not keep. It comes once there is something to post
+        // and a journal to read it back in.
         //
         // The entry is called «Zustand» and will be called «Einstellungen» once the fiscal
         // year gives it something to set. The address stays as it is — a label is cheap to
@@ -680,6 +682,15 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: BookOpen,
         module: ACCOUNTING_MODULE,
         children: [
+          // First, and ahead of the state: the chart of accounts is what a tenant lays out on
+          // the first day, and everything that posts later reads it.
+          {
+            label: 'Kontenplan',
+            icon: ListTree,
+            href: CHART_OF_ACCOUNTS_PATH,
+            permission: ACCOUNTING_RIGHTS.read,
+            module: ACCOUNTING_MODULE,
+          },
           {
             label: 'Zustand',
             icon: BookOpen,
