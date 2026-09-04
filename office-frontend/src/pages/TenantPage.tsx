@@ -15,7 +15,7 @@ import { RequirePermission } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { parseDecimal } from '../lib/format'
 import { originOf, type Origin } from '../lib/origin'
-import type { ReferenceType, Tenant, VatMethod } from '../lib/types'
+import type { ReferenceType, Tenant, VatAccountingBasis, VatMethod } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
@@ -61,6 +61,9 @@ type TenantForm = {
   vatMethod: VatMethod
   vatSaldoRate: string
   vatLiableFrom: string
+  vatAccountingBasis: VatAccountingBasis
+  vatAccountingBasisFrom: string
+  vatPeriodsLockedUntil: string
   street: string
   buildingNumber: string
   postalCode: string
@@ -98,6 +101,12 @@ function initial(tenant: Tenant | null): TenantForm {
     vatMethod: tenant?.vat?.vatMethod ?? 'EFFECTIVE',
     vatSaldoRate: tenant?.vat?.vatSaldoRate?.toString() ?? '',
     vatLiableFrom: tenant?.vat?.vatLiableFrom ?? '',
+    // «Vereinbarte Entgelte» is the statutory default of MWSTG Art. 39 Abs. 1 — settling by
+    // collected considerations needs the tax authority's approval. So the pre-selection is the
+    // law and not a guess, and the field is compulsory anyway once the tenant is liable.
+    vatAccountingBasis: tenant?.vat?.vatAccountingBasis ?? 'AGREED_CONSIDERATION',
+    vatAccountingBasisFrom: tenant?.vat?.vatAccountingBasisFrom ?? '',
+    vatPeriodsLockedUntil: tenant?.vatPeriodsLockedUntil ?? '',
     street: tenant?.address?.street ?? '',
     buildingNumber: tenant?.address?.buildingNumber ?? '',
     postalCode: tenant?.address?.postalCode ?? '',
@@ -154,6 +163,10 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     legalForm: form.legalForm || undefined,
     uid: form.uid.trim() || undefined,
     commercialRegisterName: form.commercialRegisterName.trim() || undefined,
+    // The whole block is replaced on every save, never merged — a field left out here is a
+    // field cleared over there. That is why the accounting basis travels: without it the
+    // backend refuses every liable tenant with «Ein steuerpflichtiger Mandant braucht eine
+    // Abrechnungsart», and this mask could not save one at all (backend ADR-0100).
     vat: {
       vatLiable: form.vatLiable,
       vatMethod: form.vatLiable ? form.vatMethod : undefined,
@@ -162,7 +175,15 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
           ? (parseDecimal(form.vatSaldoRate) ?? undefined)
           : undefined,
       vatLiableFrom: form.vatLiable ? form.vatLiableFrom || undefined : undefined,
+      vatAccountingBasis: form.vatLiable ? form.vatAccountingBasis : undefined,
+      vatAccountingBasisFrom: form.vatLiable
+        ? form.vatAccountingBasisFrom || undefined
+        : undefined,
     },
+    // On the top level and not in the block above, exactly as the backend carries it. An empty
+    // field sends nothing, and nothing keeps what is stored: resetting to «gar nichts
+    // abgerechnet» is an intervention and not a day-to-day step (backend ADR-0113).
+    vatPeriodsLockedUntil: form.vatPeriodsLockedUntil || undefined,
     address: {
       street: form.street.trim() || undefined,
       buildingNumber: form.buildingNumber.trim() || undefined,
@@ -411,6 +432,38 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                     value={form.vatLiableFrom}
                     onChange={(event) => set('vatLiableFrom', event.target.value)}
                     disabled={!mayWrite}
+                  />
+
+                  {/* «Abrechnungsart» and not «Abrechnungsmethode»: this one says when the tax
+                      claim arises (MWSTG Art. 39), the one above says how the tax is worked
+                      out. Two fields using the same word for the two would be the confusion
+                      this one exists to end. */}
+                  <CatalogueSelect
+                    label="Abrechnungsart"
+                    tenantId={tenantId}
+                    catalogue="vat-accounting-basis"
+                    value={form.vatAccountingBasis}
+                    onChange={(code) => set('vatAccountingBasis', code as VatAccountingBasis)}
+                    disabled={!mayWrite}
+                  />
+
+                  <TextField
+                    label="Abrechnungsart gilt ab"
+                    type="date"
+                    value={form.vatAccountingBasisFrom}
+                    onChange={(event) => set('vatAccountingBasisFrom', event.target.value)}
+                    disabled={!mayWrite}
+                    hint="Ein Wechsel gilt ab dem 1. Januar."
+                  />
+
+                  <TextField
+                    label="MWST abgerechnet bis"
+                    type="date"
+                    value={form.vatPeriodsLockedUntil}
+                    onChange={(event) => set('vatPeriodsLockedUntil', event.target.value)}
+                    disabled={!mayWrite}
+                    hint="Bis zu diesem Tag ist die Mehrwertsteuer abgerechnet; Buchungen bis und mit diesem Tag sind gesperrt. Ein leeres Feld lässt den gespeicherten Tag stehen."
+                    className="sm:col-span-2"
                   />
 
                   {form.vatMethod === 'SALDO' && (

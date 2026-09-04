@@ -12,6 +12,7 @@ import {
   Boxes,
   Building2,
   CalendarClock,
+  CalendarRange,
   ClipboardCheck,
   ClipboardList,
   Coins,
@@ -57,6 +58,7 @@ import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  FISCAL_YEARS_PATH,
   CHART_OF_ACCOUNTS_PATH,
   TAX_CODES_PATH,
 } from '../lib/accounting'
@@ -676,9 +678,9 @@ export const NAV_GROUPS: NavGroup[] = [
         // be a promise this delivery does not keep. It comes once there is something to post
         // and a journal to read it back in.
         //
-        // The entry is called «Zustand» and will be called «Einstellungen» once the fiscal
-        // year gives it something to set. The address stays as it is — a label is cheap to
-        // change, an address people have learnt is not (ADR-0037 read it the same way).
+        // The entry that was called «Zustand» is called «Einstellungen» from the fiscal year
+        // on: the lock date has an effect from there. The address stayed as it was — a label is
+        // cheap to change, an address people have learnt is not (ADR-0037 read it the same way).
         label: 'Buchhaltung',
         icon: BookOpen,
         module: ACCOUNTING_MODULE,
@@ -702,8 +704,18 @@ export const NAV_GROUPS: NavGroup[] = [
             permission: ACCOUNTING_RIGHTS.read,
             module: ACCOUNTING_MODULE,
           },
+          // Before the settings, because it is the one thing a tenant has to lay out before
+          // anything can be posted at all — the lock date over there only bites once a year
+          // exists.
           {
-            label: 'Zustand',
+            label: 'Geschäftsjahre',
+            icon: CalendarRange,
+            href: FISCAL_YEARS_PATH,
+            permission: ACCOUNTING_RIGHTS.read,
+            module: ACCOUNTING_MODULE,
+          },
+          {
+            label: 'Einstellungen',
             icon: BookOpen,
             href: ACCOUNTING_SETTINGS_PATH,
             permission: ACCOUNTING_RIGHTS.read,

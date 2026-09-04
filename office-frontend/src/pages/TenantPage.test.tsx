@@ -41,6 +41,26 @@ const MINIMUM = 'Untergrenze der Begründungspflicht'
 const ROUNDING_LIMIT = 'Überzahlung: Rundung bis'
 const KEEP_LIMIT = 'Einbehalt vorschlagen bis'
 const KEEP_MAXIMUM = 'Einbehalt höchstens'
+/** The three fields the VAT panel gained with the fiscal year (backend ADR-0113). */
+const BASIS = 'Abrechnungsart'
+const BASIS_FROM = 'Abrechnungsart gilt ab'
+const VAT_LOCKED = 'MWST abgerechnet bis'
+
+/** A tenant that is registered for VAT — the case the mask could not save at all. */
+function liable(overrides: Partial<Tenant> = {}): Tenant {
+  return tenant({
+    uid: 'CHE-123.456.789',
+    vat: {
+      vatLiable: true,
+      vatMethod: 'EFFECTIVE',
+      vatLiableFrom: '2024-01-01',
+      vatAccountingBasis: 'COLLECTED_CONSIDERATION',
+      vatAccountingBasisFrom: '2026-01-01',
+    },
+    vatPeriodsLockedUntil: '2026-06-30',
+    ...overrides,
+  })
+}
 
 /**
  * The tenant the mask reads.
@@ -214,5 +234,81 @@ describe('TenantPage', () => {
     expect(written[0].body.overpaymentRoundingLimit).toBe(0.1)
     expect(written[0].body.overpaymentKeepLimit).toBe(2)
     expect(written[0].body.overpaymentKeepMaximum).toBe(20)
+  })
+
+  // --- das Panel «Mehrwertsteuer» (backend ADR-0100 und ADR-0113) ------------
+
+  it('tenantPageShowsTheVatAccountingFieldsTest', async () => {
+    stored = liable()
+    await render()
+
+    expect(field(BASIS)?.value).toBe('COLLECTED_CONSIDERATION')
+    expect(field(BASIS_FROM)?.value).toBe('2026-01-01')
+    expect(field(VAT_LOCKED)?.value).toBe('2026-06-30')
+  })
+
+  /** Without liability there is no basis to state and no period to settle. */
+  it('tenantPageHidesTheVatAccountingFieldsWithoutLiabilityTest', async () => {
+    await render()
+
+    expect(field(BASIS)).toBeUndefined()
+    expect(field(BASIS_FROM)).toBeUndefined()
+    expect(field(VAT_LOCKED)).toBeUndefined()
+  })
+
+  /**
+   * The bug this issue repairs.
+   *
+   * <p>`TenantConverter.toVatSettings` replaces the whole VAT block instead of merging it, and
+   * `TenantRules.validateVat` refuses a liable tenant without an accounting basis. The mask
+   * used to send the block without that field — so a liable tenant could not be saved at all.
+   */
+  it('tenantPageSendsTheVatAccountingBasisTest', async () => {
+    stored = liable()
+    await render()
+
+    await save()
+
+    const vat = written[0].body.vat as Record<string, unknown>
+    expect(vat.vatLiable).toBe(true)
+    expect(vat.vatAccountingBasis).toBe('COLLECTED_CONSIDERATION')
+    expect(vat.vatAccountingBasisFrom).toBe('2026-01-01')
+  })
+
+  /** «Vereinbarte Entgelte» is the default of MWSTG Art. 39 Abs. 1, not a guess of this mask. */
+  it('tenantPageSendsTheDefaultVatAccountingBasisTest', async () => {
+    stored = liable({ vat: { vatLiable: true, vatMethod: 'EFFECTIVE' } })
+    await render()
+
+    await save()
+
+    const vat = written[0].body.vat as Record<string, unknown>
+    expect(vat.vatAccountingBasis).toBe('AGREED_CONSIDERATION')
+  })
+
+  /**
+   * The settled VAT period travels on the top level, exactly as `TenantDto` carries it.
+   *
+   * <p>Inside the VAT block it would be lost: that block is replaced wholesale on every save.
+   */
+  it('tenantPageSendsVatPeriodsLockedUntilOnTheTopLevelTest', async () => {
+    stored = liable()
+    await render()
+
+    await save()
+
+    expect(written[0].body.vatPeriodsLockedUntil).toBe('2026-06-30')
+    const vat = written[0].body.vat as Record<string, unknown>
+    expect(vat.vatPeriodsLockedUntil).toBeUndefined()
+  })
+
+  /** An empty field sends nothing, and nothing keeps the stored day (backend ADR-0113). */
+  it('tenantPageKeepsVatPeriodsLockedUntilWhenEmptyTest', async () => {
+    stored = liable({ vatPeriodsLockedUntil: undefined })
+    await render()
+
+    await save()
+
+    expect(Object.keys(written[0].body)).not.toContain('vatPeriodsLockedUntil')
   })
 })

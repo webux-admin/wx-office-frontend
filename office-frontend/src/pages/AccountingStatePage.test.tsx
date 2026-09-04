@@ -5,8 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import { ACCOUNTING_RIGHTS, ACCOUNTING_SETTINGS_PATH } from '../lib/accounting'
-import type { AccountingSettings } from '../lib/types'
+import {
+  ACCOUNTING_RIGHTS,
+  ACCOUNTING_SETTINGS_PATH,
+  FISCAL_YEARS_PATH,
+} from '../lib/accounting'
+import type { AccountingSettings, FiscalYear, FiscalYearList } from '../lib/types'
 import { AccountingStatePage } from './AccountingStatePage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -55,12 +59,49 @@ const STORED: AccountingSettings = {
 
 const HINT = 'Keine Rolle dieses Mandanten trägt die Buchhaltungsrechte.'
 
+const YEAR_2026: FiscalYear = {
+  id: 12,
+  label: '2026',
+  numberYear: 2026,
+  startDate: '2026-01-01',
+  endDate: '2026-12-31',
+  status: 'OPEN',
+  deletable: true,
+  editable: true,
+  spansAFullCalendarYear: false,
+}
+
+/**
+ * What `GET /fiscal-years` answers.
+ *
+ * <p>`warn` is not worked out here: the thirty days are counted in the backend, and a browser
+ * counting them a second time would be a second rule to keep in step (backend ADR-0113).
+ */
+function fiscalYears(daysLeft: number | null, years: FiscalYear[] = [YEAR_2026]): FiscalYearList {
+  return {
+    years,
+    boundary: { postableFrom: null, lockedUntil: null, source: 'NONE', message: '' },
+    expiry: {
+      lastEndDate: years.at(-1)?.endDate ?? null,
+      daysLeft,
+      warn: daysLeft !== null && daysLeft <= 30,
+    },
+  }
+}
+
+const EXPIRY_WARNING = 'Das letzte Geschäftsjahr endet am'
+
+/** What `App.tsx` holds an answer fresh for. */
+const APP_STALE_TIME = 30_000
+
 let container: HTMLDivElement
 let root: Root
 /** What `GET /settings` answers; every test sets what it is about. */
 let settings: AccountingSettings
 /** What the role endpoint answers. Empty means: nobody may keep books yet. */
 let roles: { permissions: string[] }[]
+/** What the fiscal year endpoint answers; every test about the warning sets it. */
+let years: FiscalYearList
 /** Every write the mask sent: address, method and body per request. */
 let written: { url: string; method: string; body: Record<string, unknown> }[]
 /** Every address the mask read, so a test can say what was *not* fetched. */
@@ -86,6 +127,7 @@ function stubFetch() {
     }
     read.push(url)
     if (url.endsWith('/roles')) return json(roles)
+    if (url.includes('/fiscal-years')) return json(years)
     return json(settings)
   })
 }
@@ -93,6 +135,7 @@ function stubFetch() {
 beforeEach(() => {
   settings = { ...STORED }
   roles = []
+  years = fiscalYears(200)
   written = []
   read = []
   stubFetch()
@@ -115,8 +158,13 @@ async function settle() {
   }
 }
 
-async function render(auth: AuthState = CONFIGURE) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+/**
+ * @param auth the session the mask runs under
+ * @param staleTime how long an answer counts as fresh; `APP_STALE_TIME` is what `App.tsx`
+ *   runs with, and only under it does a test say anything about invalidating a cache
+ */
+async function render(auth: AuthState = CONFIGURE, staleTime = 0) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime } } })
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={[ACCOUNTING_SETTINGS_PATH]}>
@@ -229,6 +277,41 @@ describe('AccountingStatePage', () => {
     expect(container.textContent).toContain('31.12.2026')
   })
 
+  /**
+   * The named day is locked itself.
+   *
+   * <p>The backend refuses a booking date that is not <b>after</b> the bolt, so «Vor diesem
+   * Tag wird nichts verbucht» was wrong by exactly one day — the one day somebody would have
+   * posted on before noticing.
+   */
+  it('namesTheLockedDayItselfTest', async () => {
+    await render()
+
+    expect(container.textContent).toContain('Bis und mit diesem Tag wird nichts verbucht.')
+    expect(container.textContent).not.toContain('Vor diesem Tag')
+  })
+
+  /**
+   * The bolt that was just moved is one of the three the posting boundary is worked out from.
+   *
+   * <p>Rendered with the staleness the application runs with, so a remount alone fetches
+   * nothing: without the invalidation «Buchhaltung → Geschäftsjahre» went on naming the day
+   * before the save for another half minute.
+   */
+  it('invalidatesTheFiscalYearsAfterSavingTheLockDateTest', async () => {
+    await render(CONFIGURE, APP_STALE_TIME)
+    const before = read.filter((url) => url.includes('/fiscal-years')).length
+
+    await type('Gesperrt bis', '2026-12-31')
+    await act(async () => {
+      button('Speichern')?.click()
+    })
+    await settle()
+
+    expect(before).toBe(1)
+    expect(read.filter((url) => url.includes('/fiscal-years')).length).toBeGreaterThan(before)
+  })
+
   it('savesTheLockDateTest', async () => {
     await render()
 
@@ -241,6 +324,53 @@ describe('AccountingStatePage', () => {
     const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
     expect(put?.method).toBe('PUT')
     expect(put?.body).toEqual({ postingsLockedUntil: '2026-12-31' })
+  })
+
+  // --- die 30-Tage-Warnung, hier wie auf der Geschaeftsjahresmaske ------------
+
+  /**
+   * The warning stands in two places, and this is the second one.
+   *
+   * <p>ENTSCHEID 2 asks for it on the fiscal year screen <b>and</b> on the screen that answers
+   * the state of the module. Both read the same query key, so there is one cached answer.
+   */
+  it('warnsThirtyDaysBeforeTheLastYearEndsTest', async () => {
+    years = fiscalYears(30)
+    await render()
+
+    expect(container.textContent).toContain(EXPIRY_WARNING)
+    expect(container.textContent).toContain('31.12.2026')
+    expect(link('Buchhaltung → Geschäftsjahre')?.getAttribute('href')).toBe(FISCAL_YEARS_PATH)
+  })
+
+  /** One day earlier there is nothing to warn about, and the row states the fact instead. */
+  it('doesNotWarnThirtyOneDaysBeforeTheLastYearEndsTest', async () => {
+    years = fiscalYears(31)
+    await render()
+
+    expect(container.textContent).not.toContain(EXPIRY_WARNING)
+    expect(container.textContent).toContain('Letztes Geschäftsjahr')
+    expect(container.textContent).toContain('31.12.2026')
+  })
+
+  /** Once the day has passed the sentence moves into the past tense. */
+  it('warnsAfterTheLastYearEndedTest', async () => {
+    years = fiscalYears(-4)
+    await render()
+
+    expect(container.textContent).toContain('Das letzte Geschäftsjahr endete am')
+    expect(container.textContent).toContain('Seither lässt sich nichts mehr buchen')
+  })
+
+  /** Without a single year there is nothing to warn about — and the lock date has no effect. */
+  it('rendersFiscalYearSectionWithoutYearsTest', async () => {
+    years = fiscalYears(null, [])
+    await render()
+
+    expect(container.textContent).not.toContain(EXPIRY_WARNING)
+    expect(container.textContent).toContain(
+      'Solange kein Geschäftsjahr besteht, wirkt das Datum noch nicht.',
+    )
   })
 
   it('rendersMissingRightsHintTest', async () => {

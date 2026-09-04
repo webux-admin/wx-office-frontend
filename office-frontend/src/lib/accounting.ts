@@ -12,9 +12,15 @@ import type {
   Account,
   AccountRequest,
   AccountType,
+  BoundarySource,
   ChartCopyRequest,
   ChartCopyResult,
   ChartTemplate,
+  FiscalYear,
+  FiscalYearList,
+  FiscalYearPreview,
+  FiscalYearRequest,
+  FiscalYearStatus,
   Page,
   PositionHint,
   SystemKey,
@@ -25,10 +31,10 @@ import type {
 export const ACCOUNTING_MODULE = 'ACCOUNTING'
 
 /**
- * Path of the state screen within the application.
+ * Path of the settings screen within the application.
  *
- * <p>The menu entry is called «Zustand» today and «Einstellungen» from the fiscal year on. The
- * address stays as it is: a label is cheap to change, an address people have learnt is not.
+ * <p>Its menu entry was called «Zustand» until the fiscal year gave it something to set; the
+ * address never moved. A label is cheap to change, an address people have learnt is not.
  */
 export const ACCOUNTING_SETTINGS_PATH = '/buchhaltung/einstellungen'
 
@@ -472,4 +478,297 @@ export function taxCodesKey(tenantId: number): readonly unknown[] {
  */
 export function fetchTaxCodes(tenantId: number): Promise<TaxCodeCatalogue> {
   return api.get<TaxCodeCatalogue>(taxCodesUrl(tenantId))
+}
+
+// --- die Geschaeftsjahre -------------------------------------------------------------------
+
+/**
+ * Path of the fiscal year screen within the application.
+ *
+ * <p>Under `/buchhaltung/` beside the chart of accounts and the tax codes although its menu
+ * entry sits in the module settings: the fiscal year is read by everything that posts, and its
+ * address should not move when the group «Buchhaltung» appears (ADR-0044).
+ */
+export const FISCAL_YEARS_PATH = '/buchhaltung/geschaeftsjahre'
+
+/**
+ * The code of the number range a fiscal year brings with it.
+ *
+ * <p>Reserved: the backend refuses it on the ordinary number range endpoint, because the range
+ * is laid out and removed together with the year it counts for. The number range screen leaves
+ * it out of its table and out of its picker for the same reason — a range that cannot be
+ * changed does not belong in a mask that invites changing it (backend ADR-0113).
+ */
+export const JOURNAL_NUMBER_RANGE_CODE = 'JOURNAL'
+
+/**
+ * What a fiscal year is called in each of its three states.
+ *
+ * <p>A closed set: a state missing here would not compile. No catalogue behind it — unlike the
+ * account types these are not renamable, because the closing writes what `CLOSED` means.
+ */
+export const FISCAL_YEAR_STATUS: Record<FiscalYearStatus, string> = {
+  OPEN: 'Offen',
+  LOCKED: 'Gesperrt',
+  CLOSED: 'Abgeschlossen',
+}
+
+/**
+ * What holds the one posting boundary, in words.
+ *
+ * <p>Shown beside the sentence the backend sends, as the short name of the bolt. `NONE` reads
+ * as a statement rather than as a blank, because the footer keeps its row either way.
+ */
+export const BOUNDARY_SOURCES: Record<BoundarySource, string> = {
+  NONE: 'Nichts gesperrt',
+  FISCAL_YEAR: 'Geschäftsjahr',
+  LOCK_DATE: 'Sperrdatum der Buchhaltung',
+  VAT_PERIOD: 'MWST-Abrechnung',
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the fiscal years of that tenant
+ */
+export function fiscalYearsUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the fiscal years of that tenant
+ */
+export function fiscalYearsKey(tenantId: number): readonly unknown[] {
+  return ['accounting-fiscal-years', tenantId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of one fiscal year
+ */
+export function fiscalYearUrl(tenantId: number, fiscalYearId: number): string {
+  return `${fiscalYearsUrl(tenantId)}/${fiscalYearId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address the state of one fiscal year is switched at
+ */
+export function fiscalYearStatusUrl(tenantId: number, fiscalYearId: number): string {
+  return `${fiscalYearUrl(tenantId, fiscalYearId)}/status`
+}
+
+/**
+ * Address of the calculator behind the create dialog.
+ *
+ * <p>`label` and `numberYear` are what somebody has typed over the proposal. Sent, the backend
+ * judges <b>those</b> instead of the two values it reads off the dates — which is what lets the
+ * second period of a split year be laid out at all: its dates suggest a series that is already
+ * taken, and only the typed one is free.
+ *
+ * @param tenantId the tenant
+ * @param start the first day as it stands in the field
+ * @param end the last day as it stands in the field
+ * @param label the name somebody typed, left out while nobody has
+ * @param numberYear the series somebody typed, left out while it is not a year yet
+ * @returns address of the calculator behind the create dialog
+ */
+export function fiscalYearPreviewUrl(
+  tenantId: number,
+  start: string,
+  end: string,
+  label?: string,
+  numberYear?: number,
+): string {
+  const overrides =
+    (label === undefined || label === '' ? '' : `&label=${encodeURIComponent(label)}`)
+    + (numberYear === undefined ? '' : `&numberYear=${numberYear}`)
+  return `${fiscalYearsUrl(tenantId)}/preview`
+    + `?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${overrides}`
+}
+
+/**
+ * Cache key of one preview.
+ *
+ * <p>It carries the two overrides beside the dates, and it has to: the answer depends on them.
+ * A key on the dates alone left the dialog stuck on a series error the reader had already
+ * corrected — same key, so no request went out and the sentence never cleared.
+ *
+ * @param tenantId the tenant
+ * @param start the first day as it stands in the field
+ * @param end the last day as it stands in the field
+ * @param label the name somebody typed, left out while nobody has
+ * @param numberYear the series somebody typed, left out while it is not a year yet
+ * @returns cache key of one preview
+ */
+export function fiscalYearPreviewKey(
+  tenantId: number,
+  start: string,
+  end: string,
+  label?: string,
+  numberYear?: number,
+): readonly unknown[] {
+  return [
+    'accounting-fiscal-year-preview',
+    tenantId,
+    start,
+    end,
+    label ?? '',
+    numberYear ?? null,
+  ]
+}
+
+/**
+ * The fiscal years of one tenant with the posting boundary and the expiry warning.
+ *
+ * <p>Answers while the module is off: the books stay readable under GeBüV Art. 6 Abs. 1. The
+ * screen still shows its module notice — what stays readable is the endpoint, not the mask.
+ *
+ * @param tenantId the tenant
+ * @returns the years together with the boundary and the expiry
+ */
+export function fetchFiscalYears(tenantId: number): Promise<FiscalYearList> {
+  return api.get<FiscalYearList>(fiscalYearsUrl(tenantId))
+}
+
+/**
+ * What a range would become: name, series, length, the following year, and the two sentences.
+ *
+ * <p>A calculator and no store. Asked on every change to start, end, name or series, debounced.
+ *
+ * <p>`label` and `numberYear` in the <b>answer</b> stay the proposal read off the dates, also
+ * where the two arguments were sent — only `error` speaks about what was typed. That is what
+ * lets a dialog go on offering the proposal wherever nobody has typed and still hear whether
+ * what somebody did type will be accepted.
+ *
+ * @param tenantId the tenant
+ * @param start the first day
+ * @param end the last day
+ * @param label the name somebody typed, left out while nobody has
+ * @param numberYear the series somebody typed, left out while it is not a year yet
+ * @returns the proposal with `warning` and `error` filled where they apply
+ */
+export function fetchFiscalYearPreview(
+  tenantId: number,
+  start: string,
+  end: string,
+  label?: string,
+  numberYear?: number,
+): Promise<FiscalYearPreview> {
+  return api.get<FiscalYearPreview>(
+    fiscalYearPreviewUrl(tenantId, start, end, label, numberYear),
+  )
+}
+
+/**
+ * Lays out a fiscal year, and the following one where the tick stands.
+ *
+ * <p>One request and one transaction: where the following year collides, neither of the two is
+ * stored, and the sentence says so.
+ *
+ * @param tenantId the tenant
+ * @param request what somebody typed
+ * @returns the whole list again, so boundary and expiry need no second round trip
+ */
+export function createFiscalYear(
+  tenantId: number,
+  request: FiscalYearRequest,
+): Promise<FiscalYearList> {
+  return api.post<FiscalYearList>(fiscalYearsUrl(tenantId), request)
+}
+
+/**
+ * Changes name, series and dates of a year that carries no posting yet.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @param request what somebody typed
+ * @returns the stored year
+ */
+export function updateFiscalYear(
+  tenantId: number,
+  fiscalYearId: number,
+  request: FiscalYearRequest,
+): Promise<FiscalYear> {
+  return api.put<FiscalYear>(fiscalYearUrl(tenantId, fiscalYearId), request)
+}
+
+/**
+ * Removes a fiscal year together with its log.
+ *
+ * <p>Answers 409 once a journal number has been drawn from it — then the year is corrected
+ * rather than removed.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ */
+export function deleteFiscalYear(tenantId: number, fiscalYearId: number): Promise<void> {
+  return api.delete<void>(fiscalYearUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * Locks an open year or opens a locked one.
+ *
+ * <p>Only those two directions. `CLOSED` is reached by the closing run and never from here.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @param status the state it moves to
+ * @returns the stored year
+ */
+export function setFiscalYearStatus(
+  tenantId: number,
+  fiscalYearId: number,
+  status: FiscalYearStatus,
+): Promise<FiscalYear> {
+  return api.put<FiscalYear>(fiscalYearStatusUrl(tenantId, fiscalYearId), { status })
+}
+
+/**
+ * The first day the create dialog opens with.
+ *
+ * <p>A prefill and nothing more: the preview corrects name, series and the two sentences the
+ * moment it answers, and it is the backend that decides whether the range is allowed. Where
+ * years exist the next one starts the day after the last one ends, because a gap in the middle
+ * of a running bookkeeping is refused anyway. Where none exist the fiscal year the tenant is in
+ * right now is proposed, read off its start month.
+ *
+ * @param years the years the tenant has, in any order
+ * @param fiscalYearStartMonth the start month of the tenant, 1 to 12
+ * @param today the day the dialog is opened on
+ * @returns the first day as `yyyy-MM-dd`
+ */
+export function suggestFiscalYearStart(
+  years: readonly { endDate: string }[],
+  fiscalYearStartMonth: number,
+  today: Date,
+): string {
+  const latest = [...years].map((year) => year.endDate).sort().at(-1)
+  if (latest !== undefined) return addDays(latest, 1)
+  const month = Math.min(Math.max(fiscalYearStartMonth, 1), 12)
+  const year = today.getMonth() + 1 >= month ? today.getFullYear() : today.getFullYear() - 1
+  return `${year}-${`${month}`.padStart(2, '0')}-01`
+}
+
+/**
+ * The last day the create dialog opens with: twelve months on from the first, minus a day.
+ *
+ * <p>The same prefill reasoning as {@link suggestFiscalYearStart}. A 29th of February that has
+ * no counterpart a year later lands on the 28th, which is the day a reader expects.
+ *
+ * @param startDate the first day as `yyyy-MM-dd`
+ * @returns the last day as `yyyy-MM-dd`
+ */
+export function suggestFiscalYearEnd(startDate: string): string {
+  const [year, month, day] = startDate.split('-').map(Number)
+  return addDays(`${year + 1}-${`${month}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}`, -1)
+}
+
+/** Moves an ISO day by whole days, in UTC so no time zone can shift the date. */
+function addDays(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number)
+  const moved = new Date(Date.UTC(year, month - 1, date + days))
+  return moved.toISOString().slice(0, 10)
 }

@@ -66,6 +66,7 @@ export type CatalogueName =
   | 'vat-category'
   | 'price-origin'
   | 'vat-method'
+  | 'vat-accounting-basis'
   | 'reference-type'
   | 'document-category'
   | 'document-status'
@@ -324,6 +325,16 @@ export type Tenant = {
   overpaymentKeepLimit?: number
   /** The hard ceiling: above it a keep cannot be chosen at all. */
   overpaymentKeepMaximum?: number
+  /**
+   * The last day already settled with the tax authority; nothing is posted up to and
+   * including it.
+   *
+   * <p>**A field of its own and not part of {@link TenantVat}** — that is how the backend
+   * carries it, and the VAT block is replaced wholesale on every save while this one is not.
+   * Leaving it out of a payload keeps what is stored, like the two count thresholds: a form
+   * that does not show it must not reset it (backend ADR-0113).
+   */
+  vatPeriodsLockedUntil?: string
   createdAt?: string
   changedAt?: string
 }
@@ -334,6 +345,16 @@ export type TenantVat = {
   /** Only meaningful with the saldo method: the flat rate agreed with the tax office. */
   vatSaldoRate?: number
   vatLiableFrom?: string
+  /**
+   * When the tax claim arises — MWSTG Art. 39, «vereinbart» or «vereinnahmt».
+   *
+   * <p>**Not {@link VatMethod}**, which says how the tax is worked out. Required as soon as
+   * the tenant is liable: the backend refuses a liable tenant without it, so a form that
+   * sends the VAT block has to send this one too (backend ADR-0100).
+   */
+  vatAccountingBasis?: VatAccountingBasis
+  /** Since when that basis holds; a change takes effect on a 1 January. */
+  vatAccountingBasisFrom?: string
 }
 
 export type TenantAddress = {
@@ -3606,4 +3627,159 @@ export type TaxCodeCatalogue = {
   codes: TaxCode[]
   /** Absent or `null` while there are codes. */
   emptyReason?: TaxCodeEmptyReason | null
+}
+
+// --- Geschaeftsjahre (Modul accounting, backend ADR-0113) ---------------------------------
+
+/**
+ * Where a fiscal year stands.
+ *
+ * <p>`LOCKED` is reversible and `CLOSED` is not — the closing writes the entries that make it
+ * so. Only `OPEN` ↔ `LOCKED` may be switched from a screen (backend ADR-0113).
+ */
+export type FiscalYearStatus = 'OPEN' | 'LOCKED' | 'CLOSED'
+
+/**
+ * Which of the three bolts holds the one boundary the screen shows.
+ *
+ * <p>Four values against the six of the per-day answer, and that is not an oversight: a
+ * missing fiscal year is no date on the time axis and shifts no lower boundary — it shows up
+ * in the empty state instead (backend ADR-0113).
+ */
+export type BoundarySource = 'NONE' | 'FISCAL_YEAR' | 'LOCK_DATE' | 'VAT_PERIOD'
+
+/** Which kind of entry is being asked about; `NORMAL` is the ordinary case. */
+export type EntryKind = 'NORMAL' | 'OPENING' | 'CLOSING'
+
+/** The first barrier that closed on a given day, as `PostingWindow` names it. */
+export type Barrier =
+  | 'NONE'
+  | 'NO_FISCAL_YEAR'
+  | 'YEAR_LOCKED'
+  | 'YEAR_CLOSED'
+  | 'LOCK_DATE'
+  | 'VAT_PERIOD'
+
+/**
+ * One fiscal year of a tenant, as `FiscalYearDto` sends it.
+ *
+ * <p>`deletable` and `editable` are answers and not columns: they say what the screen may
+ * offer, so the screen does not repeat the rule behind them.
+ */
+export type FiscalYear = {
+  id: number
+  /** What the year is called on paper: «2026», «2026/27», «Gründungsjahr». */
+  label: string
+  /** The series the journal numbers of this year are drawn from. */
+  numberYear: number
+  startDate: string
+  endDate: string
+  status: FiscalYearStatus
+  /** Whether the year may still be removed: no journal number drawn, no entry. */
+  deletable: boolean
+  /** Whether the dates may still be moved. */
+  editable: boolean
+  /** Whether it covers a calendar year it does not end in — what DBG Art. 79 Abs. 3 warns about. */
+  spansAFullCalendarYear: boolean
+}
+
+/**
+ * The one boundary the screen shows: from which day on this tenant books, and what holds it.
+ *
+ * <p>Three bolts are three dates, and a screen showing all three would ask a bookkeeper to do
+ * the arithmetic. This is the latest of them with the name of its source (backend ADR-0113).
+ */
+export type PostingBoundary = {
+  /** The first day that is free again, absent where nothing is locked. */
+  postableFrom?: string | null
+  /** The last locked day, absent where nothing is locked. */
+  lockedUntil?: string | null
+  source: BoundarySource
+  /** The German sentence, empty where nothing is locked. */
+  message: string
+}
+
+/**
+ * How much time is left on the last fiscal year.
+ *
+ * <p>`warn` is counted in the backend and read here — the thirty days are a constant of
+ * `FiscalYearRules` and live nowhere else (backend ADR-0113).
+ */
+export type FiscalYearExpiry = {
+  /** The greatest end date of all years, absent where the tenant has none. */
+  lastEndDate?: string | null
+  /** Days from today to that date; negative once it has passed. */
+  daysLeft?: number | null
+  warn: boolean
+}
+
+/** What `GET /fiscal-years` answers: the list plus the four things the screen shows around it. */
+export type FiscalYearList = {
+  years: FiscalYear[]
+  boundary: PostingBoundary
+  expiry: FiscalYearExpiry
+  /**
+   * The soft bolt of the bookkeeping, absent where none is set.
+   *
+   * <p>A read value. Written it is under *Buchhaltung → Einstellungen* with
+   * `ACCOUNTING_CONFIGURE` — two masks writing one row would be two caches of it.
+   */
+  postingsLockedUntil?: string | null
+  /**
+   * The last day of the settled VAT period, absent where nothing is settled.
+   *
+   * <p>A read value, and it travels in this answer rather than being read off
+   * `GET /api/tenants/{id}`: that would make `TENANT_READ` the price of the fiscal year
+   * screen's own explanation, and a bookkeeper without it would read «nicht gesetzt» at a date
+   * that is set. Written it is on the tenant mask with `TENANT_WRITE` (backend ADR-0113).
+   */
+  vatPeriodsLockedUntil?: string | null
+}
+
+/** A fiscal year that does not exist yet: what the dialog fills its form with. */
+export type FiscalYearProposal = {
+  label: string
+  numberYear: number
+  startDate: string
+  endDate: string
+}
+
+/**
+ * What the calculator behind the create dialog answers for a range being typed.
+ *
+ * <p>`error` filled means the button stays off and the sentence stands at the field; `warning`
+ * filled means the button is called «Trotzdem anlegen». Both come from the same rules the
+ * creation itself uses — one truth, two ways to it.
+ */
+export type FiscalYearPreview = {
+  numberYear: number
+  label: string
+  /** The length as `endDate - startDate`, so a calendar year counts 364. */
+  days: number
+  spansAFullCalendarYear: boolean
+  warning: string
+  error: string
+  /** What the following year would look like, absent where none can be proposed. */
+  following?: FiscalYearProposal | null
+}
+
+/** What the create dialog sends. One request, one transaction, up to two years. */
+export type FiscalYearRequest = {
+  label: string
+  numberYear: number
+  startDate: string
+  endDate: string
+  /** Set while the tick stands: the following year is laid out in the same transaction. */
+  createFollowingYear?: boolean
+}
+
+/** Whether a booking may be written for one day, and why not. */
+export type PostingWindow = {
+  allowed: boolean
+  barrier: Barrier
+  /** The German sentence, empty where nothing is blocked. */
+  reason: string
+  fiscalYearId?: number | null
+  /** The last blocked day; absent for the three answers a fiscal year gives. */
+  lockedUntil?: string | null
 }

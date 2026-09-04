@@ -14,8 +14,11 @@ import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   CHART_OF_ACCOUNTS_PATH,
+  FISCAL_YEARS_PATH,
   accountingSettingsKey,
   accountingSettingsUrl,
+  fetchFiscalYears,
+  fiscalYearsKey,
 } from '../lib/accounting'
 import { api } from '../lib/api'
 import { formatDate, isCompleteIsoDate } from '../lib/format'
@@ -23,14 +26,14 @@ import { MODULE_PATH } from '../lib/modules'
 import type { AccountingSettings } from '../lib/types'
 
 /**
- * In what state the bookkeeping of this tenant is.
+ * The settings of the bookkeeping of this tenant, and the state it is in.
  *
- * <p>A state screen and not a settings mask, and the difference is deliberate: the fields
- * `PUT /settings` will carry over the whole series — the equity layout and the carry-forward
- * account — have no subject yet, and a mask that sets nothing must not be called
- * «Einstellungen». What this answers are the three questions a tenant has on the first day: is
- * the module running and where does its switch sit, does any role hold the accounting rights,
- * and can this tenant keep books here at all (backend ADR-0110).
+ * <p>What this answers are the questions a tenant has on the first day: is the module running
+ * and where does its switch sit, does any role hold the accounting rights, can this tenant keep
+ * books here at all, and from which day on is posting locked (backend ADR-0110).
+ *
+ * <p>Since the fiscal year the menu entry is called «Einstellungen» rather than «Zustand»: the
+ * lock date has an effect from here on. The address never moved.
  *
  * <p>No empty state: `GET /settings` always has an answer.
  */
@@ -127,6 +130,10 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
       }),
     onSuccess: (settings) => {
       queryClient.setQueryData(accountingSettingsKey(tenantId), settings)
+      // The bolt that was just moved is one of the three the posting boundary is worked out
+      // from, and both screens read that boundary out of the fiscal year answer. Left cached,
+      // «Buchhaltung → Geschäftsjahre» would go on naming yesterday's day.
+      void queryClient.invalidateQueries({ queryKey: fiscalYearsKey(tenantId) })
     },
   })
 
@@ -160,7 +167,12 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         </div>
       </Panel>
 
-      <Panel title="Buchungen sperren" description="Vor diesem Tag wird nichts verbucht.">
+      {/* «Bis und mit» and not «vor»: the backend refuses a booking date that is not after
+          the bolt, so the named day is itself locked (AccountingRules). */}
+      <Panel
+        title="Buchungen sperren"
+        description="Bis und mit diesem Tag wird nichts verbucht."
+      >
         {mayConfigure ? (
           <div className="grid gap-3">
             <div className="flex flex-wrap items-end gap-3">
@@ -170,7 +182,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
                   type="date"
                   value={lockedUntil}
                   onChange={(event) => setLockedUntil(event.target.value)}
-                  hint="Leer lassen hebt die Sperre auf."
+                  hint="Dieser Tag ist mitgesperrt. Leer lassen hebt die Sperre auf."
                 />
               </span>
               <Button
@@ -181,9 +193,6 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
                 Speichern
               </Button>
             </div>
-            <p className="text-[12px] text-text-secondary">
-              Solange kein Geschäftsjahr besteht, wirkt das Datum noch nicht.
-            </p>
             {save.error !== null && <ErrorNotice error={save.error} />}
           </div>
         ) : (
@@ -204,6 +213,8 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         )}
       </Panel>
 
+      <FiscalYearSection tenantId={tenantId} />
+
       {/* The honest sentence of this stage: the chart is there, the postings are not. */}
       <Panel title="Als Nächstes">
         <p className="text-[13px] leading-[20px] text-text-secondary">
@@ -219,6 +230,77 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         </p>
       </Panel>
     </>
+  )
+}
+
+/**
+ * How much time is left on the last fiscal year — the same warning the fiscal year screen shows.
+ *
+ * <p>ENTSCHEID 2 asks for it in two places: on the screen of the years and on the one that
+ * answers the state of the module. Both read the <b>same</b> query key, so there is one cached
+ * answer and not two that drift apart, and the thirty days are counted in the backend
+ * (`FiscalYearRules.WARN_DAYS`) and nowhere here.
+ */
+function FiscalYearSection({ tenantId }: { tenantId: number }) {
+  const years = useQuery({
+    queryKey: fiscalYearsKey(tenantId),
+    queryFn: () => fetchFiscalYears(tenantId),
+  })
+
+  const last = [...(years.data?.years ?? [])].sort((a, b) =>
+    a.endDate < b.endDate ? 1 : -1,
+  )[0]
+
+  return (
+    <Panel title="Geschäftsjahr">
+      {years.error !== null ? (
+        <ErrorNotice error={years.error} />
+      ) : years.data === undefined ? (
+        <LoadingBlock />
+      ) : (
+        <div className="grid gap-3 text-[13px]">
+          {years.data.expiry.warn && (
+            <WarningNotice>
+              {(years.data.expiry.daysLeft ?? 0) < 0 ? (
+                <>
+                  <strong>
+                    Das letzte Geschäftsjahr endete am{' '}
+                    {formatDate(years.data.expiry.lastEndDate)}.
+                  </strong>{' '}
+                  Seither lässt sich nichts mehr buchen, bis das Folgejahr angelegt ist.
+                </>
+              ) : (
+                <>
+                  <strong>
+                    Das letzte Geschäftsjahr endet am{' '}
+                    {formatDate(years.data.expiry.lastEndDate)}.
+                  </strong>{' '}
+                  Danach lässt sich nichts mehr buchen, bis das Folgejahr angelegt ist.
+                </>
+              )}
+            </WarningNotice>
+          )}
+          {last === undefined ? (
+            <p className="text-text-secondary">
+              Solange kein Geschäftsjahr besteht, wirkt das Datum noch nicht.
+            </p>
+          ) : (
+            <p>
+              Letztes Geschäftsjahr: <span className="font-medium">{last.label}</span>, bis{' '}
+              <span className="font-mono tabular-nums">{formatDate(last.endDate)}</span>
+            </p>
+          )}
+          <p>
+            <Link
+              to={FISCAL_YEARS_PATH}
+              className="text-accent-text underline-offset-2 hover:underline"
+            >
+              Buchhaltung → Geschäftsjahre
+            </Link>
+          </p>
+        </div>
+      )}
+    </Panel>
   )
 }
 

@@ -11,6 +11,7 @@ import { SelectField } from '../components/SelectField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
+import { JOURNAL_NUMBER_RANGE_CODE } from '../lib/accounting'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
 import type { DocumentType, NumberRange } from '../lib/types'
@@ -49,6 +50,14 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
     queryKey: ['number-ranges', tenantId],
     queryFn: () => api.get<NumberRange[]>(`/api/tenants/${tenantId}/number-ranges`),
   })
+
+  // The journal range is laid out and removed with the fiscal year it counts for, and the
+  // backend refuses it on this endpoint. A row that only ever answers 400 does not belong in a
+  // mask that invites changing it, so it is left out of the table and out of the picker below
+  // (backend ADR-0113).
+  const editableRanges = (ranges.data ?? []).filter(
+    (range) => range.documentTypeCode !== JOURNAL_NUMBER_RANGE_CODE,
+  )
 
   const types = useQuery({
     queryKey: ['document-types', tenantId],
@@ -163,7 +172,9 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
 
   // The kinds a range may be opened for, and what they are called. A range is read next to
   // the Belegart it counts for, and a bare code sends the reader off to look it up.
-  const activeTypes = (types.data ?? []).filter((type) => type.active)
+  const activeTypes = (types.data ?? []).filter(
+    (type) => type.active && type.code !== JOURNAL_NUMBER_RANGE_CODE,
+  )
   const nameOf = (code: string) => (types.data ?? []).find((type) => type.code === code)?.name
 
   return (
@@ -184,7 +195,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
         <Panel padded={false}>
           <DataTable
             columns={columns}
-            rows={ranges.data ?? []}
+            rows={editableRanges}
             keyOf={(range) => `${range.documentTypeCode}-${range.fiscalYear}`}
             onRowOpen={mayWrite ? openEdit : undefined}
             loading={ranges.isPending}
