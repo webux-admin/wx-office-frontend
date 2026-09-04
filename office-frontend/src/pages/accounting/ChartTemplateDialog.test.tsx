@@ -53,15 +53,24 @@ const ONE_TEMPLATE: ChartTemplate = {
   accountCount: { JURISTIC: 39, SOLE_PROPRIETOR: 36, PARTNERSHIP: 40 },
 }
 
+/** What the backend answers where a chart already stands — the sentence names how many. */
+const CHART_EXISTS =
+  'Für diesen Mandanten besteht bereits ein Kontenplan mit 39 Konten. Ein Kontenplan wird '
+  + 'einmal aus einer Vorlage angelegt; danach kommen Konten einzeln dazu.'
+
 let container: HTMLDivElement
 let root: Root
 /** Every request the dialog sent, so a test can say what went over the wire. */
 let sent: { url: string; body: unknown }[]
+/** Set where a test is about the copy being refused; null while it goes through. */
+let refusal: string | null
+/** How often the dialog asked to be closed. A refusal must leave it open. */
+let closed: number
 
-function json(body: unknown) {
+function json(body: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
-      status: 200,
+      status,
       headers: { 'Content-Type': 'application/json' },
     }),
   )
@@ -69,12 +78,16 @@ function json(body: unknown) {
 
 beforeEach(() => {
   sent = []
+  refusal = null
+  closed = 0
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     sent.push({
       url,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     })
-    if (url.includes('/accounts/from-template')) return json({ created: 39 })
+    if (url.includes('/accounts/from-template')) {
+      return refusal === null ? json({ created: 39 }) : json({ detail: refusal }, 409)
+    }
     if (url.match(/\/api\/tenants\/\d+$/)) {
       return json({ id: TENANT, code: 'WX', name: 'Webux', legalFormLabel: 'GmbH' })
     }
@@ -110,7 +123,9 @@ async function render(suggested?: EquityLayout, auth: AuthState = BOOKKEEPER) {
               tenantId={TENANT}
               templates={[ONE_TEMPLATE]}
               suggestedLayout={suggested}
-              onClose={() => {}}
+              onClose={() => {
+                closed += 1
+              }}
             />
           </QueryClientProvider>
         </AuthContext.Provider>
@@ -186,5 +201,28 @@ describe('ChartTemplateDialog', () => {
 
     const copy = sent.find((call) => call.url.includes('/accounts/from-template'))
     expect(copy?.body).toEqual({ templateCode: 'OR_MINIMAL', equityLayout: 'PARTNERSHIP' })
+  })
+
+  /**
+   * A chart is copied once, and a second session may have got there first. The backend words
+   * that refusal and names how many accounts it found; that sentence is what the reader gets,
+   * and not the client's own «Der Datensatz wurde zwischenzeitlich geändert».
+   *
+   * <p>The box stays open, so the sentence can be read before anything else happens.
+   */
+  it('showsTheRefusalWhenAChartAlreadyExistsTest', async () => {
+    refusal = CHART_EXISTS
+    await render('JURISTIC')
+
+    await act(async () => {
+      button('Kontenplan anlegen')?.click()
+    })
+    await settle()
+
+    expect(document.body.textContent).toContain(CHART_EXISTS)
+    expect(document.body.textContent).not.toContain(
+      'Der Datensatz wurde zwischenzeitlich geändert',
+    )
+    expect(closed).toBe(0)
   })
 })

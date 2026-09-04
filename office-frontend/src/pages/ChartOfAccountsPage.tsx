@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { KeyRound, Lock, Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
-import { EmptyState } from '../components/Notice'
+import { EmptyState, WarningNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { QuickSearchField } from '../components/QuickSearch'
@@ -178,150 +179,174 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
     },
   ]
 
-  if (chartIsEmpty && !startedEmpty) {
+  // The fifth state, and a branch of the tree below rather than a return of its own.
+  const noChartYet = chartIsEmpty && !startedEmpty
+
+  // A barred tenant is offered nothing. AccountingSettingsDto fills either the settings or the
+  // blocker and never both, so without this the fifth state stands there with «Aus der Vorlage
+  // anlegen» on an undefined layout and the way ends in the 400 of the backend. The bar can
+  // appear on a tenant that had a normal screen yesterday: the ledger currency is read afresh
+  // on every look, so correcting the tenant to EUR bars it from here on (OR Art. 958d Abs. 3).
+  if (settings.data?.blocker) {
     return (
       <>
         <Header total={0} />
         <div className="px-8 pb-12">
-          <Panel padded={false}>
-            <NoChartYet
-              template={firstTemplate(templates.data)}
-              layout={settings.data?.equityLayout}
-              mayConfigure={mayConfigure}
-              onCopy={() => setCopying(true)}
-              onStartEmpty={() => setStartedEmpty(true)}
-            />
-          </Panel>
+          <WarningNotice>
+            <strong>Dieser Mandant kann hier keine Bücher führen.</strong>{' '}
+            {settings.data.blocker}{' '}
+            <Link
+              to={`/mandanten/${tenantId}`}
+              className="text-accent-text underline-offset-2 hover:underline"
+            >
+              Mandant → Grunddaten
+            </Link>
+          </WarningNotice>
         </div>
-        {copying && (
-          <ChartTemplateDialog
-            tenantId={tenantId}
-            templates={templates.data ?? []}
-            suggestedLayout={settings.data?.suggestedEquityLayout}
-            onClose={() => setCopying(false)}
-          />
-        )}
       </>
     )
   }
 
   return (
     <>
-      <Header total={result.totalElements}>
-        <Button variant="secondary" onClick={() => setCheckingKeys(true)}>
-          <KeyRound size={15} aria-hidden />
-          Systemkonten prüfen
-        </Button>
-        {mayConfigure && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={15} aria-hidden />
-            Konto anlegen
-          </Button>
-        )}
-      </Header>
-
-      <div className="px-8 pb-12">
-        <Panel padded={false}>
-          <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
-            <QuickSearchField
-              value={search.value}
-              onChange={(next) => {
-                search.setValue(next)
-                setPage(0)
-              }}
-              placeholder="Nummer oder Bezeichnung"
-              maxLength={120}
-            />
-            <SelectField
-              label="Kontoart"
-              value={accountType}
-              onChange={(event) => {
-                setAccountType(event.target.value)
-                setPage(0)
-              }}
-              className="w-[180px]"
-            >
-              <option value="">Alle</option>
-              {ACCOUNT_TYPE_ORDER.map((code) => (
-                <option key={code} value={code}>
-                  {accountTypeLabel(types, code)}
-                </option>
-              ))}
-            </SelectField>
-            <CheckboxField
-              label="Nur aktive"
-              checked={activeOnly}
-              onChange={(event) => {
-                setActiveOnly(event.target.checked)
-                setPage(0)
-              }}
-              className="h-10 items-center"
-            />
+      {noChartYet ? (
+        <>
+          <Header total={0} />
+          <div className="px-8 pb-12">
+            <Panel padded={false}>
+              <NoChartYet
+                template={firstTemplate(templates.data)}
+                layout={settings.data?.equityLayout}
+                mayConfigure={mayConfigure}
+                onCopy={() => setCopying(true)}
+                onStartEmpty={() => setStartedEmpty(true)}
+              />
+            </Panel>
           </div>
+        </>
+      ) : (
+        <>
+          <Header total={result.totalElements}>
+            <Button variant="secondary" onClick={() => setCheckingKeys(true)}>
+              <KeyRound size={15} aria-hidden />
+              Systemkonten prüfen
+            </Button>
+            {mayConfigure && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus size={15} aria-hidden />
+                Konto anlegen
+              </Button>
+            )}
+          </Header>
 
-          <DataTable
-            columns={columns}
-            rows={result.content}
-            keyOf={(account) => account.id}
-            onRowOpen={(account) => setEditing(account)}
-            // Only while the list stands in the order the rules describe. Sorted by name they
-            // would cut the alphabet into nine pieces for no reason.
-            sectionTitle={
-              sort.startsWith('accountNumber')
-                ? (account) => headingOf(account.accountNumber)
-                : undefined
-            }
-            page={result}
-            onPageChange={setPage}
-            sort={sort}
-            onSortChange={(next) => {
-              setSort(next)
-              setPage(0)
-            }}
-            loading={accounts.isPending}
-            error={accounts.error}
-            footer={
-              settings.data?.chartSource && (
-                <tr>
-                  <td
-                    colSpan={columns.length}
-                    className="px-5 py-3 text-[12px] leading-[18px] text-text-secondary"
-                  >
-                    {settings.data.chartSource}
-                  </td>
-                </tr>
-              )
-            }
-            empty={
-              <EmptyState
-                title={filtered ? 'Nichts gefunden' : 'Noch kein Konto'}
-                description={
-                  filtered
-                    ? 'Kein Konto passt zu dieser Suche.'
-                    : 'Ohne Konto lässt sich nichts buchen.'
+          <div className="px-8 pb-12">
+            <Panel padded={false}>
+              <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
+                <QuickSearchField
+                  value={search.value}
+                  onChange={(next) => {
+                    search.setValue(next)
+                    setPage(0)
+                  }}
+                  placeholder="Nummer oder Bezeichnung"
+                  maxLength={120}
+                />
+                <SelectField
+                  label="Kontoart"
+                  value={accountType}
+                  onChange={(event) => {
+                    setAccountType(event.target.value)
+                    setPage(0)
+                  }}
+                  className="w-[180px]"
+                >
+                  <option value="">Alle</option>
+                  {ACCOUNT_TYPE_ORDER.map((code) => (
+                    <option key={code} value={code}>
+                      {accountTypeLabel(types, code)}
+                    </option>
+                  ))}
+                </SelectField>
+                <CheckboxField
+                  label="Nur aktive"
+                  checked={activeOnly}
+                  onChange={(event) => {
+                    setActiveOnly(event.target.checked)
+                    setPage(0)
+                  }}
+                  className="h-10 items-center"
+                />
+              </div>
+
+              <DataTable
+                columns={columns}
+                rows={result.content}
+                keyOf={(account) => account.id}
+                onRowOpen={(account) => setEditing(account)}
+                // Only while the list stands in the order the rules describe. Sorted by name they
+                // would cut the alphabet into nine pieces for no reason.
+                sectionTitle={
+                  sort.startsWith('accountNumber')
+                    ? (account) => headingOf(account.accountNumber)
+                    : undefined
                 }
-              >
-                {!filtered && mayConfigure && (
-                  <span className="flex flex-wrap justify-center gap-2">
-                    <Button onClick={() => setCreating(true)}>
-                      <Plus size={15} aria-hidden />
-                      Erstes Konto anlegen
-                    </Button>
-                    {/* «Leer beginnen» stores nothing, so the way through the template stays
-                        open as long as there is no account yet. */}
-                    {templates.data !== undefined && templates.data.length > 0 && (
-                      <Button variant="secondary" onClick={() => setCopying(true)}>
-                        Aus der Vorlage anlegen
-                      </Button>
+                page={result}
+                onPageChange={setPage}
+                sort={sort}
+                onSortChange={(next) => {
+                  setSort(next)
+                  setPage(0)
+                }}
+                loading={accounts.isPending}
+                error={accounts.error}
+                footer={
+                  settings.data?.chartSource && (
+                    <tr>
+                      <td
+                        colSpan={columns.length}
+                        className="px-5 py-3 text-[12px] leading-[18px] text-text-secondary"
+                      >
+                        {settings.data.chartSource}
+                      </td>
+                    </tr>
+                  )
+                }
+                empty={
+                  <EmptyState
+                    title={filtered ? 'Nichts gefunden' : 'Noch kein Konto'}
+                    description={
+                      filtered
+                        ? 'Kein Konto passt zu dieser Suche.'
+                        : 'Ohne Konto lässt sich nichts buchen.'
+                    }
+                  >
+                    {!filtered && mayConfigure && (
+                      <span className="flex flex-wrap justify-center gap-2">
+                        <Button onClick={() => setCreating(true)}>
+                          <Plus size={15} aria-hidden />
+                          Erstes Konto anlegen
+                        </Button>
+                        {/* «Leer beginnen» stores nothing, so the way through the template stays
+                            open as long as there is no account yet. */}
+                        {templates.data !== undefined && templates.data.length > 0 && (
+                          <Button variant="secondary" onClick={() => setCopying(true)}>
+                            Aus der Vorlage anlegen
+                          </Button>
+                        )}
+                      </span>
                     )}
-                  </span>
-                )}
-              </EmptyState>
-            }
-          />
-        </Panel>
-      </div>
+                  </EmptyState>
+                }
+              />
+            </Panel>
+          </div>
+        </>
+      )}
 
+      {/* The three dialogs stand outside the two states above, and that is the point. While one
+          is open the chart may stop being empty under it — a second session copies the template,
+          and the answer to that is a 409 with a sentence worth reading. Drawn inside the branch,
+          the refreshed list would remount the box and take the sentence with it. */}
       {copying && (
         <ChartTemplateDialog
           tenantId={tenantId}

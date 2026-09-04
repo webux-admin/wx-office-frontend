@@ -43,6 +43,11 @@ const SOURCE_NOTE =
   'Kontonummern und Kontobezeichnungen nach dem Schweizer Kontenrahmen KMU, offizielle '
   + 'Schulversion, herausgegeben von veb.ch / SwissAccounting.'
 
+/** What the backend answers where a chart already stands — the sentence names how many. */
+const CHART_EXISTS =
+  'Für diesen Mandanten besteht bereits ein Kontenplan mit 39 Konten. Ein Kontenplan wird '
+  + 'einmal aus einer Vorlage angelegt; danach kommen Konten einzeln dazu.'
+
 /** The one template that is shipped today. The dialog must never name another. */
 const ONE_TEMPLATE: ChartTemplate = {
   code: 'OR_MINIMAL',
@@ -104,6 +109,8 @@ let settings: AccountingSettings
 let templates: ChartTemplate[]
 /** Set to a status where a test is about the request failing. */
 let accountsStatus: number
+/** Set where a test is about the copy from the template being refused; null while it works. */
+let copyRefusal: string | null
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -119,6 +126,9 @@ function stubFetch() {
     if (url.includes('/accounting/chart-templates')) return json(templates)
     if (url.includes('/accounting/settings')) return json(settings)
     if (url.includes('/accounting/accounts/system-keys')) return json([])
+    if (url.includes('/accounting/accounts/from-template')) {
+      return copyRefusal === null ? json({ created: 39 }) : json({ detail: copyRefusal }, 409)
+    }
     if (url.includes('/accounting/accounts')) {
       return accountsStatus === 200
         ? json(accounts)
@@ -155,6 +165,7 @@ beforeEach(() => {
   }
   templates = [ONE_TEMPLATE]
   accountsStatus = 200
+  copyRefusal = null
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -188,11 +199,13 @@ async function paint(auth: AuthState = CONFIGURE) {
       </MemoryRouter>,
     )
   })
+  return client
 }
 
 async function render(auth: AuthState = CONFIGURE) {
-  await paint(auth)
+  const client = await paint(auth)
   await settle()
+  return client
 }
 
 function button(text: string): HTMLButtonElement | undefined {
@@ -360,6 +373,43 @@ describe('ChartOfAccountsPage', () => {
     expect(button('Erstes Konto anlegen')).toBeDefined()
     // And no dead end: as long as there is no account, the template is still one click away.
     expect(button('Aus der Vorlage anlegen')).toBeDefined()
+  })
+
+  /**
+   * The copy is refused because a second session got there first, and the sentence naming how
+   * many accounts it found is what the reader gets.
+   *
+   * <p>Then the list behind the box catches up and the screen leaves «Noch kein Kontenplan» for
+   * the table — <b>and the sentence has to survive that switch</b>. The three dialogs keep their
+   * place in the tree across it; drawn inside the branch they would be remounted, and a reader
+   * would be left with a box that had silently forgotten why nothing happened.
+   */
+  it('keepsTheRefusalWhenTheChartFillsUnderneathTest', async () => {
+    accounts = pageOf([])
+    copyRefusal = CHART_EXISTS
+    const client = await render()
+
+    await act(async () => {
+      button('Aus der Vorlage anlegen')?.click()
+    })
+    await settle()
+    await act(async () => {
+      button('Kontenplan anlegen')?.click()
+    })
+    await settle()
+
+    expect(document.body.textContent).toContain(CHART_EXISTS)
+
+    // What the refusal said, now visible to this screen too.
+    accounts = pageOf(ACCOUNTS)
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['accounts', TENANT] })
+    })
+    await settle()
+
+    expect(container.textContent).toContain('Raumaufwand')
+    expect(container.textContent).not.toContain('Noch kein Kontenplan')
+    expect(document.body.textContent).toContain(CHART_EXISTS)
   })
 
   /** Reading is one right, every button another. */

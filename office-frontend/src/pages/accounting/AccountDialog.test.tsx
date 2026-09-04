@@ -60,6 +60,25 @@ const SYSTEM_ACCOUNT: Account = {
   active: true,
 }
 
+/** What the backend answers when an account that carries entries is to be deleted. */
+const BOOKED_REFUSAL =
+  'Auf Konto 6000 Raumaufwand sind 3 Buchungen erfasst. Ein bebuchtes Konto lässt sich '
+  + 'abschalten, aber nicht löschen — es gehört mindestens zehn Jahre zur Buchführung '
+  + '(OR Art. 958f); für Unterlagen zu Grundstücken gelten nach MWSTG Art. 70 Abs. 3 '
+  + 'längere Fristen.'
+
+/**
+ * What it answers when a system account is to take an account type its key does not accept.
+ * Copied from AccountingManagement.requireTypeFitsSystemKey in wx-office, assembled with
+ * SystemAccountKey.JAHRESERGEBNIS_ER.question() and AccountingRules.accountName().
+ */
+const SYSTEM_KEY_REFUSAL =
+  'Konto 9200 Jahresgewinn oder Jahresverlust ist ein Systemkonto: es beantwortet '
+  + '«Welches Konto führt Ihren Jahresgewinn in der Erfolgsrechnung?». Dafür wird ein '
+  + 'Abschlusskonto gebraucht, ein Aufwandkonto kann dort nicht stehen. Lassen Sie die '
+  + 'Frage zuerst über «Systemkonten prüfen» von einem anderen Konto beantworten; danach '
+  + 'lässt sich die Kontoart hier ändern.'
+
 const ORDINARY_ACCOUNT: Account = {
   id: 4,
   accountNumber: '6000',
@@ -74,11 +93,22 @@ let container: HTMLDivElement
 let root: Root
 /** Every address the dialog read, so a test can say what was *not* fetched. */
 let read: string[]
+/** Every write the dialog sent, with the method it used. */
+let written: { url: string; method: string }[]
+/**
+ * What a write answers where a test is about a refusal, null while every write goes through.
+ *
+ * <p>The shape the backend sends: RFC 9457 with the sentence in `detail`. A test that answered
+ * a bare status would prove nothing — that is the case the client has a fallback for.
+ */
+let refusal: { status: number; detail: string } | null
+/** How often the dialog asked to be closed. A refusal must leave it open. */
+let closed: number
 
-function json(body: unknown) {
+function json(body: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
-      status: 200,
+      status,
       headers: { 'Content-Type': 'application/json' },
     }),
   )
@@ -86,7 +116,15 @@ function json(body: unknown) {
 
 beforeEach(() => {
   read = []
-  vi.stubGlobal('fetch', (url: string) => {
+  written = []
+  refusal = null
+  closed = 0
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (method !== 'GET') {
+      written.push({ url, method })
+      return refusal === null ? json({}) : json({ detail: refusal.detail }, refusal.status)
+    }
     read.push(url)
     if (url.includes('/position-suggestion')) {
       return json({
@@ -152,7 +190,13 @@ async function render(account: Account | null) {
       <MemoryRouter>
         <AuthContext.Provider value={AUTH}>
           <QueryClientProvider client={client}>
-            <AccountDialog tenantId={TENANT} account={account} onClose={() => {}} />
+            <AccountDialog
+              tenantId={TENANT}
+              account={account}
+              onClose={() => {
+                closed += 1
+              }}
+            />
           </QueryClientProvider>
         </AuthContext.Provider>
       </MemoryRouter>,
@@ -299,5 +343,54 @@ describe('AccountDialog', () => {
     await settle()
 
     expect(button('Wirklich löschen')).toBeDefined()
+  })
+
+  /**
+   * The refusal the backend words is what the reader gets — the number of entries included —
+   * and not the client's own «Der Datensatz wurde zwischenzeitlich geändert». That fallback
+   * exists for a bare status, and a 409 that carries a sentence must never fall into it.
+   *
+   * <p>And the box stays open: a sentence on a box that has just shut is a sentence nobody
+   * reads.
+   */
+  it('showsTheRefusalWhenDeletingTest', async () => {
+    refusal = { status: 409, detail: BOOKED_REFUSAL }
+    await render(ORDINARY_ACCOUNT)
+
+    await act(async () => {
+      button('Löschen')?.click()
+    })
+    await settle()
+    await act(async () => {
+      button('Wirklich löschen')?.click()
+    })
+    await settle()
+
+    expect(written.some((call) => call.method === 'DELETE')).toBe(true)
+    expect(container.textContent).toContain(BOOKED_REFUSAL)
+    expect(container.textContent).not.toContain('Der Datensatz wurde zwischenzeitlich geändert')
+    expect(closed).toBe(0)
+  })
+
+  /**
+   * The same for the save, which answers 400 rather than 409 — moving 9200 out of «Abschluss»
+   * takes an account type its system key does not accept. A 400 is no more generic than a 409
+   * here, and «Die Eingabe wurde nicht akzeptiert» says nothing about which field is meant.
+   */
+  it('showsTheRefusalWhenSavingTest', async () => {
+    refusal = { status: 400, detail: SYSTEM_KEY_REFUSAL }
+    await render(SYSTEM_ACCOUNT)
+
+    await type(selects()[0], 'EXPENSE')
+    await type(selects()[1], 'ER_UEBRIGER_BETRIEBSAUFWAND')
+    await act(async () => {
+      button('Speichern')?.click()
+    })
+    await settle()
+
+    expect(written.some((call) => call.method === 'PUT')).toBe(true)
+    expect(container.textContent).toContain(SYSTEM_KEY_REFUSAL)
+    expect(container.textContent).not.toContain('Die Eingabe wurde nicht akzeptiert.')
+    expect(closed).toBe(0)
   })
 })

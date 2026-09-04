@@ -9,6 +9,7 @@ import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
   FISCAL_YEARS_PATH,
+  accountingSettingsKey,
 } from '../lib/accounting'
 import type { AccountingSettings, FiscalYear, FiscalYearList } from '../lib/types'
 import { AccountingStatePage } from './AccountingStatePage'
@@ -58,6 +59,18 @@ const STORED: AccountingSettings = {
 }
 
 const HINT = 'Keine Rolle dieses Mandanten trägt die Buchhaltungsrechte.'
+
+/**
+ * The sentence the backend sends for a tenant that keeps its books in another currency.
+ *
+ * <p>Held once, because two tests read it: the one that opens on it and the one that arrives
+ * at it. A copy in each would let the second go on passing after the wording had moved on.
+ */
+const CURRENCY_BLOCKER =
+  'Die Buchhaltung führt derzeit nur Franken. Dieser Mandant rechnet in EUR. Nach OR '
+  + 'Art. 958d Abs. 3 müsste die Jahresrechnung zusätzlich in Franken ausgewiesen und '
+  + 'die Umrechnungskurse müssten im Anhang offengelegt werden; das baut diese Reihe '
+  + 'nicht.'
 
 const YEAR_2026: FiscalYear = {
   id: 12,
@@ -177,6 +190,15 @@ async function render(auth: AuthState = CONFIGURE, staleTime = 0) {
     )
   })
   await settle()
+  return client
+}
+
+/** Fetches the settings again, the way anything that touches them does. */
+async function readSettingsAgain(client: QueryClient) {
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: accountingSettingsKey(TENANT) })
+  })
+  await settle()
 }
 
 /** The input the given label points at, or undefined while the mask does not show it. */
@@ -230,13 +252,7 @@ describe('AccountingStatePage', () => {
    * here at all, and the explanation belongs on the screen rather than in a red error page.
    */
   it('rendersBlockerTest', async () => {
-    settings = {
-      blocker:
-        'Die Buchhaltung führt derzeit nur Franken. Dieser Mandant rechnet in EUR. Nach OR '
-        + 'Art. 958d Abs. 3 müsste die Jahresrechnung zusätzlich in Franken ausgewiesen und '
-        + 'die Umrechnungskurse müssten im Anhang offengelegt werden; das baut diese Reihe '
-        + 'nicht.',
-    }
+    settings = { blocker: CURRENCY_BLOCKER }
     await render(WITH_ROLES)
 
     expect(container.textContent).toContain('Dieser Mandant kann hier keine Bücher führen.')
@@ -247,6 +263,43 @@ describe('AccountingStatePage', () => {
     expect(button('Speichern')).toBeUndefined()
     // And no second warning beside it: two of them read as a broken mask.
     expect(container.textContent).not.toContain(HINT)
+  })
+
+  /**
+   * The barred state does not only arrive on the first read.
+   *
+   * <p>The currency is judged on <b>every</b> read (backend ADR-0110), so a base currency
+   * somebody changed in the tenant master record turns up here on the next answer — on a screen
+   * that was showing an ordinary form a moment earlier. What must not survive that is the date
+   * field: an editable bolt over a bookkeeping nobody may keep invites a save that the backend
+   * would refuse and that the reader cannot explain.
+   */
+  it('replacesTheFormWhenTheTenantBecomesBarredTest', async () => {
+    const client = await render()
+    expect(field('Gesperrt bis')).toBeDefined()
+
+    settings = { blocker: CURRENCY_BLOCKER }
+    await readSettingsAgain(client)
+
+    expect(container.textContent).toContain('Dieser Mandant kann hier keine Bücher führen.')
+    expect(container.textContent).toContain('rechnet in EUR')
+    expect(field('Gesperrt bis')).toBeUndefined()
+    expect(button('Speichern')).toBeUndefined()
+    // The panel the field stood in goes with it, rather than staying behind empty.
+    expect(container.textContent).not.toContain('Bis und mit diesem Tag wird nichts verbucht.')
+  })
+
+  /** And back, once the master record is corrected: the form returns as it was. */
+  it('restoresTheFormWhenTheBlockerGoesTest', async () => {
+    settings = { blocker: CURRENCY_BLOCKER }
+    const client = await render()
+    expect(field('Gesperrt bis')).toBeUndefined()
+
+    settings = { ...STORED, postingsLockedUntil: '2026-12-31' }
+    await readSettingsAgain(client)
+
+    expect(container.textContent).not.toContain('Dieser Mandant kann hier keine Bücher führen.')
+    expect(field('Gesperrt bis')?.value).toBe('2026-12-31')
   })
 
   /**
