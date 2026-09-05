@@ -28,6 +28,9 @@ import type {
   Entry,
   EntryAttention,
   EntryRequest,
+  EntrySuggestion,
+  EntryTemplate,
+  EntryTemplateRequest,
   FiscalYear,
   FiscalYearList,
   FiscalYearPreview,
@@ -1097,6 +1100,157 @@ export function runPost(tenantId: number, entryIds: readonly number[]): Promise<
   })
 }
 
+// --- die Buchungsvorlagen und der Textvorschlag ---------------------------------------------
+
+/**
+ * The address a tenant's posting templates are served under, relative to its accounting.
+ *
+ * <p>Not a screen path like {@link ENTRY_PATH}: templates have no route of their own. They hang
+ * off the entry mask, and the two dialogs that maintain them open from its split button.
+ */
+export const ENTRY_TEMPLATE_PATH = 'entry-templates'
+
+/** How many suggestions the text field asks for. The server caps at the same number. */
+export const SUGGESTION_LIMIT = 8
+
+/** From how many characters the text field asks at all. Under it the server answers empty. */
+export const SUGGESTION_MINIMUM = 2
+
+/**
+ * @param tenantId the tenant
+ * @returns the address of its posting templates
+ */
+export function entryTemplatesUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/${ENTRY_TEMPLATE_PATH}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param templateId the template
+ * @returns the address of that one template
+ */
+export function entryTemplateUrl(tenantId: number, templateId: number): string {
+  return `${entryTemplatesUrl(tenantId)}/${templateId}`
+}
+
+/**
+ * The address of the text suggestions.
+ *
+ * <p>The term is encoded, so a `%`, an `&` or a space in what somebody typed stays part of the
+ * search instead of becoming a second parameter.
+ *
+ * @param tenantId the tenant
+ * @param term what has been typed into the text field so far
+ * @param limit how many suggestions to ask for; the server cuts a bigger wish quietly
+ * @returns the address of the suggestion endpoint
+ */
+export function suggestionsUrl(tenantId: number, term: string, limit = SUGGESTION_LIMIT): string {
+  return `${accountingUrl(tenantId)}/entries/suggestions`
+    + `?q=${encodeURIComponent(term)}&limit=${limit}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns the cache key of its template list
+ */
+export function entryTemplatesKey(tenantId: number): readonly unknown[] {
+  return ['accounting-entry-templates', tenantId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param term the settled term the list was asked for
+ * @returns the cache key of one suggestion list
+ */
+export function suggestionsKey(tenantId: number, term: string): readonly unknown[] {
+  return ['accounting-entry-suggestions', tenantId, term]
+}
+
+/**
+ * Reads the posting templates of one tenant, in menu order.
+ *
+ * <p>A bare array and no page: a template list is a picking list, and ADR-0026 leaves short
+ * holdings unpaginated. It answers while the module is switched off as well.
+ *
+ * @param tenantId the tenant
+ * @returns its templates, each with its lines, its version and its problems
+ */
+export function fetchEntryTemplates(tenantId: number): Promise<EntryTemplate[]> {
+  return api.get<EntryTemplate[]>(entryTemplatesUrl(tenantId))
+}
+
+/**
+ * Stores a new posting template.
+ *
+ * <p>It is appended: whatever `sortOrder` the payload names is ignored. The left half of the
+ * split button fires the **first** template, so a new one at the top would rehang the main
+ * button on every save.
+ *
+ * @param tenantId the tenant
+ * @param request name, description, the two header fields and the lines
+ * @returns the stored template, with the place it was given
+ */
+export function createEntryTemplate(
+  tenantId: number,
+  request: EntryTemplateRequest,
+): Promise<EntryTemplate> {
+  return api.post<EntryTemplate>(entryTemplatesUrl(tenantId), request)
+}
+
+/**
+ * Changes a posting template: its name, its description, its lines or its place in the menu.
+ *
+ * <p>The payload carries the `version` the list delivered, and that is the whole optimistic
+ * lock. A template somebody else changed in the meantime answers 409 rather than overwriting
+ * their work; the answer carries the new version for the next `PUT`.
+ *
+ * @param tenantId the tenant
+ * @param templateId the template
+ * @param request the whole template — the endpoint replaces what it is given
+ * @returns the changed template, with its new version
+ */
+export function updateEntryTemplate(
+  tenantId: number,
+  templateId: number,
+  request: EntryTemplateRequest,
+): Promise<EntryTemplate> {
+  return api.put<EntryTemplate>(entryTemplateUrl(tenantId, templateId), request)
+}
+
+/**
+ * Removes a posting template.
+ *
+ * <p>The one delete of this module: a template carries no booking date and no journal number,
+ * and entries already posted from it stay untouched.
+ *
+ * @param tenantId the tenant
+ * @param templateId the template
+ */
+export function deleteEntryTemplate(tenantId: number, templateId: number): Promise<void> {
+  return api.delete<void>(entryTemplateUrl(tenantId, templateId))
+}
+
+/**
+ * What has been posted under a text like this before, with the accounts it went to.
+ *
+ * <p>Only posted entries: the text of a draft is no fact yet, and a typo in an open draft would
+ * otherwise be suggested forever — while its author is correcting it.
+ *
+ * @param tenantId the tenant
+ * @param term the settled term; under two characters nothing is asked at all
+ * @param limit how many to ask for
+ * @returns the suggestions, most used first; empty while the term is too short
+ */
+export function fetchEntrySuggestions(
+  tenantId: number,
+  term: string,
+  limit = SUGGESTION_LIMIT,
+): Promise<EntrySuggestion[]> {
+  const needle = term.trim()
+  if (needle.length < SUGGESTION_MINIMUM) return Promise.resolve([])
+  return api.get<EntrySuggestion[]>(suggestionsUrl(tenantId, needle, limit))
+}
+
 // --- was die Erfassungsmaske selbst rechnet ------------------------------------------------
 
 /**
@@ -1123,6 +1277,11 @@ export type EntryDraftState = {
   documentReference: string
   description: string
   rows: EntryDraftRow[]
+  /**
+   * When it was last rescued, ISO. Written by the mask, read by the banner that offers it back
+   * — «zuletzt heute um 14:12». Absent on a state that was never in the rescue store.
+   */
+  savedAt?: string
 }
 
 /**
@@ -1158,12 +1317,47 @@ export function readEntryDraft(tenantId: number): EntryDraftState | null {
   const stored = readSessionText(entryDraftKey(tenantId))
   if (stored === null) return null
   try {
-    const state = JSON.parse(stored) as EntryDraftState
-    if (!Array.isArray(state?.rows)) return null
-    return state
+    const state: unknown = JSON.parse(stored)
+    return isEntryDraftState(state) ? state : null
   } catch {
     return null
   }
+}
+
+/**
+ * Whether a parsed value really is a state this mask can open with.
+ *
+ * <p><b>Parsing is not reading.</b> `JSON.parse` succeeds on anything well formed, and what
+ * comes back is handed straight to code that trims strings and walks rows. A stored value of
+ * another shape — a tampered key, or a row shape a later version of this file changes — throws
+ * inside the `useState` initialiser of the mask, and a throw there means the screen does not
+ * open at all. That is the opposite of what the function above promises, and far worse than
+ * losing a rescued draft: the rescue is a convenience, the mask is the work.
+ *
+ * <p>Checked field by field rather than through a schema library: five names and one row shape
+ * do not carry a dependency. `savedAt` is let through when absent — it is optional by
+ * declaration, and a state without it is what the mask holds before the first rescue.
+ */
+function isEntryDraftState(value: unknown): value is EntryDraftState {
+  if (typeof value !== 'object' || value === null) return false
+  const state = value as Partial<EntryDraftState>
+  if (typeof state.bookingDate !== 'string') return false
+  if (typeof state.documentReference !== 'string') return false
+  if (typeof state.description !== 'string') return false
+  if (state.savedAt !== undefined && typeof state.savedAt !== 'string') return false
+  if (!Array.isArray(state.rows)) return false
+  return state.rows.every((row: unknown) => {
+    if (typeof row !== 'object' || row === null) return false
+    const line = row as Partial<EntryDraftRow>
+    return (
+      typeof line.key === 'number' &&
+      typeof line.accountText === 'string' &&
+      typeof line.debit === 'string' &&
+      typeof line.credit === 'string' &&
+      (line.accountId === null || typeof line.accountId === 'number') &&
+      (line.taxCodeId === null || typeof line.taxCodeId === 'number')
+    )
+  })
 }
 
 /**

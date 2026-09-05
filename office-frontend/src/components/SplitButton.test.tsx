@@ -188,4 +188,97 @@ describe('SplitButton', () => {
     expect(toggle().getAttribute('aria-label')).toBe('Weitere Wege')
     expect(toggle().getAttribute('aria-haspopup')).toBe('menu')
   })
+
+  /**
+   * The rule sits **on** the entry it stands above, so it changes no count and no index: the
+   * menu holds as many entries as `actions` has, and the arrow keys walk all of them.
+   */
+  it('splitButtonDrawsASeparatorTest', () => {
+    act(() =>
+      root.render(
+        <SplitButton
+          onClick={onPrimary}
+          menuLabel="Weitere Wege"
+          actions={[
+            { id: 'takeover', label: 'Übernehmen', onSelect: onTakeover },
+            { id: 'copy', label: 'Kopieren', onSelect: onCopy, separatorBefore: true },
+          ]}
+        >
+          Auftrag erfassen
+        </SplitButton>,
+      ),
+    )
+    act(() => toggle().click())
+
+    expect(menuItems()).toHaveLength(2)
+    expect(menuItems()[0].getAttribute('data-separator')).toBeNull()
+    expect(menuItems()[1].getAttribute('data-separator')).toBe('true')
+
+    // The walk is untouched: the second entry is still one step away from the first.
+    press(menuItems()[0], 'ArrowDown')
+    expect(document.activeElement).toBe(menuItems()[1])
+  })
+
+  /**
+   * Half off: the usual way has nothing to work on, but the way to give it something sits
+   * behind the arrow. Switching the whole button off would take that away.
+   */
+  it('splitButtonWithADisabledPrimaryTest', () => {
+    act(() =>
+      root.render(
+        <SplitButton
+          onClick={onPrimary}
+          menuLabel="Weitere Wege"
+          primaryDisabled
+          actions={[{ id: 'takeover', label: 'Übernehmen', onSelect: onTakeover }]}
+        >
+          Auftrag erfassen
+        </SplitButton>,
+      ),
+    )
+
+    expect(primary().disabled).toBe(true)
+    expect(toggle().disabled).toBe(false)
+
+    act(() => toggle().click())
+
+    expect(isOpen()).toBe(true)
+    act(() => menuItems()[0].click())
+    expect(onTakeover).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The note is read, not operated: it is no `menuitem`, it takes no focus, and the arrow keys
+   * walk from the first entry to the last without ever landing on it.
+   */
+  it('splitButtonShowsANoteTest', () => {
+    act(() =>
+      root.render(
+        <SplitButton
+          onClick={onPrimary}
+          menuLabel="Weitere Wege"
+          note="Noch keine Vorlage."
+          actions={[
+            { id: 'takeover', label: 'Übernehmen', onSelect: onTakeover },
+            { id: 'copy', label: 'Kopieren', onSelect: onCopy },
+          ]}
+        >
+          Auftrag erfassen
+        </SplitButton>,
+      ),
+    )
+    act(() => toggle().click())
+
+    const note = container.querySelector('[role="presentation"]')
+    expect(note?.textContent).toBe('Noch keine Vorlage.')
+    expect(note?.tagName).toBe('P')
+    expect(menuItems()).toHaveLength(2)
+
+    // The walk starts at the first entry and wraps back to it, never onto the note.
+    expect(document.activeElement).toBe(menuItems()[0])
+    press(menuItems()[0], 'ArrowUp')
+    expect(document.activeElement).toBe(menuItems()[1])
+    press(menuItems()[1], 'ArrowDown')
+    expect(document.activeElement).toBe(menuItems()[0])
+  })
 })

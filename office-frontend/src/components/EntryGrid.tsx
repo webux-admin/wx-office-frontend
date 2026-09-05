@@ -34,6 +34,16 @@ type EntryGridProps = {
   onSubmit?: () => void
   /** Off while a save is running, so nothing changes underneath a request. */
   disabled?: boolean
+  /**
+   * The rows whose amounts came out of a posting template, by row key.
+   *
+   * <p><b>An amount from a template is a proposal and no value.</b> It is drawn as a changed
+   * proposal and freely overwritten, the way the position proposal of the chart of accounts is
+   * drawn; the first keystroke in the cell turns it into an ordinary amount.
+   */
+  suggestedAmounts?: readonly number[]
+  /** Called on the first keystroke in a proposed amount cell, so the mark goes. */
+  onAmountTyped?: (key: number) => void
 }
 
 /**
@@ -65,6 +75,8 @@ export function EntryGrid({
   currencyCode,
   onSubmit,
   disabled = false,
+  suggestedAmounts = [],
+  onAmountTyped,
 }: EntryGridProps) {
   const [wanted, setWanted] = useState({ row: 0, column: 0 })
   const gridRef = useRef<HTMLDivElement>(null)
@@ -235,12 +247,16 @@ export function EntryGrid({
               label={`Soll Zeile ${rowIndex + 1}`}
               value={row.debit}
               disabled={disabled}
+              suggested={suggestedAmounts.includes(row.key)}
               focused={focus.row === rowIndex && focus.column === 1}
               inGrid={() => gridRef.current?.contains(document.activeElement) ?? false}
               onFocused={() => setWanted({ row: rowIndex, column: 1 })}
               // One side per line: typing into the one column empties the other, so nobody
               // has to remember to clear it.
-              onChange={(next) => change(rowIndex, { debit: next, credit: '' })}
+              onChange={(next) => {
+                onAmountTyped?.(row.key)
+                change(rowIndex, { debit: next, credit: '' })
+              }}
             />
 
             <AmountCell
@@ -249,10 +265,14 @@ export function EntryGrid({
               label={`Haben Zeile ${rowIndex + 1}`}
               value={row.credit}
               disabled={disabled}
+              suggested={suggestedAmounts.includes(row.key)}
               focused={focus.row === rowIndex && focus.column === 2}
               inGrid={() => gridRef.current?.contains(document.activeElement) ?? false}
               onFocused={() => setWanted({ row: rowIndex, column: 2 })}
-              onChange={(next) => change(rowIndex, { credit: next, debit: '' })}
+              onChange={(next) => {
+                onAmountTyped?.(row.key)
+                change(rowIndex, { credit: next, debit: '' })
+              }}
             />
 
             <span role="gridcell" aria-colindex={4} className={`${COLUMNS[3].width} min-w-0`}>
@@ -539,13 +559,20 @@ function AccountCell({
   )
 }
 
-/** One of the two amount cells. Right aligned, because a column of amounts is read as one. */
+/**
+ * One of the two amount cells. Right aligned, because a column of amounts is read as one.
+ *
+ * <p>An amount out of a posting template is marked as a **proposal**: it is written in, it is
+ * freely overwritten, and it says of itself that it has to be checked. The first keystroke in
+ * the cell takes the mark away and it becomes an ordinary amount.
+ */
 function AmountCell({
   column,
   width,
   label,
   value,
   disabled,
+  suggested,
   focused,
   inGrid,
   onFocused,
@@ -556,11 +583,14 @@ function AmountCell({
   label: string
   value: string
   disabled: boolean
+  /** Whether this amount came out of a template and is still nothing but a proposal. */
+  suggested: boolean
   focused: boolean
   inGrid: () => boolean
   onFocused: () => void
   onChange: (next: string) => void
 }) {
+  const marked = suggested && value !== ''
   return (
     <span role="gridcell" aria-colindex={column + 1} className={`${width} min-w-0`}>
       <input
@@ -568,13 +598,19 @@ function AmountCell({
         inputMode="decimal"
         value={value}
         disabled={disabled}
+        data-suggested={marked ? 'true' : undefined}
+        title={marked ? 'Vorschlag aus der Vorlage — bitte prüfen.' : undefined}
         tabIndex={focused ? 0 : -1}
         ref={(element) => {
           if (element && focused && inGrid()) element.focus()
         }}
         onFocus={onFocused}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-full rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2 text-right font-mono text-[13px] tabular-nums text-text-primary outline-none hover:border-line focus:border-accent"
+        className={`h-8 w-full rounded-[var(--radius-sm)] border bg-transparent px-2 text-right font-mono text-[13px] tabular-nums outline-none hover:border-line focus:border-accent ${
+          marked
+            ? 'border-dashed border-accent/60 text-accent-text'
+            : 'border-transparent text-text-primary'
+        }`}
       />
     </span>
   )

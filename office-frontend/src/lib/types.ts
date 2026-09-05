@@ -4005,3 +4005,100 @@ export type PostRunPreview = {
   firstNumber?: string | null
   lastNumber?: string | null
 }
+
+// --- die Buchungsvorlage und der Textvorschlag (Modul accounting, backend ADR-0114) --------
+
+/** Which column of an entry a template line puts its amount in. */
+export type EntrySide = 'DEBIT' | 'CREDIT'
+
+/**
+ * One line of a posting template or of a text suggestion, as `EntryTemplateLineDto` sends it.
+ *
+ * <p>One shape for both, because both are read against **today's** chart of accounts: a
+ * template stores nothing but the account number and has id, name and `postable` worked out on
+ * reading, a suggestion is read through the account id of the entry it comes from.
+ */
+export type EntryTemplateLine = {
+  /** Absent where a template names a number the chart no longer holds. */
+  accountId?: number | null
+  accountNumber: string
+  /** Absent where the account is gone. */
+  accountName?: string | null
+  side: EntrySide
+  /** Absent where the template was saved without amounts. A proposal, never a value. */
+  amount?: number | null
+  taxCodeId?: number | null
+  taxCode?: string | null
+  /** Absent to fall back to the entry text. */
+  text?: string | null
+  /** Whether an entry may be posted here by hand. False where the account is gone. */
+  postable: boolean
+}
+
+/**
+ * One posting template, as `EntryTemplateDto` sends it.
+ *
+ * <p>`version` is what the row stood at when it was read, and it goes back out with every
+ * `PUT`. It is the only type of this application that carries one: the optimistic lock of this
+ * table is kept by hand, so the client has no other way of knowing the number (backend
+ * ADR-0114).
+ */
+export type EntryTemplate = {
+  id: number
+  name: string
+  /** The hint line under the name in the menu. Absent where none was given. */
+  description?: string | null
+  /** What the entry text is prefilled with. Absent where the template carries none. */
+  entryDescription?: string | null
+  documentReference?: string | null
+  carriesAmounts: boolean
+  sortOrder: number
+  version: number
+  lines: EntryTemplateLine[]
+  /**
+   * What stands in the way of applying it, in finished German sentences — «Konto 6105 gibt es
+   * in Ihrem Kontenplan nicht mehr.» Always there, usually empty. Sentences and not codes: the
+   * screen shows a ⚠ and the sentence, and a code would have to be worded a second time.
+   */
+  problems: string[]
+}
+
+/** What has been posted under a text like this before, as `EntrySuggestionDto` sends it. */
+export type EntrySuggestion = {
+  text: string
+  /** How many posted entries carry it. What was booked eleven times stands above one. */
+  useCount: number
+  lastBookedOn: string
+  /** The lines of the newest posted entry with that text. */
+  lines: EntryTemplateLine[]
+}
+
+/**
+ * One line as the two template dialogs send it.
+ *
+ * <p>No account id: a template stores the **number**, and the server resolves everything else.
+ * An id whose account was deleted would be an orphan saying nothing; «6000» stays readable.
+ */
+export type EntryTemplateLineRequest = {
+  accountNumber: string
+  side: EntrySide
+  amount?: number | null
+  taxCode?: string | null
+  text?: string | null
+}
+
+/**
+ * What the two template dialogs send, for a `POST` as well as for a `PUT`.
+ *
+ * <p>`sortOrder` and `version` are ignored on a `POST` — a new template is appended — and both
+ * are required on a `PUT`.
+ */
+export type EntryTemplateRequest = {
+  name: string
+  description?: string | null
+  sortOrder?: number | null
+  version?: number | null
+  entryDescription?: string | null
+  documentReference?: string | null
+  lines: EntryTemplateLineRequest[]
+}

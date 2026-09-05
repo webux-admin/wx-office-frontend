@@ -12,7 +12,13 @@ import {
   type EntryDraftRow,
 } from '../lib/accounting'
 import { toIsoDate } from '../lib/format'
-import type { Account, TaxCode } from '../lib/types'
+import type {
+  Account,
+  EntrySuggestion,
+  EntryTemplate,
+  EntryTemplateLine,
+  TaxCode,
+} from '../lib/types'
 import { EntryPage } from '../pages/EntryPage'
 import { EntryGrid } from './EntryGrid'
 
@@ -610,14 +616,33 @@ describe('the entry mask around the grid', () => {
   beforeEach(() => {
     chart = CHART
     fiscalYears = true
+    templates = []
+    suggestions = []
+    sent.length = 0
   })
 
   /** Set where a test is about the mask having nothing to work with. */
   let chart: Account[] = CHART
   let fiscalYears = true
+  let templates: EntryTemplate[] = []
+  let suggestions: EntrySuggestion[] = []
+  /** Every write the mask sent, so a test can read what went out and where. */
+  const sent: { url: string; method: string; body: unknown }[] = []
 
   function stubFetch() {
-    vi.stubGlobal('fetch', (url: string) => {
+    vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
+      const method = options?.method ?? 'GET'
+      if (method !== 'GET') {
+        sent.push({
+          url,
+          method,
+          body: typeof options?.body === 'string' ? JSON.parse(options.body) : undefined,
+        })
+      }
+      if (url.includes('/accounting/entry-templates')) {
+        return method === 'GET' ? json(templates) : json({ id: 300 })
+      }
+      if (url.includes('/accounting/entries/suggestions')) return json(suggestions)
       if (url.includes('/accounting/tax-codes')) return json({ codes: [UST81] })
       if (url.includes('/accounting/fiscal-years')) {
         if (!fiscalYears) {
@@ -673,29 +698,124 @@ describe('the entry mask around the grid', () => {
     await settle()
   }
 
-  /** Whoever leaves the page in the middle of an entry finds it again on coming back. */
-  it('entryGridRescuesTheTypingStateTest', async () => {
+  /**
+   * Whoever leaves the page in the middle of an entry is offered it again — and **is not given
+   * it back on its own**. A mask that fills itself with two account rows on opening looks like
+   * an entry that already exists; so the grid stays empty until «Weiterschreiben» is pressed,
+   * and the banner names the moment, the row count and the text.
+   */
+  it('rescueStateTest', async () => {
     writeEntryDraft(1, {
       bookingDate: today(),
       documentReference: 'MB-144',
       description: 'Miete September',
       rows: [row({ key: 1, accountId: 4, accountText: '6000 Raumaufwand', debit: '3200' })],
+      savedAt: `${today()}T14:12:00.000Z`,
     })
 
     await paintMask(1)
+
+    expect(container.textContent).toContain('Sie hatten hier etwas angefangen')
+    expect(container.textContent).toContain('1 Zeile, Text «Miete September».')
+    // Nothing is in the mask yet: it was offered, not taken back.
+    expect(field('Text').value).toBe('')
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('')
+
+    await act(async () => {
+      button('Weiterschreiben')?.click()
+    })
 
     expect(field('Text').value).toBe('Miete September')
     expect(field('Beleg').value).toBe('MB-144')
     expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('6000 Raumaufwand')
     expect((cell('Soll Zeile 1') as HTMLInputElement).value).toBe('3200')
+    expect(container.textContent).not.toContain('Sie hatten hier etwas angefangen')
+  })
+
+  /** «Verwerfen» throws the rescued state out of the browser, not only off the screen. */
+  it('rescueStateDiscardedTest', async () => {
+    writeEntryDraft(1, {
+      bookingDate: today(),
+      documentReference: '',
+      description: 'Miete September',
+      rows: [row({ key: 1, accountId: 4, accountText: '6000 Raumaufwand', debit: '3200' })],
+      savedAt: `${today()}T14:12:00.000Z`,
+    })
+
+    await paintMask(1)
+    await act(async () => {
+      button('Verwerfen')?.click()
+    })
+    await settle()
+
+    expect(container.textContent).not.toContain('Sie hatten hier etwas angefangen')
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
+  })
+
+  /** Typed for a while, then reloaded: the store holds it, and the banner offers it. */
+  it('rescueStateClearedAfterSaveTest', async () => {
+    await paintMask(1)
+
+    act(() => cell('Konto Zeile 1').focus())
+    type(cell('Konto Zeile 1'), '6000')
+    type(cell('Soll Zeile 1'), '3200')
+    await settle()
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).not.toBeNull()
+
+    await act(async () => {
+      button('Nur speichern')?.click()
+    })
+    await settle()
+
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
   })
 
   /**
-   * And the one that matters: another tenant gets an empty mask, and what was left for the
-   * first one is gone from the browser. Account numbers and amounts of one business must never
-   * turn up in the mask of another.
+   * <b>The banner goes with the store, or the rescue becomes the thing it was built to
+   * prevent.</b> Somebody opens the mask with a rescued entry offered in the banner, types a
+   * different entry instead and saves that. Were the banner to survive the save,
+   * «Weiterschreiben» would fill the mask with the older state — and because that state counts
+   * as typed, the debounced effect would write it straight back into the store. The next reload
+   * would offer it again, and it would be booked a second time by somebody who believed the
+   * mask.
    */
-  it('entryGridClearsTheTypingStateOnATenantSwitchTest', async () => {
+  it('rescueStateBannerClearedAfterSaveTest', async () => {
+    writeEntryDraft(1, {
+      bookingDate: today(),
+      documentReference: 'MB-144',
+      description: 'Miete September',
+      rows: [row({ key: 1, accountId: 4, accountText: '6000 Raumaufwand', debit: '3200' })],
+      savedAt: `${today()}T14:12:00.000Z`,
+    })
+
+    await paintMask(1)
+    expect(container.textContent).toContain('Sie hatten hier etwas angefangen')
+
+    // Something else is typed and saved. The banner is left standing, never taken up.
+    act(() => cell('Konto Zeile 1').focus())
+    type(cell('Konto Zeile 1'), '6000')
+    type(cell('Soll Zeile 1'), '3200')
+    await settle()
+    await act(async () => {
+      button('Nur speichern')?.click()
+    })
+    await settle()
+
+    expect(container.textContent).not.toContain('Sie hatten hier etwas angefangen')
+    expect(button('Weiterschreiben')).toBeUndefined()
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
+
+    // And it stays gone: nothing writes the offered state back after the fact.
+    await settle()
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
+  })
+
+  /**
+   * And the one that matters: another tenant gets an empty mask with no banner at all, and what
+   * was left for the first one is gone from the browser. Account numbers and amounts of one
+   * business must never turn up in the mask of another.
+   */
+  it('rescueStateAfterTenantChangeTest', async () => {
     writeEntryDraft(1, {
       bookingDate: today(),
       documentReference: 'MB-144',
@@ -705,6 +825,7 @@ describe('the entry mask around the grid', () => {
 
     await paintMask(2)
 
+    expect(container.textContent).not.toContain('Sie hatten hier etwas angefangen')
     expect(field('Text').value).toBe('')
     expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('')
     expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
@@ -806,7 +927,7 @@ describe('the entry mask around the grid', () => {
     expect(container.textContent).not.toContain('Kein Konto gewählt.')
   })
 
-  /** Both there: the grid stands, and so do the two buttons of the header. */
+  /** All three there: the grid stands, and so do the buttons of the header. */
   it('entryMaskShowsTheGridTest', async () => {
     await paintMask(1)
 
@@ -814,8 +935,235 @@ describe('the entry mask around the grid', () => {
     const labels = [...container.querySelectorAll('button')].map((entry) => entry.textContent)
     expect(labels).toContain('Nur speichern')
     expect(labels).toContain('Speichern und verbuchen')
-    // Not in this delivery: there is no endpoint behind it (#93).
-    expect(labels).not.toContain('Vorlage anwenden')
+    // The endpoint behind it landed with #93, so the button is here now as well.
+    expect(labels).toContain('Vorlage anwenden')
+  })
+
+  /** Applying fills the grid, and the amounts arrive marked as what they are: a proposal. */
+  it('applyTemplateTest', async () => {
+    templates = [template()]
+
+    await paintMask(1)
+    await act(async () => {
+      button('Vorlage anwenden')?.click()
+    })
+
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('6000 Raumaufwand')
+    expect((cell('Soll Zeile 1') as HTMLInputElement).value).toBe('3200.00')
+    expect((cell('Konto Zeile 2') as HTMLInputElement).value).toBe('1020 Bankguthaben')
+    expect((cell('Haben Zeile 2') as HTMLInputElement).value).toBe('3200.00')
+    expect(field('Text').value).toBe('Miete September')
+    // A proposal and not a value, drawn as a changed proposal.
+    expect(cell('Soll Zeile 1').getAttribute('data-suggested')).toBe('true')
+
+    // The first keystroke in the cell makes an ordinary amount of it.
+    type(cell('Soll Zeile 1'), '3300')
+    expect(cell('Soll Zeile 1').getAttribute('data-suggested')).toBeNull()
+  })
+
+  /**
+   * Applying **replaces**, and where rows are typed it asks first. Appending would be the more
+   * dangerous of the two: the sums would stay balanced, the amount would be there twice, and
+   * the entry would look right.
+   */
+  it('applyTemplateOverTypedRowsTest', async () => {
+    templates = [template()]
+
+    await paintMask(1)
+    act(() => cell('Konto Zeile 1').focus())
+    type(cell('Konto Zeile 1'), '1020')
+    type(cell('Soll Zeile 1'), '99')
+    type(cell('Konto Zeile 2'), '3400')
+    type(cell('Haben Zeile 2'), '99')
+    await settle()
+
+    await act(async () => {
+      button('Vorlage anwenden')?.click()
+    })
+
+    // Nothing has changed yet: the question stands first, and it names how much is at stake.
+    expect(document.body.textContent).toContain('Die 2 getippten Zeilen werden ersetzt.')
+    expect((cell('Soll Zeile 1') as HTMLInputElement).value).toBe('99')
+
+    await act(async () => {
+      dialogButton('Ersetzen')?.click()
+    })
+
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('6000 Raumaufwand')
+    expect((cell('Soll Zeile 1') as HTMLInputElement).value).toBe('3200.00')
+    // Two rows and no more: the typed row was replaced, not kept beside them.
+    expect(container.querySelector('[aria-label="Konto Zeile 3"]')).toBeNull()
+  })
+
+  /**
+   * A template on an account posting is barred on stays applicable — it is the property of the
+   * tenant — but the row arrives without an account and is marked. The refusal then comes from
+   * `PostingRules` with its sentence and never as a 500 out of the database.
+   */
+  it('applyTemplateWithLockedAccountTest', async () => {
+    templates = [
+      template({
+        problems: ['Auf 9200 darf von Hand nicht gebucht werden.'],
+        lines: [
+          templateLine({ accountId: 9, accountNumber: '9200', accountName: 'Abschluss',
+            postable: false }),
+          templateLine({ accountId: 1, accountNumber: '1020', accountName: 'Bankguthaben',
+            side: 'CREDIT' }),
+        ],
+      }),
+    ]
+
+    await paintMask(1)
+    await act(async () => {
+      button('Vorlage anwenden')?.click()
+    })
+    await settle()
+
+    // The number stays readable, the account does not arrive, and the row says so.
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('9200')
+    expect(cell('Konto Zeile 1').getAttribute('aria-invalid')).toBe('true')
+    expect(container.textContent).toContain('Kein Konto gewählt.')
+    expect((cell('Konto Zeile 2') as HTMLInputElement).value).toBe('1020 Bankguthaben')
+  })
+
+  /** A text chosen from the list brings the accounts of the entry it comes from. */
+  it('suggestionFillsAccountsTest', async () => {
+    suggestions = [
+      {
+        text: 'Miete September',
+        useCount: 11,
+        lastBookedOn: `${year()}-08-09`,
+        lines: [
+          templateLine({}),
+          templateLine({ accountId: 1, accountNumber: '1020', accountName: 'Bankguthaben',
+            side: 'CREDIT' }),
+        ],
+      },
+    ]
+
+    await paintMask(1)
+    type(field('Text'), 'Mie')
+    await settle()
+
+    const option = container.querySelector<HTMLElement>('[role="option"]')
+    expect(option?.textContent).toContain('Miete September')
+    await act(async () => option?.click())
+
+    expect(field('Text').value).toBe('Miete September')
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('6000 Raumaufwand')
+    expect((cell('Haben Zeile 2') as HTMLInputElement).value).toBe('3200.00')
+  })
+
+  /**
+   * The list is walked the way the account list of the grid is walked — arrows, Enter, Escape —
+   * so this mask has one keyboard model and not two.
+   */
+  it('suggestionWalksWithArrowKeysTest', async () => {
+    suggestions = [
+      {
+        text: 'Miete September',
+        useCount: 11,
+        lastBookedOn: `${year()}-08-09`,
+        lines: [templateLine({})],
+      },
+      {
+        text: 'Mietzins Lager',
+        useCount: 4,
+        lastBookedOn: `${year()}-07-01`,
+        lines: [templateLine({ accountId: 1, accountNumber: '1020',
+          accountName: 'Bankguthaben' })],
+      },
+    ]
+
+    await paintMask(1)
+    act(() => field('Text').focus())
+    type(field('Text'), 'Mie')
+    await settle()
+
+    press('ArrowDown')
+    expect(
+      [...container.querySelectorAll('[role="option"]')][1].getAttribute('aria-selected'),
+    ).toBe('true')
+
+    press('Enter')
+    expect(field('Text').value).toBe('Mietzins Lager')
+
+    // And Escape closes the list without taking anything.
+    type(field('Text'), 'Mie')
+    await settle()
+    expect(container.querySelector('[role="listbox"]')).not.toBeNull()
+    press('Escape')
+    expect(container.querySelector('[role="listbox"]')).toBeNull()
+  })
+
+  /**
+   * And the line that has to be drawn: typing the same text by hand proposes nothing. A
+   * proposal on a merely similar text would be a guess.
+   */
+  it('suggestionDoesNotFillTypedTextTest', async () => {
+    suggestions = [
+      {
+        text: 'Miete September',
+        useCount: 11,
+        lastBookedOn: `${year()}-08-09`,
+        lines: [templateLine({})],
+      },
+    ]
+
+    await paintMask(1)
+    type(field('Text'), 'Miete September')
+    await settle()
+
+    expect(field('Text').value).toBe('Miete September')
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('')
+  })
+
+  /**
+   * <b>And the second half of that rule: the accounts arrive only over an empty grid.</b> The
+   * text is always taken — it is what was picked — but the rows are not: somebody who has
+   * already typed an account and an amount and then picks a text to go with them would
+   * otherwise watch their work be replaced by the lines of an old entry. A suggestion is worth
+   * the typing it saves and never the typing it destroys.
+   */
+  it('suggestionDoesNotOverwriteFilledRowsTest', async () => {
+    suggestions = [
+      {
+        text: 'Miete September',
+        useCount: 11,
+        lastBookedOn: `${year()}-08-09`,
+        lines: [
+          templateLine({}),
+          templateLine({ accountId: 1, accountNumber: '1020', accountName: 'Bankguthaben',
+            side: 'CREDIT' }),
+        ],
+      },
+    ]
+
+    await paintMask(1)
+    // A row is filled first — an account and an amount, the way somebody starts an entry. The
+    // number alone carries the account: the box below says «Bankguthaben», so the row really
+    // holds an accountId and the guard has something to protect.
+    act(() => cell('Konto Zeile 1').focus())
+    type(cell('Konto Zeile 1'), '1020')
+    await settle()
+    type(cell('Soll Zeile 1'), '750')
+    await settle()
+    expect(container.textContent).toContain('Bankguthaben')
+
+    // And only then is a text picked out of the list.
+    type(field('Text'), 'Mie')
+    await settle()
+    const option = container.querySelector<HTMLElement>('[role="option"]')
+    expect(option?.textContent).toContain('Miete September')
+    await act(async () => option?.click())
+    await settle()
+
+    // The text is taken, the typed row is untouched, and the accounts of the old entry — 6000
+    // in the first row, 1020 in the second — were not pushed over it.
+    expect(field('Text').value).toBe('Miete September')
+    expect((cell('Konto Zeile 1') as HTMLInputElement).value).toBe('1020')
+    expect((cell('Soll Zeile 1') as HTMLInputElement).value).toBe('750')
+    expect(container.textContent).not.toContain('Raumaufwand')
   })
 
   function field(label: string): HTMLInputElement {
@@ -831,6 +1179,52 @@ describe('the entry mask around the grid', () => {
     return [...container.querySelectorAll('button')].find(
       (entry) => entry.textContent === text,
     ) as HTMLButtonElement | undefined
+  }
+
+  /** A dialog is rendered into the body, not into the container of the mask. */
+  function dialogButton(text: string): HTMLButtonElement | undefined {
+    return [...document.body.querySelectorAll('[role="dialog"] button')].find(
+      (entry) => entry.textContent === text,
+    ) as HTMLButtonElement | undefined
+  }
+
+  function templateLine(over: Partial<EntryTemplateLine>): EntryTemplateLine {
+    return {
+      accountId: 4,
+      accountNumber: '6000',
+      accountName: 'Raumaufwand',
+      side: 'DEBIT',
+      amount: 3200,
+      taxCodeId: null,
+      taxCode: null,
+      text: null,
+      postable: true,
+      ...over,
+    }
+  }
+
+  function template(over: Partial<EntryTemplate> = {}): EntryTemplate {
+    return {
+      id: 300,
+      name: 'Miete Geschäftslokal',
+      description: 'jeden Monatsletzten',
+      entryDescription: 'Miete September',
+      documentReference: 'MB-144',
+      carriesAmounts: true,
+      sortOrder: 0,
+      version: 3,
+      lines: [
+        templateLine({}),
+        templateLine({
+          accountId: 1,
+          accountNumber: '1020',
+          accountName: 'Bankguthaben',
+          side: 'CREDIT',
+        }),
+      ],
+      problems: [],
+      ...over,
+    }
   }
 })
 

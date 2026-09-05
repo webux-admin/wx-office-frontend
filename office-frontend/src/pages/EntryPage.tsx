@@ -8,6 +8,7 @@ import { EmptyState, ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
+import { useDebouncedValue } from '../components/useDebouncedValue'
 import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -28,8 +29,10 @@ import {
   emptyEntryDraft,
   entryKey,
   entryRequestOf,
+  entryTemplatesKey,
   fetchAccounts,
   fetchEntry,
+  fetchEntryTemplates,
   fetchFiscalYears,
   fetchTaxCodes,
   fiscalYearsKey,
@@ -38,12 +41,26 @@ import {
   taxCodesKey,
   updateEntry,
   writeEntryDraft,
+  type EntryDraftRow,
   type EntryDraftState,
 } from '../lib/accounting'
 import { api } from '../lib/api'
 import { formatDate, toIsoDate } from '../lib/format'
 import { listQuery, PICKER_SIZE } from '../lib/paging'
-import type { AccountingSettings, Entry } from '../lib/types'
+import type { AccountingSettings, Entry, EntrySuggestion, EntryTemplate } from '../lib/types'
+import { EntryTemplateMenu } from './accounting/EntryTemplateMenu'
+import { EntryTextField } from './accounting/EntryTextField'
+import { ManageTemplatesDialog } from './accounting/ManageTemplatesDialog'
+import { SaveTemplateDialog } from './accounting/SaveTemplateDialog'
+import {
+  replacementWarning,
+  rescueHeadline,
+  rescueStateOf,
+  rowsFromLines,
+  rowsFromTemplate,
+  stateFromRescue,
+  type RescuedDraft,
+} from './accounting/entryTemplateForm'
 
 /** What has to be shown after a save, and where it leads. */
 type Done = { message: string; to: string; label: string }
@@ -55,6 +72,10 @@ type Done = { message: string; to: string; label: string }
  * `webux.accounting.draft.<tenantId>` so a page change does not lose it — and switching tenant
  * has to empty the mask, because otherwise the half typed entry of another business turns up in
  * it, account numbers and amounts included (ADR-0045).
+ *
+ * <p><b>A rescued state is never taken back on its own.</b> A mask that fills itself with two
+ * account rows on opening looks like an entry that already exists, so a banner over the grid
+ * offers it back and names the moment, the number of rows and the text.
  *
  * <p><b>Its empty states name the missing precondition</b>, in the order the three bolts are
  * checked: without a chart of accounts nothing can be typed at all, and without a fiscal year
@@ -76,16 +97,24 @@ function EntryMask({ tenantId }: { tenantId: number }) {
   const params = useParams<{ id?: string }>()
   const editing = params.id === undefined ? null : Number(params.id)
   const mayPost = can(ACCOUNTING_RIGHTS.post)
+  const mayRead = can(ACCOUNTING_RIGHTS.read)
 
   const today = toIsoDate()
-  // Read once, in the initialiser: a rescued draft belongs to the moment the mask opens, and
-  // reading it later would fight with what somebody has typed since.
-  const [draft, setDraft] = useState<EntryDraftState>(
-    () => (editing === null ? readEntryDraft(tenantId) : null) ?? emptyEntryDraft(today),
+  const [draft, setDraft] = useState<EntryDraftState>(() => emptyEntryDraft(today))
+  // Read once, in the initialiser: what was rescued belongs to the moment the mask opens, and
+  // reading it later would fight with what somebody has typed since. Reading it also throws
+  // away what was left lying for every other tenant.
+  const [offer, setOffer] = useState<RescuedDraft | undefined>(() =>
+    editing === null ? stateFromRescue(readEntryDraft(tenantId)) : undefined,
   )
   const [confirming, setConfirming] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [done, setDone] = useState<Done | null>(null)
+  const [applying, setApplying] = useState<EntryTemplate | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [managing, setManaging] = useState(false)
+  // The row keys whose amounts came out of a template and are still nothing but a proposal.
+  const [proposed, setProposed] = useState<number[]>([])
 
   const accounts = useQuery({
     queryKey: accountsKey(tenantId, ACCOUNT_QUERY),
@@ -108,8 +137,15 @@ function EntryMask({ tenantId }: { tenantId: number }) {
     queryFn: () => fetchEntry(tenantId, editing ?? 0),
     enabled: editing !== null,
   })
+  // The list carries the version of every template, which is what makes renaming, reordering
+  // and «Überschreiben?» possible at all. Asked only where the right to read it is held.
+  const templates = useQuery({
+    queryKey: entryTemplatesKey(tenantId),
+    queryFn: () => fetchEntryTemplates(tenantId),
+    enabled: mayRead,
+  })
 
-  // A stored draft takes the place of the rescued one, once and only once — adjusted here
+  // A stored draft takes the place of the typed one, once and only once — adjusted here
   // during render rather than in an effect, which would draw the mask empty for one frame and
   // fill it in the next (the same call `Dialog` makes).
   const [loaded, setLoaded] = useState<number | null>(null)
@@ -119,19 +155,46 @@ function EntryMask({ tenantId }: { tenantId: number }) {
   }
 
   // Kept while something is typed, thrown away as soon as nothing is: the key exists exactly
-  // as long as there is a state worth rescuing.
+  // as long as there is a state worth rescuing. Debounced, so a keystroke that costs no
+  // request does not cost a write to the store either.
+  const settled = useDebouncedValue(draft, 400)
   useEffect(() => {
     if (editing !== null) return
-    if (isDirty(draft)) writeEntryDraft(tenantId, draft)
-    else clearEntryDraft(tenantId)
-  }, [tenantId, draft, editing])
+    // Written while the banner is standing too. What is typed under it is newer than what the
+    // banner offers, and the banner keeps its own copy anyway — leaving the typing unrescued
+    // would mean an F5 brings the older state back over it.
+    if (!isDirty(settled)) return
+    writeEntryDraft(tenantId, rescueStateOf(settled, new Date().toISOString()))
+  }, [tenantId, settled, editing])
+
+  useEffect(() => {
+    if (editing !== null) return
+    // The live state decides the throwing away, not only the debounced one. «Weiterschreiben»
+    // fills the mask and drops the banner in the same tick, while `settled` still holds the
+    // empty state of 400 ms ago — clearing on that would wipe the store, and a reload inside
+    // that window would lose the draft outright.
+    if (isDirty(draft) || isDirty(settled)) return
+    // Nothing stands in the mask. While the banner is up, what it offers back is still in the
+    // store, and it is the only copy that survives a reload.
+    if (offer !== undefined) return
+    clearEntryDraft(tenantId)
+  }, [tenantId, draft, settled, editing, offer])
 
   const currencyCode = settings.data?.ledgerCurrency ?? 'CHF'
   const chart = accounts.data?.content ?? []
   const codes = (taxCodes.data?.codes ?? []).filter((code) => code.active)
+  const kept = templates.data ?? []
+  // What applying a template would replace — the two header fields as much as the rows.
+  const replaced = replacementWarning(draft)
 
   function afterSave(saved: Entry, message: Done) {
     clearEntryDraft(tenantId)
+    // And the banner goes with the store — here, above the early return, so the posting path
+    // drops it as well. A banner left standing over a saved entry offers «Weiterschreiben» on
+    // a booking that is already in the books; the state behind it counts as typed, so the
+    // debounced effect writes it straight back into the store and the next reload offers it
+    // again. That is the duplicate this rescue exists to prevent, not to produce.
+    setOffer(undefined)
     // The prefix without the query string, so every page of the two lists is dropped and not
     // only the one nobody happens to be looking at.
     void queryClient.invalidateQueries({ queryKey: ['accounting-entries', tenantId] })
@@ -143,6 +206,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
       return
     }
     setDraft(emptyEntryDraft(today))
+    setProposed([])
     setDone(message)
   }
 
@@ -193,6 +257,53 @@ function EntryMask({ tenantId }: { tenantId: number }) {
   /** What Ctrl+S does anywhere on the mask; inside the grid the grid takes the press itself. */
   const submit = () => (mayPost ? setConfirming(true) : save.mutate())
   useSubmitShortcut(busy ? undefined : submit)
+
+  /**
+   * Puts a template into the grid — and asks first where anything it would replace is typed.
+   *
+   * <p><b>Applying replaces, it does not append.</b> Appending would be the more dangerous of
+   * the two: the sums would stay balanced, the amount would be there twice, and the entry would
+   * look right.
+   *
+   * <p><b>The question counts the two header fields, not only the rows.</b> Applying replaces
+   * the entry text and the voucher too, so somebody who typed a reference and a booking text
+   * and has not filled a row yet would otherwise lose both without ever seeing the question.
+   */
+  function applyTemplate(template: EntryTemplate) {
+    if (replaced !== undefined) {
+      setApplying(template)
+      return
+    }
+    takeTemplate(template)
+  }
+
+  function takeTemplate(template: EntryTemplate) {
+    const rows = rowsFromTemplate(template)
+    setDraft({
+      ...draft,
+      // A template carries no booking date, so the date stays. The two other header fields are
+      // replaced: a template without them leaves them empty, which is what it says it does.
+      description: template.entryDescription ?? '',
+      documentReference: template.documentReference ?? '',
+      rows,
+    })
+    setProposed(template.carriesAmounts ? rows.map((row) => row.key) : [])
+    setApplying(null)
+  }
+
+  /**
+   * A text chosen from the list brings the accounts of the entry it comes from.
+   *
+   * <p>Only where the grid carries no account yet: a proposal over rows somebody has filled
+   * would overwrite their work. And only where the text was **chosen** — typing the same text
+   * by hand proposes nothing, because a proposal on a merely similar text would be a guess.
+   */
+  function takeSuggestion(suggestion: EntrySuggestion) {
+    if (draft.rows.some((row) => row.accountId !== null)) return
+    const rows = rowsFromLines(suggestion.lines)
+    setDraft({ ...draft, description: suggestion.text, rows })
+    setProposed(rows.map((row) => row.key))
+  }
 
   if (accounts.isLoading || years.isLoading || (editing !== null && stored.isLoading)) {
     return (
@@ -268,6 +379,13 @@ function EntryMask({ tenantId }: { tenantId: number }) {
             Entwurf löschen
           </Button>
         )}
+        <EntryTemplateMenu
+          templates={kept}
+          onApply={applyTemplate}
+          onSave={() => setSaving(true)}
+          onManage={() => setManaging(true)}
+          disabled={busy}
+        />
         <Button variant="secondary" onClick={() => save.mutate()} busy={save.isPending}>
           Nur speichern
         </Button>
@@ -279,6 +397,37 @@ function EntryMask({ tenantId }: { tenantId: number }) {
       </Header>
 
       <div className="grid gap-4 px-8 pb-12">
+        {offer !== undefined && (
+          <Panel>
+            <div className="grid gap-2 text-[13px]">
+              <p>{rescueHeadline(offer.savedAt)}</p>
+              <p className="text-text-secondary">
+                {offer.rowCount === 1 ? '1 Zeile' : `${offer.rowCount} Zeilen`}
+                {offer.description.trim() === '' ? '' : `, Text «${offer.description}»`}.
+              </p>
+              <span className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    setDraft(offer.state)
+                    setOffer(undefined)
+                  }}
+                >
+                  Weiterschreiben
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    clearEntryDraft(tenantId)
+                    setOffer(undefined)
+                  }}
+                >
+                  Verwerfen
+                </Button>
+              </span>
+            </div>
+          </Panel>
+        )}
+
         {done !== null && (
           <Panel>
             <p className="text-[13px]">
@@ -316,11 +465,12 @@ function EntryMask({ tenantId }: { tenantId: number }) {
                 setDraft({ ...draft, documentReference: event.target.value })
               }
             />
-            <TextField
-              label="Text"
+            <EntryTextField
+              tenantId={tenantId}
               value={draft.description}
-              maxLength={200}
-              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              onChange={(next) => setDraft({ ...draft, description: next })}
+              onPick={takeSuggestion}
+              disabled={busy}
             />
           </div>
         </Panel>
@@ -334,9 +484,49 @@ function EntryMask({ tenantId }: { tenantId: number }) {
             currencyCode={currencyCode}
             disabled={busy}
             onSubmit={submit}
+            suggestedAmounts={proposed}
+            onAmountTyped={(key) => setProposed((keys) => keys.filter((entry) => entry !== key))}
           />
         </Panel>
       </div>
+
+      <Dialog
+        open={applying !== null}
+        title="Vorlage anwenden"
+        onClose={() => setApplying(null)}
+        onSubmit={() => applying !== null && takeTemplate(applying)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setApplying(null)}>
+              Abbrechen
+            </Button>
+            <Button onClick={() => applying !== null && takeTemplate(applying)}>Ersetzen</Button>
+          </>
+        }
+      >
+        <p className="text-[13px]">{replaced}</p>
+      </Dialog>
+
+      {saving && (
+        <SaveTemplateDialog
+          tenantId={tenantId}
+          rows={draft.rows}
+          entryDescription={draft.description}
+          documentReference={draft.documentReference}
+          accounts={chart}
+          taxCodes={codes}
+          templates={kept}
+          onClose={() => setSaving(false)}
+        />
+      )}
+
+      {managing && (
+        <ManageTemplatesDialog
+          tenantId={tenantId}
+          templates={kept}
+          onClose={() => setManaging(false)}
+        />
+      )}
 
       <Dialog
         open={confirming}
@@ -415,13 +605,16 @@ function Header({ editing, children }: { editing: boolean; children?: ReactNode 
 /** Whether anything worth rescuing stands in the mask. */
 function isDirty(draft: EntryDraftState): boolean {
   if (draft.description.trim() !== '' || draft.documentReference.trim() !== '') return true
-  return draft.rows.some(
-    (row) =>
-      row.accountId !== null
-      || row.accountText.trim() !== ''
-      || row.debit.trim() !== ''
-      || row.credit.trim() !== ''
-      || row.taxCodeId !== null,
+  return draft.rows.some((row) => carriesSomething(row) || row.taxCodeId !== null)
+}
+
+/** Whether one row holds anything at all. */
+function carriesSomething(row: EntryDraftRow): boolean {
+  return (
+    row.accountId !== null
+    || row.accountText.trim() !== ''
+    || row.debit.trim() !== ''
+    || row.credit.trim() !== ''
   )
 }
 

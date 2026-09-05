@@ -13,6 +13,15 @@ export type SplitButtonAction = {
   icon?: ReactNode
   onSelect: () => void
   disabled?: boolean
+  /**
+   * Draws a rule **above** this entry, to set a group off from the one before it.
+   *
+   * <p>A rule on an entry and not an entry of its own. A `{kind: 'separator'}` inside `actions`
+   * would have to be skipped by `items.current`, by `actions.length` and by both pieces of
+   * arrow-key arithmetic — four places for an off-by-one, in exchange for a line. This way the
+   * whole calculation stays untouched.
+   */
+  separatorBefore?: boolean
 }
 
 type SplitButtonProps = {
@@ -23,7 +32,25 @@ type SplitButtonProps = {
   actions: SplitButtonAction[]
   /** What a screen reader calls the arrow, for example «Weitere Wege zum Auftrag». */
   menuLabel: string
+  /** Switches both halves off. */
   disabled?: boolean
+  /**
+   * Switches only the left half off; the arrow and its menu stay live.
+   *
+   * <p>For the case where the usual way has nothing to work on yet while the menu behind the
+   * arrow still holds the way to get there. The entry mask is the one it was built for: with no
+   * posting template there is nothing to apply, but «Als Vorlage speichern …» sits behind the
+   * arrow and is the only way to a first one. A wholly disabled button would bolt the mask shut.
+   */
+  primaryDisabled?: boolean
+  /**
+   * One line at the head of the menu, for what an empty menu has to say for itself.
+   *
+   * <p>A `<p role="presentation">` and no entry: it takes no focus, is not in `items.current`
+   * and the arrow keys walk straight past it. A disabled entry would not do — the menu moves the
+   * focus onto the highlighted entry, a disabled button takes none, and the walk would stick.
+   */
+  note?: string
   busy?: boolean
 }
 
@@ -46,6 +73,8 @@ export function SplitButton({
   actions,
   menuLabel,
   disabled = false,
+  primaryDisabled = false,
+  note,
   busy = false,
 }: SplitButtonProps) {
   const [open, setOpen] = useState(false)
@@ -117,7 +146,7 @@ export function SplitButton({
     <div ref={box} className="relative inline-flex">
       <Button
         onClick={onClick}
-        disabled={disabled}
+        disabled={disabled || primaryDisabled}
         busy={busy}
         // The two halves read as one control: the seam between them is a rule, not a gap.
         className="rounded-r-none"
@@ -167,6 +196,16 @@ export function SplitButton({
             transition={reduceMotion ? { duration: 0 } : MENU}
             className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[260px] overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface py-1 shadow-[var(--shadow-card)]"
           >
+            {note !== undefined && (
+              // role="presentation" and not a heading: it is neither a step of the menu nor a
+              // title over the entries, only a sentence saying why there are so few of them.
+              <p
+                role="presentation"
+                className="px-3 py-2 text-[12px] text-text-secondary"
+              >
+                {note}
+              </p>
+            )}
             {actions.map((action, index) => (
               <button
                 key={action.id}
@@ -176,11 +215,12 @@ export function SplitButton({
                 type="button"
                 role="menuitem"
                 disabled={action.disabled}
+                data-separator={action.separatorBefore ? 'true' : undefined}
                 onClick={() => pick(action)}
                 onMouseEnter={() => setActive(index)}
                 className={`flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                  index === active ? 'bg-sunken' : ''
-                }`}
+                  action.separatorBefore ? 'mt-1 border-t border-line-subtle pt-2.5' : ''
+                } ${index === active ? 'bg-sunken' : ''}`}
               >
                 {action.icon && (
                   <span className="mt-px shrink-0 text-text-tertiary" aria-hidden>

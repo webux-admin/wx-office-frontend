@@ -58,7 +58,11 @@ import {
   entryDraftKey,
   entryKey,
   entryRequestOf,
+  entryTemplateUrl,
+  entryTemplatesKey,
+  entryTemplatesUrl,
   entryUrl,
+  fetchEntrySuggestions,
   integrityKey,
   integrityUrl,
   journalKey,
@@ -71,6 +75,8 @@ import {
   reversalReasonRoom,
   runPost,
   searchAccounts,
+  suggestionsKey,
+  suggestionsUrl,
   taxSplitOf,
   updateEntry,
   writeEntryDraft,
@@ -734,6 +740,56 @@ describe('ENTRY_SORT_FIELDS', () => {
   })
 })
 
+describe('fetchEntrySuggestions', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * The everyday call. The term is trimmed before it goes into the query string: what the
+   * server matches on is the text, and a trailing space somebody has just typed would find
+   * nothing while looking as if the suggestion had stopped working.
+   */
+  it('fetchEntrySuggestionsTest', async () => {
+    let seen = ''
+    vi.stubGlobal('fetch', (url: string) => {
+      seen = url
+      return Promise.resolve(
+        new Response(JSON.stringify([{ text: 'Miete September', useCount: 11 }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const found = await fetchEntrySuggestions(1, ' Miete ', 8)
+
+    expect(seen).toBe(suggestionsUrl(1, 'Miete', 8))
+    expect(found[0].text).toBe('Miete September')
+  })
+
+  /**
+   * <b>Under two characters nothing goes out at all.</b> One character finds no usable choice
+   * among a thousand entries and would cost a request on every keystroke; the server answers
+   * such a term empty anyway, so asking it is a round trip for a known answer. Held here and
+   * not only in the field: this is the last place before the network.
+   */
+  it('fetchEntrySuggestionsWithOneCharacterTest', async () => {
+    const asked: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push(url)
+      return Promise.resolve(new Response('[]', { status: 200 }))
+    })
+
+    // A single character, and a single character with the padding somebody types around it.
+    expect(await fetchEntrySuggestions(1, 'M')).toEqual([])
+    expect(await fetchEntrySuggestions(1, ' M ')).toEqual([])
+    expect(await fetchEntrySuggestions(1, '')).toEqual([])
+
+    expect(asked).toEqual([])
+  })
+})
+
 describe('createEntry', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -1292,6 +1348,46 @@ describe('entryDraftKey', () => {
   })
 
   /**
+   * <b>Parsing is not reading, and this is the difference.</b> All four of these are valid
+   * JSON, so the parser lets them through; none of them is a state this mask can open with.
+   * Handed on, they reach code that trims strings and walks rows — and because the mask reads
+   * the rescue inside a `useState` initialiser, a throw there means the screen does not open at
+   * all. Losing a rescued draft costs a minute of typing; losing the mask costs the work. So a
+   * state of the wrong shape is dropped, exactly like the unparsable text above.
+   */
+  it('readEntryDraftWithAForeignShapeTest', () => {
+    const refused = [
+      // Rows are there, the header fields are not: `description.trim()` would throw.
+      '{"rows":[]}',
+      // A description that is a number passes `?? ""` untouched and throws on `.trim()`.
+      '{"bookingDate":"2026-09-09","documentReference":"","description":5,"rows":[]}',
+      // A row of an older or tampered shape, missing the text field every row is read through.
+      '{"bookingDate":"2026-09-09","documentReference":"","description":"Miete",'
+        + '"rows":[{"key":1,"accountId":null}]}',
+      // Valid JSON, and not an object at all.
+      '["Miete September"]',
+    ]
+
+    for (const stored of refused) {
+      window.sessionStorage.setItem('webux.accounting.draft.7', stored)
+
+      expect(readEntryDraft(7), stored).toBeNull()
+    }
+  })
+
+  /** The stamp is the one optional field: a state without it is what the mask holds before the
+   * first rescue, and it has to read. */
+  it('readEntryDraftWithoutAStampTest', () => {
+    window.sessionStorage.setItem(
+      'webux.accounting.draft.7',
+      JSON.stringify(emptyEntryDraft('2026-09-09')),
+    )
+
+    expect(readEntryDraft(7)?.rows).toHaveLength(2)
+    expect(readEntryDraft(7)?.savedAt).toBeUndefined()
+  })
+
+  /**
    * The one that matters: reading for one tenant throws away what was left for every other.
    * Without it the half typed entry of another business turns up in this mask.
    */
@@ -1326,5 +1422,44 @@ describe('emptyEntryDraft', () => {
       credit: '',
       taxCodeId: null,
     })
+  })
+})
+
+describe('entryTemplatesUrl', () => {
+  it('entryTemplatesUrlTest', () => {
+    expect(entryTemplatesUrl(7)).toBe('/api/tenants/7/accounting/entry-templates')
+  })
+})
+
+describe('entryTemplateUrl', () => {
+  it('entryTemplateUrlTest', () => {
+    expect(entryTemplateUrl(7, 300)).toBe('/api/tenants/7/accounting/entry-templates/300')
+  })
+})
+
+describe('suggestionsUrl', () => {
+  it('suggestionsUrlTest', () => {
+    expect(suggestionsUrl(7, 'Miete', 8)).toBe(
+      '/api/tenants/7/accounting/entries/suggestions?q=Miete&limit=8',
+    )
+  })
+
+  /**
+   * The term is encoded. Without it a `%` would arrive as the start of an escape, a `&` would
+   * open a second parameter, and a space would break the address outright.
+   */
+  it('suggestionsUrlEncodesTheTermTest', () => {
+    expect(suggestionsUrl(7, '50% Rabatt & mehr')).toBe(
+      '/api/tenants/7/accounting/entries/suggestions?q=50%25%20Rabatt%20%26%20mehr&limit=8',
+    )
+  })
+})
+
+describe('entryTemplatesKey', () => {
+  /** Every key of this module carries the tenant, so two tenants never share a cache. */
+  it('entryTemplateKeysArePerTenantTest', () => {
+    expect(entryTemplatesKey(7)).toEqual(['accounting-entry-templates', 7])
+    expect(suggestionsKey(7, 'Mie')).toEqual(['accounting-entry-suggestions', 7, 'Mie'])
+    expect(entryTemplatesKey(8)).not.toEqual(entryTemplatesKey(7))
   })
 })
