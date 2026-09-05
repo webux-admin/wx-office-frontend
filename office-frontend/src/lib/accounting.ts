@@ -18,6 +18,7 @@ import {
 } from './preferences'
 import type {
   Account,
+  AccountSheet,
   AccountRequest,
   AccountType,
   BoundarySource,
@@ -43,6 +44,7 @@ import type {
   PostRunResult,
   ReversalRequest,
   SystemKey,
+  TrialBalance,
   TaxCode,
   TaxCodeCatalogue,
 } from './types'
@@ -810,6 +812,109 @@ export const DRAFT_PATH = '/buchhaltung/entwuerfe'
 /** Path of the journal within the application. */
 export const JOURNAL_PATH = '/buchhaltung/journal'
 
+/** Path of the trial balance — the menu entry «Konten». */
+export const ACCOUNT_BALANCE_PATH = '/buchhaltung/konten'
+
+/**
+ * Path of the archive.
+ *
+ * <p><b>The one accounting screen that stays reachable with the module switched off.</b> Its
+ * route carries no `module`, because switching off closes the writing ways and must not hide the
+ * books: GeBüV Art. 6 Abs. 1 wants a person holding the read right to be able to look at them
+ * within a reasonable time.
+ */
+export const ACCOUNTING_ARCHIVE_PATH = '/buchhaltung/archiv'
+
+/**
+ * Path of one account sheet, which has no menu entry of its own.
+ *
+ * @param accountId the account
+ * @returns where the drill-down out of the trial balance leads
+ */
+export function accountSheetPath(accountId: number): string {
+  return `${ACCOUNT_BALANCE_PATH}/${accountId}`
+}
+
+/** The fields the trial balance may be sorted by — word for word the whitelist of the server. */
+export const TRIAL_BALANCE_SORT_FIELDS = [
+  'accountNumber',
+  'accountName',
+  'debitTotal',
+  'creditTotal',
+  'balance',
+] as const
+
+/** Which reports the printout knows. The balance sheet and the income statement follow. */
+export type AccountingReport = 'journal' | 'account-sheets' | 'trial-balance'
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns address of the trial balance
+ */
+export function trialBalanceUrl(tenantId: number, query = ''): string {
+  return `${accountingUrl(tenantId)}/trial-balance${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param accountId the account
+ * @param query the paging values, as a query string without the `?`
+ * @returns address of one account sheet
+ */
+export function accountSheetUrl(tenantId: number, accountId: number, query = ''): string {
+  return `${accountingUrl(tenantId)}/account-sheet/${accountId}${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to pack; one per call
+ * @returns address of the archive as a ZIP
+ */
+export function accountingExportUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/export?fiscalYearId=${fiscalYearId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param report which report
+ * @param fiscalYearId the year to print
+ * @param accountId one account, for `account-sheets` only
+ * @returns address of the printable page
+ */
+export function accountingPrintUrl(
+  tenantId: number,
+  report: AccountingReport,
+  fiscalYearId: number,
+  accountId?: number,
+): string {
+  const account = accountId === undefined ? '' : `&accountId=${accountId}`
+  return `${accountingUrl(tenantId)}/print/${report}?fiscalYearId=${fiscalYearId}${account}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns cache key of the trial balance
+ */
+export function trialBalanceKey(tenantId: number, query: string): readonly unknown[] {
+  return ['accounting-trial-balance', tenantId, query]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param accountId the account
+ * @param query the paging values, as a query string without the `?`
+ * @returns cache key of one account sheet
+ */
+export function accountSheetKey(
+  tenantId: number,
+  accountId: number,
+  query: string,
+): readonly unknown[] {
+  return ['accounting-account-sheet', tenantId, accountId, query]
+}
+
 /**
  * The fields the two lists may be sorted by.
  *
@@ -941,6 +1046,38 @@ export function fetchEntry(tenantId: number, entryId: number): Promise<Entry> {
  */
 export function fetchAttention(tenantId: number): Promise<EntryAttention> {
   return api.get<EntryAttention>(attentionUrl(tenantId))
+}
+
+/**
+ * The trial balance of one fiscal year: a page of accounts, the proof, and the notices.
+ *
+ * <p>The proof arrives with the rows and never in a second call — one that loaded afterwards
+ * would not be a proof, and one that never arrived would not be noticed.
+ *
+ * <p>It answers while the module is off, like everything that reads here.
+ *
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns the page, the proof and what stands above them
+ */
+export function fetchTrialBalance(tenantId: number, query: string): Promise<TrialBalance> {
+  return api.get<TrialBalance>(trialBalanceUrl(tenantId, query))
+}
+
+/**
+ * One account read the other way round from the journal.
+ *
+ * @param tenantId the tenant
+ * @param accountId the account
+ * @param query the paging values, as a query string without the `?`
+ * @returns the head, the totals and one page of lines
+ */
+export function fetchAccountSheet(
+  tenantId: number,
+  accountId: number,
+  query: string,
+): Promise<AccountSheet> {
+  return api.get<AccountSheet>(accountSheetUrl(tenantId, accountId, query))
 }
 
 /**

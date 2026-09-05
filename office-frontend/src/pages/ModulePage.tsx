@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
@@ -12,6 +13,7 @@ import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { ACCOUNTING_ARCHIVE_PATH, ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
 import { parseDecimal } from '../lib/format'
 import { MODULE_RIGHTS, tenantModulesKey, tenantModulesUrl } from '../lib/modules'
 import type { Tenant, TenantModule } from '../lib/types'
@@ -199,8 +201,17 @@ function Modules({ tenantId }: { tenantId: number }) {
               disabled={!mayWrite || save.isPending}
             />
             {module.usage !== undefined && (
-              <p className="mt-2 text-[12px] text-text-secondary">
-                Im Modul liegen bereits: {module.usage}.
+              <p className="mt-2 flex flex-wrap items-baseline gap-2 text-[12px] text-text-secondary">
+                <span>Im Modul liegen bereits: {module.usage}.</span>
+                {/* Only where the module has an archive to point at, and only for a session that
+                    may read it — a link to a mask that turns the reader away with a refusal is no
+                    help. The switched-off module with data in it is the case this is for: what is
+                    kept has to stay reachable (OR Art. 958f, GeBüV Art. 6 Abs. 1). */}
+                {archiveOf(module.code) !== undefined && can(ACCOUNTING_RIGHTS.read) && (
+                  <Link to={archiveOf(module.code) ?? ''} className="underline">
+                    Daten ansehen
+                  </Link>
+                )}
               </p>
             )}
             {/* The sentence that has to be said here and nowhere else at this moment: the
@@ -278,4 +289,21 @@ function Modules({ tenantId }: { tenantId: number }) {
       </Dialog>
     </>
   )
+}
+
+/**
+ * Where the data of a switched-off module can still be looked at.
+ *
+ * <p><b>Kept here and not in `lib/modules.ts`.</b> `lib/accounting.ts` reads
+ * `LicensedModuleCode` out of `lib/modules.ts`, and pointing back the other way would be an
+ * import cycle between two building blocks almost everything reads.
+ *
+ * <p>One entry today. It is a map rather than an `if` so the second module costs a line instead
+ * of a second shape.
+ *
+ * @param code the module, as the backend spells it
+ * @returns where its archive is, or `undefined` for a module that has none
+ */
+function archiveOf(code: string): string | undefined {
+  return code === ACCOUNTING_MODULE ? ACCOUNTING_ARCHIVE_PATH : undefined
 }

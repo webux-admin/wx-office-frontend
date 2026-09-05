@@ -8,6 +8,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { downloadFile } from '../lib/files'
 import { formatAmount, formatByteCount, formatDate, formatDateTime } from '../lib/format'
 import {
   BANKING_RIGHTS,
@@ -313,10 +314,8 @@ function statusName(status: BankEntry['status']): string {
  */
 async function download(tenantId: number, importId: number, fileName: string) {
   const file = await api.file(bankStatementFileUrl(tenantId, importId))
-  const url = URL.createObjectURL(file.blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = file.fileName || fileName
-  link.click()
-  URL.revokeObjectURL(url)
+  // `downloadFile` since the accounting archive needed the same handing over. It also mends
+  // what this copy had wrong: the object URL was released immediately, so a browser that
+  // started the download a moment later found a dead URL and saved an empty file.
+  downloadFile({ ...file, fileName: file.fileName || fileName })
 }

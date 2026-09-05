@@ -101,6 +101,7 @@ const YEARS: FiscalYearList = {
       deletable: false,
       editable: false,
       spansAFullCalendarYear: true,
+      postedEntries: 0,
     },
   ],
   boundary: { postableFrom: null, lockedUntil: null, source: 'NONE', message: '' },

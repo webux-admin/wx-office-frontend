@@ -422,3 +422,51 @@ describe('ModulePage', () => {
     ).toBe(0)
   })
 })
+
+describe('the way to the archive of a switched-off module', () => {
+  /**
+   * <b>What the decision asks for: the module screen points at the data of a module that is
+   * off.</b> The route for it exists from this delivery on, so the link is built here too. It is
+   * the accounting archive, which is the one screen a switched-off module still answers on —
+   * what is kept for ten years has to stay reachable for ten years (OR Art. 958f).
+   */
+  it('switchedOffModuleWithDataLinksToTheArchiveTest', async () => {
+    modules = [accounting({ active: false, usage: '1842 verbuchte Buchungen' })]
+
+    await render(session(['TENANT_READ', 'TENANT_WRITE', 'ACCOUNTING_READ']))
+
+    expect(container.textContent).toContain('Im Modul liegen bereits: 1842 verbuchte Buchungen.')
+    const link = [...container.querySelectorAll('a')].find(
+      (entry) => entry.getAttribute('href') === '/buchhaltung/archiv',
+    )
+    expect(link?.textContent).toBe('Daten ansehen')
+  })
+
+  /**
+   * <b>Only for a session that may read the books.</b> A link onto a mask that turns the reader
+   * away with a refusal is not a help — it is a dead end with a promise on it.
+   */
+  it('archiveLinkNeedsTheAccountingReadRightTest', async () => {
+    modules = [accounting({ active: false, usage: '1842 verbuchte Buchungen' })]
+
+    await render(BOTH)
+
+    expect(container.textContent).toContain('Im Modul liegen bereits')
+    expect(
+      [...container.querySelectorAll('a')].some(
+        (entry) => entry.getAttribute('href') === '/buchhaltung/archiv',
+      ),
+    ).toBe(false)
+  })
+
+  /** A module with no archive to point at shows the sentence and no link. */
+  it('moduleWithoutAnArchiveShowsNoLinkTest', async () => {
+    modules = [inventory({ active: false, usage: '142 Bewegungen' })]
+
+    await render(session(['TENANT_READ', 'TENANT_WRITE', 'ACCOUNTING_READ']))
+
+    expect(container.textContent).toContain('Im Modul liegen bereits: 142 Bewegungen.')
+    expect([...container.querySelectorAll('a')].map((entry) => entry.getAttribute('href')))
+      .not.toContain('/buchhaltung/archiv')
+  })
+})

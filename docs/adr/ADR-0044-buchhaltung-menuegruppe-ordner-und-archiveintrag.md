@@ -204,11 +204,46 @@ der Gruppen ist die des Arbeitstags.
   Cache-Schlüssel und Verben der Buchung; `App.tsx` drei Routen.
 - `NavGroup`, `NavCounterKey` und `AppShell.NavItem` bleiben weiterhin unverändert.
 
+**Mit #94 kommt dazu, und damit ist dieses ADR eingelöst:**
+
+- **«Konten» und «Archiv»**, die Einträge vier und fünf der Gruppe. «Konten» trägt
+  `module: 'ACCOUNTING'` wie die drei davor; **«Archiv» trägt als einziges keines**, und daran
+  hängt alles: die vier anderen fallen mit dem Schalter, dieses bleibt, und die Gruppe schrumpft
+  auf genau diesen einen Eintrag zusammen, statt zu verschwinden.
+  `accountingGroupVanishesWithoutTheModuleTest` wird durch
+  `accountingGroupShrinksToTheArchiveWithoutTheModuleTest` abgelöst — die alte Prüfung hielt den
+  früheren Zustand fest und wird nicht abgeschwächt, sondern beantwortet;
+  `archiveEntryHasNoModuleTest` prüft die Aufteilung Eintrag für Eintrag.
+- **Der Archiveintrag trägt auch keine Bestandsprüfung.** Er erscheint, sobald jemand
+  `ACCOUNTING_READ` hält, auch wenn nie etwas gebucht wurde. `visibleNavGroups` entscheidet über
+  `NAV_GROUPS`, `can` und `runs` und kennt keine Datenlage; eine Sichtbarkeit, die von einer
+  Abfrage abhinge, wäre für den statischen Nachweis unsichtbar, den Abschnitt 5 gerade verlangt.
+  Dahinter steht dann ein Leerzustand — besser als ein Eintrag, der je nach Datenlage auftaucht und
+  verschwindet. Begründung in voller Länge in Backend-ADR-0119 und in
+  `docs/processes/buchhaltung-abschalten.md` des Backends.
+- **`NavCounterKey` wird zu `'CLEARING' | 'ACCOUNTING_DRAFTS'`**, und `useNavCounters` zieht aus
+  `lib/clearing.ts` nach `layout/useNavCounters.ts` um — die Seitenleiste ist sein einziger
+  Aufrufer. Es antwortet nicht mehr mit dem Zählsatz **eines** Bildschirms, sondern mit
+  `Partial<Record<NavCounterKey, number>>`: jeder Eintrag liest seine eigene Zahl, und keiner weiss
+  von den anderen. Beide Abfragen werden unbedingt deklariert und je über den Schlüssel
+  eingeschaltet — Haken dürfen nicht in einer Bedingung stehen —, und React Query fasst die Aufrufe
+  der einzelnen `NavItem` über den Schlüssel zusammen, sodass es bei einer Anfrage je Zähler bleibt.
+- **Der Zähler am Eintrag «Entwürfe» erscheint nur, wenn `GET /entries/attention` ein `lockingOn`
+  liefert.** Bei Handerfassung ist ein Entwurf der Normalfall, und ein Abzeichen, das dauerhaft für
+  den Normalfall steht, bringt Leute dazu, Abzeichen nicht mehr anzuschauen — ausgerechnet auf dem
+  Kanal, über den anderswo echte Probleme gemeldet werden. Die Frist rechnet das Backend; das
+  Frontend prüft nur, ob das Feld gefüllt ist.
+- **`ModulePage.tsx`** bekommt neben dem `ModuleUsage`-Satz den Verweis «Daten ansehen» auf
+  `/buchhaltung/archiv` — nur für eine Sitzung mit `ACCOUNTING_READ`. Die Zuordnung Modulcode →
+  Adresse steht **in `ModulePage.tsx`** und nicht in `lib/modules.ts`: `lib/accounting.ts` liest
+  `LicensedModuleCode` von dort, und die Gegenrichtung wäre ein Importzyklus zwischen zwei
+  Bausteinen, die beide fast überall gelesen werden.
+- **`lib/files.ts` bekommt `downloadFile`**, und `BankStatementDetailPage` wird darauf gezogen.
+  Beim zweiten Gebrauch geteilt statt beim dritten, weil die zwei Kopien schon auseinanderliefen:
+  die dortige gab die Objekt-URL sofort wieder frei, sodass ein Browser, der den Download verzögert
+  startet, eine tote URL bekam und eine leere Datei speicherte. Zwei Kopien, von denen eine falsch
+  ist, sind kein Fall für die Dreierregel.
+
 ## Offen
 
-Zugewiesen, keine offene Frage:
-
-- **Der Archiveintrag `/buchhaltung/archiv` — #94.** Ohne `module`-Feld, aus dem in Abschnitt 3
-  genannten Grund. Dieses ADR wird dort um ihn ergänzt.
-- **Der Zähler `ACCOUNTING_DRAFTS` am Eintrag «Entwürfe» — #94**, zusammen mit der
-  Verallgemeinerung von `AppShell.NavItem`.
+Nichts aus diesem ADR.

@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowDownToLine,
   ArrowLeftRight,
   Ban,
@@ -55,9 +56,11 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import {
+  ACCOUNTING_ARCHIVE_PATH,
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  ACCOUNT_BALANCE_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
@@ -123,7 +126,7 @@ export type NavModule = LicensedModuleCode
  * <p>A closed list, so an entry cannot name a source that does not exist. The test in
  * `navigation.test.ts` holds it against the sources the shell knows (ADR-0043).
  */
-export type NavCounterKey = 'CLEARING'
+export type NavCounterKey = 'CLEARING' | 'ACCOUNTING_DRAFTS'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -440,6 +443,10 @@ export const NAV_GROUPS: NavGroup[] = [
         href: DRAFT_PATH,
         permission: ACCOUNTING_RIGHTS.read,
         module: ACCOUNTING_MODULE,
+        // Only where a period is about to be locked. In hand bookkeeping a draft is the normal
+        // state of an entry somebody is in the middle of, and a badge that stands for the normal
+        // case teaches people to stop looking at badges.
+        counter: 'ACCOUNTING_DRAFTS',
       },
       {
         label: 'Journal',
@@ -447,6 +454,33 @@ export const NAV_GROUPS: NavGroup[] = [
         href: JOURNAL_PATH,
         permission: ACCOUNTING_RIGHTS.read,
         module: ACCOUNTING_MODULE,
+      },
+      // The other half of the general ledger: the journal is the chronological view (GeBüV
+      // Art. 1 Abs. 2 Bst. b), this is the one by subject. After it, because a booking is read
+      // there first and looked up per account afterwards.
+      {
+        label: 'Konten',
+        icon: Scale,
+        href: ACCOUNT_BALANCE_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
+      },
+      // **The one entry of this group without a `module`, and that is the whole point of it.**
+      // Switching the module off closes the writing ways; it must not hide the books. GeBüV
+      // Art. 6 Abs. 1 wants a person holding the read right to be able to look at them within a
+      // reasonable time, and a fiduciary hired after the switch went off could otherwise never
+      // get at them. The group therefore shrinks to exactly this entry rather than disappearing.
+      //
+      // It carries no check on whether anything has been posted either. A menu entry that came
+      // and went with the data would be invisible to `visibleNavGroups`, which decides on
+      // `NAV_GROUPS`, `can` and `runs` alone — and «Mahnungen» next door is ungated the same
+      // way. A tenant that has never posted sees the entry and an empty state behind it, which
+      // is better than one that appears and disappears.
+      {
+        label: 'Archiv',
+        icon: Archive,
+        href: ACCOUNTING_ARCHIVE_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
       },
     ],
   },

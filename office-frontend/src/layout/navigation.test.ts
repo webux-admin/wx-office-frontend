@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACCOUNTING_ARCHIVE_PATH,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  ACCOUNT_BALANCE_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
@@ -30,6 +32,7 @@ import {
   isFolder,
   NAV_GROUPS,
   visibleNavGroups,
+  type NavCounterKey,
   type NavEntry,
   type NavModule,
 } from './navigation'
@@ -901,23 +904,68 @@ describe('the accounting group', () => {
     return NAV_GROUPS.find((candidate) => candidate.title === 'Buchhaltung')
   }
 
-  it('accountingGroupHasThreeEntriesTest', () => {
+  it('accountingGroupHasFiveEntriesTest', () => {
     const entries = flattenNav(group()?.entries ?? [])
 
-    expect(entries.map((entry) => entry.label)).toEqual(['Buchen', 'Entwürfe', 'Journal'])
-    expect(entries.map((entry) => entry.href)).toEqual([ENTRY_PATH, DRAFT_PATH, JOURNAL_PATH])
-    // Typing needs the write right; reading what is waiting and what is booked needs the read
-    // one. Posting is asked for at the button, not at the menu entry.
+    expect(entries.map((entry) => entry.label)).toEqual([
+      'Buchen',
+      'Entwürfe',
+      'Journal',
+      'Konten',
+      'Archiv',
+    ])
+    expect(entries.map((entry) => entry.href)).toEqual([
+      ENTRY_PATH,
+      DRAFT_PATH,
+      JOURNAL_PATH,
+      ACCOUNT_BALANCE_PATH,
+      ACCOUNTING_ARCHIVE_PATH,
+    ])
+    // Typing needs the write right; reading what is waiting, what is booked and what stands on
+    // the accounts needs the read one. Posting is asked for at the button, not at the entry.
     expect(entries.map((entry) => entry.permission)).toEqual([
       ACCOUNTING_RIGHTS.write,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
     ])
-    expect(entries.map((entry) => entry.module)).toEqual([
-      'ACCOUNTING',
-      'ACCOUNTING',
-      'ACCOUNTING',
-    ])
+  })
+
+  /**
+   * <b>The archive carries no module, and every other entry of the group does.</b> That one
+   * missing field is what keeps the books reachable after the switch goes off: GeBüV Art. 6
+   * Abs. 1 wants a person holding the read right to be able to look at them within a reasonable
+   * time, and a fiduciary hired afterwards could otherwise never get at them.
+   */
+  it('archiveEntryHasNoModuleTest', () => {
+    const entries = flattenNav(group()?.entries ?? [])
+
+    const archive = entries.find((entry) => entry.href === ACCOUNTING_ARCHIVE_PATH)
+    expect(archive?.module).toBeUndefined()
+    expect(
+      entries
+        .filter((entry) => entry.href !== ACCOUNTING_ARCHIVE_PATH)
+        .map((entry) => entry.module),
+    ).toEqual(['ACCOUNTING', 'ACCOUNTING', 'ACCOUNTING', 'ACCOUNTING'])
+  })
+
+  /**
+   * Every counter an entry asks for is one the shell can serve. A key nobody answers would show
+   * as an entry that silently never gets a number.
+   */
+  it('everyNavCounterKeyIsKnownTest', () => {
+    const known: NavCounterKey[] = ['CLEARING', 'ACCOUNTING_DRAFTS']
+    const entries = NAV_GROUPS.flatMap((candidate) => flattenNav(candidate.entries))
+
+    const used = entries
+      .map((entry) => entry.counter)
+      .filter((counter): counter is NavCounterKey => counter !== undefined)
+    expect(used.length).toBeGreaterThan(0)
+    used.forEach((counter) => expect(known).toContain(counter))
+    // And the one this delivery adds sits where it belongs.
+    expect(entries.find((entry) => entry.href === DRAFT_PATH)?.counter)
+      .toBe('ACCOUNTING_DRAFTS')
   })
 
   /** The order of the groups is the order of the working day: sale, books, warehouse. */
@@ -929,19 +977,42 @@ describe('the accounting group', () => {
   })
 
   /**
-   * `NavGroup` carries no `module` field, and this is what stands in for one: all three entries
-   * fall, `visibleNavGroups` is left with an empty group and throws it away.
+   * <b>The group shrinks to exactly one entry, and does not disappear.</b> Four of the five
+   * carry the module and fall with it; the archive does not, and stays. That is the whole
+   * mechanism by which the books remain reachable after the switch goes off — the group used to
+   * vanish altogether, and this test held that earlier state.
+   *
+   * <p>It is worth pinning statically rather than leaving to the screen, because
+   * `visibleNavGroups` decides on `NAV_GROUPS`, `can` and `runs` alone: a visibility that
+   * depended on a query would be invisible here, which is why the archive entry carries no such
+   * check either.
    */
-  it('accountingGroupVanishesWithoutTheModuleTest', () => {
+  it('accountingGroupShrinksToTheArchiveWithoutTheModuleTest', () => {
     const withoutAccounting = visibleNavGroups(all, (module) => module !== 'ACCOUNTING')
 
-    expect(withoutAccounting.map((candidate) => candidate.title)).not.toContain('Buchhaltung')
+    const group = withoutAccounting.find((candidate) => candidate.title === 'Buchhaltung')
+    expect(group).toBeDefined()
+    expect(flattenNav(group?.entries ?? []).map((entry) => entry.href)).toEqual([
+      ACCOUNTING_ARCHIVE_PATH,
+    ])
     const reachable = withoutAccounting
       .flatMap((candidate) => flattenNav(candidate.entries))
       .map((entry) => entry.href)
     expect(reachable).not.toContain(ENTRY_PATH)
     expect(reachable).not.toContain(DRAFT_PATH)
     expect(reachable).not.toContain(JOURNAL_PATH)
+    expect(reachable).not.toContain(ACCOUNT_BALANCE_PATH)
+  })
+
+  /** Without the read right nothing of the group is left, the archive included. */
+  it('accountingGroupVanishesWithoutTheReadRightTest', () => {
+    const withoutReading = visibleNavGroups(
+      (permission) => permission !== ACCOUNTING_RIGHTS.read
+        && permission !== ACCOUNTING_RIGHTS.write,
+      all,
+    )
+
+    expect(withoutReading.map((candidate) => candidate.title)).not.toContain('Buchhaltung')
   })
 
   /** The group is a heading and no folder: its entries carry no register strip. */
@@ -962,6 +1033,8 @@ describe('the accounting group', () => {
     expect(flattenNav(reading?.entries ?? []).map((entry) => entry.href)).toEqual([
       DRAFT_PATH,
       JOURNAL_PATH,
+      ACCOUNT_BALANCE_PATH,
+      ACCOUNTING_ARCHIVE_PATH,
     ])
   })
 })

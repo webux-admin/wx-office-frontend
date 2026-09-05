@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Undo2 } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
@@ -27,6 +28,7 @@ import {
 } from '../lib/accounting'
 import { formatAmount, formatDate, formatDateTime, toIsoDate } from '../lib/format'
 import { selectOptions } from '../lib/masterData'
+import { optionalOriginOf } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import type { EntryLine, FiscalYear, JournalRow } from '../lib/types'
 import { useCatalogue } from '../masterdata/useMasterData'
@@ -52,19 +54,32 @@ export function JournalPage() {
 }
 
 function Journal({ tenantId }: { tenantId: number }) {
+  const location = useLocation()
   const { can } = useAuth()
   const queryClient = useQueryClient()
   const mayPost = can(ACCOUNTING_RIGHTS.post)
 
   const search = useQuickSearch()
-  const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
+  // Preselected where the account sheet named one, so the entry it links to is on the page that
+  // opens rather than on whichever year the picker would have chosen.
+  const [fiscalYearId, setFiscalYearId] = useState<number | null>(() => {
+    const named = new URLSearchParams(location.search).get('fiscalYearId')
+    return named === null ? null : Number(named)
+  })
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [entryKind, setEntryKind] = useState('')
   const [source, setSource] = useState('')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('bookingDate,asc')
-  const [opened, setOpened] = useState<number | null>(null)
+  // The account sheet leads here with one entry named, and that entry is opened straight away.
+  // Read once, in the initialiser: it is where the screen was opened from, and reading it again
+  // later would fight with whatever somebody has opened since. There is no screen of its own for
+  // one booking — a second mask for the same entry would be a second truth about it.
+  const [opened, setOpened] = useState<number | null>(() => {
+    const named = new URLSearchParams(location.search).get('entryId')
+    return named === null ? null : Number(named)
+  })
   const [reversing, setReversing] = useState<JournalRow | null>(null)
 
   // Through `selectOptions`, so a value the tenant has hidden is hidden here too: the endpoint
@@ -229,6 +244,9 @@ function Journal({ tenantId }: { tenantId: number }) {
       <PageHeader
         title="Journal"
         subtitle="Was verbucht ist, in der Reihenfolge, in der es geschrieben wurde. Geändert wird hier nichts."
+        // Only where somebody was sent here — from an account sheet, say. Reached through the
+        // navigation the journal shows no way back at all (frontend ADR-0003).
+        back={backOf(location.state)}
       />
 
       <div className="grid gap-4 px-8 pb-12">
@@ -537,4 +555,16 @@ function defaultYearOf(years: readonly FiscalYear[]): FiscalYear | undefined {
   const running = years.find((year) => year.startDate <= today && today <= year.endDate)
   if (running !== undefined) return running
   return [...years].sort((one, other) => one.endDate.localeCompare(other.endDate)).at(-1)
+}
+
+/**
+ * The way back, where another screen sent the reader here.
+ *
+ * <p>`Origin` calls the address `from` and the header calls it `to`; renamed in one place rather
+ * than given a second shape. Reached through the navigation there is no origin and no way back,
+ * which is what a list normally looks like (frontend ADR-0003).
+ */
+function backOf(state: unknown): { to: string; label: string } | undefined {
+  const origin = optionalOriginOf(state)
+  return origin === undefined ? undefined : { to: origin.from, label: origin.label }
 }

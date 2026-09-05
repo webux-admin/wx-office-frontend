@@ -229,11 +229,11 @@ async function settle() {
   }
 }
 
-async function render(auth: AuthState = POSTING) {
+async function render(auth: AuthState = POSTING, at: string = JOURNAL_PATH) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={[JOURNAL_PATH]}>
+      <MemoryRouter initialEntries={[at]}>
         <AuthContext.Provider value={auth}>
           <QueryClientProvider client={client}>
             <JournalPage />
@@ -304,6 +304,29 @@ async function click(element: HTMLElement | undefined) {
 }
 
 describe('JournalPage', () => {
+  /**
+   * <b>The third step of the drill-down out of the account sheet.</b> A row there leads here with
+   * one entry named, and that entry opens straight away — there is no screen of its own for a
+   * single booking, because a second mask for the same entry would be a second truth about it.
+   */
+  it('opensTheEntryFromTheQueryTest', async () => {
+    await render(POSTING, `${JOURNAL_PATH}?fiscalYearId=3&entryId=45`)
+
+    const opened = [...container.querySelectorAll('[aria-expanded="true"]')]
+    expect(opened).toHaveLength(1)
+    expect(opened[0].textContent).toContain('2026-000045')
+  })
+
+  /**
+   * Without the parameter nothing is opened. The journal is a list, and a row that unfolded on
+   * its own would look like the one somebody had been looking for.
+   */
+  it('opensNothingWithoutTheQueryTest', async () => {
+    await render()
+
+    expect(container.querySelectorAll('[aria-expanded="true"]')).toHaveLength(0)
+  })
+
   it('rendersJournalTest', async () => {
     await render()
 

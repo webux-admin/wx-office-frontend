@@ -63,6 +63,13 @@ import {
   entryTemplatesUrl,
   entryUrl,
   fetchEntrySuggestions,
+  ACCOUNTING_ARCHIVE_PATH,
+  ACCOUNT_BALANCE_PATH,
+  accountSheetPath,
+  accountSheetUrl,
+  accountingExportUrl,
+  accountingPrintUrl,
+  trialBalanceUrl,
   integrityKey,
   integrityUrl,
   journalKey,
@@ -702,6 +709,64 @@ describe('journalUrl', () => {
 
   it('journalUrlWithoutQueryTest', () => {
     expect(journalUrl(7)).toBe('/api/tenants/7/accounting/journal')
+  })
+})
+
+describe('trialBalanceUrl', () => {
+  it('trialBalanceUrlTest', () => {
+    expect(trialBalanceUrl(7, 'fiscalYearId=3&page=0')).toBe(
+      '/api/tenants/7/accounting/trial-balance?fiscalYearId=3&page=0',
+    )
+  })
+
+  it('trialBalanceUrlWithoutFiltersTest', () => {
+    expect(trialBalanceUrl(7)).toBe('/api/tenants/7/accounting/trial-balance')
+  })
+})
+
+describe('accountSheetUrl', () => {
+  it('accountSheetUrlTest', () => {
+    expect(accountSheetUrl(7, 412, 'fiscalYearId=3')).toBe(
+      '/api/tenants/7/accounting/account-sheet/412?fiscalYearId=3',
+    )
+  })
+
+  it('accountSheetUrlWithoutQueryTest', () => {
+    expect(accountSheetUrl(7, 412)).toBe('/api/tenants/7/accounting/account-sheet/412')
+  })
+})
+
+describe('accountSheetPath', () => {
+  /** The address the drill-down out of the trial balance builds out of a row. */
+  it('accountSheetPathTest', () => {
+    expect(accountSheetPath(412)).toBe('/buchhaltung/konten/412')
+    expect(ACCOUNT_BALANCE_PATH).toBe('/buchhaltung/konten')
+    expect(ACCOUNTING_ARCHIVE_PATH).toBe('/buchhaltung/archiv')
+  })
+})
+
+describe('accountingExportUrl', () => {
+  /** One year per call: ten years in one request is the difference between a file and a timeout. */
+  it('accountingExportUrlTest', () => {
+    expect(accountingExportUrl(7, 3)).toBe('/api/tenants/7/accounting/export?fiscalYearId=3')
+  })
+})
+
+describe('accountingPrintUrl', () => {
+  it('accountingPrintUrlTest', () => {
+    expect(accountingPrintUrl(7, 'journal', 3)).toBe(
+      '/api/tenants/7/accounting/print/journal?fiscalYearId=3',
+    )
+    expect(accountingPrintUrl(7, 'trial-balance', 3)).toBe(
+      '/api/tenants/7/accounting/print/trial-balance?fiscalYearId=3',
+    )
+  })
+
+  /** The account only travels for the sheets, which is the one report that takes one. */
+  it('accountingPrintUrlWithOneAccountTest', () => {
+    expect(accountingPrintUrl(7, 'account-sheets', 3, 412)).toBe(
+      '/api/tenants/7/accounting/print/account-sheets?fiscalYearId=3&accountId=412',
+    )
   })
 })
 

@@ -3686,6 +3686,14 @@ export type FiscalYear = {
   editable: boolean
   /** Whether it covers a calendar year it does not end in — what DBG Art. 79 Abs. 3 warns about. */
   spansAFullCalendarYear: boolean
+  /**
+   * How many entries of this year are posted.
+   *
+   * <p>The archive screen names it per year and switches its buttons off at zero: an empty ZIP
+   * is refused rather than delivered. It rides on this list rather than on an endpoint of its
+   * own, which would be a second cache beside `GET /fiscal-years` and would go stale in one.
+   */
+  postedEntries: number
 }
 
 /**
@@ -3872,6 +3880,97 @@ export type Entry = {
   /** What the entry moves: the debit sum, and therefore the credit sum as well. */
   amount: number
   lines: EntryLine[]
+}
+
+/** A stretch in which the accounting was switched off, cut to the fiscal year — `ModuleGapDto`. */
+export type ModuleGap = {
+  from: string
+  to: string
+  /** Still running: the screen then says «seit dem …» rather than naming an end. */
+  open: boolean
+}
+
+/**
+ * What stands above an evaluation — `ReportNoticesDto`.
+ *
+ * <p>The same shape over the trial balance, the account sheet and the printout, so all three say
+ * the same thing rather than each wording it again.
+ */
+export type ReportNotices = {
+  drafts: number
+  /** Absent where nothing is waiting. */
+  draftTotal?: number | null
+  /** The ledger currency the total is in. Read off the books, never guessed. */
+  currencyCode?: string | null
+  moduleGaps: ModuleGap[]
+}
+
+/** One account of the trial balance — `TrialBalanceRowDto`. */
+export type TrialBalanceRow = {
+  /** What the drill-down into the account sheet is built from. */
+  accountId: number
+  accountNumber: string
+  accountName: string
+  accountType: string
+  orPosition: string
+  debitTotal: number
+  creditTotal: number
+  /** Debit minus credit, never turned round by account type: a liability stands negative. */
+  balance: number
+}
+
+/**
+ * The proof under the trial balance — `TrialBalanceControlDto`.
+ *
+ * <p>Always over every account of the chart, whatever the page, the search and the movement
+ * switch happen to show.
+ */
+export type TrialBalanceControl = {
+  debitTotal: number
+  creditTotal: number
+  /** Zero in a healthy holding. Anything else means somebody wrote past this application. */
+  difference: number
+  /** How many accounts the chart holds — not the number of rows in front of the reader. */
+  accountCount: number
+}
+
+/** The answer of the trial balance — `TrialBalanceDto`. */
+export type TrialBalance = {
+  accounts: Page<TrialBalanceRow>
+  control: TrialBalanceControl
+  notices: ReportNotices
+}
+
+/** One line of an account sheet — `AccountSheetLineDto`. */
+export type AccountSheetLine = {
+  /** The entry, so the row can lead into the journal with that entry opened. */
+  entryId: number
+  bookingDate: string
+  entryNumber: string
+  documentReference?: string | null
+  text?: string | null
+  /** The other side, or «(mehrere)» where the entry has more than two lines. */
+  contraAccount: string
+  debit: number
+  credit: number
+  /** Worked out over the whole account, so page two continues page one. */
+  runningBalance: number
+}
+
+/** The answer of one account sheet — `AccountSheetDto`. */
+export type AccountSheet = {
+  accountId: number
+  accountNumber: string
+  accountName: string
+  accountType: string
+  orPosition: string
+  openingBalance: number
+  debitTotal: number
+  creditTotal: number
+  /** The figure the trial balance shows for the same account and the same cut-off day. */
+  closingBalance: number
+  lines: Page<AccountSheetLine>
+  notices: ReportNotices
 }
 
 /** What the draft list says about itself, above its rows — `EntryDto.AttentionDto`. */

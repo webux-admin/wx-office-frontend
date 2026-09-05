@@ -17,7 +17,7 @@ import { BrandMark } from '../components/BrandMark'
 import { useAuth } from '../auth/useAuth'
 import { initialsOf } from '../lib/format'
 import { runsModule } from '../lib/modules'
-import { useNavCounters } from '../lib/clearing'
+import { useNavCounters } from './useNavCounters'
 import {
   flattenNav,
   isFolder,
@@ -365,8 +365,8 @@ function NavItem({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) 
   const { user } = useAuth()
   // Asked only where the entry is visible at all: right and module switch are already
   // decided by the caller, so a user without the right never triggers the request.
-  const counts = useNavCounters(user?.activeTenantId, entry.counter !== undefined)
-  const number = entry.counter === undefined ? undefined : counts?.open
+  const counts = useNavCounters(user?.activeTenantId, entry.counter)
+  const number = entry.counter === undefined ? undefined : counts[entry.counter]
   const shows = number !== undefined && number > 0
 
   return (

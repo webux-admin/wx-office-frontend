@@ -82,6 +82,7 @@ const YEAR_2026: FiscalYear = {
   deletable: true,
   editable: true,
   spansAFullCalendarYear: false,
+  postedEntries: 0,
 }
 
 /**

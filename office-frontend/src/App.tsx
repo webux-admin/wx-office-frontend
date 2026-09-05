@@ -13,6 +13,8 @@ import {
   DRAFT_PATH,
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
+  ACCOUNTING_ARCHIVE_PATH,
+  ACCOUNT_BALANCE_PATH,
   JOURNAL_PATH,
   TAX_CODES_PATH,
 } from './lib/accounting'
@@ -48,6 +50,9 @@ const AccountingStatePage = lazy(() => import('./pages/AccountingStatePage').the
 const EntryPage = lazy(() => import('./pages/EntryPage').then((module) => ({ default: module.EntryPage })))
 const EntryDraftPage = lazy(() => import('./pages/EntryDraftPage').then((module) => ({ default: module.EntryDraftPage })))
 const JournalPage = lazy(() => import('./pages/JournalPage').then((module) => ({ default: module.JournalPage })))
+const AccountBalanceListPage = lazy(() => import('./pages/accounting/AccountBalanceListPage').then((module) => ({ default: module.AccountBalanceListPage })))
+const AccountSheetPage = lazy(() => import('./pages/accounting/AccountSheetPage').then((module) => ({ default: module.AccountSheetPage })))
+const AccountingArchivePage = lazy(() => import('./pages/accounting/AccountingArchivePage').then((module) => ({ default: module.AccountingArchivePage })))
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
 const TaxCodePage = lazy(() => import('./pages/TaxCodePage').then((module) => ({ default: module.TaxCodePage })))
@@ -221,6 +226,9 @@ export default function App() {
                 <Route path={`${ENTRY_PATH}/:id`} element={<EntryPage />} />
                 <Route path={DRAFT_PATH} element={<EntryDraftPage />} />
                 <Route path={JOURNAL_PATH} element={<JournalPage />} />
+                <Route path={ACCOUNT_BALANCE_PATH} element={<AccountBalanceListPage />} />
+                <Route path="/buchhaltung/konten/:accountId" element={<AccountSheetPage />} />
+                <Route path={ACCOUNTING_ARCHIVE_PATH} element={<AccountingArchivePage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/mahnstopps" element={<DunningBlockPage />} />

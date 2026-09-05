@@ -60,6 +60,7 @@ function year(overrides: Partial<FiscalYear> = {}): FiscalYear {
     deletable: true,
     editable: true,
     spansAFullCalendarYear: false,
+    postedEntries: 0,
     ...overrides,
   }
 }

@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
 import { queryStringOf } from './banking'
 import type {
@@ -167,38 +166,6 @@ export function fetchWorklist(
  */
 export function fetchWorklistCount(tenantId: number): Promise<WorklistCount> {
   return api.get<WorklistCount>(`/api/tenants/${tenantId}/banking/worklist/count`)
-}
-
-/**
- * The figures behind the badge in the navigation.
- *
- * <p><b>This is the first request the sidebar ever makes.</b> Until now it asked nothing —
- * the module switch travels with the session, and that costs no request. The break is
- * deliberate and it is paid for: one call a minute, only for somebody who may read bank
- * statements and whose tenant runs the module, with four numbers in the answer (ADR-0043).
- *
- * <p><b>A failure shows nothing.</b> No badge and no error box — a navigation that shows a
- * red box is more broken than one without a number.
- *
- * @param tenantId the tenant, {@code null} while none is chosen
- * @param enabled  whether the entry is visible at all; the request is not made otherwise
- * @returns how much is still open, {@code undefined} while unknown
- */
-export function useNavCounters(
-  tenantId: number | null | undefined,
-  enabled: boolean,
-): WorklistCount | undefined {
-  const answer = useQuery({
-    queryKey: worklistCountKey(tenantId ?? 0),
-    queryFn: () => fetchWorklistCount(tenantId ?? 0),
-    enabled: enabled && tenantId !== null && tenantId !== undefined,
-    // A number that changes once or twice a day needs no faster poll; coming back to the
-    // tab is the moment it matters.
-    staleTime: 60_000,
-    refetchOnWindowFocus: true,
-    retry: false,
-  })
-  return answer.data
 }
 
 /** Assigns one bank movement to one or several invoices. */
