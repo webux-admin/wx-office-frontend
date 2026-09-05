@@ -10,7 +10,10 @@ import { UnauthorizedError } from './lib/api'
 import {
   ACCOUNTING_SETTINGS_PATH,
   CHART_OF_ACCOUNTS_PATH,
+  DRAFT_PATH,
+  ENTRY_PATH,
   FISCAL_YEARS_PATH,
+  JOURNAL_PATH,
   TAX_CODES_PATH,
 } from './lib/accounting'
 import { firstBasicDataPath } from './lib/basicData'
@@ -42,6 +45,9 @@ import { LoginPage } from './pages/LoginPage'
  * sees, and a chunk for it would only add a round trip before the password field appears.
  */
 const AccountingStatePage = lazy(() => import('./pages/AccountingStatePage').then((module) => ({ default: module.AccountingStatePage })))
+const EntryPage = lazy(() => import('./pages/EntryPage').then((module) => ({ default: module.EntryPage })))
+const EntryDraftPage = lazy(() => import('./pages/EntryDraftPage').then((module) => ({ default: module.EntryDraftPage })))
+const JournalPage = lazy(() => import('./pages/JournalPage').then((module) => ({ default: module.JournalPage })))
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
 const TaxCodePage = lazy(() => import('./pages/TaxCodePage').then((module) => ({ default: module.TaxCodePage })))
@@ -207,6 +213,14 @@ export default function App() {
                 <Route path={MATCH_RULE_PATH} element={<MatchRulePage />} />
                 <Route path={CLEARING_PATH} element={<ClearingPage />} />
                 <Route path={WRITE_OFF_RUN_PATH} element={<WriteOffRunPage />} />
+                {/* The three screens of the group «Buchhaltung». They stand outside
+                    `RegisterGroupLayout`: their menu entries are a group, not a folder, and a
+                    group carries no register strip (ADR-0031). `/buchhaltung/buchen/:id` is the
+                    same mask on a stored draft — a detail address, so it gets no strip either. */}
+                <Route path={ENTRY_PATH} element={<EntryPage />} />
+                <Route path={`${ENTRY_PATH}/:id`} element={<EntryPage />} />
+                <Route path={DRAFT_PATH} element={<EntryDraftPage />} />
+                <Route path={JOURNAL_PATH} element={<JournalPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/mahnstopps" element={<DunningBlockPage />} />

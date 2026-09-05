@@ -7,10 +7,11 @@
   Mandant → Modul → Recht in `RequireTenant` — und ordnet nach der Regel von
   [ADR-0011](ADR-0011-systemeinstellungen-und-moduleinstellungen.md) ein. Ändert an
   [ADR-0018](ADR-0018-modulliste-in-der-sitzung.md), ADR-0011 und ADR-0032 nichts.
-- **Umfang:** Von den drei Bausteinen im Titel baut diese Auslieferung **nur den mittleren**,
-  den Ordner. Menügruppe und Archiveintrag werden hier entschieden und begründet, damit die
-  Entscheidung einmal fällt und nicht dreimal — gebaut werden sie mit den Auslieferungen, die
-  ihnen einen Inhalt geben (#92 und #94).
+- **Umfang:** Von den drei Bausteinen im Titel baute die erste Auslieferung (#89) **nur den
+  mittleren**, den Ordner. Menügruppe und Archiveintrag wurden dort entschieden und begründet,
+  damit die Entscheidung einmal fällt und nicht dreimal — gebaut werden sie mit den
+  Auslieferungen, die ihnen einen Inhalt geben. **Die Menügruppe ist mit #92 gebaut; Abschnitt 5
+  ist dort nachgetragen.** Der Archiveintrag folgt mit #94.
 
 ## Kontext
 
@@ -61,7 +62,8 @@ auf Bildschirme, die diese Auslieferung nicht baut: ein Versprechen, das sie nic
 
 `navigation.test.ts` hält den Zustand mit `accountingHasNoOwnGroupYetTest` fest, damit die
 Gruppe später bewusst entsteht und nicht nebenbei. **#92 trägt sie nach**, zusammen mit dem
-ersten Bildschirm, der etwas buchen kann, und dem Journal, in dem man das Gebuchte wiederfindet.
+ersten Bildschirm, der etwas buchen kann, und dem Journal, in dem man das Gebuchte wiederfindet;
+wie sie aussieht, steht in Abschnitt 5.
 
 ### 3. Der Archiveintrag, den der Schalter nicht versteckt — #94
 
@@ -92,6 +94,52 @@ liest keine fremden Tabellen und bekommt für einen Hinweistext keine Kante. Im 
 beide Endpunkte ohnehin nebeneinander — das kostet keinen neuen Endpunkt, keine Replikation und
 keine Modulkante.
 
+### 5. Die Menügruppe «Buchhaltung» — nachgetragen mit #92
+
+Sie entsteht in `layout/navigation.ts` mit genau drei Einträgen:
+
+| Beschriftung | Route | Recht | Modul |
+| --- | --- | --- | --- |
+| Buchen | `/buchhaltung/buchen` | `ACCOUNTING_WRITE` | `ACCOUNTING` |
+| Entwürfe | `/buchhaltung/entwuerfe` | `ACCOUNTING_READ` | `ACCOUNTING` |
+| Journal | `/buchhaltung/journal` | `ACCOUNTING_READ` | `ACCOUNTING` |
+
+**Warum sie erst jetzt entsteht und nicht in #88 oder #89.** Beide Auslieferungen haben sie
+ausdrücklich weggelassen, und Abschnitt 2 hält den Grund fest: `visibleNavGroups` wirft eine
+Gruppe weg, sobald nichts mehr darin steht — **eine leere Gruppe kann es technisch gar nicht
+geben**. Die Gruppe hätte also Einträge tragen müssen, und die zeigten auf Bildschirme, die es
+nicht gab. Ein Menüeintrag, der auf nichts zeigt, ist die Enttäuschung mit Ankündigung, die
+dieselbe Überlegung auch für den Eintrag «Abschluss» verwirft. #92 ist die erste Auslieferung, in
+der es etwas zu tippen und etwas nachzulesen gibt; darum gehören die drei Einträge und die Gruppe
+in dieselbe Lieferung.
+
+**Warum sie zwischen «Verkauf» und «Lager» steht.** Die Reihenfolge der Gruppen ist die des
+Arbeitstags, nicht die des Alphabets: Übersicht, dann was verkauft wird, dann was gebucht wird,
+dann was liegt, danach die Stammdaten und zuletzt die Einstellungen. Die Buchhaltung steht
+**hinter** dem Verkauf, weil sie ihm folgt — gebucht wird, was fakturiert wurde —, und **vor**
+dem Lager, weil sie das Hauptbuch führt und das Lager ein Hilfsbuch ist. Beide Gruppen standen
+bisher unmittelbar hintereinander; ans Ende gesetzt wäre die Buchhaltung unter Stammdaten und
+Einstellungen gerutscht, und die tägliche Arbeit stünde dann hinter der Einrichtung.
+
+**`NavGroup` trägt kein `module`-Feld**, und das bleibt so. Der Typ ist
+`{ title: string; entries: NavNode[] }` — mehr nicht. Die Gruppe verschwindet dadurch, dass
+`visibleNavGroups` ihre Einträge einzeln prüft und die Gruppe wegwirft, sobald keiner übrig
+bleibt. Ohne den Modulschalter fallen alle drei Einträge, und damit ist die ganze Gruppe fort,
+ohne dass irgendwo ein zweites Mal `ACCOUNTING` steht. Ein `module` an der Gruppe wäre genau
+diese zweite Stelle — und die erste, die jemand vergisst, wenn ein Eintrag ohne Schalter
+dazukommt. Der Archiveintrag aus #94 ist dieser Fall: er trägt kein `module`-Feld, und die Gruppe
+bleibt dann mit ihm allein stehen. Das ist gewollt und ginge nicht, wenn der Schalter an der
+Gruppe hinge.
+
+Der Ordner «Buchhaltung» unter Moduleinstellungen bleibt daneben bestehen. Die Regel von
+ADR-0011 trennt die beiden sauber: eingerichtet wird im Ordner, gearbeitet wird in der Gruppe.
+
+**`NavCounterKey` bleibt unverändert.** Der Zähler `ACCOUNTING_DRAFTS` am Eintrag «Entwürfe» und
+die Verallgemeinerung von `AppShell.NavItem` — das heute fest `useNavCounters` aus
+`lib/clearing.ts` ruft — sind Arbeit von #94. Ein Zähler, der eine zweite Quelle in die
+Seitenleiste einzieht, ist eine eigene Entscheidung und keine Beigabe zu einer Menügruppe
+(ADR-0043).
+
 ## Verworfene Alternativen
 
 **Die Menügruppe schon jetzt anlegen, mit einem Platzhaltereintrag.** Ein Versprechen ohne
@@ -120,6 +168,16 @@ einzigen Kind gelegt hat, statt das Menü zweimal zu bauen.
 **Den Archiveintrag ebenfalls am Schalter hängen.** Verletzte GeBüV Art. 6 Abs. 1 und wäre
 zudem widersprüchlich: der Endpunkt dahinter bleibt aus demselben Grund auch abgeschaltet offen.
 
+**`NavGroup` ein `module`-Feld geben** (nachgetragen mit #92). Es läse sich sauberer als drei
+Einträge, die denselben Code tragen, und wäre die zweite Stelle, an der `ACCOUNTING` steht. Die
+erste Gruppe, die einen Eintrag **ohne** Schalter bekommt — das Archiv in #94 —, verschwände
+damit mitsamt dem Eintrag, den GeBüV Art. 6 Abs. 1 gerade sichtbar halten will. Eine Gruppe ist
+eine Überschrift; sichtbar oder nicht sind ihre Einträge.
+
+**Die Gruppe ans Ende der Leiste setzen** (nachgetragen mit #92). Sie stünde dann unter
+Stammdaten und Einstellungen — also die tägliche Arbeit hinter der Einrichtung. Die Reihenfolge
+der Gruppen ist die des Arbeitstags.
+
 ## Konsequenzen
 
 - `layout/navigation.ts` bekommt einen Ordner mit einem Kind; `App.tsx` eine Route unter
@@ -136,12 +194,21 @@ zudem widersprüchlich: der Endpunkt dahinter bleibt aus demselben Grund auch ab
 - `AppShell.NavItem` und `NavCounterKey` bleiben unangetastet. Ein Zähler für Buchungsentwürfe
   gehört zu der Auslieferung, die Entwürfe erzeugt.
 
+**Mit #92 kommt dazu:**
+
+- `NAV_GROUPS` bekommt die Gruppe «Buchhaltung» zwischen «Verkauf» und «Lager», mit den drei
+  Einträgen aus Abschnitt 5; `navigation.test.ts` löst `accountingHasNoOwnGroupYetTest` durch die
+  Prüfung ab, dass die Gruppe an ihrem Platz steht, ihre drei Einträge `module: 'ACCOUNTING'`
+  tragen und ohne den Schalter die **ganze** Gruppe verschwindet.
+- `lib/accounting.ts` bekommt `ENTRY_PATH`, `DRAFT_PATH` und `JOURNAL_PATH` sowie die
+  Cache-Schlüssel und Verben der Buchung; `App.tsx` drei Routen.
+- `NavGroup`, `NavCounterKey` und `AppShell.NavItem` bleiben weiterhin unverändert.
+
 ## Offen
 
-Beides ist zugewiesen, keines eine offene Frage:
+Zugewiesen, keine offene Frage:
 
-- **Die Menügruppe «Buchhaltung» — #92.** Sie entsteht mit dem ersten Bildschirm, der etwas
-  buchen kann, und dem Journal, in dem man das Gebuchte wiederfindet. Dieses ADR wird dort um
-  ihren Aufbau ergänzt.
-- **Der Archiveintrag `/buchhaltung/archiv` — #94.** Ohne `module`-Feld, aus dem oben genannten
-  Grund. Dieses ADR wird dort um ihn ergänzt.
+- **Der Archiveintrag `/buchhaltung/archiv` — #94.** Ohne `module`-Feld, aus dem in Abschnitt 3
+  genannten Grund. Dieses ADR wird dort um ihn ergänzt.
+- **Der Zähler `ACCOUNTING_DRAFTS` am Eintrag «Entwürfe» — #94**, zusammen mit der
+  Verallgemeinerung von `AppShell.NavItem`.

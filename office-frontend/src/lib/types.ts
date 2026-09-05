@@ -83,6 +83,11 @@ export type CatalogueName =
   // 959a/959b, and a self-made French one would end up on a signed annual account. `labels`
   // stays empty until the official versions have been checked line by line (backend ADR-0112).
   | 'or-position'
+  // Both from `AccountingCatalogues`, and both renamable by the tenant: the journal filters
+  // «Buchungsart» and «Herkunft» take their wording from here and never from a constant in this
+  // frontend (ADR-0017, backend ADR-0114).
+  | 'entry-kind'
+  | 'entry-source'
 
 /** One value of a structural enum, as `/api/tenants/{id}/catalogues` returns it. */
 export type CatalogueEntry = {
@@ -3782,4 +3787,221 @@ export type PostingWindow = {
   fiscalYearId?: number | null
   /** The last blocked day; absent for the three answers a fiscal year gives. */
   lockedUntil?: string | null
+}
+
+// --- die Buchung (Modul accounting, backend ADR-0114, ADR-0115) ----------------------------
+
+/**
+ * Where an entry came from.
+ *
+ * <p>`MANUAL` is the only one this stage writes. The others are the doors the document, the
+ * payment and the bank statement will post through later; the journal filter offers all five,
+ * and its wording comes from the catalogue `entry-source` (backend ADR-0114).
+ */
+export type EntrySource = 'MANUAL' | 'DOCUMENT' | 'PAYMENT' | 'BANK' | 'SYSTEM'
+
+/**
+ * One line of an entry, as `EntryLineDto` sends it.
+ *
+ * <p>The frozen copies travel beside the ids: on a draft the read model fills them from the
+ * account and the tax code, on a posted line they are what was frozen when it was posted and
+ * the only answer there is. A renamed account must not change a statement printed years ago.
+ *
+ * <p>`taxGenerated` marks the line the application wrote itself. It shows in the journal and
+ * is never an input row on the entry screen.
+ */
+export type EntryLine = {
+  /** Absent on a line that was never stored. */
+  id?: number | null
+  /** Position in the entry, from 1. The server hands it out, never the screen. */
+  lineNumber: number
+  accountId: number
+  accountNumber?: string | null
+  accountName?: string | null
+  /** What the entry screen reads its effect line off. */
+  accountType?: AccountType | null
+  orPosition?: OrPositionCode | null
+  debit?: number | null
+  credit?: number | null
+  /** Absent to fall back to the entry text. */
+  text?: string | null
+  currencyCode?: string | null
+  originalAmount?: number | null
+  exchangeRate?: number | null
+  exchangeRateUnit: number
+  exchangeRateDate?: string | null
+  taxCodeId?: number | null
+  taxCode?: string | null
+  taxRate?: number | null
+  taxKind?: TaxKind | null
+  /** The consideration the tax was worked out of; never on the generated tax line. */
+  taxBase?: number | null
+  taxAmount?: number | null
+  estvDigit?: string | null
+  taxGenerated: boolean
+}
+
+/**
+ * One entry with its lines, as `EntryDto` sends it — a draft as well as one in the journal.
+ *
+ * <p>One payload for both states. The fields a draft leaves empty — `entryNumber`,
+ * `chainNumber`, `postedAt`, `postedBy` — are exactly the ones only posting produces, and
+ * `posted` says in one flag which of the two a screen is looking at. There is no status:
+ * whether an entry is in the books follows from the moment it was written (backend ADR-0114).
+ */
+export type Entry = {
+  id?: number | null
+  fiscalYearId: number
+  bookingDate: string
+  entryKind: EntryKind
+  source: EntrySource
+  description: string
+  documentReference: string
+  sourceKind?: string | null
+  sourceId?: number | null
+  currencyCode: string
+  /** The journal number, absent while it is a draft. */
+  entryNumber?: string | null
+  /** The entry this one reverses; set on a counter entry only. */
+  reversesEntryId?: number | null
+  reversalReason?: string | null
+  chainNumber?: number | null
+  postedAt?: string | null
+  postedBy?: string | null
+  posted: boolean
+  /** What the entry moves: the debit sum, and therefore the credit sum as well. */
+  amount: number
+  lines: EntryLine[]
+}
+
+/** What the draft list says about itself, above its rows — `EntryDto.AttentionDto`. */
+export type EntryAttention = {
+  drafts: number
+  draftTotal: number
+  /** Absent for a tenant that cannot keep books here at all. */
+  currencyCode?: string | null
+  /** Absent where nothing is waiting. */
+  oldestBookingDate?: string | null
+  /** The last locked day; absent where nothing is locked. */
+  lockingOn?: string | null
+}
+
+/**
+ * One row of the journal, as `JournalRowDto` sends it.
+ *
+ * <p>`amount` is the debit sum and, because no unbalanced entry can exist, the credit sum as
+ * well. The screen puts the one figure in both columns of the head row.
+ */
+export type JournalRow = {
+  id: number
+  entryNumber: string
+  bookingDate: string
+  entryKind: EntryKind
+  source: EntrySource
+  description: string
+  documentReference: string
+  currencyCode: string
+  amount: number
+  /** Set on a counter entry: what marks the row and what it links back to. */
+  reversesEntryId?: number | null
+  reversalReason?: string | null
+  chainNumber: number
+  postedAt: string
+  postedBy: string
+  lines: EntryLine[]
+}
+
+/**
+ * What a run over the hash chain found, as `IntegrityDto` sends it.
+ *
+ * <p>A break and a gap are reported separately: a break means a stored entry no longer matches
+ * its hash, a gap means a chain number is missing (backend ADR-0115).
+ */
+export type ChainIntegrity = {
+  checkedAt: string
+  entryCount: number
+  intact: boolean
+  brokenAt?: number | null
+  gapAt?: number | null
+  message: string
+}
+
+/**
+ * One line as the entry screen sends it.
+ *
+ * <p>Five fields, and the screen has no more: no currency, no rate and no line number. The
+ * lines are numbered 1..n in the order they arrive (backend ADR-0114).
+ */
+export type EntryLineRequest = {
+  accountId: number
+  debit?: number | null
+  credit?: number | null
+  text?: string | null
+  taxCodeId?: number | null
+}
+
+/**
+ * What the entry screen sends to store or change a draft.
+ *
+ * <p>Neither the currency nor the fiscal year is in here: the year follows from the booking
+ * date and the currency from the accounting settings.
+ */
+export type EntryRequest = {
+  bookingDate: string
+  /** Left out counts as `NORMAL`, and only that one is written in this stage. */
+  entryKind?: EntryKind
+  description: string
+  documentReference: string
+  lines: EntryLineRequest[]
+}
+
+/** What the reversal dialog sends. The booking date left out means the day of the original. */
+export type ReversalRequest = {
+  reversalReason: string
+  bookingDate?: string
+}
+
+/** What became of one entry in a posting run. */
+export type PostOutcome = 'POSTED' | 'SKIPPED' | 'FAILED'
+
+/** One line of the three result lists of a posting run. */
+export type PostRunOutcome = {
+  entryId: number
+  outcome: PostOutcome
+  /** The journal number it was given; absent unless it was posted. */
+  entryNumber?: string | null
+  /** Why it was skipped or what went wrong; absent on a posted entry. */
+  message?: string | null
+}
+
+/**
+ * What a posting run did, as `PostRunResultDto` sends it.
+ *
+ * <p>Three lists and not a count: a run opens one transaction per entry, so «5 verbucht» is
+ * never the whole story (backend ADR-0102, ADR-0109).
+ */
+export type PostRunResult = {
+  posted: PostRunOutcome[]
+  skipped: PostRunOutcome[]
+  failed: PostRunOutcome[]
+}
+
+/** One entry a run would leave alone, with the sentence saying why. */
+export type PostRunBlocked = {
+  entryId: number
+  reason: string
+}
+
+/**
+ * What a run would do, before anything is written.
+ *
+ * <p>`firstNumber` and `lastNumber` are **always** absent in this stage: naming them would mean
+ * reading the counter of `numbering`, and that counter never leaves that module. The dialog
+ * therefore names no number range (backend ADR-0114, frontend ADR-0045).
+ */
+export type PostRunPreview = {
+  postable: number[]
+  blocked: PostRunBlocked[]
+  firstNumber?: string | null
+  lastNumber?: string | null
 }

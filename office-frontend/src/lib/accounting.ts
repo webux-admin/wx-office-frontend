@@ -8,22 +8,39 @@
  * written twice is a cache that goes stale in one of them.
  */
 import { api } from './api'
+import { parseDecimal } from './format'
+import { listQuery } from './paging'
+import {
+  clearSessionFamily,
+  clearSessionText,
+  readSessionText,
+  writeSessionText,
+} from './preferences'
 import type {
   Account,
   AccountRequest,
   AccountType,
   BoundarySource,
+  ChainIntegrity,
   ChartCopyRequest,
   ChartCopyResult,
   ChartTemplate,
+  Entry,
+  EntryAttention,
+  EntryRequest,
   FiscalYear,
   FiscalYearList,
   FiscalYearPreview,
   FiscalYearRequest,
   FiscalYearStatus,
+  JournalRow,
   Page,
   PositionHint,
+  PostRunPreview,
+  PostRunResult,
+  ReversalRequest,
   SystemKey,
+  TaxCode,
   TaxCodeCatalogue,
 } from './types'
 
@@ -771,4 +788,642 @@ function addDays(day: string, days: number): string {
   const [year, month, date] = day.split('-').map(Number)
   const moved = new Date(Date.UTC(year, month - 1, date + days))
   return moved.toISOString().slice(0, 10)
+}
+
+// --- die Buchung ---------------------------------------------------------------------------
+
+/**
+ * Path of the entry screen within the application.
+ *
+ * <p>`/buchhaltung/buchen/:id` opens the same mask on a draft that is already stored. One mask
+ * and not two: what is typed is the same thing either way, and a second one would be the second
+ * place the live difference is worked out (ADR-0045).
+ */
+export const ENTRY_PATH = '/buchhaltung/buchen'
+
+/** Path of the draft list within the application. */
+export const DRAFT_PATH = '/buchhaltung/entwuerfe'
+
+/** Path of the journal within the application. */
+export const JOURNAL_PATH = '/buchhaltung/journal'
+
+/**
+ * The fields the two lists may be sorted by.
+ *
+ * <p>Word for word the whitelist of `PageRequests`: the server answers 400 for anything else, so
+ * a column offering a sort the endpoint does not know would be a table nobody can click.
+ */
+export const ENTRY_SORT_FIELDS: readonly string[] = [
+  'entryNumber',
+  'description',
+  'documentReference',
+  'bookingDate',
+  'postedAt',
+  'createdAt',
+]
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns address of the drafts of that tenant
+ */
+export function entriesUrl(tenantId: number, query = ''): string {
+  return `${accountingUrl(tenantId)}/entries${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values the page was asked for
+ * @returns cache key of one page of drafts
+ */
+export function entriesKey(tenantId: number, query = ''): readonly unknown[] {
+  return ['accounting-entries', tenantId, query]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param entryId the entry
+ * @returns address of one entry, draft or posted
+ */
+export function entryUrl(tenantId: number, entryId: number): string {
+  return `${accountingUrl(tenantId)}/entries/${entryId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param entryId the entry
+ * @returns cache key of one entry
+ */
+export function entryKey(tenantId: number, entryId: number): readonly unknown[] {
+  return ['accounting-entry', tenantId, entryId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of what the draft list says about itself
+ */
+export function attentionUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/entries/attention`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the draft summary
+ */
+export function attentionKey(tenantId: number): readonly unknown[] {
+  return ['accounting-attention', tenantId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns address of the journal
+ */
+export function journalUrl(tenantId: number, query = ''): string {
+  return `${accountingUrl(tenantId)}/journal${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values the page was asked for
+ * @returns cache key of one page of the journal
+ */
+export function journalKey(tenantId: number, query = ''): readonly unknown[] {
+  return ['accounting-journal', tenantId, query]
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the run over the hash chain
+ */
+export function integrityUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/integrity`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the integrity answer
+ */
+export function integrityKey(tenantId: number): readonly unknown[] {
+  return ['accounting-integrity', tenantId]
+}
+
+/**
+ * One page of drafts. Answers while the module is off.
+ *
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns the matching page, oldest booking date first unless another order was asked for
+ */
+export function fetchEntries(tenantId: number, query = ''): Promise<Page<Entry>> {
+  return api.get<Page<Entry>>(entriesUrl(tenantId, query))
+}
+
+/**
+ * One entry with its lines.
+ *
+ * @param tenantId the tenant
+ * @param entryId the entry
+ * @returns the entry, posted or not
+ */
+export function fetchEntry(tenantId: number, entryId: number): Promise<Entry> {
+  return api.get<Entry>(entryUrl(tenantId, entryId))
+}
+
+/**
+ * How many drafts are waiting, what they add up to and since when.
+ *
+ * @param tenantId the tenant
+ * @returns the summary the draft list carries above its rows
+ */
+export function fetchAttention(tenantId: number): Promise<EntryAttention> {
+  return api.get<EntryAttention>(attentionUrl(tenantId))
+}
+
+/**
+ * One page of the journal. Posted entries only, and it answers while the module is off — what is
+ * booked stays readable (OR Art. 958f).
+ *
+ * @param tenantId the tenant
+ * @param query the filter and paging values, the fiscal year among them
+ * @returns the matching page
+ */
+export function fetchJournal(tenantId: number, query = ''): Promise<Page<JournalRow>> {
+  return api.get<Page<JournalRow>>(journalUrl(tenantId, query))
+}
+
+/**
+ * Walks the hash chain and says whether it is intact.
+ *
+ * @param tenantId the tenant
+ * @returns what the run found, with the German sentence to show
+ */
+export function fetchIntegrity(tenantId: number): Promise<ChainIntegrity> {
+  return api.get<ChainIntegrity>(integrityUrl(tenantId))
+}
+
+/**
+ * Stores a draft.
+ *
+ * <p>Answers 400 where the entry does not balance, has fewer than two lines, sits outside its
+ * fiscal year or breaks one of the posting rules. The sentence comes from the backend and names
+ * both sums — the screen never writes one of its own.
+ *
+ * @param tenantId the tenant
+ * @param request what somebody typed
+ * @returns the stored draft, its lines numbered 1..n
+ */
+export function createEntry(tenantId: number, request: EntryRequest): Promise<Entry> {
+  return api.post<Entry>(entriesUrl(tenantId), request)
+}
+
+/**
+ * Changes a draft that is not posted yet.
+ *
+ * @param tenantId the tenant
+ * @param entryId the draft
+ * @param request what somebody typed
+ * @returns the stored draft
+ */
+export function updateEntry(
+  tenantId: number,
+  entryId: number,
+  request: EntryRequest,
+): Promise<Entry> {
+  return api.put<Entry>(entryUrl(tenantId, entryId), request)
+}
+
+/**
+ * Removes a draft. Answers 409 once it is posted — from then on only a counter entry corrects
+ * it.
+ *
+ * @param tenantId the tenant
+ * @param entryId the draft
+ */
+export function deleteEntry(tenantId: number, entryId: number): Promise<void> {
+  return api.delete<void>(entryUrl(tenantId, entryId))
+}
+
+/**
+ * Posts one draft: journal number, chain position, the frozen columns and the tax line.
+ *
+ * <p>After this nothing about the entry can be changed or removed any more.
+ *
+ * @param tenantId the tenant
+ * @param entryId the draft
+ * @returns the entry as it now stands in the journal
+ */
+export function postEntry(tenantId: number, entryId: number): Promise<Entry> {
+  return api.post<Entry>(`${entryUrl(tenantId, entryId)}/post`, {})
+}
+
+/**
+ * Reverses a posted entry with a counter entry that is posted at once.
+ *
+ * @param tenantId the tenant
+ * @param entryId the posted entry
+ * @param request the reason, and the day the counter entry sits on
+ * @returns the counter entry
+ */
+export function reverseEntry(
+  tenantId: number,
+  entryId: number,
+  request: ReversalRequest,
+): Promise<Entry> {
+  return api.post<Entry>(`${entryUrl(tenantId, entryId)}/reverse`, request)
+}
+
+/**
+ * How many characters of a reversal reason fit, given the journal number it is written beside.
+ *
+ * <p>The reason is not stored on its own. The backend builds «Storno zu &lt;Journalnummer&gt;:
+ * &lt;Grund&gt;» out of it and writes that sentence to the description of the counter entry and
+ * to the text of every one of its lines — two `VARCHAR(200)` columns. So the room is 200 less
+ * the prefix, and it shrinks as the journal number grows: 177 characters beside «2026-000045».
+ *
+ * <p><b>The three constants are copied from `PostingManagement`, not guessed.</b> The mask uses
+ * this to stop the typing where the endpoint stops it, so nobody writes two sentences and reads
+ * a refusal only after pressing the button. The refusal itself stays where it belongs: this is
+ * a convenience, and the backend remains the one that decides.
+ *
+ * @param entryNumber the journal number of the entry being reversed
+ * @returns how many characters the reason may have, never below zero
+ */
+export function reversalReasonRoom(entryNumber: string): number {
+  const room = REVERSAL_TEXT_LIMIT - REVERSAL_PREFIX.length - entryNumber.length
+    - REVERSAL_SEPARATOR.length
+  return Math.max(0, room)
+}
+
+/** `accounting_entry.description` and `accounting_entry_line.text` are both `VARCHAR(200)`. */
+const REVERSAL_TEXT_LIMIT = 200
+const REVERSAL_PREFIX = 'Storno zu '
+const REVERSAL_SEPARATOR = ': '
+
+/**
+ * What a posting run would do, before anything is written.
+ *
+ * <p>The one reading way of this module that answers 409 while the module is off: it writes
+ * nothing but it announces a write. `firstNumber` and `lastNumber` come back empty in this
+ * stage, so the dialog names no number range (backend ADR-0114).
+ *
+ * @param tenantId the tenant
+ * @param entryIds the drafts that were ticked
+ * @returns which would be posted, and why the others would not
+ */
+export function previewPostRun(
+  tenantId: number,
+  entryIds: readonly number[],
+): Promise<PostRunPreview> {
+  const query = listQuery({ entryIds: entryIds.map(String) })
+  return api.get<PostRunPreview>(
+    `${accountingUrl(tenantId)}/entries/post-run/preview${query === '' ? '' : `?${query}`}`,
+  )
+}
+
+/**
+ * Posts the ticked drafts, one transaction each.
+ *
+ * <p>The run does not tip over: a draft that cannot be posted lands in `skipped` or `failed`
+ * with its sentence, and the others go into the journal all the same.
+ *
+ * @param tenantId the tenant
+ * @param entryIds the drafts that were ticked; empty posts nothing
+ * @returns the three result lists
+ */
+export function runPost(tenantId: number, entryIds: readonly number[]): Promise<PostRunResult> {
+  return api.post<PostRunResult>(`${accountingUrl(tenantId)}/entries/post-run`, {
+    entryIds: [...entryIds],
+  })
+}
+
+// --- was die Erfassungsmaske selbst rechnet ------------------------------------------------
+
+/**
+ * One row of the entry grid while it is being typed.
+ *
+ * <p>The amounts are the raw field values and not numbers: a field somebody is in the middle of
+ * typing holds «1'2» for a moment, and turning that into a number would move the caret. The one
+ * place they become numbers is {@link entryBalance} and the request builder.
+ */
+export type EntryDraftRow = {
+  /** Identifies the row inside the mask. Never sent — the server numbers the lines. */
+  key: number
+  accountId: number | null
+  /** What stands in the account field, so a half typed number survives a page change too. */
+  accountText: string
+  debit: string
+  credit: string
+  taxCodeId: number | null
+}
+
+/** What the entry mask keeps while somebody is typing. */
+export type EntryDraftState = {
+  bookingDate: string
+  documentReference: string
+  description: string
+  rows: EntryDraftRow[]
+}
+
+/**
+ * The family of keys the rescued typing state is kept under, without the `webux.` prefix.
+ *
+ * <p>The tenant id is part of the key and has to be: without it, whoever switches tenant would
+ * get the half typed entry of **another business** into their mask — account numbers and
+ * amounts included (ADR-0045).
+ */
+export const ENTRY_DRAFT_PREFIX = 'accounting.draft.'
+
+/**
+ * @param tenantId the tenant
+ * @returns the key of the rescued typing state, without the `webux.` prefix
+ */
+export function entryDraftKey(tenantId: number): string {
+  return `${ENTRY_DRAFT_PREFIX}${tenantId}`
+}
+
+/**
+ * The typing state left behind for this tenant, and nothing else.
+ *
+ * <p>Reading also throws away what was left lying for **every other** tenant, which is what
+ * makes a tenant change clear the mask. A value that cannot be read as a state is dropped
+ * rather than reported: a rescued draft is a convenience, and a broken one is worth no error
+ * message.
+ *
+ * @param tenantId the tenant the mask is open for
+ * @returns what was typed, or null where nothing was left
+ */
+export function readEntryDraft(tenantId: number): EntryDraftState | null {
+  clearSessionFamily(ENTRY_DRAFT_PREFIX, entryDraftKey(tenantId))
+  const stored = readSessionText(entryDraftKey(tenantId))
+  if (stored === null) return null
+  try {
+    const state = JSON.parse(stored) as EntryDraftState
+    if (!Array.isArray(state?.rows)) return null
+    return state
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Keeps what is being typed, so a page change does not lose it.
+ *
+ * @param tenantId the tenant the mask is open for
+ * @param state what stands in the mask
+ */
+export function writeEntryDraft(tenantId: number, state: EntryDraftState): void {
+  writeSessionText(entryDraftKey(tenantId), JSON.stringify(state))
+}
+
+/**
+ * Throws the rescued state away.
+ *
+ * <p>Called after a successful save. Without it a state stays behind that looks like an unsaved
+ * entry, and the next person types the same booking a second time (ADR-0045).
+ *
+ * @param tenantId the tenant the mask is open for
+ */
+export function clearEntryDraft(tenantId: number): void {
+  clearSessionText(entryDraftKey(tenantId))
+}
+
+/** An empty mask: today, no voucher, no text, and two rows, because an entry has two sides. */
+export function emptyEntryDraft(today: string): EntryDraftState {
+  return {
+    bookingDate: today,
+    documentReference: '',
+    description: '',
+    rows: [emptyEntryRow(1), emptyEntryRow(2)],
+  }
+}
+
+/**
+ * @param key the row key
+ * @returns a row with nothing in it
+ */
+export function emptyEntryRow(key: number): EntryDraftRow {
+  return { key, accountId: null, accountText: '', debit: '', credit: '', taxCodeId: null }
+}
+
+/**
+ * The accounts a typed term may mean, by number **or** by name.
+ *
+ * <p>Somebody types «miete» and gets «6000 Raumaufwand»; somebody types «6000» and gets the
+ * same. Accounts that are switched off or that only the closing posts to do not appear at all —
+ * **a convenience and no barrier**: the barrier stands in `PostingRules` and in a database guard
+ * (ADR-0045).
+ *
+ * @param accounts the chart as it was read
+ * @param term what stands in the field, trimmed
+ * @param limit how many to offer at most
+ * @returns the matches, by account number
+ */
+export function searchAccounts(
+  accounts: readonly Account[],
+  term: string,
+  limit = 8,
+): Account[] {
+  const needle = term.trim().toLowerCase()
+  const open = accounts.filter((account) => account.active && account.directPostingAllowed)
+  const matching =
+    needle === ''
+      ? open
+      : open.filter(
+          (account) =>
+            account.accountNumber.toLowerCase().startsWith(needle)
+            || account.name.toLowerCase().includes(needle),
+        )
+  return [...matching]
+    .sort((one, other) => one.accountNumber.localeCompare(other.accountNumber))
+    .slice(0, limit)
+}
+
+/** What the two columns of the grid add up to, and what is missing between them. */
+export type EntryBalance = {
+  debit: number
+  credit: number
+  /** Debit minus credit. Zero is the only value the entry may be stored with. */
+  difference: number
+}
+
+/**
+ * Adds the two columns up as they stand in the fields.
+ *
+ * <p>Counted in whole rappen rather than in francs: adding 0.1 and 0.2 as binary fractions
+ * leaves a difference of 0.00000000000000004, which would be shown as 0.00 and be red.
+ *
+ * <p><b>This is a display and no validation.</b> The server adds the same two columns in
+ * `EntryBalance` and is the only one that says «ausgeglichen»; the figure is not sent along
+ * (ADR-0045).
+ *
+ * @param rows the rows as they stand in the mask
+ * @returns both sums and the difference between them
+ */
+export function entryBalance(
+  rows: readonly { debit: string; credit: string }[],
+): EntryBalance {
+  const rappen = (raw: string) => Math.round((parseDecimal(raw) ?? 0) * 100)
+  const debit = rows.reduce((sum, row) => sum + rappen(row.debit), 0)
+  const credit = rows.reduce((sum, row) => sum + rappen(row.credit), 0)
+  return { debit: debit / 100, credit: credit / 100, difference: (debit - credit) / 100 }
+}
+
+/**
+ * What one line does to its account, in words — the weak read-back of ADR-0045.
+ *
+ * <p>It stands **at one place only**, under its line in the box «So wird gebucht», and nowhere
+ * else: not as a column heading, not as a placeholder, not in the journal. Soll and Haben stay
+ * the only vocabulary everywhere else.
+ *
+ * <p>A `CLOSING` account gets none. It is not in the table the decision names, and the only one
+ * shipped cannot be posted to by hand at all.
+ *
+ * @param accountType the type of the account the line sits on
+ * @param side which column carries the amount
+ * @returns the sentence without the amount, or undefined where there is nothing to say
+ */
+export function effectPhrase(
+  accountType: AccountType | null | undefined,
+  side: 'debit' | 'credit',
+): string | undefined {
+  if (!accountType) return undefined
+  const phrases = EFFECT_PHRASES[accountType]
+  return phrases === undefined ? undefined : phrases[side]
+}
+
+/** The table of ADR-0045 section 3, and the only place it is written down. */
+const EFFECT_PHRASES: Partial<Record<AccountType, { debit: string; credit: string }>> = {
+  ASSET: { debit: 'Guthaben steigt um', credit: 'Guthaben sinkt um' },
+  LIABILITY: { debit: 'Schuld sinkt um', credit: 'Schuld steigt um' },
+  EQUITY: { debit: 'Eigenkapital sinkt um', credit: 'Eigenkapital steigt um' },
+  EXPENSE: { debit: 'Aufwand steigt um', credit: 'Aufwand sinkt um' },
+  REVENUE: { debit: 'Ertrag sinkt um', credit: 'Ertrag steigt um' },
+}
+
+/** What a gross amount falls apart into at one rate. */
+export type TaxSplit = { net: number; tax: number }
+
+/**
+ * Takes the tax out of a gross amount, the way `TaxSplit.splitOf` does it.
+ *
+ * <p>Two decimals, half up, and the tax as gross minus net rather than rounded on its own, so
+ * the three figures always add up exactly. A rate of zero splits nothing.
+ *
+ * <p><b>A preview and no calculation of record.</b> The server works the same split out again
+ * when the entry is posted, and what it writes is what counts.
+ *
+ * @param gross what stands in the field
+ * @param rate the percentage of the tax code, three decimals
+ * @returns the net that stays on the typed account and the tax that moves, or null at rate zero
+ */
+export function taxSplitOf(gross: number, rate: number): TaxSplit | null {
+  if (!Number.isFinite(gross) || !Number.isFinite(rate) || rate === 0) return null
+  const grossRappen = Math.round(gross * 100)
+  const netRappen = Math.round(grossRappen / (1 + rate / 100))
+  const taxRappen = grossRappen - netRappen
+  if (taxRappen === 0) return null
+  return { net: netRappen / 100, tax: taxRappen / 100 }
+}
+
+/** One line of the box «So wird gebucht». */
+export type PostingPreviewLine = {
+  accountNumber: string
+  accountName: string
+  accountType: AccountType | null
+  side: 'debit' | 'credit'
+  amount: number
+  /** What the application writes itself: the tax line. It is no input row. */
+  generated: boolean
+  /** The text the generated line carries, word for word the one the backend writes. */
+  text?: string
+}
+
+/**
+ * The finished entry as posting will write it, tax line included.
+ *
+ * <p>Mirrors the order of the backend: the typed lines first, in the order they stand, then the
+ * generated tax lines. Where a line carries a tax code with a rate, the typed amount shrinks to
+ * the net and the tax moves to the tax account **on the same side** — that is what keeps the
+ * entry balanced (backend `TaxSplit`).
+ *
+ * <p><b>«zu Zeile n» counts the lines that are sent, not the rows of the grid.</b>
+ * {@link entryRequestOf} leaves out what carries no account, and the backend numbers what
+ * arrives 1..n. Counting the grid instead would let an empty row above a taxed one name a line
+ * number the journal never shows.
+ *
+ * @param rows the rows as they stand in the mask
+ * @param accounts the chart, to resolve number, name and type
+ * @param taxCodes the tax codes of the tenant
+ * @returns the lines to show, empty while nothing usable is typed
+ */
+export function postingPreviewOf(
+  rows: readonly EntryDraftRow[],
+  accounts: readonly Account[],
+  taxCodes: readonly TaxCode[],
+): PostingPreviewLine[] {
+  const typed: PostingPreviewLine[] = []
+  const generated: PostingPreviewLine[] = []
+  let lineNumber = 0
+  rows.forEach((row) => {
+    if (row.accountId === null) return
+    lineNumber += 1
+    const account = accounts.find((candidate) => candidate.id === row.accountId)
+    if (account === undefined) return
+    const debit = parseDecimal(row.debit) ?? 0
+    const credit = parseDecimal(row.credit) ?? 0
+    const side: 'debit' | 'credit' = debit !== 0 ? 'debit' : 'credit'
+    const gross = debit !== 0 ? debit : credit
+    if (gross === 0) return
+
+    const code = taxCodes.find((candidate) => candidate.id === row.taxCodeId)
+    const split = code === undefined ? null : taxSplitOf(gross, code.rate)
+    typed.push({
+      accountNumber: account.accountNumber,
+      accountName: account.name,
+      accountType: account.accountType,
+      side,
+      amount: split === null ? gross : split.net,
+      generated: false,
+    })
+    if (split === null || code === undefined || !code.taxAccountNumber) return
+    const taxAccount = accounts.find(
+      (candidate) => candidate.accountNumber === code.taxAccountNumber,
+    )
+    generated.push({
+      accountNumber: code.taxAccountNumber,
+      accountName: code.taxAccountName ?? '',
+      accountType: taxAccount?.accountType ?? null,
+      side,
+      amount: split.tax,
+      generated: true,
+      text: `MWST ${code.code} zu Zeile ${lineNumber}`,
+    })
+  })
+  return [...typed, ...generated]
+}
+
+/**
+ * Turns the mask into what the endpoint takes.
+ *
+ * <p>Rows without an account and without an amount are left out: the last row of a grid is
+ * almost always the empty one somebody stopped typing in.
+ *
+ * @param state what stands in the mask
+ * @returns the payload of `POST /entries` and `PUT /entries/{id}`
+ */
+export function entryRequestOf(state: EntryDraftState): EntryRequest {
+  return {
+    bookingDate: state.bookingDate,
+    description: state.description,
+    documentReference: state.documentReference,
+    lines: state.rows
+      .filter((row) => row.accountId !== null)
+      .map((row) => ({
+        accountId: row.accountId as number,
+        debit: parseDecimal(row.debit),
+        credit: parseDecimal(row.credit),
+        taxCodeId: row.taxCodeId,
+      })),
+  }
 }

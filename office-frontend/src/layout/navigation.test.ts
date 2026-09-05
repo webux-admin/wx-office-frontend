@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  DRAFT_PATH,
+  ENTRY_PATH,
   FISCAL_YEARS_PATH,
   CHART_OF_ACCOUNTS_PATH,
+  JOURNAL_PATH,
   TAX_CODES_PATH,
 } from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
@@ -877,9 +880,88 @@ describe('the accounting folder', () => {
     expect(folderFor(FISCAL_YEARS_PATH, all, (module) => module !== 'ACCOUNTING')).toBeNull()
   })
 
-  /** In this state there is nothing to post and nothing to read back. */
-  it('accountingHasNoOwnGroupYetTest', () => {
-    expect(NAV_GROUPS.map((group) => group.title)).not.toContain('Buchhaltung')
-    expect(visibleNavGroups(all, all).map((group) => group.title)).not.toContain('Buchhaltung')
+  /** The two live side by side: set up in the folder, worked in the group (ADR-0011). */
+  it('accountingFolderStandsBesideTheGroupTest', () => {
+    expect(NAV_GROUPS.map((group) => group.title)).toContain('Buchhaltung')
+    expect(accounting()).toBeDefined()
+  })
+})
+
+/**
+ * The menu group «Buchhaltung», built with #92.
+ *
+ * <p>It replaces `accountingHasNoOwnGroupYetTest`, which held the earlier state on purpose so
+ * that the group would appear deliberately and not in passing (ADR-0044 section 2). This is the
+ * delivery that gives it a content, so the old assertion is not weakened but answered.
+ */
+describe('the accounting group', () => {
+  const all = () => true
+
+  function group() {
+    return NAV_GROUPS.find((candidate) => candidate.title === 'Buchhaltung')
+  }
+
+  it('accountingGroupHasThreeEntriesTest', () => {
+    const entries = flattenNav(group()?.entries ?? [])
+
+    expect(entries.map((entry) => entry.label)).toEqual(['Buchen', 'Entwürfe', 'Journal'])
+    expect(entries.map((entry) => entry.href)).toEqual([ENTRY_PATH, DRAFT_PATH, JOURNAL_PATH])
+    // Typing needs the write right; reading what is waiting and what is booked needs the read
+    // one. Posting is asked for at the button, not at the menu entry.
+    expect(entries.map((entry) => entry.permission)).toEqual([
+      ACCOUNTING_RIGHTS.write,
+      ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
+    ])
+    expect(entries.map((entry) => entry.module)).toEqual([
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+    ])
+  })
+
+  /** The order of the groups is the order of the working day: sale, books, warehouse. */
+  it('accountingGroupStandsBetweenSalesAndInventoryTest', () => {
+    const titles = NAV_GROUPS.map((candidate) => candidate.title)
+
+    expect(titles.indexOf('Buchhaltung')).toBe(titles.indexOf('Verkauf') + 1)
+    expect(titles.indexOf('Lager')).toBe(titles.indexOf('Buchhaltung') + 1)
+  })
+
+  /**
+   * `NavGroup` carries no `module` field, and this is what stands in for one: all three entries
+   * fall, `visibleNavGroups` is left with an empty group and throws it away.
+   */
+  it('accountingGroupVanishesWithoutTheModuleTest', () => {
+    const withoutAccounting = visibleNavGroups(all, (module) => module !== 'ACCOUNTING')
+
+    expect(withoutAccounting.map((candidate) => candidate.title)).not.toContain('Buchhaltung')
+    const reachable = withoutAccounting
+      .flatMap((candidate) => flattenNav(candidate.entries))
+      .map((entry) => entry.href)
+    expect(reachable).not.toContain(ENTRY_PATH)
+    expect(reachable).not.toContain(DRAFT_PATH)
+    expect(reachable).not.toContain(JOURNAL_PATH)
+  })
+
+  /** The group is a heading and no folder: its entries carry no register strip. */
+  it('accountingGroupIsNoFolderTest', () => {
+    expect((group()?.entries ?? []).some(isFolder)).toBe(false)
+    expect(folderFor(ENTRY_PATH, all, all)).toBeNull()
+    expect(folderFor(DRAFT_PATH, all, all)).toBeNull()
+    expect(folderFor(JOURNAL_PATH, all, all)).toBeNull()
+  })
+
+  /** Somebody who may read but not type keeps the two reading screens and loses «Buchen». */
+  it('accountingGroupWithoutTheWriteRightTest', () => {
+    const reading = visibleNavGroups(
+      (permission) => permission !== ACCOUNTING_RIGHTS.write,
+      all,
+    ).find((candidate) => candidate.title === 'Buchhaltung')
+
+    expect(flattenNav(reading?.entries ?? []).map((entry) => entry.href)).toEqual([
+      DRAFT_PATH,
+      JOURNAL_PATH,
+    ])
   })
 })

@@ -58,8 +58,11 @@ import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  DRAFT_PATH,
+  ENTRY_PATH,
   FISCAL_YEARS_PATH,
   CHART_OF_ACCOUNTS_PATH,
+  JOURNAL_PATH,
   TAX_CODES_PATH,
 } from '../lib/accounting'
 import { basicDataFor } from '../lib/basicData'
@@ -404,6 +407,46 @@ export const NAV_GROUPS: NavGroup[] = [
             module: DUNNING_MODULE,
           },
         ],
+      },
+    ],
+  },
+  {
+    // Between «Verkauf» and «Lager», because the order of the groups is the order of the working
+    // day and not the alphabet: the bookkeeping follows the sale — booked is what was invoiced —
+    // and comes before the inventory, because it keeps the general ledger while the inventory is
+    // a subsidiary one (ADR-0044 section 5).
+    //
+    // NO `module` FIELD ON THE GROUP, and there will be none. `NavGroup` is a heading; visible
+    // or not are its entries. All three carry the switch, so `visibleNavGroups` is left with an
+    // empty group and throws it away — a second place holding `ACCOUNTING` would be the first
+    // one somebody forgets when an entry without a switch arrives (the archive of #94).
+    title: 'Buchhaltung',
+    entries: [
+      // Typing comes first: this is the screen somebody opens twenty times a day. The two
+      // reading screens follow it in the order a booking passes through them — first it lies in
+      // the drafts, then it stands in the journal.
+      {
+        label: 'Buchen',
+        icon: TableProperties,
+        href: ENTRY_PATH,
+        permission: ACCOUNTING_RIGHTS.write,
+        module: ACCOUNTING_MODULE,
+      },
+      // `ACCOUNTING_READ` and not the write right: reading what is waiting is a read. Posting
+      // needs `ACCOUNTING_POST`, and the screen asks for that at its button.
+      {
+        label: 'Entwürfe',
+        icon: ClipboardList,
+        href: DRAFT_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
+      },
+      {
+        label: 'Journal',
+        icon: BookOpen,
+        href: JOURNAL_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
       },
     ],
   },

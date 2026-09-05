@@ -39,7 +39,44 @@ import {
   suggestFiscalYearStart,
   taxCodesKey,
   taxCodesUrl,
+  DRAFT_PATH,
+  ENTRY_DRAFT_PREFIX,
+  ENTRY_PATH,
+  ENTRY_SORT_FIELDS,
+  JOURNAL_PATH,
+  attentionKey,
+  attentionUrl,
+  clearEntryDraft,
+  createEntry,
+  deleteEntry,
+  effectPhrase,
+  emptyEntryDraft,
+  emptyEntryRow,
+  entriesKey,
+  entriesUrl,
+  entryBalance,
+  entryDraftKey,
+  entryKey,
+  entryRequestOf,
+  entryUrl,
+  integrityKey,
+  integrityUrl,
+  journalKey,
+  journalUrl,
+  postEntry,
+  postingPreviewOf,
+  previewPostRun,
+  readEntryDraft,
+  reverseEntry,
+  reversalReasonRoom,
+  runPost,
+  searchAccounts,
+  taxSplitOf,
+  updateEntry,
+  writeEntryDraft,
+  type EntryDraftRow,
 } from './accounting'
+import type { Account, TaxCode } from './types'
 
 /** A role of the tenant, reduced to what the question is about. */
 function role(permissions: string[]) {
@@ -533,5 +570,761 @@ describe('suggestFiscalYearEnd', () => {
   /** And into one: the leap day itself is the last day of that year. */
   it('suggestFiscalYearEndIntoALeapYearTest', () => {
     expect(suggestFiscalYearEnd('2027-03-01')).toBe('2028-02-29')
+  })
+})
+
+// --- die Buchung ---------------------------------------------------------------------------
+
+/** An account of the chart, reduced to what the questions here are about. */
+function testAccount(over: Partial<Account>): Account {
+  return {
+    id: 1,
+    accountNumber: '1020',
+    name: 'Bankguthaben',
+    accountType: 'ASSET',
+    orPosition: 'UV_FLUESSIGE_MITTEL',
+    directPostingAllowed: true,
+    active: true,
+    ...over,
+  }
+}
+
+const CHART: Account[] = [
+  testAccount({ id: 1, accountNumber: '1020', name: 'Bankguthaben' }),
+  testAccount({
+    id: 2,
+    accountNumber: '2200',
+    name: 'Umsatzsteuer',
+    accountType: 'LIABILITY',
+    orPosition: 'KFK_UEBRIGE',
+  }),
+  testAccount({
+    id: 3,
+    accountNumber: '3400',
+    name: 'Dienstleistungsertrag',
+    accountType: 'REVENUE',
+    orPosition: 'ER_NETTOERLOESE',
+  }),
+  testAccount({
+    id: 4,
+    accountNumber: '6000',
+    name: 'Raumaufwand',
+    accountType: 'EXPENSE',
+    orPosition: 'ER_UEBRIGER_BETRIEBSAUFWAND',
+  }),
+  testAccount({
+    id: 5,
+    accountNumber: '6105',
+    name: 'Stillgelegt',
+    accountType: 'EXPENSE',
+    orPosition: 'ER_UEBRIGER_BETRIEBSAUFWAND',
+    active: false,
+  }),
+  testAccount({
+    id: 6,
+    accountNumber: '9200',
+    name: 'Jahresergebnis',
+    accountType: 'CLOSING',
+    orPosition: 'ABSCHLUSS',
+    directPostingAllowed: false,
+  }),
+]
+
+/** The output code at the normal rate, with its tax account. */
+const UST81: TaxCode = {
+  id: 11,
+  code: 'UST81',
+  name: 'Umsatzsteuer 8.1 %',
+  direction: 'OUTPUT',
+  kind: 'NORMAL',
+  rate: 8.1,
+  taxAccountNumber: '2200',
+  taxAccountName: 'Umsatzsteuer',
+  estvDigit: '302',
+  inTurnoverTotal: true,
+  validFrom: '2024-01-01',
+  active: true,
+  sortOrder: 100,
+}
+
+/** One of the real zero-rate cases: nothing is owed, so nothing is booked. */
+const USTEX: TaxCode = { ...UST81, id: 12, code: 'USTEX', name: 'Von der Steuer befreit', rate: 0 }
+
+function draftRow(over: Partial<EntryDraftRow>): EntryDraftRow {
+  return { ...emptyEntryRow(1), ...over }
+}
+
+describe('ENTRY_PATH', () => {
+  it('entryPathsTest', () => {
+    expect(ENTRY_PATH).toBe('/buchhaltung/buchen')
+    expect(DRAFT_PATH).toBe('/buchhaltung/entwuerfe')
+    expect(JOURNAL_PATH).toBe('/buchhaltung/journal')
+  })
+})
+
+describe('entriesUrl', () => {
+  it('entriesUrlTest', () => {
+    expect(entriesUrl(7, 'page=1&size=50')).toBe(
+      '/api/tenants/7/accounting/entries?page=1&size=50',
+    )
+  })
+
+  /** Nothing asked for: no `?` either, which the server would read as an empty filter. */
+  it('entriesUrlWithoutQueryTest', () => {
+    expect(entriesUrl(7)).toBe('/api/tenants/7/accounting/entries')
+  })
+})
+
+describe('entryUrl', () => {
+  it('entryUrlTest', () => {
+    expect(entryUrl(7, 45)).toBe('/api/tenants/7/accounting/entries/45')
+  })
+})
+
+describe('attentionUrl', () => {
+  it('attentionUrlTest', () => {
+    expect(attentionUrl(7)).toBe('/api/tenants/7/accounting/entries/attention')
+  })
+})
+
+describe('journalUrl', () => {
+  it('journalUrlTest', () => {
+    expect(journalUrl(7, 'fiscalYearId=3')).toBe(
+      '/api/tenants/7/accounting/journal?fiscalYearId=3',
+    )
+  })
+
+  it('journalUrlWithoutQueryTest', () => {
+    expect(journalUrl(7)).toBe('/api/tenants/7/accounting/journal')
+  })
+})
+
+describe('integrityUrl', () => {
+  it('integrityUrlTest', () => {
+    expect(integrityUrl(7)).toBe('/api/tenants/7/accounting/integrity')
+  })
+})
+
+describe('entriesKey', () => {
+  it('entriesKeyTest', () => {
+    expect(entriesKey(7, 'page=1')).toEqual(['accounting-entries', 7, 'page=1'])
+  })
+
+  /** Every key of this module carries the tenant, so two tenants never share a cache. */
+  it('entryKeysArePerTenantTest', () => {
+    expect(entryKey(7, 45)).toEqual(['accounting-entry', 7, 45])
+    expect(attentionKey(7)).toEqual(['accounting-attention', 7])
+    expect(journalKey(7, '')).toEqual(['accounting-journal', 7, ''])
+    expect(integrityKey(7)).toEqual(['accounting-integrity', 7])
+    expect(entriesKey(8, 'page=1')).not.toEqual(entriesKey(7, 'page=1'))
+  })
+})
+
+describe('ENTRY_SORT_FIELDS', () => {
+  /** Word for word the whitelist of the endpoint: anything else answers 400. */
+  it('entrySortFieldsTest', () => {
+    expect([...ENTRY_SORT_FIELDS]).toEqual([
+      'entryNumber',
+      'description',
+      'documentReference',
+      'bookingDate',
+      'postedAt',
+      'createdAt',
+    ])
+  })
+})
+
+describe('createEntry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('createEntryTest', async () => {
+    let seen: { url: string; method?: string; body?: unknown } = { url: '' }
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      seen = { url, method: init.method, body: JSON.parse(String(init.body)) }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 45, posted: false }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const stored = await createEntry(7, {
+      bookingDate: '2026-09-09',
+      description: 'Miete September',
+      documentReference: 'MB-144',
+      lines: [{ accountId: 4, debit: 3200 }],
+    })
+
+    expect(seen.url).toBe('/api/tenants/7/accounting/entries')
+    expect(seen.method).toBe('POST')
+    expect(stored.id).toBe(45)
+  })
+
+  /** The sentence of the backend arrives as the message, not a status text of our own. */
+  it('createEntryWhenUnbalancedTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'Soll 3’200.00, Haben 3’000.00, Differenz 200.00' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(
+      createEntry(7, {
+        bookingDate: '2026-09-09',
+        description: 'Miete',
+        documentReference: 'MB-144',
+        lines: [],
+      }),
+    ).rejects.toThrow('Soll 3’200.00, Haben 3’000.00, Differenz 200.00')
+  })
+})
+
+describe('updateEntry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('updateEntryTest', async () => {
+    let method = ''
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/entries/45')
+      method = String(init.method)
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 45 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    await updateEntry(7, 45, {
+      bookingDate: '2026-09-09',
+      description: 'Miete',
+      documentReference: 'MB-144',
+      lines: [],
+    })
+
+    expect(method).toBe('PUT')
+  })
+})
+
+describe('deleteEntry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('deleteEntryTest', async () => {
+    let method = ''
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/entries/45')
+      method = String(init.method)
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+
+    await deleteEntry(7, 45)
+
+    expect(method).toBe('DELETE')
+  })
+
+  /** Posted is posted: the backend answers 409 and says so. */
+  it('deleteEntryWhenPostedTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'Die Buchung ist verbucht.' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(deleteEntry(7, 45)).rejects.toThrow('Die Buchung ist verbucht.')
+  })
+})
+
+describe('postEntry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('postEntryTest', async () => {
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/entries/45/post')
+      expect(init.method).toBe('POST')
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 45, entryNumber: '2026-000045', posted: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    expect((await postEntry(7, 45)).entryNumber).toBe('2026-000045')
+  })
+})
+
+describe('reverseEntry', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reverseEntryTest', async () => {
+    let body: unknown = null
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/entries/45/reverse')
+      body = JSON.parse(String(init.body))
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: 46, reversesEntryId: 45 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const counter = await reverseEntry(7, 45, { reversalReason: 'falsches Konto' })
+
+    expect(body).toEqual({ reversalReason: 'falsches Konto' })
+    expect(counter.reversesEntryId).toBe(45)
+  })
+})
+
+describe('reversalReasonRoom', () => {
+  /** The ordinary case: a journal number of eleven characters leaves 177 of the 200. */
+  it('reversalReasonRoomTest', () => {
+    expect(reversalReasonRoom('2026-000045')).toBe(177)
+  })
+
+  /**
+   * It follows the number rather than being a second constant. A longer number leaves less
+   * room, and a mask that hard coded 177 would let the same two sentences through into a 400.
+   */
+  it('reversalReasonRoomWithALongerNumberTest', () => {
+    expect(reversalReasonRoom('2026-RE-00000045')).toBe(172)
+  })
+
+  /** No number yet — the shut dialog asks before it knows one — and the full room is left. */
+  it('reversalReasonRoomWithoutANumberTest', () => {
+    expect(reversalReasonRoom('')).toBe(188)
+  })
+
+  /** A number longer than the whole text never yields a negative `maxLength`. */
+  it('reversalReasonRoomWithAnAbsurdNumberTest', () => {
+    expect(reversalReasonRoom('X'.repeat(300))).toBe(0)
+  })
+})
+
+describe('previewPostRun', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** Repeated and not comma separated: that is how the endpoint reads a list. */
+  it('previewPostRunTest', async () => {
+    let seen = ''
+    vi.stubGlobal('fetch', (url: string) => {
+      seen = url
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ postable: [1, 2], blocked: [], firstNumber: null, lastNumber: null }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    const preview = await previewPostRun(7, [1, 2])
+
+    expect(seen).toBe(
+      '/api/tenants/7/accounting/entries/post-run/preview?entryIds=1&entryIds=2',
+    )
+    expect(preview.postable).toEqual([1, 2])
+    // Always empty in this stage — the dialog therefore names no number range.
+    expect(preview.firstNumber).toBeNull()
+  })
+
+  /** Nothing ticked: no parameter at all, and the endpoint reads that as an empty selection. */
+  it('previewPostRunWithoutSelectionTest', async () => {
+    let seen = ''
+    vi.stubGlobal('fetch', (url: string) => {
+      seen = url
+      return Promise.resolve(
+        new Response(JSON.stringify({ postable: [], blocked: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    await previewPostRun(7, [])
+
+    expect(seen).toBe('/api/tenants/7/accounting/entries/post-run/preview')
+  })
+})
+
+describe('runPost', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('runPostTest', async () => {
+    let body: unknown = null
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/entries/post-run')
+      body = JSON.parse(String(init.body))
+      return Promise.resolve(
+        new Response(JSON.stringify({ posted: [], skipped: [], failed: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const result = await runPost(7, [1, 2])
+
+    expect(body).toEqual({ entryIds: [1, 2] })
+    expect(result.posted).toEqual([])
+  })
+})
+
+describe('searchAccounts', () => {
+  it('searchAccountsTest', () => {
+    expect(searchAccounts(CHART, 'miete')).toEqual([])
+    expect(searchAccounts(CHART, 'raum').map((account) => account.accountNumber)).toEqual(['6000'])
+    expect(searchAccounts(CHART, '60').map((account) => account.accountNumber)).toEqual(['6000'])
+  })
+
+  /** An empty term offers the whole chart, which is what an opened field shows. */
+  it('searchAccountsWithoutTermTest', () => {
+    expect(searchAccounts(CHART, '').map((account) => account.accountNumber)).toEqual([
+      '1020',
+      '2200',
+      '3400',
+      '6000',
+    ])
+  })
+
+  /**
+   * Switched off, and «only for the system»: neither appears. **A convenience and no barrier** —
+   * the barrier stands in `PostingRules` and in a database guard.
+   */
+  it('searchAccountsLeavesTheBlockedOnesOutTest', () => {
+    expect(searchAccounts(CHART, 'Stillgelegt')).toEqual([])
+    expect(searchAccounts(CHART, '9200')).toEqual([])
+  })
+
+  it('searchAccountsWithoutAMatchTest', () => {
+    expect(searchAccounts(CHART, 'zzz')).toEqual([])
+  })
+
+  it('searchAccountsHonoursTheLimitTest', () => {
+    expect(searchAccounts(CHART, '', 2)).toHaveLength(2)
+  })
+})
+
+describe('entryBalance', () => {
+  it('entryBalanceTest', () => {
+    const balance = entryBalance([
+      { debit: '1250.00', credit: '' },
+      { debit: '', credit: '1000.00' },
+      { debit: '', credit: '250.00' },
+    ])
+
+    expect(balance).toEqual({ debit: 1250, credit: 1250, difference: 0 })
+  })
+
+  /** Nothing typed: three zeros, and the line still stands there. */
+  it('entryBalanceWithoutRowsTest', () => {
+    expect(entryBalance([])).toEqual({ debit: 0, credit: 0, difference: 0 })
+  })
+
+  /** One side only: the difference is the amount, which is what turns the figure red. */
+  it('entryBalanceWithOneSideTest', () => {
+    expect(entryBalance([{ debit: '3200', credit: '' }]).difference).toBe(3200)
+  })
+
+  /**
+   * Three thirds of 1'250.00 add up exactly. Counted in francs as binary fractions the sum
+   * misses by a hair and would be shown as 0.00 and be red.
+   */
+  it('entryBalanceAtARoundingBoundaryTest', () => {
+    const balance = entryBalance([
+      { debit: '416.66', credit: '' },
+      { debit: '416.67', credit: '' },
+      { debit: '416.67', credit: '' },
+      { debit: '', credit: '1250.00' },
+    ])
+
+    expect(balance.difference).toBe(0)
+  })
+
+  /** Swiss keyboards: comma as the decimal mark, apostrophe as the thousands separator. */
+  it('entryBalanceWithATypedApostropheTest', () => {
+    expect(entryBalance([{ debit: "1'250,50", credit: '' }]).debit).toBe(1250.5)
+  })
+
+  /**
+   * What is no number at all counts as nothing rather than as NaN — a sum that reads «-» while
+   * somebody types would be worse than one that is briefly too small.
+   *
+   * <p>A trailing decimal mark still reads as the whole number, which is the friendly answer
+   * halfway through «1250,50».
+   */
+  it('entryBalanceWithAHalfTypedAmountTest', () => {
+    expect(entryBalance([{ debit: '1,2,3', credit: '' }]).debit).toBe(0)
+    expect(entryBalance([{ debit: '1250,', credit: '' }]).debit).toBe(1250)
+  })
+})
+
+describe('effectPhrase', () => {
+  it('effectPhraseTest', () => {
+    expect(effectPhrase('EXPENSE', 'debit')).toBe('Aufwand steigt um')
+    expect(effectPhrase('ASSET', 'credit')).toBe('Guthaben sinkt um')
+  })
+
+  /** The whole table of ADR-0045 section 3, both sides. */
+  it('effectPhraseForEveryAccountTypeTest', () => {
+    expect(effectPhrase('ASSET', 'debit')).toBe('Guthaben steigt um')
+    expect(effectPhrase('LIABILITY', 'debit')).toBe('Schuld sinkt um')
+    expect(effectPhrase('LIABILITY', 'credit')).toBe('Schuld steigt um')
+    expect(effectPhrase('EQUITY', 'debit')).toBe('Eigenkapital sinkt um')
+    expect(effectPhrase('EQUITY', 'credit')).toBe('Eigenkapital steigt um')
+    expect(effectPhrase('EXPENSE', 'credit')).toBe('Aufwand sinkt um')
+    expect(effectPhrase('REVENUE', 'debit')).toBe('Ertrag sinkt um')
+    expect(effectPhrase('REVENUE', 'credit')).toBe('Ertrag steigt um')
+  })
+
+  /** `CLOSING` is not in the table, and the one shipped cannot be posted to by hand. */
+  it('effectPhraseForAClosingAccountTest', () => {
+    expect(effectPhrase('CLOSING', 'debit')).toBeUndefined()
+  })
+
+  /** No account picked yet: nothing to say about it. */
+  it('effectPhraseWithoutAnAccountTest', () => {
+    expect(effectPhrase(null, 'debit')).toBeUndefined()
+  })
+})
+
+describe('taxSplitOf', () => {
+  /** The example of the decision: gross 1'080.10 at 8.1 % is 999.17 plus 80.93. */
+  it('taxSplitOfTest', () => {
+    expect(taxSplitOf(1080.1, 8.1)).toEqual({ net: 999.17, tax: 80.93 })
+  })
+
+  /** A real zero-rate case books nothing at all. */
+  it('taxSplitOfWithZeroRateTest', () => {
+    expect(taxSplitOf(1080.1, 0)).toBeNull()
+  })
+
+  /** Nothing to move: no line either. */
+  it('taxSplitOfWithATinyAmountTest', () => {
+    expect(taxSplitOf(0.01, 0.001)).toBeNull()
+  })
+
+  /** Net plus tax is the gross again, always — the tax is the remainder, never rounded twice. */
+  it('taxSplitOfAddsUpTest', () => {
+    const split = taxSplitOf(100.05, 2.6)
+
+    expect(Math.round(((split?.net ?? 0) + (split?.tax ?? 0)) * 100) / 100).toBe(100.05)
+  })
+})
+
+describe('postingPreviewOf', () => {
+  it('postingPreviewOfTest', () => {
+    const lines = postingPreviewOf(
+      [
+        draftRow({ key: 1, accountId: 4, debit: '3200' }),
+        draftRow({ key: 2, accountId: 1, credit: '3200' }),
+      ],
+      CHART,
+      [],
+    )
+
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatchObject({ accountNumber: '6000', side: 'debit', amount: 3200 })
+    expect(lines[1]).toMatchObject({ accountNumber: '1020', side: 'credit', amount: 3200 })
+  })
+
+  /**
+   * The tax is taken **out of** the typed line and moves to the tax account on the same side.
+   * Any other construction leaves the entry unbalanced.
+   */
+  it('postingPreviewOfWithATaxCodeTest', () => {
+    const lines = postingPreviewOf(
+      [
+        draftRow({ key: 1, accountId: 1, debit: '1080.10' }),
+        draftRow({ key: 2, accountId: 3, credit: '1080.10', taxCodeId: 11 }),
+      ],
+      CHART,
+      [UST81],
+    )
+
+    expect(lines).toHaveLength(3)
+    expect(lines[1]).toMatchObject({ accountNumber: '3400', side: 'credit', amount: 999.17 })
+    expect(lines[2]).toMatchObject({
+      accountNumber: '2200',
+      side: 'credit',
+      amount: 80.93,
+      generated: true,
+      text: 'MWST UST81 zu Zeile 2',
+    })
+  })
+
+  /** A zero-rate code adds no line: nothing is owed. */
+  it('postingPreviewOfWithAZeroRateCodeTest', () => {
+    const lines = postingPreviewOf(
+      [draftRow({ key: 1, accountId: 3, credit: '1080.10', taxCodeId: 12 })],
+      CHART,
+      [USTEX],
+    )
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0].amount).toBe(1080.1)
+  })
+
+  /**
+   * «zu Zeile n» names the line the backend will write, not the row of the grid.
+   * {@link entryRequestOf} leaves the row without an account out and the server numbers what
+   * arrives from one — the box would otherwise name a line the journal never shows.
+   */
+  it('postingPreviewOfNumbersTheLinesThatAreSentTest', () => {
+    const lines = postingPreviewOf(
+      [
+        draftRow({ key: 1 }),
+        draftRow({ key: 2, accountId: 1, debit: '1080.10' }),
+        draftRow({ key: 3, accountId: 3, credit: '1080.10', taxCodeId: 11 }),
+      ],
+      CHART,
+      [UST81],
+    )
+
+    expect(lines).toHaveLength(3)
+    expect(lines[2].text).toBe('MWST UST81 zu Zeile 2')
+  })
+
+  /** A row without an account or without an amount is the one somebody stopped typing in. */
+  it('postingPreviewOfWithAnEmptyRowTest', () => {
+    expect(postingPreviewOf([draftRow({ key: 1 })], CHART, [])).toEqual([])
+    expect(postingPreviewOf([draftRow({ key: 1, accountId: 4 })], CHART, [])).toEqual([])
+  })
+})
+
+describe('entryRequestOf', () => {
+  it('entryRequestOfTest', () => {
+    const request = entryRequestOf({
+      bookingDate: '2026-09-09',
+      documentReference: 'MB-144',
+      description: 'Miete September',
+      rows: [
+        draftRow({ key: 1, accountId: 4, debit: '3200' }),
+        draftRow({ key: 2, accountId: 1, credit: '3200' }),
+      ],
+    })
+
+    expect(request.lines).toEqual([
+      { accountId: 4, debit: 3200, credit: null, taxCodeId: null },
+      { accountId: 1, debit: null, credit: 3200, taxCodeId: null },
+    ])
+    expect(request.bookingDate).toBe('2026-09-09')
+  })
+
+  /** The last row of a grid is almost always the empty one; it is not sent. */
+  it('entryRequestOfWithoutAnAccountTest', () => {
+    const request = entryRequestOf({
+      ...emptyEntryDraft('2026-09-09'),
+      rows: [draftRow({ key: 1, accountId: 4, debit: '3200' }), draftRow({ key: 2 })],
+    })
+
+    expect(request.lines).toHaveLength(1)
+  })
+
+  /** No line number travels: the server numbers them 1..n in the order they arrive. */
+  it('entryRequestOfSendsNoLineNumberTest', () => {
+    const request = entryRequestOf({
+      ...emptyEntryDraft('2026-09-09'),
+      rows: [draftRow({ key: 9, accountId: 4, debit: '1' })],
+    })
+
+    expect(Object.keys(request.lines[0]).sort()).toEqual([
+      'accountId',
+      'credit',
+      'debit',
+      'taxCodeId',
+    ])
+  })
+})
+
+describe('entryDraftKey', () => {
+  afterEach(() => {
+    window.sessionStorage.clear()
+  })
+
+  /** The key is exactly this, and the tenant id is the point of it. */
+  it('entryDraftKeyTest', () => {
+    expect(entryDraftKey(7)).toBe('accounting.draft.7')
+    expect(ENTRY_DRAFT_PREFIX).toBe('accounting.draft.')
+  })
+
+  it('writeEntryDraftStoresUnderThePrefixedKeyTest', () => {
+    writeEntryDraft(7, emptyEntryDraft('2026-09-09'))
+
+    expect(window.sessionStorage.getItem('webux.accounting.draft.7')).not.toBeNull()
+  })
+
+  it('readEntryDraftTest', () => {
+    writeEntryDraft(7, { ...emptyEntryDraft('2026-09-09'), description: 'Miete September' })
+
+    expect(readEntryDraft(7)?.description).toBe('Miete September')
+  })
+
+  /** Nothing rescued: the mask opens empty rather than on a broken state. */
+  it('readEntryDraftWithoutAStoredStateTest', () => {
+    expect(readEntryDraft(7)).toBeNull()
+  })
+
+  it('readEntryDraftWithGarbageTest', () => {
+    window.sessionStorage.setItem('webux.accounting.draft.7', 'kein JSON')
+
+    expect(readEntryDraft(7)).toBeNull()
+  })
+
+  /**
+   * The one that matters: reading for one tenant throws away what was left for every other.
+   * Without it the half typed entry of another business turns up in this mask.
+   */
+  it('readEntryDraftClearsTheOtherTenantsTest', () => {
+    writeEntryDraft(1, { ...emptyEntryDraft('2026-09-09'), description: 'fremder Betrieb' })
+    writeEntryDraft(2, { ...emptyEntryDraft('2026-09-09'), description: 'eigener Betrieb' })
+
+    expect(readEntryDraft(2)?.description).toBe('eigener Betrieb')
+    expect(window.sessionStorage.getItem('webux.accounting.draft.1')).toBeNull()
+  })
+
+  it('clearEntryDraftTest', () => {
+    writeEntryDraft(7, emptyEntryDraft('2026-09-09'))
+    clearEntryDraft(7)
+
+    expect(readEntryDraft(7)).toBeNull()
+  })
+})
+
+describe('emptyEntryDraft', () => {
+  /** Two rows, because an entry has two sides. */
+  it('emptyEntryDraftTest', () => {
+    const draft = emptyEntryDraft('2026-09-09')
+
+    expect(draft.bookingDate).toBe('2026-09-09')
+    expect(draft.rows).toHaveLength(2)
+    expect(draft.rows[0]).toEqual({
+      key: 1,
+      accountId: null,
+      accountText: '',
+      debit: '',
+      credit: '',
+      taxCodeId: null,
+    })
   })
 })
