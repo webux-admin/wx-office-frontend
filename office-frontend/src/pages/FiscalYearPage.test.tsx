@@ -123,6 +123,16 @@ const DBG_WARNING =
 
 const EXPIRY_WARNING = 'Das letzte Geschäftsjahr endet am'
 
+/** What `GET /setup-state` answers; only the notice above the table reads it. */
+let setupState: {
+  accountCount: number
+  fiscalYear: unknown
+  postingStartsOn: string | null
+  openingEntry: unknown
+  openingSuggestion: unknown[]
+  nextStep: string
+}
+
 let container: HTMLDivElement
 let root: Root
 /** What the fiscal year endpoint answers; every test sets what it is about. */
@@ -170,6 +180,7 @@ beforeEach(() => {
       return json(years)
     }
     read.push(url)
+    if (url.includes('/setup-state')) return json(setupState)
     if (url.includes('/fiscal-years/preview')) return json(previewFor(url))
     if (url.includes('/fiscal-years')) {
       return listStatus === 200
@@ -178,6 +189,14 @@ beforeEach(() => {
     }
     return json(TENANT_RECORD)
   })
+  setupState = {
+    accountCount: 132,
+    fiscalYear: null,
+    postingStartsOn: null,
+    openingEntry: null,
+    openingSuggestion: [],
+    nextStep: 'DONE',
+  }
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -324,11 +343,68 @@ describe('FiscalYearPage', () => {
     await render()
 
     expect(text()).toContain('Es gibt noch kein Geschäftsjahr')
-    expect(button('Erstes Geschäftsjahr anlegen')).toBeDefined()
+    expect(button('Nur Geschäftsjahr anlegen')).toBeDefined()
+    // The wizard stands first: whoever is setting up wants the three steps, and whoever knows
+    // what they are doing takes the second button.
+    expect(button('Buchhaltung einrichten')).toBeDefined()
     // Nothing is locked, so the footer says so rather than naming a day.
     expect(text()).toContain('Es ist nichts gesperrt.')
     // A date nobody set stays «nicht gesetzt» — the null travels as a null.
     expect(text()).toContain('nicht gesetzt')
+  })
+
+  /**
+   * <b>The way into the setup wizard, from the empty state.</b> A route nobody can reach would be
+   * a delivered screen nobody finds — and the wizard deliberately has no menu entry.
+   */
+  it('fiscalYearEmptyStateLeadsToTheSetupTest', async () => {
+    years = list({
+      years: [],
+      boundary: { postableFrom: null, lockedUntil: null, source: 'NONE', message: '' },
+      expiry: { lastEndDate: null, daysLeft: null, warn: false },
+      postingsLockedUntil: null,
+      vatPeriodsLockedUntil: null,
+    })
+    await render()
+
+    const way = button('Buchhaltung einrichten')
+    expect(way).toBeDefined()
+    expect(way?.disabled).toBe(false)
+  })
+
+  /**
+   * <b>The fourth way in, and the one that keeps step 3 reachable at all.</b> Whoever laid the
+   * chart and the year out by hand has no empty state left anywhere and would never get at the
+   * opening entry. It stands for the year today falls into and for no other.
+   */
+  it('fiscalYearWarnsAboutTheMissingOpeningEntryTest', async () => {
+    setupState = {
+      accountCount: 132,
+      fiscalYear: { ...years.years[0] },
+      postingStartsOn: null,
+      openingEntry: null,
+      openingSuggestion: [],
+      nextStep: 'OPENING',
+    }
+    await render()
+
+    expect(text()).toContain('besteht keine Eröffnungsbuchung')
+    expect(button('Eröffnung erfassen')).toBeDefined()
+  })
+
+  /** Once the opening stands, the notice goes: it would otherwise stand there for ever. */
+  it('fiscalYearHidesTheOpeningNoticeOnceItStandsTest', async () => {
+    setupState = {
+      accountCount: 132,
+      fiscalYear: { ...years.years[0] },
+      postingStartsOn: '2026-01-01',
+      openingEntry: null,
+      openingSuggestion: [],
+      nextStep: 'DONE',
+    }
+    await render()
+
+    expect(text()).not.toContain('besteht keine Eröffnungsbuchung')
   })
 
   it('fiscalYearPageShowsErrorTest', async () => {

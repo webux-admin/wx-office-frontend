@@ -121,12 +121,14 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
   const [lockedUntil, setLockedUntil] = useState(stored.postingsLockedUntil ?? '')
 
   const save = useMutation({
-    // `null` and not an omitted field: the payload carries this one value, so «nicht genannt»
-    // and «geleert» cannot be told apart — and a bolt that survives an empty save silently is
-    // the worse of the two mistakes (backend ADR-0119).
+    // Clearing is said outright rather than by leaving the field out. Three screens write this
+    // row — this one, and two steps of the setup wizard — and each knows one field of it; a
+    // missing field read as «leeren» would let step 3, which knows only the changeover day,
+    // lift the bolt on its way past (backend ADR-0119).
     mutationFn: (day: string) =>
       api.put<AccountingSettings>(accountingSettingsUrl(tenantId), {
         postingsLockedUntil: day === '' ? null : day,
+        clearPostingsLock: day === '',
       }),
     onSuccess: (settings) => {
       queryClient.setQueryData(accountingSettingsKey(tenantId), settings)

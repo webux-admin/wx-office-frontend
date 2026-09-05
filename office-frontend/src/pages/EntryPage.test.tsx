@@ -155,11 +155,17 @@ function json(body: unknown, status = 200) {
   )
 }
 
+/** The chart the screen reads; emptied to reach the first empty state. */
+let chart: typeof CHART
+
+/** The fiscal years the screen reads; emptied to reach the second empty state. */
+let years: typeof YEARS
+
 function stubFetch() {
   vi.stubGlobal('fetch', (url: string) => {
-    if (url.includes('/accounting/accounts')) return json(pageOf(CHART))
+    if (url.includes('/accounting/accounts')) return json(pageOf(chart))
     if (url.includes('/accounting/tax-codes')) return json({ codes: [] })
-    if (url.includes('/accounting/fiscal-years')) return json(YEARS)
+    if (url.includes('/accounting/fiscal-years')) return json(years)
     if (url.includes('/accounting/settings')) return json({ ledgerCurrency: 'CHF' })
     if (url.includes('/accounting/entry-templates')) return json(TEMPLATES)
     if (url.includes('/accounting/entries/suggestions')) return json([])
@@ -169,6 +175,8 @@ function stubFetch() {
 
 beforeEach(() => {
   window.sessionStorage.clear()
+  chart = CHART
+  years = YEARS
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -253,6 +261,31 @@ function rescue(over: Partial<EntryDraftState>) {
 }
 
 describe('EntryPage', () => {
+  /**
+   * <b>Both empty states lead into the setup wizard, and it stands first.</b> The wizard has no
+   * menu entry, so a route without these buttons would be a delivered screen nobody finds — and
+   * whoever lands here has nothing at all yet.
+   */
+  it('entryEmptyStateLeadsToTheSetupTest', async () => {
+    chart = []
+    await paint()
+
+    expect(container.textContent).toContain('Es gibt noch keinen Kontenplan')
+    expect(button('Buchhaltung einrichten')).toBeDefined()
+    expect(button('Kontenplan anlegen')).toBeDefined()
+  })
+
+  /** And the other one, for the day nobody has laid out a fiscal year. */
+  it('entryEmptyStateWithoutAFiscalYearLeadsToTheSetupTest', async () => {
+    years = { ...YEARS, years: [] }
+    await paint()
+
+    expect(container.textContent).toContain('gibt es kein Geschäftsjahr')
+    expect(button('Buchhaltung einrichten')).toBeDefined()
+    expect(button('Geschäftsjahr anlegen')).toBeDefined()
+  })
+
+
   /**
    * Applying a template replaces the entry text and the voucher too, so it has to ask before it
    * does — even where no row is filled yet. Counting rows alone let somebody who had typed a

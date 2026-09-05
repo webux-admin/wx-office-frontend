@@ -377,7 +377,12 @@ describe('AccountingStatePage', () => {
 
     const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
     expect(put?.method).toBe('PUT')
-    expect(put?.body).toEqual({ postingsLockedUntil: '2026-12-31' })
+    // Clearing is said outright rather than by leaving the field out: two steps of the setup
+    // wizard write this same row and know one field each (backend ADR-0119).
+    expect(put?.body).toEqual({
+      postingsLockedUntil: '2026-12-31',
+      clearPostingsLock: false,
+    })
   })
 
   // --- die 30-Tage-Warnung, hier wie auf der Geschaeftsjahresmaske ------------

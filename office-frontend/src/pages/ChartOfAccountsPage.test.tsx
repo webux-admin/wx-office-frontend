@@ -301,6 +301,20 @@ describe('ChartOfAccountsPage', () => {
   })
 
   /**
+   * <b>The way into the setup wizard, and it stands first.</b> Whoever lands here has nothing at
+   * all yet, and the three steps are the shorter way than three screens found one by one. The
+   * wizard has no menu entry, so a route without this button would be a delivered screen nobody
+   * finds.
+   */
+  it('chartEmptyStateLeadsToTheSetupTest', async () => {
+    accounts = pageOf([])
+    await render()
+
+    expect(button('Buchhaltung einrichten')).toBeDefined()
+    expect(container.textContent).toContain('in drei Schritten')
+  })
+
+  /**
    * The precaution the licence question demands: where no template is shipped, the way in
    * through a template disappears instead of pointing at something that is not there.
    */

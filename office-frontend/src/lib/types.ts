@@ -3973,6 +3973,191 @@ export type AccountSheet = {
   notices: ReportNotices
 }
 
+/** Which of the two statements an answer carries — `StatementDto.report`. */
+export type StatementKind = 'BALANCE_SHEET' | 'INCOME_STATEMENT'
+
+/**
+ * What one line of a statement is — `StatementRowDto.kind`.
+ *
+ * <p>`GROSS` is the one kind that is not an account and not a position: the four figures of OR
+ * Art. 959b Abs. 2 Ziff. 7–9 name expense and income together and have to be printed gross, so
+ * their two halves are always shown — while account lines are shown only where somebody asked
+ * for them.
+ */
+export type StatementRowKind =
+  | 'GROUP'
+  | 'POSITION'
+  | 'ACCOUNT'
+  | 'GROSS'
+  | 'SUBTOTAL'
+  | 'TOTAL'
+  | 'CONTROL'
+
+/** What a note above a statement is about — `StatementNoteDto.kind`. */
+export type StatementNoteKind =
+  | 'MANUAL_ONLY'
+  | 'NO_ANNUAL_ACCOUNTS'
+  | 'PRIOR_YEAR_MISSING'
+  | 'INTERIM'
+  | 'DRAFTS'
+  | 'MODULE_OFF_PERIOD'
+  | 'INVENTORY_NO_CHANGE'
+
+/**
+ * One line of a balance sheet or an income statement — `StatementRowDto`.
+ *
+ * <p><b>Every amount is already the display amount and is signed.</b> The screen adds a column
+ * and never works out a sign: the one place a sign is decided is `StatementBuilder` in the
+ * backend, so screen, printout and CSV cannot drift apart.
+ */
+export type StatementRow = {
+  kind: StatementRowKind
+  /** How deep the line is indented, 0 for the outermost heading. */
+  level: number
+  /** The position of the minimum breakdown, absent on a heading and on a total. */
+  position?: string | null
+  label: string
+  /** The account behind the line, and what the drill-down into the account sheet is built from. */
+  accountId?: number | null
+  /** The account number, only on an `ACCOUNT` line. */
+  accountNumber?: string | null
+  /** Absent on a heading. */
+  amount?: number | null
+  /** The whole year before, absent where there is none. */
+  priorAmount?: number | null
+  /** Whether the label carries «(Minusposten)». A labelling fact, never a sign. */
+  negativeItem: boolean
+  /** Worked out rather than read off accounts: «Saldo der Erfolgsrechnung» under the result. */
+  synthetic: boolean
+}
+
+/**
+ * One sentence above a statement — `StatementNoteDto`.
+ *
+ * <p>The text is worded in the backend so that the screen and the printout say the same thing;
+ * a note only the browser knew would be missing from the paper (GeBüV Art. 6 Abs. 3).
+ */
+export type StatementNote = {
+  kind: StatementNoteKind
+  text: string
+}
+
+/** What is not in the figures yet, counted over this fiscal year — `StatementDraftsDto`. */
+export type StatementDrafts = {
+  count: number
+  amount: number
+}
+
+/** The proof under a balance sheet — `StatementControlDto`. */
+export type StatementControl = {
+  label: string
+  amount: number
+  /** Whether it is zero, so the screen colours the line without comparing a decimal. */
+  balanced: boolean
+}
+
+/**
+ * The answer of the balance sheet and of the income statement — `StatementDto`.
+ *
+ * <p><b>Not paged</b>, and that is the list contract rather than an exception to it: the number
+ * of lines is bounded by the position catalogue, and a balance sheet with a second page would be
+ * one nobody could add up (ADR-0026).
+ *
+ * <p><b>It always carries everything</b> — every position, every account line, both columns. The
+ * two switches of the screen filter locally; reloading for one of them would recompute the whole
+ * aggregation.
+ */
+export type Statement = {
+  report: StatementKind
+  fiscalYearId: number
+  fiscalYearLabel: string
+  startDate: string
+  endDate: string
+  /** The cut-off day, absent for the whole year. */
+  asOf?: string | null
+  currency: string
+  /** Absent where this is the first fiscal year of the bookkeeping. */
+  priorFiscalYearId?: number | null
+  priorFiscalYearLabel?: string | null
+  drafts: StatementDrafts
+  /** Absent on an income statement, whose result line is itself the proof. */
+  control?: StatementControl | null
+  notes: StatementNote[]
+  rows: StatementRow[]
+}
+
+/** Where a tenant stands in setting up its bookkeeping — `SetupStateDto.nextStep`. */
+export type SetupStep = 'EQUITY_AND_CHART' | 'FISCAL_YEAR' | 'OPENING' | 'DONE'
+
+/**
+ * One proposed row of the opening grid — `SuggestedLineDto`.
+ *
+ * <p>An account and no amount. `fromOpenItems` is true for exactly one row, the receivables
+ * account, and the browser fills that one from `GET /open-items/total` — so no edge
+ * `accounting → document` comes into being.
+ */
+export type SuggestedLine = {
+  accountId: number
+  accountNumber: string
+  accountName: string
+  fromOpenItems: boolean
+}
+
+/**
+ * Where a tenant stands in setting up its bookkeeping — `SetupStateDto`.
+ *
+ * <p>One call and not four: the wizard opens at the first unfinished step, and four requests to
+ * work that out would show three steps flickering past before settling on the right one.
+ */
+export type SetupState = {
+  accountCount: number
+  /** Absent where no equity layout is chosen yet. */
+  equityLayout?: string | null
+  /** The year the wizard is about: the one containing today, else the most recent. */
+  fiscalYear?: FiscalYear | null
+  /** The day the tenant starts keeping books here, absent where it has not been said. */
+  postingStartsOn?: string | null
+  /** The opening entry of that year, absent where it has none. */
+  openingEntry?: Entry | null
+  openingSuggestion: SuggestedLine[]
+  nextStep: SetupStep
+}
+
+/** What `POST /opening-entry` answers — `OpeningEntryOutcomeDto`. */
+export type OpeningEntryOutcome = {
+  entryId: number
+  /** Always there: an opening entry is posted the moment it is written. */
+  entryNumber: string
+  /** Derived by the server from `posting_starts_on`; the mask has no field for it. */
+  bookingDate: string
+  /** The opening entry this one replaced, absent where there was none. */
+  replacedEntryNumber?: string | null
+  /** The counter entry that took the old one out, absent likewise. */
+  reversalEntryNumber?: string | null
+}
+
+/** What `POST /opening-entry` takes — `OpeningEntryBody`. */
+export type OpeningEntryRequest = {
+  fiscalYearId: number
+  lines: EntryLineRequest[]
+  replaceExisting: boolean
+  /** Mandatory as soon as `replaceExisting` is set. */
+  reason?: string | null
+}
+
+/** What is open in one currency, right now — `OpenItemTotalDto`. */
+export type OpenItemTotal = {
+  currencyCode: string
+  /** Can be negative where an invoice is overpaid — the credit is owed to the customer. */
+  openTotal: number
+  count: number
+}
+
+/** The open holding, one row per currency — `OpenItemTotalsDto`. */
+export type OpenItemTotals = {
+  rows: OpenItemTotal[]
+}
+
 /** What the draft list says about itself, above its rows — `EntryDto.AttentionDto`. */
 export type EntryAttention = {
   drafts: number

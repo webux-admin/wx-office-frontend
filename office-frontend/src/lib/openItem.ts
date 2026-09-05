@@ -2,6 +2,7 @@ import { api } from './api'
 import { listQuery } from './paging'
 import type {
   OpenItem,
+  OpenItemTotals,
   Page,
   WriteOff,
   WriteOffProposal,
@@ -206,3 +207,31 @@ export function runWriteOff(
   return api.post<WriteOffRunResult>(`/api/tenants/${tenantId}/write-off-runs`, body)
 }
 
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the open holding per currency
+ */
+export function openItemTotalKey(tenantId: number | null): readonly unknown[] {
+  return ['open-item-totals', tenantId]
+}
+
+/**
+ * What is open per currency, right now.
+ *
+ * <p><b>Why this exists beside the list.</b> The list answers paged and is capped at 200 rows,
+ * so the browser cannot add it up. One screen needs the sum and only the sum: step 3 of the
+ * accounting setup, which proposes the receivables balance of the opening entry and says where
+ * the figure came from.
+ *
+ * <p><b>It lives in `document` and is called from here</b>, which is what keeps the edge
+ * `accounting → document` from coming into being — it runs the other way from stage 3 (backend
+ * ADR-0110). It needs `INVOICE_READ`; without that right the caller leaves the figure empty and
+ * says where it stands.
+ *
+ * @param tenantId the tenant
+ * @returns one row per currency, the largest holding first; empty where nothing is open
+ */
+export function fetchOpenItemTotals(tenantId: number): Promise<OpenItemTotals> {
+  return api.get<OpenItemTotals>(`/api/tenants/${tenantId}/open-items/total`)
+}

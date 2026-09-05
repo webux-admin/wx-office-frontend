@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { KeyRound, Lock, Plus } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
@@ -21,6 +21,7 @@ import {
   accountClassOf,
   accountClassTitle,
   accountTypeLabel,
+  ACCOUNTING_SETUP_PATH,
   accountingSettingsKey,
   accountingSettingsUrl,
   accountsKey,
@@ -63,6 +64,7 @@ export function ChartOfAccountsPage() {
 }
 
 function ChartOfAccounts({ tenantId }: { tenantId: number }) {
+  const navigate = useNavigate()
   const { can } = useAuth()
   const mayConfigure = can(ACCOUNTING_RIGHTS.configure)
 
@@ -220,6 +222,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
                 mayConfigure={mayConfigure}
                 onCopy={() => setCopying(true)}
                 onStartEmpty={() => setStartedEmpty(true)}
+                onSetUp={() => void navigate(ACCOUNTING_SETUP_PATH)}
               />
             </Panel>
           </div>
@@ -317,12 +320,18 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
                     description={
                       filtered
                         ? 'Kein Konto passt zu dieser Suche.'
-                        : 'Ohne Konto lässt sich nichts buchen.'
+                        : 'Ohne Konto lässt sich nichts buchen. Der Assistent führt in drei '
+                          + 'Schritten durch Kontenplan, Geschäftsjahr und Eröffnung.'
                     }
                   >
                     {!filtered && mayConfigure && (
                       <span className="flex flex-wrap justify-center gap-2">
-                        <Button onClick={() => setCreating(true)}>
+                        {/* First, and deliberately: whoever has nothing yet wants the three
+                            steps rather than the first of thirty accounts. */}
+                        <Button onClick={() => void navigate(ACCOUNTING_SETUP_PATH)}>
+                          Buchhaltung einrichten
+                        </Button>
+                        <Button variant="secondary" onClick={() => setCreating(true)}>
                           <Plus size={15} aria-hidden />
                           Erstes Konto anlegen
                         </Button>
@@ -402,24 +411,31 @@ function NoChartYet({
   mayConfigure,
   onCopy,
   onStartEmpty,
+  onSetUp,
 }: {
   template: ChartTemplate | undefined
   layout: EquityLayout | undefined
   mayConfigure: boolean
   onCopy: () => void
   onStartEmpty: () => void
+  onSetUp: () => void
 }) {
   const rows = template === undefined ? undefined : countFor(template, layout)
 
   return (
     <EmptyState
       title="Noch kein Kontenplan"
-      description="Ein Kontenplan sagt, wohin gebucht wird und wie Bilanz und Erfolgsrechnung gegliedert sind."
+      description="Ein Kontenplan sagt, wohin gebucht wird und wie Bilanz und Erfolgsrechnung gegliedert sind. Der Assistent führt in drei Schritten durch Kontenplan, Geschäftsjahr und Eröffnung."
     >
       <div className="grid justify-items-center gap-4">
         <div className="flex flex-wrap justify-center gap-2">
+          {/* First, and deliberately: whoever lands here has nothing at all yet, and the three
+              steps are the shorter way than three screens found one by one. */}
+          <Button onClick={onSetUp}>Buchhaltung einrichten</Button>
           {template !== undefined && mayConfigure && (
-            <Button onClick={onCopy}>Aus der Vorlage anlegen</Button>
+            <Button variant="secondary" onClick={onCopy}>
+              Aus der Vorlage anlegen
+            </Button>
           )}
           <Button variant="secondary" onClick={onStartEmpty}>
             Leer beginnen

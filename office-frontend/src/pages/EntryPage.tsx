@@ -15,6 +15,7 @@ import { RequireTenant } from '../layout/RequireTenant'
 import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
+  ACCOUNTING_SETUP_PATH,
   CHART_OF_ACCOUNTS_PATH,
   DRAFT_PATH,
   FISCAL_YEARS_PATH,
@@ -336,11 +337,18 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           <Panel padded={false}>
             <EmptyState
               title="Es gibt noch keinen Kontenplan."
-              description="Gebucht wird auf Konten. Der Kontenplan wird einmal aus einer Vorlage angelegt."
+              description="Gebucht wird auf Konten. Der Assistent führt in drei Schritten durch Kontenplan, Geschäftsjahr und Eröffnung."
             >
-              <Link to={CHART_OF_ACCOUNTS_PATH}>
-                <Button>Kontenplan anlegen</Button>
-              </Link>
+              <span className="flex flex-wrap justify-center gap-2">
+                {/* First, and deliberately: whoever lands here has nothing at all yet, and the
+                    three steps are the shorter way than three screens found one by one. */}
+                <Link to={ACCOUNTING_SETUP_PATH}>
+                  <Button>Buchhaltung einrichten</Button>
+                </Link>
+                <Link to={CHART_OF_ACCOUNTS_PATH}>
+                  <Button variant="secondary">Kontenplan anlegen</Button>
+                </Link>
+              </span>
             </EmptyState>
           </Panel>
         </div>
@@ -361,9 +369,14 @@ function EntryMask({ tenantId }: { tenantId: number }) {
               title={`Für den ${formatDate(draft.bookingDate)} gibt es kein Geschäftsjahr.`}
               description="Jede Buchung gehört in ein Geschäftsjahr. Ohne eines lässt sich nichts speichern."
             >
-              <Link to={FISCAL_YEARS_PATH}>
-                <Button>Geschäftsjahr anlegen</Button>
-              </Link>
+              <span className="flex flex-wrap justify-center gap-2">
+                <Link to={ACCOUNTING_SETUP_PATH}>
+                  <Button>Buchhaltung einrichten</Button>
+                </Link>
+                <Link to={FISCAL_YEARS_PATH}>
+                  <Button variant="secondary">Geschäftsjahr anlegen</Button>
+                </Link>
+              </span>
             </EmptyState>
           </Panel>
         </div>

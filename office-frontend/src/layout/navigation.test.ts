@@ -3,7 +3,10 @@ import {
   ACCOUNTING_ARCHIVE_PATH,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
+  BALANCE_SHEET_PATH,
+  INCOME_STATEMENT_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
@@ -904,7 +907,7 @@ describe('the accounting group', () => {
     return NAV_GROUPS.find((candidate) => candidate.title === 'Buchhaltung')
   }
 
-  it('accountingGroupHasFiveEntriesTest', () => {
+  it('navGroupsCoverTheAccountingReportsTest', () => {
     const entries = flattenNav(group()?.entries ?? [])
 
     expect(entries.map((entry) => entry.label)).toEqual([
@@ -912,6 +915,8 @@ describe('the accounting group', () => {
       'Entwürfe',
       'Journal',
       'Konten',
+      'Bilanz',
+      'Erfolgsrechnung',
       'Archiv',
     ])
     expect(entries.map((entry) => entry.href)).toEqual([
@@ -919,17 +924,33 @@ describe('the accounting group', () => {
       DRAFT_PATH,
       JOURNAL_PATH,
       ACCOUNT_BALANCE_PATH,
+      BALANCE_SHEET_PATH,
+      INCOME_STATEMENT_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
-    // Typing needs the write right; reading what is waiting, what is booked and what stands on
-    // the accounts needs the read one. Posting is asked for at the button, not at the entry.
+    // Typing needs the write right; reading what is waiting, what is booked, what stands on the
+    // accounts and the two statements needs the read one. Posting is asked for at the button.
     expect(entries.map((entry) => entry.permission)).toEqual([
       ACCOUNTING_RIGHTS.write,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
     ])
+  })
+
+  /**
+   * <b>The setup wizard stands in no group, and that is decided.</b> A menu entry for something
+   * a tenant does once in its life would stand there for ever afterwards. It is reached from the
+   * three empty states of this group and from the fiscal year screen, and from nowhere else.
+   */
+  it('navHasNoSetupEntryTest', () => {
+    const every = NAV_GROUPS.flatMap((candidate) => flattenNav(candidate.entries))
+
+    expect(every.map((entry) => entry.href)).not.toContain(ACCOUNTING_SETUP_PATH)
+    expect(every.map((entry) => entry.label)).not.toContain('Buchhaltung einrichten')
   })
 
   /**
@@ -947,7 +968,14 @@ describe('the accounting group', () => {
       entries
         .filter((entry) => entry.href !== ACCOUNTING_ARCHIVE_PATH)
         .map((entry) => entry.module),
-    ).toEqual(['ACCOUNTING', 'ACCOUNTING', 'ACCOUNTING', 'ACCOUNTING'])
+    ).toEqual([
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+      'ACCOUNTING',
+    ])
   })
 
   /**
@@ -1034,6 +1062,8 @@ describe('the accounting group', () => {
       DRAFT_PATH,
       JOURNAL_PATH,
       ACCOUNT_BALANCE_PATH,
+      BALANCE_SHEET_PATH,
+      INCOME_STATEMENT_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
   })

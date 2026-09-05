@@ -6,6 +6,7 @@ import {
   WRITE_OFF_REASON_ORDER,
   openItemQuery,
   openItemsKey,
+  openItemTotalKey,
 } from './openItem'
 
 /** The addresses, keys and query strings behind the open items. */
@@ -75,5 +76,20 @@ describe('openItem', () => {
   it('writeOffReasonHintsNameTheOnesWithoutATaxConsequenceTest', () => {
     expect(WRITE_OFF_REASON_HINTS.BANKSPESEN).toContain('nicht')
     expect(WRITE_OFF_REASON_HINTS.KURSDIFFERENZ).toContain('nicht')
+  })
+})
+
+describe('the open holding per currency', () => {
+  /**
+   * <b>Why this exists beside the list.</b> The list answers paged and is capped at 200 rows, so
+   * the browser cannot add it up. One screen needs the sum and only the sum: step 3 of the
+   * accounting setup. It lives in `document` and is called from here, so no edge
+   * `accounting → document` comes into being (backend ADR-0110).
+   */
+  it('openItemTotalKeyTest', () => {
+    expect(openItemTotalKey(7)).toEqual(['open-item-totals', 7])
+    expect(openItemTotalKey(8)).not.toEqual(openItemTotalKey(7))
+    // A tenant that is not chosen yet has a key of its own rather than sharing one.
+    expect(openItemTotalKey(null)).toEqual(['open-item-totals', null])
   })
 })

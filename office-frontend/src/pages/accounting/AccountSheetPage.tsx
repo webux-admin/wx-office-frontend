@@ -198,7 +198,7 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
  */
 async function printSheet(tenantId: number, fiscalYearId: number, accountId: number) {
   const file = await api.file(
-    accountingPrintUrl(tenantId, 'account-sheets', fiscalYearId, accountId),
+    accountingPrintUrl(tenantId, 'account-sheets', fiscalYearId, { accountId }),
   )
   printFile(file)
 }

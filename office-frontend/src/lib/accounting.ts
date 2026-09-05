@@ -18,6 +18,7 @@ import {
 } from './preferences'
 import type {
   Account,
+  AccountingSettings,
   AccountSheet,
   AccountRequest,
   AccountType,
@@ -32,17 +33,22 @@ import type {
   EntrySuggestion,
   EntryTemplate,
   EntryTemplateRequest,
+  EquityLayout,
   FiscalYear,
   FiscalYearList,
   FiscalYearPreview,
   FiscalYearRequest,
   FiscalYearStatus,
   JournalRow,
+  OpeningEntryOutcome,
+  OpeningEntryRequest,
   Page,
   PositionHint,
   PostRunPreview,
   PostRunResult,
   ReversalRequest,
+  SetupState,
+  Statement,
   SystemKey,
   TrialBalance,
   TaxCode,
@@ -835,6 +841,189 @@ export function accountSheetPath(accountId: number): string {
   return `${ACCOUNT_BALANCE_PATH}/${accountId}`
 }
 
+/** Path of the balance sheet within the application. */
+export const BALANCE_SHEET_PATH = '/buchhaltung/bilanz'
+
+/** Path of the income statement within the application. */
+export const INCOME_STATEMENT_PATH = '/buchhaltung/erfolgsrechnung'
+
+/**
+ * Path of the setup wizard.
+ *
+ * <p><b>It has no menu entry, and that is decided.</b> A menu entry for something a tenant does
+ * once in its life would stand there for ever afterwards. The four ways in are the empty states
+ * of «Buchen», of the chart and of the fiscal years, and the notice on a filled fiscal year
+ * screen that has no opening entry.
+ */
+export const ACCOUNTING_SETUP_PATH = '/buchhaltung/einrichten'
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to read
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns address of the balance sheet
+ */
+export function balanceSheetUrl(tenantId: number, fiscalYearId: number, asOf?: string): string {
+  return `${accountingUrl(tenantId)}/balance-sheet${statementQuery(fiscalYearId, asOf)}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to read
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns address of the income statement
+ */
+export function incomeStatementUrl(tenantId: number, fiscalYearId: number, asOf?: string): string {
+  return `${accountingUrl(tenantId)}/income-statement${statementQuery(fiscalYearId, asOf)}`
+}
+
+/**
+ * The query of both statements — and nothing else in it.
+ *
+ * <p>No `page`, no `size`, no `sort` and neither of the two presentation switches: the endpoint
+ * answers 400 for every one of them, because a caller that leafed through the answer would take
+ * the whole report for a first page.
+ */
+function statementQuery(fiscalYearId: number, asOf?: string): string {
+  const cutOff = asOf === undefined || asOf === '' ? '' : `&asOf=${asOf}`
+  return `?fiscalYearId=${fiscalYearId}${cutOff}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of the opening entry, for reading and for writing
+ */
+export function openingEntryUrl(tenantId: number, fiscalYearId?: number): string {
+  const year = fiscalYearId === undefined ? '' : `?fiscalYearId=${fiscalYearId}`
+  return `${accountingUrl(tenantId)}/opening-entry${year}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the setup state
+ */
+export function setupStateUrl(tenantId: number): string {
+  return `${accountingUrl(tenantId)}/setup-state`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns cache key of the balance sheet
+ */
+export function balanceSheetKey(
+  tenantId: number,
+  fiscalYearId: number,
+  asOf?: string,
+): readonly unknown[] {
+  return ['accounting-balance-sheet', tenantId, fiscalYearId, asOf ?? '']
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns cache key of the income statement
+ */
+export function incomeStatementKey(
+  tenantId: number,
+  fiscalYearId: number,
+  asOf?: string,
+): readonly unknown[] {
+  return ['accounting-income-statement', tenantId, fiscalYearId, asOf ?? '']
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns cache key of the opening entry
+ */
+export function openingEntryKey(tenantId: number, fiscalYearId: number): readonly unknown[] {
+  return ['accounting-opening-entry', tenantId, fiscalYearId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the setup state
+ */
+export function setupStateKey(tenantId: number): readonly unknown[] {
+  return ['accounting-setup-state', tenantId]
+}
+
+/**
+ * The balance sheet of one fiscal year, OR Art. 959a.
+ *
+ * <p>It answers while the module is off, like everything that reads here (OR Art. 958f).
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to read
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns the lines, the notes and the proof
+ */
+export function fetchBalanceSheet(
+  tenantId: number,
+  fiscalYearId: number,
+  asOf?: string,
+): Promise<Statement> {
+  return api.get<Statement>(balanceSheetUrl(tenantId, fiscalYearId, asOf))
+}
+
+/**
+ * The income statement of one fiscal year by nature of expense, OR Art. 959b Abs. 2.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to read
+ * @param asOf the cut-off day, absent for the whole year
+ * @returns the lines and the notes
+ */
+export function fetchIncomeStatement(
+  tenantId: number,
+  fiscalYearId: number,
+  asOf?: string,
+): Promise<Statement> {
+  return api.get<Statement>(incomeStatementUrl(tenantId, fiscalYearId, asOf))
+}
+
+/**
+ * The opening entry of one fiscal year.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns the opening entry with its lines; the call fails with 404 where the year has none
+ */
+export function fetchOpeningEntry(tenantId: number, fiscalYearId: number): Promise<Entry> {
+  return api.get<Entry>(openingEntryUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * Books the opening balance sheet, or replaces the one that stands.
+ *
+ * <p>There is no booking date in the payload: the server derives it from `posting_starts_on`,
+ * which travels through `PUT /settings` and nowhere else.
+ *
+ * @param tenantId the tenant
+ * @param request the year, the balances and whether an existing opening may be replaced
+ * @returns the new entry, and the journal numbers of what it replaced
+ */
+export function recordOpeningEntry(
+  tenantId: number,
+  request: OpeningEntryRequest,
+): Promise<OpeningEntryOutcome> {
+  return api.post<OpeningEntryOutcome>(openingEntryUrl(tenantId), request)
+}
+
+/**
+ * Where the tenant stands in setting up its bookkeeping.
+ *
+ * @param tenantId the tenant
+ * @returns the state of the three steps
+ */
+export function fetchSetupState(tenantId: number): Promise<SetupState> {
+  return api.get<SetupState>(setupStateUrl(tenantId))
+}
+
 /** The fields the trial balance may be sorted by — word for word the whitelist of the server. */
 export const TRIAL_BALANCE_SORT_FIELDS = [
   'accountNumber',
@@ -844,8 +1033,19 @@ export const TRIAL_BALANCE_SORT_FIELDS = [
   'balance',
 ] as const
 
-/** Which reports the printout knows. The balance sheet and the income statement follow. */
-export type AccountingReport = 'journal' | 'account-sheets' | 'trial-balance'
+/**
+ * Which reports the printout knows.
+ *
+ * <p>Five since #95. Two of them — the balance sheet and the income statement — are laid out and
+ * are the only two that take the presentation switches; the other three have no breakdown, and
+ * the endpoint answers 400 rather than quietly ignoring a switch sent to them.
+ */
+export type AccountingReport =
+  | 'journal'
+  | 'account-sheets'
+  | 'trial-balance'
+  | 'balance-sheet'
+  | 'income-statement'
 
 /**
  * @param tenantId the tenant
@@ -876,20 +1076,43 @@ export function accountingExportUrl(tenantId: number, fiscalYearId: number): str
 }
 
 /**
+ * The address of a printable page.
+ *
+ * <p><b>The two presentation switches travel with the link</b>, so the paper shows what the
+ * screen showed — and they are sent for the two laid-out reports only, because the other three
+ * answer 400 for them.
+ *
  * @param tenantId the tenant
  * @param report which report
  * @param fiscalYearId the year to print
- * @param accountId one account, for `account-sheets` only
+ * @param options the account for `account-sheets`, the cut-off day, and the two switches
  * @returns address of the printable page
  */
 export function accountingPrintUrl(
   tenantId: number,
   report: AccountingReport,
   fiscalYearId: number,
-  accountId?: number,
+  options: {
+    accountId?: number
+    asOf?: string
+    hideEmpty?: boolean
+    withAccounts?: boolean
+  } = {},
 ): string {
-  const account = accountId === undefined ? '' : `&accountId=${accountId}`
-  return `${accountingUrl(tenantId)}/print/${report}?fiscalYearId=${fiscalYearId}${account}`
+  const parts = [`fiscalYearId=${fiscalYearId}`]
+  if (options.accountId !== undefined) {
+    parts.push(`accountId=${options.accountId}`)
+  }
+  if (options.asOf !== undefined && options.asOf !== '') {
+    parts.push(`asOf=${options.asOf}`)
+  }
+  if (options.hideEmpty !== undefined) {
+    parts.push(`hideEmpty=${options.hideEmpty}`)
+  }
+  if (options.withAccounts !== undefined) {
+    parts.push(`withAccounts=${options.withAccounts}`)
+  }
+  return `${accountingUrl(tenantId)}/print/${report}?${parts.join('&')}`
 }
 
 /**
@@ -1757,4 +1980,46 @@ export function entryRequestOf(state: EntryDraftState): EntryRequest {
         taxCodeId: row.taxCodeId,
       })),
   }
+}
+
+/**
+ * What `PUT /settings` takes.
+ *
+ * <p><b>Every value left out stays as it is</b>, and clearing the posting lock is said outright.
+ * Three screens write this row — the state screen, and steps 1 and 3 of the setup wizard — and
+ * each knows one field of it; a missing field read as «leeren» would let step 3 lift the bolt on
+ * its way past.
+ */
+export type AccountingSettingsUpdate = {
+  postingsLockedUntil?: string | null
+  clearPostingsLock?: boolean
+  equityLayout?: EquityLayout
+  postingStartsOn?: string
+  /**
+   * Takes the changeover day off again.
+   *
+   * <p>Step 3 sets it to undo its own first call when the opening entry that follows is refused:
+   * the day and the entry are two writes, and a day left behind without an entry would tell
+   * `GET /setup-state` that the setup is finished — which would take the only way back to that
+   * step away.
+   */
+  clearPostingStartsOn?: boolean
+}
+
+/**
+ * Writes the settings of the bookkeeping.
+ *
+ * <p>Needs `ACCOUNTING_CONFIGURE`. `posting_starts_on` travels through here and nowhere else:
+ * the opening entry derives its booking date from it, and two writers for the same date would be
+ * a second truth.
+ *
+ * @param tenantId the tenant
+ * @param body the fields to write
+ * @returns the stored settings
+ */
+export function updateAccountingSettings(
+  tenantId: number,
+  body: AccountingSettingsUpdate,
+): Promise<AccountingSettings> {
+  return api.put<AccountingSettings>(accountingSettingsUrl(tenantId), body)
 }

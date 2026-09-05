@@ -69,6 +69,14 @@ import {
   accountSheetUrl,
   accountingExportUrl,
   accountingPrintUrl,
+  balanceSheetKey,
+  balanceSheetUrl,
+  incomeStatementKey,
+  incomeStatementUrl,
+  openingEntryKey,
+  openingEntryUrl,
+  setupStateKey,
+  setupStateUrl,
   trialBalanceUrl,
   integrityKey,
   integrityUrl,
@@ -764,7 +772,7 @@ describe('accountingPrintUrl', () => {
 
   /** The account only travels for the sheets, which is the one report that takes one. */
   it('accountingPrintUrlWithOneAccountTest', () => {
-    expect(accountingPrintUrl(7, 'account-sheets', 3, 412)).toBe(
+    expect(accountingPrintUrl(7, 'account-sheets', 3, { accountId: 412 })).toBe(
       '/api/tenants/7/accounting/print/account-sheets?fiscalYearId=3&accountId=412',
     )
   })
@@ -1526,5 +1534,78 @@ describe('entryTemplatesKey', () => {
     expect(entryTemplatesKey(7)).toEqual(['accounting-entry-templates', 7])
     expect(suggestionsKey(7, 'Mie')).toEqual(['accounting-entry-suggestions', 7, 'Mie'])
     expect(entryTemplatesKey(8)).not.toEqual(entryTemplatesKey(7))
+  })
+})
+
+describe('the two statements', () => {
+  /** The year is compulsory at the endpoint, and the cut-off day travels only where it is set. */
+  it('balanceSheetUrlTest', () => {
+    expect(balanceSheetUrl(7, 3)).toBe('/api/tenants/7/accounting/balance-sheet?fiscalYearId=3')
+    expect(balanceSheetUrl(7, 3, '2026-09-30')).toBe(
+      '/api/tenants/7/accounting/balance-sheet?fiscalYearId=3&asOf=2026-09-30',
+    )
+    expect(incomeStatementUrl(7, 3)).toBe(
+      '/api/tenants/7/accounting/income-statement?fiscalYearId=3',
+    )
+  })
+
+  /**
+   * <b>No paging and no presentation switch in the query.</b> The endpoint answers 400 for
+   * `page`, `size`, `sort`, `hideEmpty` and `withAccounts` — a caller that leafed through the
+   * answer would take the whole report for a first page.
+   */
+  it('statementUrlCarriesNothingElseTest', () => {
+    const url = balanceSheetUrl(7, 3, '2026-09-30')
+
+    expect(url).not.toContain('page')
+    expect(url).not.toContain('size')
+    expect(url).not.toContain('sort')
+    expect(url).not.toContain('hideEmpty')
+    expect(url).not.toContain('withAccounts')
+  })
+
+  /** Every key carries the tenant, the year and the cut-off day: three answers, three caches. */
+  it('statementKeysArePerYearAndDayTest', () => {
+    expect(balanceSheetKey(7, 3)).toEqual(['accounting-balance-sheet', 7, 3, ''])
+    expect(balanceSheetKey(7, 3, '2026-09-30')).not.toEqual(balanceSheetKey(7, 3))
+    expect(incomeStatementKey(7, 3)).not.toEqual(balanceSheetKey(7, 3))
+  })
+})
+
+describe('the opening entry and the setup state', () => {
+  it('openingEntryUrlTest', () => {
+    expect(openingEntryUrl(7, 3)).toBe('/api/tenants/7/accounting/opening-entry?fiscalYearId=3')
+    // The POST carries the year in its body, so the address takes none.
+    expect(openingEntryUrl(7)).toBe('/api/tenants/7/accounting/opening-entry')
+    expect(setupStateUrl(7)).toBe('/api/tenants/7/accounting/setup-state')
+  })
+
+  it('setupStateKeyIsPerTenantTest', () => {
+    expect(setupStateKey(7)).toEqual(['accounting-setup-state', 7])
+    expect(setupStateKey(8)).not.toEqual(setupStateKey(7))
+    expect(openingEntryKey(7, 3)).not.toEqual(openingEntryKey(7, 4))
+  })
+})
+
+describe('the print link of the two statements', () => {
+  /**
+   * The two switches travel with the link, so the paper shows what the screen showed. They are
+   * sent for the two laid-out reports only — the other three answer 400 for them.
+   */
+  it('accountingPrintUrlCarriesTheSwitchesTest', () => {
+    expect(
+      accountingPrintUrl(7, 'balance-sheet', 3, {
+        asOf: '2026-09-30',
+        hideEmpty: true,
+        withAccounts: false,
+      }),
+    ).toBe(
+      '/api/tenants/7/accounting/print/balance-sheet?fiscalYearId=3&asOf=2026-09-30'
+      + '&hideEmpty=true&withAccounts=false',
+    )
+    // And nothing travels that was not asked for.
+    expect(accountingPrintUrl(7, 'income-statement', 3)).toBe(
+      '/api/tenants/7/accounting/print/income-statement?fiscalYearId=3',
+    )
   })
 })

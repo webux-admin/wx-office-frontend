@@ -41,6 +41,7 @@ import {
   ReceiptText,
   Ruler,
   Scale,
+  TrendingUp,
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
@@ -61,6 +62,8 @@ import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
   ACCOUNT_BALANCE_PATH,
+  BALANCE_SHEET_PATH,
+  INCOME_STATEMENT_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
@@ -465,6 +468,27 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: ACCOUNTING_RIGHTS.read,
         module: ACCOUNTING_MODULE,
       },
+      // The two statements a bookkeeping is kept for, after the two books they are read out
+      // of: OR Art. 959a first and OR Art. 959b after it, the order of the law.
+      {
+        label: 'Bilanz',
+        icon: Scale,
+        href: BALANCE_SHEET_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
+      },
+      {
+        label: 'Erfolgsrechnung',
+        icon: TrendingUp,
+        href: INCOME_STATEMENT_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
+      },
+      // **The setup wizard gets no entry here, and that is decided.** A menu entry for something
+      // a tenant does once in its life would stand there for ever afterwards. It is reached from
+      // the three empty states of this group and from the fiscal year screen, and `navigation`
+      // deliberately does not know its path — `navHasNoSetupEntryTest` holds that.
+      //
       // **The one entry of this group without a `module`, and that is the whole point of it.**
       // Switching the module off closes the writing ways; it must not hide the books. GeBüV
       // Art. 6 Abs. 1 wants a person holding the read right to be able to look at them within a

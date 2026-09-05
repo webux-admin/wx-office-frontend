@@ -14,7 +14,10 @@ import {
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
   ACCOUNTING_ARCHIVE_PATH,
+  ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
+  BALANCE_SHEET_PATH,
+  INCOME_STATEMENT_PATH,
   JOURNAL_PATH,
   TAX_CODES_PATH,
 } from './lib/accounting'
@@ -52,6 +55,9 @@ const EntryDraftPage = lazy(() => import('./pages/EntryDraftPage').then((module)
 const JournalPage = lazy(() => import('./pages/JournalPage').then((module) => ({ default: module.JournalPage })))
 const AccountBalanceListPage = lazy(() => import('./pages/accounting/AccountBalanceListPage').then((module) => ({ default: module.AccountBalanceListPage })))
 const AccountSheetPage = lazy(() => import('./pages/accounting/AccountSheetPage').then((module) => ({ default: module.AccountSheetPage })))
+const BalanceSheetPage = lazy(() => import('./pages/BalanceSheetPage').then((module) => ({ default: module.BalanceSheetPage })))
+const IncomeStatementPage = lazy(() => import('./pages/IncomeStatementPage').then((module) => ({ default: module.IncomeStatementPage })))
+const AccountingSetupPage = lazy(() => import('./pages/AccountingSetupPage').then((module) => ({ default: module.AccountingSetupPage })))
 const AccountingArchivePage = lazy(() => import('./pages/accounting/AccountingArchivePage').then((module) => ({ default: module.AccountingArchivePage })))
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
@@ -228,6 +234,11 @@ export default function App() {
                 <Route path={JOURNAL_PATH} element={<JournalPage />} />
                 <Route path={ACCOUNT_BALANCE_PATH} element={<AccountBalanceListPage />} />
                 <Route path="/buchhaltung/konten/:accountId" element={<AccountSheetPage />} />
+                <Route path={BALANCE_SHEET_PATH} element={<BalanceSheetPage />} />
+                <Route path={INCOME_STATEMENT_PATH} element={<IncomeStatementPage />} />
+                {/* The wizard has no menu entry: it is reached from the three empty states of
+                    the accounting group and from the fiscal year screen. */}
+                <Route path={ACCOUNTING_SETUP_PATH} element={<AccountingSetupPage />} />
                 <Route path={ACCOUNTING_ARCHIVE_PATH} element={<AccountingArchivePage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
