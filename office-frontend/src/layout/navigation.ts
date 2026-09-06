@@ -1,5 +1,6 @@
 import {
   Archive,
+  BookCheck,
   ArrowDownToLine,
   ArrowLeftRight,
   Ban,
@@ -63,6 +64,7 @@ import {
   ACCOUNTING_SETTINGS_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
+  CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
@@ -481,6 +483,21 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Erfolgsrechnung',
         icon: TrendingUp,
         href: INCOME_STATEMENT_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
+        module: ACCOUNTING_MODULE,
+      },
+      // After the two statements, because the close is what is done once they read right — and
+      // before the archive, because the archive is what is left when everything is done.
+      //
+      // **On `ACCOUNTING_READ` and not on `ACCOUNTING_CLOSE`**, although the run itself needs
+      // the closing right. What a close did is part of the books, and the screen shows that to
+      // whoever may read them; the wizard behind it says which right is missing rather than
+      // hiding the entry. An entry on the closing right would leave a bookkeeper unable to see
+      // whether the year is closed at all.
+      {
+        label: 'Abschluss',
+        icon: BookCheck,
+        href: CLOSING_PATH,
         permission: ACCOUNTING_RIGHTS.read,
         module: ACCOUNTING_MODULE,
       },

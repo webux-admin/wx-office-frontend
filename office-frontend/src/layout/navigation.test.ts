@@ -6,6 +6,7 @@ import {
   ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
+  CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   DRAFT_PATH,
   ENTRY_PATH,
@@ -917,6 +918,7 @@ describe('the accounting group', () => {
       'Konten',
       'Bilanz',
       'Erfolgsrechnung',
+      'Abschluss',
       'Archiv',
     ])
     expect(entries.map((entry) => entry.href)).toEqual([
@@ -926,12 +928,19 @@ describe('the accounting group', () => {
       ACCOUNT_BALANCE_PATH,
       BALANCE_SHEET_PATH,
       INCOME_STATEMENT_PATH,
+      CLOSING_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
     // Typing needs the write right; reading what is waiting, what is booked, what stands on the
     // accounts and the two statements needs the read one. Posting is asked for at the button.
+    //
+    // **«Abschluss» is on the read right too, although the run behind it needs
+    // `ACCOUNTING_CLOSE`.** What a close did is part of the books; the screen shows that to
+    // whoever may read them and says at its wizard which right is missing. An entry on the
+    // closing right would leave a bookkeeper unable to see whether the year is closed at all.
     expect(entries.map((entry) => entry.permission)).toEqual([
       ACCOUNTING_RIGHTS.write,
+      ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
@@ -969,6 +978,7 @@ describe('the accounting group', () => {
         .filter((entry) => entry.href !== ACCOUNTING_ARCHIVE_PATH)
         .map((entry) => entry.module),
     ).toEqual([
+      'ACCOUNTING',
       'ACCOUNTING',
       'ACCOUNTING',
       'ACCOUNTING',
@@ -1064,6 +1074,7 @@ describe('the accounting group', () => {
       ACCOUNT_BALANCE_PATH,
       BALANCE_SHEET_PATH,
       INCOME_STATEMENT_PATH,
+      CLOSING_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
   })

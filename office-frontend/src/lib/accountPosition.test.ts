@@ -9,7 +9,7 @@ import { ACCOUNT_TYPE_ORDER } from './accounting'
 import type { AccountType, CatalogueEntry, OrPositionCode } from './types'
 
 /**
- * All thirty-nine positions of the minimum breakdown, in the order of the law.
+ * All forty positions of the minimum breakdown, in the order of the law.
  *
  * <p>Written out here and nowhere else in this frontend: the screen reads them from the
  * catalogue. This list is the mirror of the backend enum, so that the pairs below are a
@@ -41,6 +41,7 @@ const ALL_POSITIONS: OrPositionCode[] = [
   'EK_GEWINNVORTRAG',
   'EK_JAHRESERGEBNIS',
   'EK_KAPITAL_INHABER',
+  'EK_KAPITAL_BEWEGUNG',
   'EK_PRIVAT',
   'ER_NETTOERLOESE',
   'ER_BESTANDESAENDERUNGEN',
@@ -74,7 +75,7 @@ const PROFIT_AND_LOSS: OrPositionCode[] = [
 ]
 
 /**
- * The 51 allowed pairs, by name rather than by prefix.
+ * The 52 allowed pairs, by name rather than by prefix.
  *
  * <p>The same table `AccountingRulesTest` holds in the backend. Where the two drift apart, one
  * of them is wrong — and the screen would then offer a combination the database refuses.
@@ -110,6 +111,7 @@ const ALLOWED: Record<AccountType, OrPositionCode[]> = {
     'EK_GEWINNVORTRAG',
     'EK_JAHRESERGEBNIS',
     'EK_KAPITAL_INHABER',
+    'EK_KAPITAL_BEWEGUNG',
     'EK_PRIVAT',
   ],
   REVENUE: PROFIT_AND_LOSS,
@@ -124,7 +126,7 @@ function catalogue(): CatalogueEntry[] {
 
 describe('positionAllowedFor', () => {
   /**
-   * All 234 pairs in one loop, held against the table above.
+   * All 240 pairs in one loop, held against the table above.
    *
    * <p>The half of the assurance «the same truth value in the browser and in the backend» that
    * can be had without a database. The other half is
@@ -140,8 +142,8 @@ describe('positionAllowedFor', () => {
       }
     }
 
-    expect(ACCOUNT_TYPE_ORDER.length * ALL_POSITIONS.length).toBe(234)
-    expect(allowed).toBe(51)
+    expect(ACCOUNT_TYPE_ORDER.length * ALL_POSITIONS.length).toBe(240)
+    expect(allowed).toBe(52)
   })
 
   /**

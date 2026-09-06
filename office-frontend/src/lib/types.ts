@@ -3404,7 +3404,7 @@ export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENS
 /**
  * The closed catalogue of positions of the minimum breakdown, in the order of the law.
  *
- * <p>Thirty-nine values, declared in the order of OR Art. 959a and 959b. They are named here so
+ * <p>Forty values, declared in the order of OR Art. 959a and 959b. They are named here so
  * that a position the backend does not know cannot be sent; their **labels** never live in this
  * frontend, they come from the catalogue `or-position` and are the wording of the law.
  */
@@ -3434,6 +3434,7 @@ export type OrPositionCode =
   | 'EK_GEWINNVORTRAG'
   | 'EK_JAHRESERGEBNIS'
   | 'EK_KAPITAL_INHABER'
+  | 'EK_KAPITAL_BEWEGUNG'
   | 'EK_PRIVAT'
   | 'ER_NETTOERLOESE'
   | 'ER_BESTANDESAENDERUNGEN'
@@ -4143,6 +4144,207 @@ export type OpeningEntryRequest = {
   replaceExisting: boolean
   /** Mandatory as soon as `replaceExisting` is set. */
   reason?: string | null
+}
+
+/**
+ * One of the nine findings the closing run makes before it writes anything — `ClosingCheckDto`.
+ *
+ * <p>`step` is a string and not a number: two of the nine are «2a» and «3a», inserted where they
+ * belong rather than appended, so a reader of the process document and a reader of the screen
+ * count the same way.
+ */
+export type ClosingCheck = {
+  /** «1», «2», «2a», «3», «3a», «4», «5», «7» or «7a». */
+  step: string
+  passed: boolean
+  /**
+   * Whether a failure stops the run.
+   *
+   * <p>Exactly one of the nine never blocks: the reconciliation against the sub-ledgers, which
+   * has its place, its number and its note and no finding — it needs the sum of the open items,
+   * and that edge arrives with the document connection.
+   */
+  blocking: boolean
+  /** The finding, in one sentence, ready to be shown. */
+  message: string
+  /** What to do about it, empty where there is nothing to do. */
+  detail: string
+}
+
+/** One accrual account with what stands on it — `AccrualAccountDto`. */
+export type AccrualAccount = {
+  accountNumber: string
+  accountName: string
+  /** How many posted lines it carries in this year. */
+  entryCount: number
+  /** What they come to, as an amount without a sign. */
+  amount: number
+}
+
+/**
+ * One account the result may be carried onto — `CarryForwardOptionDto`.
+ *
+ * <p>Read out of the chart of this tenant and never out of a list of numbers. The account
+ * showing the result of the single year is not among them: that one has to start the following
+ * year at nil.
+ */
+export type CarryForwardOption = {
+  accountNumber: string
+  accountName: string
+}
+
+/** The year that follows the one being closed — `FollowingYearDto`. */
+export type FollowingYear = {
+  label: string
+  startDate: string
+  endDate: string
+  numberYear: number
+  /** Whether the tenant already keeps it. Where it does, the run uses it rather than opening one. */
+  exists: boolean
+  /** Its state, absent where it does not exist yet. */
+  status?: FiscalYearStatus | null
+}
+
+/**
+ * What the close of one fiscal year would do, before anything is written — `ClosingPreviewDto`.
+ *
+ * <p><b>It names no journal numbers.</b> They are drawn under a row lock at the moment of
+ * posting, and naming them here would mean reading a counter that deliberately never leaves the
+ * numbering module. What the screen may say is how many lines the entries will carry.
+ */
+export type ClosingPreview = {
+  checks: ClosingCheck[]
+  accruals: AccrualAccount[]
+  /**
+   * The net revenue of the year, for the sentence of OR Art. 958b Abs. 2 beside the confirmation.
+   *
+   * <p>A tick without a figure beside it is a tick everybody sets. No verdict travels with it:
+   * whether a business may keep its books on receipts and payments is a judgement about that
+   * business, not a computation over two sums.
+   */
+  netRevenue: number
+  /** The financial income of the year, for the same sentence. */
+  financialIncome: number
+  /** The result as it stands: positive is a profit. */
+  expectedResult: number
+  /** How many lines the two closing entries would carry together. */
+  closingLineCount: number
+  /**
+   * How the equity of this tenant is laid out, absent where none is chosen.
+   *
+   * <p>The last step reads it for the two things the options alone do not say: whether it asks
+   * where the result goes — a company never chooses, its carry forward account is 2970 and
+   * fixed — and which of the two sentences about the appropriation of the result it prints. A
+   * sole proprietorship has no general meeting that could decide one.
+   */
+  equityLayout?: EquityLayout | null
+  /** The account the result would go onto, absent where none is derivable. */
+  carryForwardAccount?: string | null
+  carryForwardOptions: CarryForwardOption[]
+  followingYear: FollowingYear
+  /** Whether an opening entry of the following year would be reversed and replaced. */
+  replacesOpeningEntry: boolean
+  /** How many accounts the carry forward would carry. */
+  carriedAccounts: number
+  /** Whether anything at all stops the run — worked out in the backend from the nine. */
+  blocked: boolean
+}
+
+/**
+ * What the closing dialog sends — `ClosingBody`.
+ *
+ * <p>`accrualsConfirmed` is the compulsory click of OR Art. 958b Abs. 1. Without it the run
+ * refuses; the preview lets it stand open, because the wizard asks for it one step later.
+ */
+export type ClosingRequest = {
+  accrualsConfirmed: boolean
+  /** Where the result goes, absent to take what the tenant picked the last time. */
+  carryForwardAccountNumber?: string | null
+  /** Whether the sub-ledgers were reconciled by hand; written into the trail beside the click. */
+  reconciliationConfirmed?: boolean
+}
+
+/** What the closing run wrote — `ClosingResultDto`. */
+export type ClosingResult = {
+  /** The journal numbers of the closing entries, in the order they were written. */
+  entryNumbers: string[]
+  /** The carry forward in the following year, absent where the year carried nothing forward. */
+  openingEntryNumber?: string | null
+  /** The year that was used or opened. */
+  followingYearId: number
+  carriedAccounts: number
+  /** The result of the year: positive is a profit. */
+  result: number
+}
+
+/** One entry the closing run wrote, as the screen names it — `ClosingEntryDto`. */
+export type ClosingEntry = {
+  /** The entry, so a row can lead into the journal with it opened. */
+  entryId: number
+  entryNumber: string
+  bookingDate: string
+  description: string
+  /** «JA-2026-1», «JA-2026-2» or «EB-2027». */
+  documentReference: string
+  /**
+   * Whether a counter entry has taken it back — which is what a reopened year looks like. The
+   * entry itself stays where it is (OR Art. 958f).
+   */
+  reversed: boolean
+}
+
+/**
+ * One line in the trail of a fiscal year — `YearLogDto`.
+ *
+ * <p>Only ever appended: a database trigger refuses every `UPDATE` on the table behind it, so
+ * the rule holds even for a repair script that goes past the application (GeBüV Art. 3).
+ */
+export type YearLogLine = {
+  event: 'STATUS' | 'MODULE_ON' | 'MODULE_OFF' | 'ACCRUALS'
+  /** The state that stands after the change; set exactly where `event` is `STATUS`. */
+  status?: FiscalYearStatus | null
+  /** Why, absent where the move asks for no reason. */
+  note?: string | null
+  changedAt: string
+  /** Who did it, `system` where nobody was logged in. */
+  changedBy: string
+}
+
+/**
+ * What the close of one fiscal year did, and the trail beside it — `ClosingSummaryDto`.
+ *
+ * <p>Answers for an open year as well, and then names no entries: the screen shows the same page
+ * before and after the close, and «noch nicht abgeschlossen» is a state rather than a missing
+ * resource.
+ */
+export type ClosingSummary = {
+  fiscalYearId: number
+  label: string
+  status: FiscalYearStatus
+  /**
+   * The result of the year: positive is a profit.
+   *
+   * <p>The same figure before and after the close — before it stands on the income accounts,
+   * afterwards on the balance sheet result account.
+   */
+  result: number
+  entries: ClosingEntry[]
+  /** The history of the year, newest first. */
+  log: YearLogLine[]
+}
+
+/** What `POST /reopen` takes — `ReopenBody`. The reason is compulsory. */
+export type ReopenRequest = {
+  reason: string
+}
+
+/** What `POST /reopen` answers — `ReopenResultDto`. */
+export type ReopenResult = {
+  /**
+   * The journal numbers of the counter entries, in the order they were written: the opening
+   * entry of the following year first, then the two closing entries — the run backwards.
+   */
+  entryNumbers: string[]
 }
 
 /** What is open in one currency, right now — `OpenItemTotalDto`. */

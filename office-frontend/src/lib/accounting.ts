@@ -7,7 +7,7 @@
  * the archive later, the chart of accounts by one screen and three dialogs, and a query key
  * written twice is a cache that goes stale in one of them.
  */
-import { api } from './api'
+import { ApiError, api } from './api'
 import { parseDecimal } from './format'
 import { listQuery } from './paging'
 import {
@@ -27,6 +27,11 @@ import type {
   ChartCopyRequest,
   ChartCopyResult,
   ChartTemplate,
+  ClosingCheck,
+  ClosingPreview,
+  ClosingRequest,
+  ClosingResult,
+  ClosingSummary,
   Entry,
   EntryAttention,
   EntryRequest,
@@ -46,6 +51,7 @@ import type {
   PositionHint,
   PostRunPreview,
   PostRunResult,
+  ReopenResult,
   ReversalRequest,
   SetupState,
   Statement,
@@ -53,6 +59,7 @@ import type {
   TrialBalance,
   TaxCode,
   TaxCodeCatalogue,
+  YearLogLine,
 } from './types'
 
 /** Name of the backend `LicensedModule` value. */
@@ -391,10 +398,10 @@ export function accountTypeLabel(
  *
  * <p>Word for word the rule of `AccountingRules.positionAllowedFor` and of the database check
  * `ck_accounting_account_position`. **In the browser it is a convenience, never a barrier**: the
- * two barriers stand in the backend, and `accountPosition.test.ts` holds all 234 pairs against
+ * two barriers stand in the backend, and `accountPosition.test.ts` holds all 240 pairs against
  * the same table `AccountingRulesTest` does, so the three cannot drift apart.
  *
- * <p>`ABSCHLUSS` is spelt out rather than given a prefix of its own: no other of the 39 codes
+ * <p>`ABSCHLUSS` is spelt out rather than given a prefix of its own: no other of the 40 codes
  * begins with it, so a prefix match and the equality the backend uses answer the same thing.
  */
 export const POSITION_PREFIXES: Record<AccountType, readonly string[]> = {
@@ -1980,6 +1987,225 @@ export function entryRequestOf(state: EntryDraftState): EntryRequest {
         taxCodeId: row.taxCodeId,
       })),
   }
+}
+
+// --- der Jahresabschluss -------------------------------------------------------------------
+
+/**
+ * Path of the year-end run within the application.
+ *
+ * <p>Its own screen and not a tab of the fiscal year list: the close is a run of thirteen steps
+ * in one transaction, asked for through a wizard of its own over three, and a tab that opened
+ * one would hide it behind a list of years.
+ */
+export const CLOSING_PATH = '/buchhaltung/abschluss'
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of the closing preview
+ */
+export function closingPreviewUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years/${fiscalYearId}/closing/preview`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of the run itself, and of what it left behind
+ */
+export function closingUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years/${fiscalYearId}/closing`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of the reopening
+ */
+export function reopenUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years/${fiscalYearId}/reopen`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns address of the trail of one fiscal year
+ */
+export function yearLogUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years/${fiscalYearId}/log`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns cache key of the closing preview
+ */
+export function closingPreviewKey(tenantId: number, fiscalYearId: number): readonly unknown[] {
+  return ['accounting-closing-preview', tenantId, fiscalYearId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns cache key of what a close left behind
+ */
+export function closingKey(tenantId: number, fiscalYearId: number): readonly unknown[] {
+  return ['accounting-closing', tenantId, fiscalYearId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns cache key of the trail of one fiscal year
+ */
+export function yearLogKey(tenantId: number, fiscalYearId: number): readonly unknown[] {
+  return ['accounting-year-log', tenantId, fiscalYearId]
+}
+
+/**
+ * What the close of one year would do, before anything is written.
+ *
+ * <p>Needs `ACCOUNTING_CLOSE` and not the read right: it serves the closing wizard alone and
+ * shares its right. It writes no entry and moves no state.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year that would be closed
+ * @returns the nine findings, the accrual accounts, the figures and the following year
+ */
+export function fetchClosingPreview(
+  tenantId: number,
+  fiscalYearId: number,
+): Promise<ClosingPreview> {
+  return api.get<ClosingPreview>(closingPreviewUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * Closes one fiscal year: the two closing entries, the carry forward and the state.
+ *
+ * <p>Needs `ACCOUNTING_CLOSE`. A refusal answers 400 and carries all nine findings under
+ * `checks`, so the wizard keeps its list rather than showing «geht nicht».
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to close
+ * @param body the accrual confirmation and where the result is carried
+ * @returns the journal numbers, the following year and what was carried
+ */
+export function closeFiscalYear(
+  tenantId: number,
+  fiscalYearId: number,
+  body: ClosingRequest,
+): Promise<ClosingResult> {
+  return api.post<ClosingResult>(closingUrl(tenantId, fiscalYearId), body)
+}
+
+/**
+ * Opens a closed year again, with counter entries and a compulsory reason.
+ *
+ * <p>Needs `ACCOUNTING_CLOSE`. Nothing is deleted: the closing entries stay in the journal and
+ * carry a counter entry each (OR Art. 958f).
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year to open again
+ * @param reason why, in the words of the person doing it
+ * @returns the journal numbers of the counter entries
+ */
+export function reopenFiscalYear(
+  tenantId: number,
+  fiscalYearId: number,
+  reason: string,
+): Promise<ReopenResult> {
+  return api.post<ReopenResult>(reopenUrl(tenantId, fiscalYearId), { reason })
+}
+
+/**
+ * What the close of one year did, and the trail beside it.
+ *
+ * <p>Answers while the module is off, like everything that reads here (OR Art. 958f), and
+ * answers for an open year as well — then without entries.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns the state, the result, the entries of the run and the history of the year
+ */
+export function fetchClosing(tenantId: number, fiscalYearId: number): Promise<ClosingSummary> {
+  return api.get<ClosingSummary>(closingUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * What has happened to one fiscal year, newest first.
+ *
+ * <p>Answers while the module is off, and that is not an oversight: it is the trail that says
+ * the module **was** switched off (GeBüV Art. 6 Abs. 1).
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns its history, newest first
+ */
+export function fetchYearLog(tenantId: number, fiscalYearId: number): Promise<YearLogLine[]> {
+  return api.get<YearLogLine[]>(yearLogUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * The findings a refused close carried, out of the `ProblemDetail` of the answer.
+ *
+ * <p><b>The refusal carries all nine and not only the red ones</b>, so the wizard shows the same
+ * list before and after the attempt. Anything that is not a list of findings gives an empty
+ * one — a network failure and a 500 have no findings, and a screen that read a `detail` as a
+ * check would show a sentence in a column of ticks.
+ *
+ * @param error whatever the call threw
+ * @returns the nine findings, or an empty list where the failure carries none
+ */
+export function closingChecksOf(error: unknown): ClosingCheck[] {
+  const details = error instanceof ApiError ? error.details : undefined
+  const checks = (details as { checks?: unknown } | null | undefined)?.checks
+  if (!Array.isArray(checks)) {
+    return []
+  }
+  return checks.filter(
+    (check): check is ClosingCheck =>
+      typeof check === 'object' &&
+      check !== null &&
+      typeof (check as ClosingCheck).step === 'string' &&
+      typeof (check as ClosingCheck).message === 'string',
+  )
+}
+
+/**
+ * The findings that stop the run, out of all nine.
+ *
+ * <p>The wizard shows every finding and puts these at the top: a list of nine in which the one
+ * that matters sits seventh is a list nobody reads to the end.
+ *
+ * @param checks the nine findings
+ * @returns the ones that block, in the order of the run
+ */
+export function blockingChecks(checks: ClosingCheck[]): ClosingCheck[] {
+  return checks.filter((check) => check.blocking && !check.passed)
+}
+
+/**
+ * What one line of the trail says, in words.
+ *
+ * <p>The event and the state are two columns in the database and one sentence on the screen:
+ * «Abgeschlossen» reads better than «STATUS · CLOSED», and a reader of a history is not reading
+ * an enum.
+ *
+ * @param line one line of the trail
+ * @returns what happened, in German
+ */
+export function yearLogLabel(line: YearLogLine): string {
+  if (line.event === 'MODULE_ON') {
+    return 'Buchhaltung eingeschaltet'
+  }
+  if (line.event === 'MODULE_OFF') {
+    return 'Buchhaltung abgeschaltet'
+  }
+  if (line.event === 'ACCRUALS') {
+    return 'Abgrenzungen bestätigt'
+  }
+  return line.status ? FISCAL_YEAR_STATUS[line.status] : 'Zustand geändert'
 }
 
 /**

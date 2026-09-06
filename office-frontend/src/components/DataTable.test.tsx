@@ -37,6 +37,14 @@ function boxes(): HTMLInputElement[] {
   return [...container.querySelectorAll('input[type=checkbox]')] as HTMLInputElement[]
 }
 
+/** Every chevron of the folded-open column, in row order. */
+function chevrons(): HTMLButtonElement[] {
+  return [...container.querySelectorAll('button')].filter((candidate) =>
+    candidate.getAttribute('aria-label')?.startsWith('Zeile auf')
+    || candidate.getAttribute('aria-label')?.startsWith('Zeile zu'),
+  ) as HTMLButtonElement[]
+}
+
 /** Where the router stands, so a navigation is visible to the test. */
 function here(): string {
   return container.querySelector('[data-where]')?.getAttribute('data-where') ?? ''
@@ -191,5 +199,182 @@ describe('DataTable sections', () => {
     await render({ sectionTitle: () => undefined })
 
     expect(container.querySelectorAll('tbody th')).toHaveLength(0)
+  })
+})
+
+/**
+ * The folded-open row: a chevron column the caller never declares, and a cell across the whole
+ * table under the row it belongs to.
+ *
+ * <p>Which rows stand open is state of the caller and not of the table: it has to survive a
+ * refetch, and a table that owned it would fold everything shut whenever an answer comes back.
+ */
+describe('DataTable expandable rows', () => {
+  /** Every row gets a chevron, and nothing is open until somebody opens it. */
+  it('dataTableShowsAChevronPerRowTest', async () => {
+    await render({
+      expandableRow: () => true,
+      expanded: new Set<string | number>(),
+      onExpandedChange: () => {},
+      renderExpanded: (row: Row) => <p>Details zu {row.name}</p>,
+    })
+
+    expect(chevrons()).toHaveLength(3)
+    expect(chevrons().every((button) => button.getAttribute('aria-expanded') === 'false')).toBe(
+      true,
+    )
+    expect(container.textContent).not.toContain('Details zu')
+  })
+
+  /** An open row draws its content in a cell spanning every column. */
+  it('dataTableShowsTheOpenedRowTest', async () => {
+    await render({
+      expandableRow: () => true,
+      expanded: new Set<string | number>([12]),
+      onExpandedChange: () => {},
+      renderExpanded: (row: Row) => <p>Details zu {row.name}</p>,
+    })
+
+    expect(container.textContent).toContain('Details zu RE-2026-0012')
+    // Three rows plus the one that is open.
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(4)
+    const opened = [...container.querySelectorAll('tbody td')].find(
+      (cell) => cell.textContent?.includes('Details zu'),
+    )
+    expect(opened?.getAttribute('colspan')).toBe('2')
+  })
+
+  /** The chevron reports what it does, and the caller is told which row was clicked. */
+  it('dataTableTogglesARowTest', async () => {
+    const seen: (string | number)[][] = []
+    await render({
+      expandableRow: () => true,
+      expanded: new Set<string | number>(),
+      onExpandedChange: (next: Set<string | number>) => seen.push([...next]),
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    await act(async () => {
+      chevrons()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(seen).toEqual([[12]])
+  })
+
+  /** And clicking an open one closes it, leaving the others where they are. */
+  it('dataTableClosesAnOpenRowTest', async () => {
+    const seen: (string | number)[][] = []
+    await render({
+      expandableRow: () => true,
+      expanded: new Set<string | number>([11, 12]),
+      onExpandedChange: (next: Set<string | number>) => seen.push([...next]),
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    await act(async () => {
+      chevrons()[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(seen).toEqual([[12]])
+    expect(chevrons()[0].getAttribute('aria-expanded')).toBe('true')
+  })
+
+  /** A row the caller says carries nothing shows no chevron and cannot be opened. */
+  it('dataTableWithoutAChevronOnEveryRowTest', async () => {
+    await render({
+      expandableRow: (row: Row) => row.closed !== true,
+      expanded: new Set<string | number>(),
+      onExpandedChange: () => {},
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    expect(chevrons()).toHaveLength(2)
+  })
+
+  /** A click on the chevron does not open the record: the row keeps its own click. */
+  it('dataTableChevronDoesNotOpenTheRecordTest', async () => {
+    await render({
+      rowTo: (row: Row) => `/liste/${row.id}`,
+      expandableRow: () => true,
+      expanded: new Set<string | number>(),
+      onExpandedChange: () => {},
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    await act(async () => {
+      chevrons()[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(here()).toBe('/liste')
+  })
+
+  /** Without the pair the table looks exactly as it always did: no column, no cell. */
+  it('dataTableWithoutExpandableRowsTest', async () => {
+    await render({ renderExpanded: () => <p>Details</p> })
+
+    expect(chevrons()).toHaveLength(0)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
+  /** The heading of a block spans the chevron column too, or the rule would start too late. */
+  it('dataTableSectionSpansTheChevronColumnTest', async () => {
+    await render({
+      sectionTitle: (row: Row) => (row.closed === true ? 'Erledigt' : 'Offen'),
+      expandableRow: () => true,
+      expanded: new Set<string | number>(),
+      onExpandedChange: () => {},
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    const heading = container.querySelector('tbody th')
+    expect(heading?.getAttribute('colspan')).toBe('2')
+  })
+
+  /**
+   * <b>A column dropped below `sm` does not count in the `colSpan`.</b>
+   *
+   * <p>On a phone that column is not in the table at all, and a detail row claiming it would add
+   * a column no other row fills. On a wider screen it is back, and a filler cell beside the
+   * content covers it — one number cannot be right for both widths, so there are two cells.
+   */
+  it('dataTableOpenedRowLeavesAHiddenColumnOutOfTheColSpanTest', async () => {
+    await render({
+      columns: [
+        ...COLUMNS,
+        { key: 'ref', header: 'Beleg', hideBelow: 'sm', render: (row: Row) => `B-${row.id}` },
+      ],
+      expandableRow: () => true,
+      expanded: new Set<string | number>([12]),
+      onExpandedChange: () => {},
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    const opened = [...container.querySelectorAll('tbody td')].find((cell) =>
+      cell.textContent?.includes('Details'),
+    )
+    // The chevron column and «Nummer» — «Beleg» is not among them.
+    expect(opened?.getAttribute('colspan')).toBe('2')
+
+    const filler = opened?.nextElementSibling
+    expect(filler?.getAttribute('colspan')).toBe('1')
+    expect(filler?.className).toContain('hidden sm:table-cell')
+    expect(filler?.textContent).toBe('')
+  })
+
+  /** No column hides, no filler: a table without `hideBelow` reads exactly as it always did. */
+  it('dataTableOpenedRowWithoutAHiddenColumnTest', async () => {
+    await render({
+      expandableRow: () => true,
+      expanded: new Set<string | number>([12]),
+      onExpandedChange: () => {},
+      renderExpanded: () => <p>Details</p>,
+    })
+
+    const opened = [...container.querySelectorAll('tbody td')].find((cell) =>
+      cell.textContent?.includes('Details'),
+    )
+
+    expect(opened?.getAttribute('colspan')).toBe('2')
+    expect(opened?.nextElementSibling).toBeNull()
   })
 })

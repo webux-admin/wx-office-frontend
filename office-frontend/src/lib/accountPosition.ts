@@ -6,7 +6,7 @@
  * chart that exists **three times** — as `ck_accounting_account_position` in the database, as
  * `AccountingRules.positionAllowedFor` in the backend, and here. The two in the backend are the
  * barriers; this one is a convenience, so that nobody has to run into a refusal to learn that an
- * income account cannot appear under «Vorräte». `accountPosition.test.ts` holds all 234 pairs
+ * income account cannot appear under «Vorräte». `accountPosition.test.ts` holds all 240 pairs
  * against the same table `AccountingRulesTest` does, which is what keeps the three together
  * (backend ADR-0112).
  */
@@ -16,7 +16,7 @@ import type { AccountType, CatalogueEntry } from './types'
 /**
  * Whether an account of this type may be filed under this position.
  *
- * <p>The same 51 of 234 pairs the backend allows: `CLOSING` with `ABSCHLUSS`, `ASSET` with the
+ * <p>The same 52 of 240 pairs the backend allows: `CLOSING` with `ABSCHLUSS`, `ASSET` with the
  * current and fixed assets, `LIABILITY` with the short and long term liabilities, `EQUITY` with
  * the equity, and income **and** expense with the profit and loss statement. That the last two
  * share their positions is no oversight: four positions name expense and income in one line

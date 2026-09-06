@@ -1,5 +1,11 @@
 import { motion } from 'motion/react'
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 import { Fragment, type MouseEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckboxField } from './CheckboxField'
@@ -115,6 +121,34 @@ type DataTableProps<T> = {
    * <p>Left out the key is read out, which is a number and says nothing.
    */
   selectionLabel?: (row: T) => string
+  /**
+   * Which rows carry something to fold open; the others show no chevron.
+   *
+   * <p>A prop pair and not a column, for the same reason the selection is one: the chevron
+   * belongs in a column of its own that the caller never declares, and every list that built
+   * one for itself would repeat the same twenty lines and reach a different keyboard behaviour.
+   *
+   * <p>Set together with {@link DataTableProps.renderExpanded}; either alone folds nothing open.
+   */
+  expandableRow?: (row: T) => boolean
+  /**
+   * What stands under a row that is folded open, across the width of the table.
+   *
+   * <p>A second table inside it is fine — the cell spans every column that stands at this
+   * width, so a nested list keeps its own alignment. A column dropped below `sm` is left out
+   * of that count: on a phone it is not there to be spanned, and on a wider screen a filler
+   * cell beside the content covers it.
+   */
+  renderExpanded?: (row: T) => ReactNode
+  /**
+   * The rows that are folded open, by their key.
+   *
+   * <p>Held by the caller and not by the table: which rows stand open is state a screen wants
+   * to keep across a refetch, and a table that owned it would fold everything shut every time
+   * an answer comes back.
+   */
+  expanded?: ReadonlySet<string | number>
+  onExpandedChange?: (next: Set<string | number>) => void
 }
 
 /**
@@ -146,6 +180,10 @@ export function DataTable<T>({
   onSelectedChange,
   selectableRow,
   selectionLabel,
+  expandableRow,
+  renderExpanded,
+  expanded,
+  onExpandedChange,
   sectionTitle,
 }: DataTableProps<T>) {
   const navigate = useNavigate()
@@ -202,6 +240,17 @@ export function DataTable<T>({
     onSelectedChange?.(next)
   }
 
+  const expanding = expanded !== undefined && onExpandedChange !== undefined && Boolean(renderExpanded)
+
+  /** Folds one row open or shut, leaving every other one where it is. */
+  const toggleExpanded = (row: T) => {
+    const key = keyOf(row)
+    const next = new Set(expanded)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    onExpandedChange?.(next)
+  }
+
   if (error) {
     return (
       <div className="p-5">
@@ -218,6 +267,14 @@ export function DataTable<T>({
   // the floor they always had.
   const narrows = columns.some((column) => column.hideBelow)
 
+  // What a folded-open row may span. A column dropped below `sm` is not in the table on a phone,
+  // so counting it there would claim a column the table does not have; on every wider screen it
+  // is in the table, and leaving it out would end the row before its last column. One number
+  // cannot be right for both, so the cell carrying the content spans what always stands, and a
+  // second cell — dropped at the same breakpoint — covers the rest.
+  const steadyColumns = columns.filter((column) => column.hideBelow === undefined).length
+  const narrowedColumns = columns.length - steadyColumns
+
   return (
     <>
       <div className="overflow-x-auto">
@@ -228,6 +285,7 @@ export function DataTable<T>({
         >
           <thead>
             <tr className="border-b border-line-subtle">
+              {expanding && <th scope="col" className="w-10 px-5 py-2.5" />}
               {selecting && (
                 <th scope="col" className="w-10 px-5 py-2.5">
                   <CheckboxField
@@ -301,7 +359,7 @@ export function DataTable<T>({
                   <tr className="bg-sunken/60">
                     <th
                       scope="colgroup"
-                      colSpan={columns.length + (selecting ? 1 : 0)}
+                      colSpan={columns.length + (selecting ? 1 : 0) + (expanding ? 1 : 0)}
                       className="text-overline px-5 py-1.5 text-left font-medium text-text-tertiary"
                     >
                       {section}
@@ -314,6 +372,29 @@ export function DataTable<T>({
                     opens ? 'cursor-pointer hover:bg-sunken' : 'hover:bg-sunken/60'
                   }`}
                 >
+                  {expanding && (
+                    <td className="w-10 px-5 py-2.5 align-middle">
+                      {(expandableRow?.(row) ?? true) && (
+                        <button
+                          type="button"
+                          aria-expanded={expanded?.has(keyOf(row)) === true}
+                          aria-label={
+                            expanded?.has(keyOf(row)) === true
+                              ? 'Zeile zuklappen'
+                              : 'Zeile aufklappen'
+                          }
+                          onClick={() => toggleExpanded(row)}
+                          className="text-text-tertiary transition-colors hover:text-text-primary"
+                        >
+                          {expanded?.has(keyOf(row)) === true ? (
+                            <ChevronDown size={14} aria-hidden />
+                          ) : (
+                            <ChevronRight size={14} aria-hidden />
+                          )}
+                        </button>
+                      )}
+                    </td>
+                  )}
                   {selecting && (
                     <td className="w-10 px-5 py-2.5 align-middle">
                       {(selectableRow?.(row) ?? true) && (
@@ -337,6 +418,19 @@ export function DataTable<T>({
                     </td>
                   ))}
                 </tr>
+                {expanding && expanded?.has(keyOf(row)) === true && (
+                  <tr className="bg-sunken/40">
+                    <td
+                      colSpan={steadyColumns + (selecting ? 1 : 0) + 1}
+                      className="px-5 py-3 align-top"
+                    >
+                      {renderExpanded?.(row)}
+                    </td>
+                    {narrowedColumns > 0 && (
+                      <td colSpan={narrowedColumns} className="hidden sm:table-cell" />
+                    )}
+                  </tr>
+                )}
                 </Fragment>
               )
             })}

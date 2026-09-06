@@ -75,8 +75,18 @@ import {
   incomeStatementUrl,
   openingEntryKey,
   openingEntryUrl,
+  blockingChecks,
+  closingChecksOf,
+  closingKey,
+  closingPreviewKey,
+  closingPreviewUrl,
+  closingUrl,
+  reopenUrl,
   setupStateKey,
   setupStateUrl,
+  yearLogKey,
+  yearLogLabel,
+  yearLogUrl,
   trialBalanceUrl,
   integrityKey,
   integrityUrl,
@@ -97,7 +107,8 @@ import {
   writeEntryDraft,
   type EntryDraftRow,
 } from './accounting'
-import type { Account, TaxCode } from './types'
+import { ApiError } from './api'
+import type { Account, TaxCode, YearLogLine } from './types'
 
 /** A role of the tenant, reduced to what the question is about. */
 function role(permissions: string[]) {
@@ -1609,3 +1620,120 @@ describe('the print link of the two statements', () => {
     )
   })
 })
+
+/**
+ * The addresses, the cache keys and the two readers of the year-end run.
+ *
+ * <p>The addresses are checked because a typo in one of them shows as a 404 nobody can place; the
+ * cache keys because two screens sharing a key would show each other's answer, and two keys for
+ * one thing would leave one of them stale after a close.
+ */
+describe('der Jahresabschluss', () => {
+  it('closingUrlsTest', () => {
+    expect(closingPreviewUrl(4, 100)).toBe(
+      '/api/tenants/4/accounting/fiscal-years/100/closing/preview',
+    )
+    expect(closingUrl(4, 100)).toBe('/api/tenants/4/accounting/fiscal-years/100/closing')
+    expect(reopenUrl(4, 100)).toBe('/api/tenants/4/accounting/fiscal-years/100/reopen')
+    expect(yearLogUrl(4, 100)).toBe('/api/tenants/4/accounting/fiscal-years/100/log')
+  })
+
+  /** Every key names the tenant and the year: nothing of one tenant reaches the cache of another. */
+  it('closingKeysTest', () => {
+    expect(closingPreviewKey(4, 100)).toEqual(['accounting-closing-preview', 4, 100])
+    expect(closingKey(4, 100)).toEqual(['accounting-closing', 4, 100])
+    expect(yearLogKey(4, 100)).toEqual(['accounting-year-log', 4, 100])
+  })
+
+  /** The preview and what a close left behind are two answers and two keys. */
+  it('closingKeysAreDistinctTest', () => {
+    expect(closingPreviewKey(4, 100)).not.toEqual(closingKey(4, 100))
+    expect(closingKey(4, 100)).not.toEqual(closingKey(4, 101))
+    expect(closingKey(4, 100)).not.toEqual(closingKey(5, 100))
+  })
+
+  describe('closingChecksOf', () => {
+    /** A refused close carries all nine, and the screen keeps its list. */
+    it('closingChecksOfTest', () => {
+      const error = new ApiError(400, 'Die Abgrenzungen sind nicht bestätigt.', {
+        detail: 'Die Abgrenzungen sind nicht bestätigt.',
+        checks: [
+          { step: '1', passed: true, blocking: true, message: 'offen', detail: '' },
+          { step: '2a', passed: false, blocking: true, message: 'fehlt', detail: '' },
+        ],
+      })
+
+      expect(closingChecksOf(error).map((check) => check.step)).toEqual(['1', '2a'])
+    })
+
+    /**
+     * <b>Anything that is not a list of findings gives an empty one.</b> A network failure and a
+     * 500 have no findings, and a screen that read a `detail` as a check would show a sentence in
+     * a column of ticks.
+     */
+    it('closingChecksOfSomethingElseTest', () => {
+      expect(closingChecksOf(new Error('offline'))).toEqual([])
+      expect(closingChecksOf(new ApiError(500, 'kaputt', { detail: 'kaputt' }))).toEqual([])
+      expect(closingChecksOf(new ApiError(400, 'x', { checks: 'nein' }))).toEqual([])
+      expect(closingChecksOf(null)).toEqual([])
+      expect(closingChecksOf(undefined)).toEqual([])
+    })
+
+    /** A row that is not a finding is dropped rather than rendered as an empty tick. */
+    it('closingChecksOfAMalformedRowTest', () => {
+      const error = new ApiError(400, 'x', {
+        checks: [
+          { step: '1', passed: true, blocking: true, message: 'offen', detail: '' },
+          { step: 2, message: 'keine Zeichenkette' },
+          null,
+        ],
+      })
+
+      expect(closingChecksOf(error)).toHaveLength(1)
+    })
+  })
+
+  describe('blockingChecks', () => {
+    /** Only what stops the run, and the reconciliation never does. */
+    it('blockingChecksTest', () => {
+      const checks = [
+        { step: '1', passed: true, blocking: true, message: 'a', detail: '' },
+        { step: '2', passed: false, blocking: true, message: 'b', detail: '' },
+        { step: '3a', passed: false, blocking: false, message: 'c', detail: '' },
+      ]
+
+      expect(blockingChecks(checks).map((check) => check.step)).toEqual(['2'])
+    })
+
+    it('blockingChecksWithoutAnyTest', () => {
+      expect(blockingChecks([])).toEqual([])
+    })
+  })
+
+  describe('yearLogLabel', () => {
+    /**
+     * The event and the state are two columns in the database and one sentence on the screen:
+     * «Abgeschlossen» reads better than «STATUS · CLOSED».
+     */
+    it('yearLogLabelTest', () => {
+      expect(yearLogLabel(logLine('STATUS', 'CLOSED'))).toBe('Abgeschlossen')
+      expect(yearLogLabel(logLine('STATUS', 'OPEN'))).toBe('Offen')
+      expect(yearLogLabel(logLine('STATUS', 'LOCKED'))).toBe('Gesperrt')
+      expect(yearLogLabel(logLine('ACCRUALS', null))).toBe('Abgrenzungen bestätigt')
+      expect(yearLogLabel(logLine('MODULE_ON', null))).toBe('Buchhaltung eingeschaltet')
+      expect(yearLogLabel(logLine('MODULE_OFF', null))).toBe('Buchhaltung abgeschaltet')
+    })
+
+    /** A status line without a state cannot arrive, and the label still reads. */
+    it('yearLogLabelWithoutAStatusTest', () => {
+      expect(yearLogLabel(logLine('STATUS', null))).toBe('Zustand geändert')
+    })
+  })
+})
+
+function logLine(
+  event: YearLogLine['event'],
+  status: YearLogLine['status'],
+): YearLogLine {
+  return { event, status, note: null, changedAt: '2027-03-15T09:00:00Z', changedBy: 'jan' }
+}
