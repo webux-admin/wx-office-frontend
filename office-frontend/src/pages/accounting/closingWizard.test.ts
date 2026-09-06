@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { ClosingCheck, ClosingPreview, FiscalYear, YearLogLine } from '../../lib/types'
+import type {
+  ArchivedReport,
+  ClosingCheck,
+  ClosingPreview,
+  FiscalYear,
+  YearLogLine,
+} from '../../lib/types'
 import {
   accrualLineOf,
   accrualRefusal,
@@ -11,8 +17,10 @@ import {
   carryForwardHint,
   checkTone,
   CLOSING_STEPS,
+  closingRunsOf,
   closingSummarySentence,
   defaultClosingYear,
+  filedPapersSentence,
   laterYearSentence,
   nextStep,
   previousStep,
@@ -24,8 +32,8 @@ import {
  * The rules of the closing wizard, without a screen.
  *
  * <p>What is checked here is the part a screen test could only get at through three clicks: which
- * step follows which, when «Weiter» does anything, and how nine findings are ordered so the one
- * that stops the run is read first.
+ * step follows which, when «Weiter» does anything, how ten findings are ordered so the one that
+ * stops the run is read first, and how the filed papers of a year fall into its closing runs.
  */
 describe('closingWizard', () => {
   describe('canContinue', () => {
@@ -35,7 +43,7 @@ describe('closingWizard', () => {
       expect(canContinue('CARRY_FORWARD', preview())).toBe(true)
     })
 
-    /** Step 1 is the gate: nine findings decide whether a close is possible at all. */
+    /** Step 1 is the gate: ten findings decide whether a close is possible at all. */
     it('canContinueWithABlockingCheckTest', () => {
       const blocked = { ...preview(), blocked: true }
 
@@ -150,33 +158,34 @@ describe('closingWizard', () => {
     })
 
     /**
-     * <b>The nine of the run, in the shape the screen really gets them, and the sorting has
+     * <b>The ten of the run, in the shape the screen really gets them, and the sorting has
      * something to do.</b> Finding 3a is the one that never blocks and finding 5 the one that is
      * red here, so the list that comes back is not the list that went in: the red one is lifted
-     * to the top and everything else keeps the order of the run — 1, 2, 2a, 3, 3a, 4, 7, 7a, the
-     * order of `ClosingChecks.of` minus the one that moved.
+     * to the top and everything else keeps the order of the run — 1, 2, 2a, 3, 3a, 4, 4a, 7, 7a,
+     * the order of `ClosingChecks.of` minus the one that moved.
      *
-     * <p><b>Nine in, nine out.</b> The sorting drops nothing and invents nothing; the backend
-     * always answers nine (`ClosingChecks.of`, «always nine and always in this order»), and a
-     * screen showing eight of them would hide a finding rather than order it. The mask end of it
-     * is `ClosingPage.closingPageShowsTheNineChecksTest`.
+     * <p><b>Ten in, ten out.</b> The sorting drops nothing and invents nothing; the backend
+     * always answers ten (`ClosingChecks.of`, «always ten and always in this order» — 4a since
+     * #97, decision A), and a screen showing one fewer would hide a finding rather than order
+     * it. The mask end of it is `ClosingPage.closingPageShowsTheTenChecksTest`.
      */
-    it('sortedChecksOfTheNineTest', () => {
-      const nine = [
+    it('sortedChecksOfTheTenTest', () => {
+      const ten = [
         passed('1'),
         passed('2'),
         passed('2a'),
         passed('3'),
         pending('3a'),
         passed('4'),
+        passed('4a'),
         failed('5'),
         passed('7'),
         passed('7a'),
       ]
 
-      const sorted = sortedChecks(nine)
+      const sorted = sortedChecks(ten)
 
-      expect(sorted).toHaveLength(9)
+      expect(sorted).toHaveLength(10)
       expect(sorted.map((check) => check.step)).toEqual([
         '5',
         '1',
@@ -185,28 +194,108 @@ describe('closingWizard', () => {
         '3',
         '3a',
         '4',
+        '4a',
         '7',
         '7a',
       ])
     })
 
     /**
-     * Nine that all hold keep the order of the run exactly — the ordinary case, in which nothing
-     * moves at all. It is the counter-probe to `sortedChecksOfTheNineTest`: where nothing blocks,
+     * Ten that all hold keep the order of the run exactly — the ordinary case, in which nothing
+     * moves at all. It is the counter-probe to `sortedChecksOfTheTenTest`: where nothing blocks,
      * the list has to come back the way the run wrote it and not sorted by anything else.
      */
     it('sortedChecksWithoutAFailureTest', () => {
-      const steps = ['1', '2', '2a', '3', '3a', '4', '5', '7', '7a']
+      const steps = ['1', '2', '2a', '3', '3a', '4', '4a', '5', '7', '7a']
 
       const sorted = sortedChecks(steps.map((step) => passed(step)))
 
-      expect(sorted).toHaveLength(9)
+      expect(sorted).toHaveLength(10)
       expect(sorted.map((check) => check.step)).toEqual(steps)
     })
 
     /** An empty list is an empty list, and no screen has to guard against it. */
     it('sortedChecksOfNothingTest', () => {
       expect(sortedChecks([])).toEqual([])
+    })
+  })
+
+  describe('closingRunsOf', () => {
+    /**
+     * <b>Two closes, two runs, nothing overwritten.</b> The archive lists newest first — the
+     * second run, then a paper filed by hand, then the first run, each run in reverse drawing
+     * order. What comes back is the two runs, the newer one first and each in the order its
+     * papers were drawn (ascending by id), and the paper filed by hand is in neither: it is not
+     * what a close did.
+     */
+    it('closingRunsOfTest', () => {
+      const archive = [
+        ...filed(2, 31).reverse(),
+        paper({ id: 29, origin: 'MANUAL', closingNumber: null, asOfDate: '2026-06-30' }),
+        ...filed(1, 21).reverse(),
+      ]
+
+      const runs = closingRunsOf(archive)
+
+      expect(runs.map((run) => run.closingNumber)).toEqual([2, 1])
+      expect(runs[0].papers.map((entry) => entry.id)).toEqual([31, 32, 33, 34, 35])
+      expect(runs[1].papers.map((entry) => entry.id)).toEqual([21, 22, 23, 24, 25])
+      expect(runs[0].papers.map((entry) => entry.report)).toEqual([
+        'journal',
+        'account-sheets',
+        'trial-balance',
+        'balance-sheet',
+        'income-statement',
+      ])
+      expect(runs.flatMap((run) => run.papers).some((entry) => entry.id === 29)).toBe(false)
+    })
+
+    /** One close is one run, with its five under the number 1. */
+    it('closingRunsOfWithOneRunTest', () => {
+      const runs = closingRunsOf(filed(1, 21).reverse())
+
+      expect(runs).toHaveLength(1)
+      expect(runs[0].closingNumber).toBe(1)
+      expect(runs[0].papers).toHaveLength(5)
+    })
+
+    /** Nothing filed, or only papers filed by hand: no run, and no screen has to guard it. */
+    it('closingRunsOfWithoutAClosingPaperTest', () => {
+      expect(closingRunsOf([])).toEqual([])
+      expect(
+        closingRunsOf([paper({ id: 29, origin: 'MANUAL', closingNumber: null })]),
+      ).toEqual([])
+    })
+
+    /**
+     * A run of one paper is still a run: the list answers what the archive holds and never
+     * pretends that five stand where one does. The database refuses a closing paper without a
+     * number; one that arrived all the same is left out rather than filed under a run of its own.
+     */
+    it('closingRunsOfWithAnIncompleteRunTest', () => {
+      const runs = closingRunsOf([
+        paper({ id: 40, closingNumber: 3 }),
+        paper({ id: 41, closingNumber: null }),
+      ])
+
+      expect(runs).toEqual([{ closingNumber: 3, papers: [paper({ id: 40, closingNumber: 3 })] }])
+    })
+  })
+
+  describe('filedPapersSentence', () => {
+    /**
+     * The five papers by their screen names, in the order the run draws them, and the two facts
+     * the person is owed before the click: nothing filed can be changed or removed, and a paper
+     * that cannot be laid out fails the whole close (backend ADR-0125).
+     */
+    it('filedPapersSentenceTest', () => {
+      expect(filedPapersSentence()).toBe(
+        'Der Abschluss legt 5 Papiere als PDF im Archiv ab — Journal, Kontoblätter,' +
+          ' Saldenliste, Bilanz und Erfolgsrechnung — in der gesetzlichen Darstellung und in' +
+          ' der Sprache des Mandanten. Sie lassen sich danach weder ändern noch löschen. Kann' +
+          ' eines davon nicht gezeichnet werden, scheitert der ganze Abschluss, und es wird' +
+          ' nichts gebucht.',
+      )
     })
   })
 
@@ -765,6 +854,7 @@ function year(
     editable: false,
     spansAFullCalendarYear: true,
     postedEntries: 12,
+    postedEntriesBesidesOpening: 11,
   }
 }
 
@@ -776,4 +866,39 @@ function logLine(event: YearLogLine['event']): YearLogLine {
     changedAt: '2027-03-15T09:00:00Z',
     changedBy: 'jan',
   }
+}
+
+/** One filed paper of a close, with whatever a single case has to say differently. */
+function paper(over: Partial<ArchivedReport> = {}): ArchivedReport {
+  return {
+    id: 24,
+    report: 'balance-sheet',
+    origin: 'CLOSING',
+    closingNumber: 1,
+    title: 'Bilanz',
+    asOfDate: '2026-12-31',
+    languageCode: 'de',
+    byteCount: 184_320,
+    sha256: 'a'.repeat(64),
+    entryCount: 34,
+    lastChainNumber: 1842,
+    createdAt: '2027-03-15T09:00:00Z',
+    createdBy: 'jan',
+    ...over,
+  }
+}
+
+/**
+ * The five papers one closing run filed, in the order the run drew them — the ids climb with
+ * it, because that is the order `archivedReportIds` names.
+ */
+function filed(closingNumber: number, firstId: number): ArchivedReport[] {
+  const reports: ArchivedReport['report'][] = [
+    'journal',
+    'account-sheets',
+    'trial-balance',
+    'balance-sheet',
+    'income-statement',
+  ]
+  return reports.map((report, index) => paper({ id: firstId + index, report, closingNumber }))
 }

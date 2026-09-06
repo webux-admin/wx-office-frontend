@@ -13,6 +13,7 @@ import {
   FISCAL_YEARS_PATH,
   CHART_OF_ACCOUNTS_PATH,
   JOURNAL_PATH,
+  PRIOR_YEAR_PATH,
   TAX_CODES_PATH,
 } from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
@@ -960,6 +961,19 @@ describe('the accounting group', () => {
 
     expect(every.map((entry) => entry.href)).not.toContain(ACCOUNTING_SETUP_PATH)
     expect(every.map((entry) => entry.label)).not.toContain('Buchhaltung einrichten')
+  })
+
+  /**
+   * <b>The prior year screen stands in no group either, and that is decided.</b> The figures of
+   * the year before the changeover are captured once in the life of a tenant; the screen is
+   * reached from where the question arises — the fiscal year screen, the note under a statement
+   * without a prior year, step three of the wizard — and by its address with the year named.
+   */
+  it('navHasNoPriorYearEntryTest', () => {
+    const every = NAV_GROUPS.flatMap((candidate) => flattenNav(candidate.entries))
+
+    expect(every.map((entry) => entry.href)).not.toContain(PRIOR_YEAR_PATH)
+    expect(every.map((entry) => entry.label)).not.toContain('Vorjahressaldi')
   })
 
   /**

@@ -6,6 +6,7 @@ import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { DataTable, type Column } from '../components/DataTable'
 import { Dialog } from '../components/Dialog'
+import { LinkButton } from '../components/LinkButton'
 import { EmptyState, ErrorNotice, WarningNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -13,6 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { FiscalYearFields } from './accounting/FiscalYearFields'
 import { useFiscalYearForm } from './accounting/fiscalYearForm'
+import { offersPriorYearCapture, priorYearCaptureLabelOf } from './accounting/priorYearForm'
 import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
@@ -20,6 +22,7 @@ import {
   ACCOUNTING_SETTINGS_PATH,
   BOUNDARY_SOURCES,
   FISCAL_YEAR_STATUS,
+  PRIOR_YEAR_PATH,
   createFiscalYear,
   deleteFiscalYear,
   fetchFiscalYears,
@@ -127,6 +130,14 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
    * a year that carries a drawn journal number — the backend refuses that with 409, and a
    * button whose only outcome is a refusal is a trap.
    *
+   * <p><b>The way into the prior year screen stands on the year before the changeover</b> —
+   * nothing posted in it besides its own opening entry, and a later year that carries postings —
+   * and nowhere else. It is the first of the three ways to that screen, which has no menu entry;
+   * the row names the year in the address, so the screen opens on it. The rule is
+   * `offersPriorYearCapture`; the word is `priorYearCaptureLabelOf`: «Vorjahressaldi erfassen»
+   * while the year carries no opening entry, «Vorjahressaldi ersetzen» once the captured
+   * balances stand.
+   *
    * <p>A function returning nodes and not a component of its own: a component declared inside
    * this one gets a new identity on every render, and the menu would shut itself the moment
    * anything else on the screen changed.
@@ -150,6 +161,11 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
 
     return (
       <span className="flex items-center justify-end gap-2">
+        {offersPriorYearCapture(year, years) && (
+          <LinkButton to={`${PRIOR_YEAR_PATH}?fiscalYearId=${year.id}`} variant="secondary">
+            {priorYearCaptureLabelOf(year)}
+          </LinkButton>
+        )}
         {year.status !== 'CLOSED' && (
           <Button
             variant="secondary"

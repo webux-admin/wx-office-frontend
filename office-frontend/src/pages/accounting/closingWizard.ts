@@ -1,4 +1,11 @@
-import type { ClosingCheck, ClosingPreview, FiscalYear, YearLogLine } from '../../lib/types'
+import { REPORT_NAMES } from '../../lib/accountingReports'
+import type {
+  ArchivedReport,
+  ClosingCheck,
+  ClosingPreview,
+  FiscalYear,
+  YearLogLine,
+} from '../../lib/types'
 
 /** The three steps of the closing wizard, in the order the run forces them into. */
 export type ClosingStep = 'CHECKS' | 'ACCRUALS' | 'CARRY_FORWARD'
@@ -13,7 +20,7 @@ export const CLOSING_STEPS: readonly { step: ClosingStep; title: string }[] = [
 /**
  * Whether the wizard may go on from one step.
  *
- * <p><b>Step 1 is the gate and the other two are not.</b> Nine findings decide whether a close is
+ * <p><b>Step 1 is the gate and the other two are not.</b> Ten findings decide whether a close is
  * possible at all; the two steps after it collect answers the caller gives, and refusing to move
  * on because a box is unticked would leave somebody staring at a button with no sentence saying
  * why. The unticked box stops the run and not the walk, one step later and beside the sentence
@@ -87,12 +94,12 @@ export function previousStep(step: ClosingStep): ClosingStep {
 /**
  * The findings, the ones that stop the run first.
  *
- * <p>A list of nine in which the one that matters sits seventh is a list nobody reads to the end.
+ * <p>A list of ten in which the one that matters sits seventh is a list nobody reads to the end.
  * Within each half the order of the run is kept, because that is the order the process document
  * and the printed checklist use.
  *
- * @param checks the nine findings
- * @returns the same nine, blocking failures first
+ * @param checks the ten findings
+ * @returns the same ten, blocking failures first
  */
 export function sortedChecks(checks: readonly ClosingCheck[]): ClosingCheck[] {
   const blocking = checks.filter((check) => check.blocking && !check.passed)
@@ -107,7 +114,7 @@ export function sortedChecks(checks: readonly ClosingCheck[]): ClosingCheck[] {
  * number and its note and no finding at all — a cross would claim something is wrong, and a tick
  * would claim something was checked. It is «offen», which is what it is.
  *
- * @param check one of the nine findings
+ * @param check one of the ten findings
  * @returns which of the three marks the row carries
  */
 export function checkTone(check: ClosingCheck): 'passed' | 'blocked' | 'open' {
@@ -346,5 +353,66 @@ export function laterYearSentence(blocking: FiscalYear, year: FiscalYear): strin
   return (
     `Das Geschäftsjahr ${blocking.label} ist ${state}.` +
     ` Öffnen Sie zuerst ${blocking.label}, dann ${year.label}.`
+  )
+}
+
+/** The papers one closing run filed, under the number of that run. */
+export type ClosingRun = {
+  /** Which close of the year this was, counting from 1. */
+  closingNumber: number
+  /** Its papers in the order the run drew them — five where the run filed all of them. */
+  papers: ArchivedReport[]
+}
+
+/**
+ * The closing runs of a year, out of everything filed for it — newest run first.
+ *
+ * <p><b>Nothing is overwritten, and this is where that shows.</b> A year that was reopened and
+ * closed again holds two sets of five, each under its own closing number, and both are listed
+ * (backend ADR-0125, GeBüV Art. 3). A paper filed by hand is not what a close did; it belongs to
+ * the archive screen and is left out here.
+ *
+ * <p>Within a run the papers stand in the order the run drew them — ascending by id, the order
+ * `archivedReportIds` of the answer names — and not in the order the archive lists them, which
+ * is newest first.
+ *
+ * @param archive everything filed for the year, as the archive lists it
+ * @returns the runs, newest first; empty where no close filed anything
+ */
+export function closingRunsOf(archive: readonly ArchivedReport[]): ClosingRun[] {
+  const byNumber = new Map<number, ArchivedReport[]>()
+  for (const paper of archive) {
+    // The database refuses a closing paper without a number; the second condition is the type's
+    // and not the rule's.
+    if (paper.origin !== 'CLOSING' || typeof paper.closingNumber !== 'number') continue
+    byNumber.set(paper.closingNumber, [...(byNumber.get(paper.closingNumber) ?? []), paper])
+  }
+  return [...byNumber.entries()]
+    .sort(([one], [other]) => other - one)
+    .map(([closingNumber, papers]) => ({
+      closingNumber,
+      papers: [...papers].sort((one, other) => one.id - other.id),
+    }))
+}
+
+/**
+ * What the run is about to file, said before the click.
+ *
+ * <p>The close files the five papers as PDF and fails as a whole where one of them cannot be laid
+ * out (backend ADR-0125) — a run that stops over a printing fault is inexplicable to somebody who
+ * was never told that printing is part of it. The names come from `REPORT_NAMES`, the one source
+ * of the word, in the order the run draws them; the sentence cannot name a paper the archive does
+ * not know.
+ *
+ * @returns the sentence, ready to be shown on the last step
+ */
+export function filedPapersSentence(): string {
+  const names = Object.values(REPORT_NAMES)
+  const listed = `${names.slice(0, -1).join(', ')} und ${names[names.length - 1]}`
+  return (
+    `Der Abschluss legt ${names.length} Papiere als PDF im Archiv ab — ${listed} — in der` +
+    ' gesetzlichen Darstellung und in der Sprache des Mandanten. Sie lassen sich danach weder' +
+    ' ändern noch löschen. Kann eines davon nicht gezeichnet werden, scheitert der ganze' +
+    ' Abschluss, und es wird nichts gebucht.'
   )
 }

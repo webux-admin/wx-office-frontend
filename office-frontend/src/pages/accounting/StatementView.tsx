@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { CheckboxField } from '../../components/CheckboxField'
 import { DataTable, type Column } from '../../components/DataTable'
@@ -7,20 +8,22 @@ import { EmptyState, ErrorNotice, WarningNotice } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
+import { useAuth } from '../../auth/useAuth'
 import {
+  ACCOUNTING_RIGHTS,
   accountingExportUrl,
-  accountingPrintUrl,
   accountSheetPath,
   fetchFiscalYears,
   fiscalYearsKey,
+  PRIOR_YEAR_PATH,
   type AccountingReport,
 } from '../../lib/accounting'
 import { api } from '../../lib/api'
 import { downloadFile } from '../../lib/files'
 import { formatAmount, formatDate, toIsoDate } from '../../lib/format'
 import { originState } from '../../lib/origin'
-import { printFile } from '../../lib/print'
 import type { FiscalYear, Statement, StatementRow } from '../../lib/types'
+import { ReportToolbar } from './ReportToolbar'
 import {
   columnDateOf,
   indentOf,
@@ -45,6 +48,11 @@ import {
  * remembered between visits either: two people printing from the same link would otherwise get
  * two different pages.
  *
+ * <p><b>The note «Vorjahreszahlen liegen nicht vor» carries the way to its own answer.</b> Beside
+ * it stands «Vorjahr erfassen» for whoever holds `ACCOUNTING_CLOSE` — the second of the three
+ * ways to the prior year screen, which has no menu entry. The note is the backend's and stands
+ * for every reader; only the link is on the right, because only the right can capture.
+ *
  * <p>Reads while the module is off — what is posted stays readable for ten years (OR Art. 958f).
  */
 export function StatementView({
@@ -63,6 +71,8 @@ export function StatementView({
   fetchStatement: (fiscalYearId: number, asOf?: string) => Promise<Statement>
   keyOf: (fiscalYearId: number, asOf?: string) => readonly unknown[]
 }) {
+  const { can } = useAuth()
+  const mayClose = can(ACCOUNTING_RIGHTS.close)
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
   const [asOf, setAsOf] = useState('')
   // On by default: a report showing forty positions at nil is one nobody reads to the end.
@@ -104,19 +114,16 @@ export function StatementView({
         >
           Als CSV
         </Button>
-        <Button
-          variant="secondary"
-          disabled={chosen === null}
-          onClick={() =>
-            void printStatement(tenantId, report, chosen as number, {
-              asOf: cutOff,
-              hideEmpty,
-              withAccounts,
-            })
-          }
-        >
-          Drucken
-        </Button>
+        {/* The two switches travel with every way to the paper, so it shows what the screen
+            showed. The archive takes neither — filed is the statutory presentation, and the
+            dialog behind «Archivieren …» says so before the click. */}
+        <ReportToolbar
+          tenantId={tenantId}
+          report={report}
+          fiscalYearId={chosen}
+          yearLabel={data?.fiscalYearLabel}
+          options={{ asOf: cutOff, hideEmpty, withAccounts }}
+        />
       </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
@@ -196,7 +203,23 @@ export function StatementView({
           {data?.notes
             .filter((note) => note.kind !== 'DRAFTS' && note.kind !== 'MODULE_OFF_PERIOD')
             .map((note) => (
-              <p key={note.kind + note.text}>{note.text}</p>
+              <p key={note.kind + note.text}>
+                {note.text}
+                {/* The note names the gap; the link is the way to close it. Without a prior
+                    year there is no year to name in the address — the screen opens on the
+                    earliest one and offers to lay out the year before. */}
+                {note.kind === 'PRIOR_YEAR_MISSING' && mayClose && (
+                  <>
+                    {' '}
+                    <Link
+                      to={PRIOR_YEAR_PATH}
+                      className="text-accent-text underline underline-offset-2"
+                    >
+                      Vorjahr erfassen
+                    </Link>
+                  </>
+                )}
+              </p>
             ))}
         </div>
       </div>
@@ -314,18 +337,4 @@ function defaultYearOf(years: readonly FiscalYear[]): FiscalYear | undefined {
  */
 async function downloadArchive(tenantId: number, fiscalYearId: number) {
   downloadFile(await api.file(accountingExportUrl(tenantId, fiscalYearId)))
-}
-
-/**
- * Fetches the printable page and opens the print dialog on it.
- *
- * <p>The two switches travel with the link, so the paper shows what the screen showed.
- */
-async function printStatement(
-  tenantId: number,
-  report: AccountingReport,
-  fiscalYearId: number,
-  options: { asOf?: string; hideEmpty: boolean; withAccounts: boolean },
-) {
-  printFile(await api.file(accountingPrintUrl(tenantId, report, fiscalYearId, options)))
 }

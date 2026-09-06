@@ -32,6 +32,7 @@ import { optionalOriginOf } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import type { EntryLine, FiscalYear, JournalRow } from '../lib/types'
 import { useCatalogue } from '../masterdata/useMasterData'
+import { ReportToolbar } from './accounting/ReportToolbar'
 
 /**
  * «Journal»: everything that is in the books, in the order it was written.
@@ -247,7 +248,17 @@ function Journal({ tenantId }: { tenantId: number }) {
         // Only where somebody was sent here — from an account sheet, say. Reached through the
         // navigation the journal shows no way back at all (frontend ADR-0003).
         back={backOf(location.state)}
-      />
+      >
+        {/* The paper is the whole journal of the year. None of the five filters travels with
+            it: the endpoint takes none of them, and the journal the law asks for is the
+            complete one (GeBüV Art. 1 Abs. 2 Bst. b), not the page somebody narrowed. */}
+        <ReportToolbar
+          tenantId={tenantId}
+          report="journal"
+          fiscalYearId={chosen}
+          yearLabel={available.find((year) => year.id === chosen)?.label}
+        />
+      </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
         <div className="flex flex-wrap items-end gap-4">

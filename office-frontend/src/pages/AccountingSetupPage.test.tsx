@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import { ACCOUNTING_RIGHTS } from '../lib/accounting'
+import { ACCOUNTING_RIGHTS, PRIOR_YEAR_PATH } from '../lib/accounting'
 import type { FiscalYear, FiscalYearList, SetupState } from '../lib/types'
 import { AccountingSetupPage } from './AccountingSetupPage'
 
@@ -50,6 +50,7 @@ const YEAR: FiscalYear = {
   editable: true,
   spansAFullCalendarYear: true,
   postedEntries: 0,
+  postedEntriesBesidesOpening: 0,
 }
 
 const YEARS: FiscalYearList = {
@@ -157,6 +158,13 @@ function buttonNamed(label: string): HTMLButtonElement {
   return found as HTMLButtonElement
 }
 
+/** One link, by the text on it, or nothing where it does not stand. */
+function linkNamed(label: string): HTMLAnchorElement | undefined {
+  return [...container.querySelectorAll('a')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+}
+
 describe('AccountingSetupPage', () => {
   /**
    * <b>The wizard keeps no state of its own.</b> Whoever breaks off keeps what is finished, and
@@ -213,5 +221,37 @@ describe('AccountingSetupPage', () => {
     expect(container.textContent).toContain('Eigenkapital und Kontenplan')
     expect(container.textContent).toContain('Geschäftsjahr')
     expect(container.textContent).toContain('Eröffnung')
+  })
+
+  // --- der dritte Weg zur Vorjahresmaske ------------------------------------------
+
+  /**
+   * <b>The third of the three ways to the prior year screen.</b> Step 3 is where a changing
+   * tenant meets the order question, so the sentence with the link stands here — and it locks
+   * nothing: the step's own button stays where it was.
+   */
+  it('setupStepThreeLinksToThePriorYearTest', async () => {
+    state = atTheOpening()
+
+    await paint([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.configure, ACCOUNTING_RIGHTS.close])
+
+    expect(container.textContent).toContain(
+      'Brauchen Sie Vergleichszahlen nach OR Art. 958d Abs. 2, erfassen Sie zuerst das Vorjahr',
+    )
+    expect(container.textContent).toContain(
+      'Sonst bleibt die Vorjahresspalte leer und trägt ihren Vermerk.',
+    )
+    expect(linkNamed('Vorjahressaldi erfassen')?.getAttribute('href')).toBe(PRIOR_YEAR_PATH)
+    expect(buttonNamed('Eröffnung buchen')).toBeDefined()
+  })
+
+  /** The screen behind the link writes with `ACCOUNTING_CLOSE`; without it the sentence stays away. */
+  it('setupStepThreeHidesThePriorYearLinkWithoutCloseTest', async () => {
+    state = atTheOpening()
+
+    await paint([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.configure])
+
+    expect(linkNamed('Vorjahressaldi erfassen')).toBeUndefined()
+    expect(container.textContent).not.toContain('Vergleichszahlen')
   })
 })

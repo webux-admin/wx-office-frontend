@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
 import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
-import type { FiscalYear, FiscalYearList } from '../../lib/types'
+import type { ArchivedReport, FiscalYear, FiscalYearList } from '../../lib/types'
 import { AccountingArchivePage } from './AccountingArchivePage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -52,6 +52,7 @@ function year(over: Partial<FiscalYear> = {}): FiscalYear {
     editable: false,
     spansAFullCalendarYear: true,
     postedEntries: 1204,
+    postedEntriesBesidesOpening: 1203,
     ...over,
   }
 }
@@ -77,10 +78,39 @@ function json(body: unknown) {
   )
 }
 
-function stubFetch(years: FiscalYear[]) {
+/**
+ * One paper of a close, as the cupboard of a year answers it. Midday UTC on purpose:
+ * `formatDateTime` prints the local day, and an evening moment would fall on the next day east
+ * of Greenwich.
+ */
+function filed(over: Partial<ArchivedReport> = {}): ArchivedReport {
+  return {
+    id: 23,
+    report: 'balance-sheet',
+    origin: 'CLOSING',
+    closingNumber: 1,
+    title: 'Bilanz',
+    asOfDate: '2026-12-31',
+    languageCode: 'de',
+    byteCount: 184_320,
+    sha256: 'a'.repeat(64),
+    entryCount: 34,
+    lastChainNumber: 1842,
+    createdAt: '2027-03-12T12:00:00Z',
+    createdBy: 'jan',
+    ...over,
+  }
+}
+
+/**
+ * @param years what the tenant keeps
+ * @param archive what the cupboard of every year holds; empty unless a test fills it
+ */
+function stubFetch(years: FiscalYear[], archive: ArchivedReport[] = []) {
   vi.stubGlobal('fetch', (url: string) => {
     asked.push(url)
     if (url.includes('/accounting/fiscal-years')) return json(listOf(years))
+    if (url.includes('/accounting/report-archive?')) return json(archive)
     // The two ways out answer bytes, not JSON. A string body rather than a Blob: jsdom's Blob
     // has no stream(), and the API client reads the body as one.
     return Promise.resolve(
@@ -110,8 +140,12 @@ afterEach(() => {
   Reflect.deleteProperty(URL, 'revokeObjectURL')
 })
 
-async function paint(years: FiscalYear[], modules: string[] = ['ACCOUNTING']) {
-  stubFetch(years)
+async function paint(
+  years: FiscalYear[],
+  modules: string[] = ['ACCOUNTING'],
+  archive: ArchivedReport[] = [],
+) {
+  stubFetch(years, archive)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
@@ -140,7 +174,10 @@ function button(text: string): HTMLButtonElement | undefined {
 describe('AccountingArchivePage', () => {
   /** Every year with its period, its state and how much is posted in it. */
   it('archiveNamesEveryFiscalYearTest', async () => {
-    await paint([year(), year({ id: 2, label: '2025', postedEntries: 638 })])
+    await paint([
+      year(),
+      year({ id: 2, label: '2025', postedEntries: 638, postedEntriesBesidesOpening: 637 }),
+    ])
 
     expect(container.textContent).toContain('Geschäftsjahr 2026')
     expect(container.textContent).toContain('01.01.2026 – 31.12.2026')
@@ -184,7 +221,10 @@ describe('AccountingArchivePage', () => {
    * archive rather than delivering one, so offering the button would be offering a refusal.
    */
   it('yearWithoutEntriesHasDisabledButtonsTest', async () => {
-    await paint([year(), year({ id: 2, label: '2025', postedEntries: 0 })])
+    await paint([
+      year(),
+      year({ id: 2, label: '2025', postedEntries: 0, postedEntriesBesidesOpening: 0 }),
+    ])
 
     const buttons = [...container.querySelectorAll('button')].filter(
       (entry) => entry.textContent === 'Alles herunterladen (ZIP)',
@@ -196,7 +236,7 @@ describe('AccountingArchivePage', () => {
 
   /** Nothing posted anywhere: an empty state that says what has to happen first. */
   it('emptyStateWhenNothingIsPostedTest', async () => {
-    await paint([year({ postedEntries: 0 })])
+    await paint([year({ postedEntries: 0, postedEntriesBesidesOpening: 0 })])
 
     expect(container.textContent).toContain('Noch nichts verbucht')
     expect(container.textContent).toContain('Sobald die erste Buchung im Journal steht')
@@ -218,6 +258,58 @@ describe('AccountingArchivePage', () => {
     expect(container.textContent).toContain(
       'Diese Seite bleibt erreichbar, auch wenn die Buchhaltung abgeschaltet ist.',
     )
+  })
+
+  /**
+   * <b>The two ways out and the cupboard stand together under one year.</b> The row prints the
+   * three books, the panel below lists what a close filed — five papers, the two statements
+   * among them — and each year asks for its own cupboard.
+   */
+  it('archiveListsTheFiledPapersBesideTheWaysOutTest', async () => {
+    await paint(
+      [
+        year(),
+        year({ id: 2, label: '2025', postedEntries: 638, postedEntriesBesidesOpening: 637 }),
+      ],
+      ['ACCOUNTING'],
+      [
+        filed({ id: 23, report: 'balance-sheet' }),
+        filed({ id: 24, report: 'income-statement' }),
+        filed({ id: 22, report: 'trial-balance' }),
+        filed({ id: 21, report: 'account-sheets' }),
+        filed({ id: 20, report: 'journal' }),
+      ],
+    )
+
+    // The row of the year, and the cupboard right under it.
+    expect(button('Journal')?.disabled).toBe(false)
+    expect(container.textContent).toContain('Archivierte Auswertungen 2026')
+    expect(container.textContent).toContain('Abschluss Nr. 1')
+    expect(container.textContent).toContain('Bilanz per 31.12.2026')
+    expect(container.textContent).toContain('Erfolgsrechnung per 31.12.2026')
+    // Both years answer the same stub, so the paper stands once under each of them.
+    expect(
+      container.querySelectorAll('button[aria-label="Journal per 31.12.2026 anzeigen"]'),
+    ).toHaveLength(2)
+    // One request per year, never one for the whole tenant: the key the archive dialog
+    // invalidates after a filing is the key of that one year.
+    expect(asked).toContain('/api/tenants/1/accounting/report-archive?fiscalYearId=3')
+    expect(asked).toContain('/api/tenants/1/accounting/report-archive?fiscalYearId=2')
+  })
+
+  /**
+   * The cupboard answers with the module off, like everything else on this screen: a paper
+   * kept for ten years has to be reachable for ten years (OR Art. 958f).
+   */
+  it('cupboardStaysReadableWhileTheModuleIsOffTest', async () => {
+    await paint([year()], [], [filed()])
+
+    expect(container.textContent).toContain('Archivierte Auswertungen 2026')
+    expect(container.textContent).toContain('Bilanz per 31.12.2026')
+    expect(
+      container.querySelector('button[aria-label="Bilanz per 31.12.2026 anzeigen"]'),
+    ).not.toBeNull()
+    expect(container.textContent).not.toContain('nicht eingeschaltet')
   })
 
   /** The two ways out satisfy two different rules, and the page says which is which. */

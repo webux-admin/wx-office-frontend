@@ -24,6 +24,7 @@ import { originState } from '../../lib/origin'
 import { listQuery, PAGE_SIZE } from '../../lib/paging'
 import type { FiscalYear, TrialBalanceRow } from '../../lib/types'
 import { AccountingNotices } from './AccountingNotices'
+import { ReportToolbar } from './ReportToolbar'
 
 /**
  * «Konten»: every account of the chart with its two sums, and the proof underneath.
@@ -129,7 +130,18 @@ function Balances({ tenantId }: { tenantId: number }) {
       <PageHeader
         title="Konten"
         subtitle="Was auf jedem Konto steht, und die Probe darunter: Soll gleich Haben."
-      />
+      >
+        {/* The paper is the trial balance of the year, cut to the same day as the screen. The
+            search and «Nur Konten mit Bewegung» stay out of it, the way they stay out of the
+            proof: a paper somebody typed their way to a smaller version of is no trial balance. */}
+        <ReportToolbar
+          tenantId={tenantId}
+          report="trial-balance"
+          fiscalYearId={chosen}
+          yearLabel={available.find((year) => year.id === chosen)?.label}
+          options={{ asOf: asOf === '' ? undefined : asOf }}
+        />
+      </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
         <div className="flex flex-wrap items-end gap-4">

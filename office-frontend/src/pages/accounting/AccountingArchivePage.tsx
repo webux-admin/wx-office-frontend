@@ -17,8 +17,15 @@ import { downloadFile } from '../../lib/files'
 import { formatDate } from '../../lib/format'
 import { printFile } from '../../lib/print'
 import type { FiscalYear } from '../../lib/types'
+import { ReportArchivePanel } from './ReportArchivePanel'
 
-/** What the three print buttons of a year are called, and which report each of them asks for. */
+/**
+ * What the three print buttons of a year are called, and which report each of them asks for.
+ *
+ * <p>Three and not five on purpose: this row prints the books — what the ZIP beside it holds
+ * as CSV. The balance sheet and the income statement are printed and filed from their own
+ * screens; the cupboard below each year holds all five, and its text says so.
+ */
 const REPORTS: { key: AccountingReport; label: string }[] = [
   { key: 'journal', label: 'Journal' },
   { key: 'account-sheets', label: 'Kontoblätter' },
@@ -39,6 +46,12 @@ const REPORTS: { key: AccountingReport; label: string }[] = [
  * files satisfies OR Art. 958f Abs. 3 — the books can be made readable again at any time. It does
  * not satisfy GeBüV Art. 6 Abs. 3, which wants them readable «auch ohne Hilfsmittel»: without a
  * technical device, which in practice means on paper. That is what the printout is for.
+ *
+ * <p><b>And under each year, its cupboard.</b> A close files five papers as PDF and a paper can
+ * be filed by hand from its screen; `ReportArchivePanel` lists them and opens the bytes that
+ * were written then, never a fresh render (backend ADR-0125). The same rule as above applies:
+ * the cupboard answers whichever way the switch stands, because a paper kept for ten years has
+ * to be reachable for ten years.
  */
 export function AccountingArchivePage() {
   return (
@@ -88,7 +101,14 @@ function Archive({ tenantId }: { tenantId: number }) {
             steht, lässt sie sich hier herunterladen und drucken.
           </EmptyState>
         ) : (
-          available.map((year) => <Year key={year.id} tenantId={tenantId} year={year} />)
+          available.map((year) => (
+            // The two panels of one year stand closer to each other than to the next year's,
+            // so the cupboard reads as part of the year above it and not as a card of its own.
+            <div key={year.id} className="grid gap-2">
+              <Year tenantId={tenantId} year={year} />
+              <ReportArchivePanel tenantId={tenantId} year={year} />
+            </div>
+          ))
         )}
 
         {posted > 0 && (

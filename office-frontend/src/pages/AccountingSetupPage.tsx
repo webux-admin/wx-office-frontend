@@ -173,9 +173,9 @@ function Setup({ tenantId }: { tenantId: number }) {
 /**
  * Where a finished wizard opens: on its last step rather than on nothing.
  *
- * <p>A tenant that is set up can still come back — from the notice on the fiscal year screen, to
- * replace an opening entry — and landing on step 1 would ask it to choose an equity layout it
- * answered a year ago.
+ * <p>A tenant that is set up can still come back — by the wizard's address, or from the entry
+ * screen's empty state for a day outside every year — to replace an opening entry, and landing
+ * on step 1 would ask it to choose an equity layout it answered a year ago.
  */
 function openingAt(next: SetupStep): SetupStep {
   return next === 'DONE' ? 'OPENING' : next

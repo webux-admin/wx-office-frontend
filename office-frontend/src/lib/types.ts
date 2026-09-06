@@ -3695,6 +3695,16 @@ export type FiscalYear = {
    * own, which would be a second cache beside `GET /fiscal-years` and would go stale in one.
    */
   postedEntries: number
+  /**
+   * How many of them are neither the opening entry of this year nor a counter entry to one.
+   *
+   * <p>The count the prior year capture is refused on: a changeover carries a year over as a
+   * whole or not at all, and the fiscal year screen reads it to decide whether the way into the
+   * prior year screen stands on a row. Below `postedEntries`, the year carries posted `OPENING`
+   * rows — its opening entry, and after a replacement the reversed one and its counter entry
+   * beside it.
+   */
+  postedEntriesBesidesOpening: number
 }
 
 /**
@@ -3905,6 +3915,23 @@ export type ReportNotices = {
   currencyCode?: string | null
   moduleGaps: ModuleGap[]
 }
+
+/**
+ * The five papers of the bookkeeping, by the key a client asks for them — backend
+ * `AccountingReport.key()`.
+ *
+ * <p>The same five keys for the printable page (`/print/{report}`), the PDF (`/pdf/{report}`)
+ * and the archive (`ArchivedReportDto.report`), so one evaluation never runs under two names.
+ * Two of them — the balance sheet and the income statement — are laid out and are the only two
+ * that take the presentation switches; the other three have no breakdown, and the endpoint
+ * answers 400 rather than quietly ignoring a switch sent to them.
+ */
+export type AccountingReport =
+  | 'journal'
+  | 'account-sheets'
+  | 'trial-balance'
+  | 'balance-sheet'
+  | 'income-statement'
 
 /** One account of the trial balance — `TrialBalanceRowDto`. */
 export type TrialBalanceRow = {
@@ -4147,20 +4174,80 @@ export type OpeningEntryRequest = {
 }
 
 /**
- * One of the nine findings the closing run makes before it writes anything — `ClosingCheckDto`.
+ * One captured balance of the year before the changeover — `PriorYearDto.LineDto`.
  *
- * <p>`step` is a string and not a number: two of the nine are «2a» and «3a», inserted where they
- * belong rather than appended, so a reader of the process document and a reader of the screen
- * count the same way.
+ * <p>Number and name are the frozen copies of the entry line, not a look-up in today's chart.
+ */
+export type PriorYearLine = {
+  accountId: number
+  accountNumber: string
+  accountName: string
+  /** The debit amount, zero where the credit side is used. */
+  debit: number
+  /** The credit amount, zero where the debit side is used. */
+  credit: number
+}
+
+/**
+ * What `GET /fiscal-years/{id}/prior-year-balances` answers — `PriorYearDto`.
+ *
+ * <p><b>`blockedBy` and `notice` are two fields on purpose.</b> The first says why no capture is
+ * possible and turns the save button off; the second says what saving would do and turns
+ * nothing off. A single field with a severity would make the screen decide from a code which of
+ * the two it is holding.
+ */
+export type PriorYearBalances = {
+  /** Whether the year carries figures at all. */
+  captured: boolean
+  /** The entry they stand in, absent where nothing is captured. */
+  entryId?: number | null
+  /** Its journal number, absent likewise. */
+  entryNumber?: string | null
+  /** The day it sits on — the last day of the year — absent where nothing is captured. */
+  bookingDate?: string | null
+  /** The captured balances, empty where nothing is captured. */
+  lines: PriorYearLine[]
+  debitTotal: number
+  creditTotal: number
+  /** Why no capture is possible, absent where one is. */
+  blockedBy?: string | null
+  /** What saving would do, announced without blocking. */
+  notice?: string | null
+  /** The journal number the notice speaks of, so the screen can offer a way to look at it. */
+  followingYearEntryNumber?: string | null
+}
+
+/**
+ * What `PUT /fiscal-years/{id}/prior-year-balances` takes — `PriorYearBody`.
+ *
+ * <p>No booking date and no fiscal year: the day is always the last one of the year being
+ * captured and is derived by the server, and the year stands in the path. The lines are the same
+ * shape the entry screen sends, tax code field and all — a tax code on these figures is refused
+ * by the server with the sentence that says why.
+ */
+export type PriorYearRequest = {
+  lines: EntryLineRequest[]
+  /** Whether an opening entry that already stands may be replaced. Left out counts as no. */
+  replaceExisting?: boolean
+  /** Mandatory as soon as `replaceExisting` is set. */
+  reason?: string | null
+}
+
+/**
+ * One of the ten findings the closing run makes before it writes anything — `ClosingCheckDto`.
+ *
+ * <p>`step` is a string and not a number: four of the ten are «2a», «3a», «4a» and «7a»,
+ * inserted where they belong rather than appended, so a reader of the process document and a
+ * reader of the screen count the same way.
  */
 export type ClosingCheck = {
-  /** «1», «2», «2a», «3», «3a», «4», «5», «7» or «7a». */
+  /** «1», «2», «2a», «3», «3a», «4», «4a», «5», «7» or «7a». */
   step: string
   passed: boolean
   /**
    * Whether a failure stops the run.
    *
-   * <p>Exactly one of the nine never blocks: the reconciliation against the sub-ledgers, which
+   * <p>Exactly one of the ten never blocks: the reconciliation against the sub-ledgers, which
    * has its place, its number and its note and no finding — it needs the sum of the open items,
    * and that edge arrives with the document connection.
    */
@@ -4246,7 +4333,7 @@ export type ClosingPreview = {
   replacesOpeningEntry: boolean
   /** How many accounts the carry forward would carry. */
   carriedAccounts: number
-  /** Whether anything at all stops the run — worked out in the backend from the nine. */
+  /** Whether anything at all stops the run — worked out in the backend from the ten. */
   blocked: boolean
 }
 
@@ -4275,6 +4362,12 @@ export type ClosingResult = {
   carriedAccounts: number
   /** The result of the year: positive is a profit. */
   result: number
+  /**
+   * The five papers this run filed, in the order they were drawn. The screen fetches each of
+   * them under `GET …/accounting/report-archive/{id}`; a count would leave it guessing which
+   * rows of the archive belong to this run.
+   */
+  archivedReportIds: number[]
 }
 
 /** One entry the closing run wrote, as the screen names it — `ClosingEntryDto`. */
@@ -4410,6 +4503,62 @@ export type ChainIntegrity = {
   brokenAt?: number | null
   gapAt?: number | null
   message: string
+}
+
+/** Where a filed paper came from — `ArchivedReportDto.origin`. */
+export type ArchiveOrigin = 'CLOSING' | 'MANUAL'
+
+/**
+ * One filed accounting paper, as `ArchivedReportDto` sends it.
+ *
+ * <p><b>Without the bytes.</b> A fiscal year closed twice holds ten papers of some sixteen
+ * megabytes; whoever draws a list wants none of them and fetches the one that is clicked from
+ * `GET /report-archive/{id}`.
+ */
+export type ArchivedReport = {
+  /** The address the bytes are fetched under. */
+  id: number
+  /** The same five keys `/print/{report}` and `/pdf/{report}` take. */
+  report: AccountingReport
+  origin: ArchiveOrigin
+  /** Which close it belongs to, counting from 1; absent on a paper filed by hand. */
+  closingNumber?: number | null
+  /** What is printed at its head, for example «Bilanz». */
+  title: string
+  /** The day the figures are about. */
+  asOfDate: string
+  /** The language it was laid out in. */
+  languageCode: string
+  /** How big the file is, so a list can say so before anybody clicks. */
+  byteCount: number
+  /** Checksum over the bytes, hex in lower case. */
+  sha256: string
+  /** How many rows the paper draws — the figure in its own foot. */
+  entryCount: number
+  /**
+   * The highest chain number among the posted entries the paper shows — those of its fiscal
+   * year booked on or before its cut-off day — and absent where that stretch holds none. Not the
+   * tenant's highest: the closing run posts the opening entry of the following year before it
+   * files the papers of the closed one, and that link stands on none of their sheets.
+   */
+  lastChainNumber?: number | null
+  createdAt: string
+  /** Who filed it, `system` where the run had nobody signed in. */
+  createdBy: string
+}
+
+/**
+ * What `POST /report-archive` takes to file one paper by hand — `ArchiveReportBody`.
+ *
+ * <p>Three fields and no fourth: no `withAccounts`, no `hideEmpty`, no `accountId` and no
+ * language. Filed is the statutory presentation in the language of the tenant, never a view of
+ * it (backend ADR-0125).
+ */
+export type ArchiveReportRequest = {
+  report: AccountingReport
+  fiscalYearId: number
+  /** Cut-off day for an interim evaluation, absent for the whole year. */
+  asOf?: string | null
 }
 
 /**

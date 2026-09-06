@@ -17,6 +17,19 @@ import { AccountBalanceListPage } from './AccountBalanceListPage'
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom has neither a print dialog nor a way to open a tab, so the two ways out of the toolbar
+// are stood in for. What is watched here is the address «Drucken» asks for.
+const printFile = vi.hoisted(() =>
+  vi.fn<(file: { fileName: string; blob: Blob }) => Promise<void>>(),
+)
+vi.mock('../../lib/print', () => ({
+  printFile,
+  PrintNotPossibleError: class PrintNotPossibleError extends Error {},
+}))
+
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../../lib/files', () => ({ showFile }))
+
 const TENANT = 1
 
 const AUTH: AuthState = {
@@ -53,6 +66,7 @@ const YEAR: FiscalYear = {
   editable: false,
   spansAFullCalendarYear: true,
   postedEntries: 12,
+  postedEntriesBesidesOpening: 11,
 }
 
 const YEARS: FiscalYearList = {
@@ -273,4 +287,42 @@ describe('AccountBalanceListPage', () => {
     // And nothing was asked for: without a year the endpoint would answer 400 anyway.
     expect(asked.some((url) => url.includes('/accounting/trial-balance'))).toBe(false)
   })
+
+  /**
+   * <b>The list has a print button now, and it prints the trial balance of the year.</b> Before
+   * this toolbar the screen had none. The day the screen is cut to travels with the paper; the
+   * search and «Nur Konten mit Bewegung» do not, because a trial balance somebody typed their way
+   * to a smaller version of is none.
+   */
+  it('trialBalancePrintsThePdfTest', async () => {
+    printFile.mockResolvedValue(undefined)
+    await paint()
+
+    await act(async () => {
+      buttonNamed('Drucken')?.click()
+    })
+    await settle()
+
+    expect(asked).toContain('/api/tenants/1/accounting/pdf/trial-balance?fiscalYearId=3')
+    expect(printFile).toHaveBeenCalledTimes(1)
+
+    type(fieldNamed('Stichtag'), '2026-06-30')
+    await settle()
+    await act(async () => {
+      buttonNamed('Drucken')?.click()
+    })
+    await settle()
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/trial-balance?fiscalYearId=3&asOf=2026-06-30',
+    )
+    expect(asked.some((url) => url.includes('/accounting/pdf/') && url.includes('q='))).toBe(false)
+  })
 })
+
+/** One button, by the start of its wording — a busy one carries the spinner's label behind it. */
+function buttonNamed(label: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll('button')].find((entry) =>
+    entry.textContent?.trim().startsWith(label),
+  ) as HTMLButtonElement | undefined
+}

@@ -102,6 +102,7 @@ const YEARS: FiscalYearList = {
       editable: false,
       spansAFullCalendarYear: true,
       postedEntries: 0,
+      postedEntriesBesidesOpening: 0,
     },
   ],
   boundary: { postableFrom: null, lockedUntil: null, source: 'NONE', message: '' },

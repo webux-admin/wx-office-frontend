@@ -18,6 +18,7 @@ import {
 } from './preferences'
 import type {
   Account,
+  AccountingReport,
   AccountingSettings,
   AccountSheet,
   AccountRequest,
@@ -51,6 +52,8 @@ import type {
   PositionHint,
   PostRunPreview,
   PostRunResult,
+  PriorYearBalances,
+  PriorYearRequest,
   ReopenResult,
   ReversalRequest,
   SetupState,
@@ -134,8 +137,16 @@ export function someRoleHoldsAccounting(
  */
 export const CHART_OF_ACCOUNTS_PATH = '/buchhaltung/kontenplan'
 
-/** Address everything the accounting of one tenant is served under. */
-function accountingUrl(tenantId: number): string {
+/**
+ * Address everything the accounting of one tenant is served under.
+ *
+ * <p>Exported for `accountingReports.ts`, which builds the addresses of the PDF and the archive
+ * on it: one spelling of the base, written once.
+ *
+ * @param tenantId the tenant
+ * @returns the base address, without a trailing slash
+ */
+export function accountingUrl(tenantId: number): string {
   return `/api/tenants/${tenantId}/accounting`
 }
 
@@ -907,6 +918,28 @@ export function openingEntryUrl(tenantId: number, fiscalYearId?: number): string
 }
 
 /**
+ * Path of the prior year screen, «Vorjahressaldi».
+ *
+ * <p><b>It has no menu entry, and that is decided.</b> The figures of the year before the
+ * changeover are captured once in the life of a tenant; the screen is meant to be reached from
+ * where the question arises — the fiscal year screen, the note under a statement without a prior
+ * year, and step three of the setup wizard — and never from the menu.
+ */
+export const PRIOR_YEAR_PATH = '/buchhaltung/vorjahr'
+
+/**
+ * The year stands in the path and the booking date in none of it: the server derives the day
+ * — always the last one of the year being captured (backend ADR-0125).
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year whose figures are read or captured
+ * @returns address of the prior year balances, for reading and for writing
+ */
+export function priorYearBalancesUrl(tenantId: number, fiscalYearId: number): string {
+  return `${accountingUrl(tenantId)}/fiscal-years/${fiscalYearId}/prior-year-balances`
+}
+
+/**
  * @param tenantId the tenant
  * @returns address of the setup state
  */
@@ -949,6 +982,18 @@ export function incomeStatementKey(
  */
 export function openingEntryKey(tenantId: number, fiscalYearId: number): readonly unknown[] {
   return ['accounting-opening-entry', tenantId, fiscalYearId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param fiscalYearId the year
+ * @returns cache key of the prior year balances
+ */
+export function priorYearBalancesKey(
+  tenantId: number,
+  fiscalYearId: number,
+): readonly unknown[] {
+  return ['accounting-prior-year-balances', tenantId, fiscalYearId]
 }
 
 /**
@@ -1022,6 +1067,44 @@ export function recordOpeningEntry(
 }
 
 /**
+ * The figures of a year kept somewhere else, as far as they were captured.
+ *
+ * <p>Answers 200 with `captured: false` and not 404 where nothing is captured yet, and answers
+ * while the module is off — the screen has to be able to show where the tenant got to.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year whose figures are read
+ * @returns what stands, with `blockedBy` and `notice` beside it
+ */
+export function fetchPriorYearBalances(
+  tenantId: number,
+  fiscalYearId: number,
+): Promise<PriorYearBalances> {
+  return api.get<PriorYearBalances>(priorYearBalancesUrl(tenantId, fiscalYearId))
+}
+
+/**
+ * Captures the figures of a year kept somewhere else, as the opening entry of that year.
+ *
+ * <p>`PUT` and not `POST`: a fiscal year has at most one set of these figures, and sending them
+ * twice leads to the same state — the second time by replacing, which the payload has to ask
+ * for. It writes the <b>same</b> record as `recordOpeningEntry`, so a year that already carries an
+ * opening entry answers 409 and names its journal number unless `replaceExisting` is set.
+ *
+ * @param tenantId the tenant
+ * @param fiscalYearId the year whose figures are captured
+ * @param request the balances, and whether an entry that stands may be replaced
+ * @returns the new entry, and the journal numbers of what it replaced
+ */
+export function capturePriorYearBalances(
+  tenantId: number,
+  fiscalYearId: number,
+  request: PriorYearRequest,
+): Promise<OpeningEntryOutcome> {
+  return api.put<OpeningEntryOutcome>(priorYearBalancesUrl(tenantId, fiscalYearId), request)
+}
+
+/**
  * Where the tenant stands in setting up its bookkeeping.
  *
  * @param tenantId the tenant
@@ -1041,18 +1124,54 @@ export const TRIAL_BALANCE_SORT_FIELDS = [
 ] as const
 
 /**
- * Which reports the printout knows.
+ * Which reports the printout knows — five since #95.
  *
- * <p>Five since #95. Two of them — the balance sheet and the income statement — are laid out and
- * are the only two that take the presentation switches; the other three have no breakdown, and
- * the endpoint answers 400 rather than quietly ignoring a switch sent to them.
+ * <p>Declared in `types.ts` beside the DTOs that carry it, because `ArchivedReport.report` is
+ * the same five keys; re-exported here so every screen keeps reading it from the module that
+ * owns the addresses.
  */
-export type AccountingReport =
-  | 'journal'
-  | 'account-sheets'
-  | 'trial-balance'
-  | 'balance-sheet'
-  | 'income-statement'
+export type { AccountingReport } from './types'
+
+/**
+ * What a report may be narrowed or laid out with, on the printable page and on the PDF alike.
+ *
+ * <p>The account is for `account-sheets`; the two switches are for the two laid-out reports only,
+ * because the other three answer 400 for them.
+ */
+export type ReportOptions = {
+  accountId?: number
+  asOf?: string
+  hideEmpty?: boolean
+  withAccounts?: boolean
+}
+
+/**
+ * The query of a report, without the `?`.
+ *
+ * <p><b>The two presentation switches travel with the link</b>, so the paper shows what the
+ * screen showed. One builder for the page and the PDF: two of them would be two orders of the
+ * same five parameters, and the tests that pin the address would pin two.
+ *
+ * @param fiscalYearId the year to print; compulsory at both endpoints
+ * @param options the account for `account-sheets`, the cut-off day, and the two switches
+ * @returns the query, starting with `fiscalYearId`
+ */
+export function reportQuery(fiscalYearId: number, options: ReportOptions = {}): string {
+  const parts = [`fiscalYearId=${fiscalYearId}`]
+  if (options.accountId !== undefined) {
+    parts.push(`accountId=${options.accountId}`)
+  }
+  if (options.asOf !== undefined && options.asOf !== '') {
+    parts.push(`asOf=${options.asOf}`)
+  }
+  if (options.hideEmpty !== undefined) {
+    parts.push(`hideEmpty=${options.hideEmpty}`)
+  }
+  if (options.withAccounts !== undefined) {
+    parts.push(`withAccounts=${options.withAccounts}`)
+  }
+  return parts.join('&')
+}
 
 /**
  * @param tenantId the tenant
@@ -1085,9 +1204,9 @@ export function accountingExportUrl(tenantId: number, fiscalYearId: number): str
 /**
  * The address of a printable page.
  *
- * <p><b>The two presentation switches travel with the link</b>, so the paper shows what the
- * screen showed — and they are sent for the two laid-out reports only, because the other three
- * answer 400 for them.
+ * <p>The self-contained HTML page of #94. It stays beside the PDF of `accountingPdfUrl` as the
+ * way that works without one — no library, no embedded font, no render error — and GeBüV
+ * Art. 6 Abs. 3 is satisfied by printing either of them.
  *
  * @param tenantId the tenant
  * @param report which report
@@ -1099,27 +1218,9 @@ export function accountingPrintUrl(
   tenantId: number,
   report: AccountingReport,
   fiscalYearId: number,
-  options: {
-    accountId?: number
-    asOf?: string
-    hideEmpty?: boolean
-    withAccounts?: boolean
-  } = {},
+  options: ReportOptions = {},
 ): string {
-  const parts = [`fiscalYearId=${fiscalYearId}`]
-  if (options.accountId !== undefined) {
-    parts.push(`accountId=${options.accountId}`)
-  }
-  if (options.asOf !== undefined && options.asOf !== '') {
-    parts.push(`asOf=${options.asOf}`)
-  }
-  if (options.hideEmpty !== undefined) {
-    parts.push(`hideEmpty=${options.hideEmpty}`)
-  }
-  if (options.withAccounts !== undefined) {
-    parts.push(`withAccounts=${options.withAccounts}`)
-  }
-  return `${accountingUrl(tenantId)}/print/${report}?${parts.join('&')}`
+  return `${accountingUrl(tenantId)}/print/${report}?${reportQuery(fiscalYearId, options)}`
 }
 
 /**
@@ -2071,7 +2172,7 @@ export function yearLogKey(tenantId: number, fiscalYearId: number): readonly unk
  *
  * @param tenantId the tenant
  * @param fiscalYearId the year that would be closed
- * @returns the nine findings, the accrual accounts, the figures and the following year
+ * @returns the ten findings, the accrual accounts, the figures and the following year
  */
 export function fetchClosingPreview(
   tenantId: number,
@@ -2083,7 +2184,7 @@ export function fetchClosingPreview(
 /**
  * Closes one fiscal year: the two closing entries, the carry forward and the state.
  *
- * <p>Needs `ACCOUNTING_CLOSE`. A refusal answers 400 and carries all nine findings under
+ * <p>Needs `ACCOUNTING_CLOSE`. A refusal answers 400 and carries all ten findings under
  * `checks`, so the wizard keeps its list rather than showing «geht nicht».
  *
  * @param tenantId the tenant
@@ -2149,13 +2250,13 @@ export function fetchYearLog(tenantId: number, fiscalYearId: number): Promise<Ye
 /**
  * The findings a refused close carried, out of the `ProblemDetail` of the answer.
  *
- * <p><b>The refusal carries all nine and not only the red ones</b>, so the wizard shows the same
+ * <p><b>The refusal carries all ten and not only the red ones</b>, so the wizard shows the same
  * list before and after the attempt. Anything that is not a list of findings gives an empty
  * one — a network failure and a 500 have no findings, and a screen that read a `detail` as a
  * check would show a sentence in a column of ticks.
  *
  * @param error whatever the call threw
- * @returns the nine findings, or an empty list where the failure carries none
+ * @returns the ten findings, or an empty list where the failure carries none
  */
 export function closingChecksOf(error: unknown): ClosingCheck[] {
   const details = error instanceof ApiError ? error.details : undefined
@@ -2173,12 +2274,12 @@ export function closingChecksOf(error: unknown): ClosingCheck[] {
 }
 
 /**
- * The findings that stop the run, out of all nine.
+ * The findings that stop the run, out of all ten.
  *
- * <p>The wizard shows every finding and puts these at the top: a list of nine in which the one
+ * <p>The wizard shows every finding and puts these at the top: a list of ten in which the one
  * that matters sits seventh is a list nobody reads to the end.
  *
- * @param checks the nine findings
+ * @param checks the ten findings
  * @returns the ones that block, in the order of the run
  */
 export function blockingChecks(checks: ClosingCheck[]): ClosingCheck[] {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { ErrorNotice, WarningNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
@@ -11,6 +12,7 @@ import {
   fetchAccounts,
   fiscalYearsKey,
   openingEntryKey,
+  PRIOR_YEAR_PATH,
   recordOpeningEntry,
   setupStateKey,
   updateAccountingSettings,
@@ -49,6 +51,13 @@ const ACCOUNT_QUERY = listQuery({ activeOnly: true, size: PICKER_SIZE, sort: 'ac
  * <p><b>The receivables row is filled from the open items, and it says so.</b> The figure is
  * today's and not the one of the changeover day; the sentence under the grid says that outright,
  * and the mark disappears the moment somebody touches the amount.
+ *
+ * <p><b>The way to the prior year stands here, above the questions.</b> This is where a tenant
+ * changing over meets the order question — capture the year before first, or open with the
+ * balances alone — and the sentence answers it with a link: the third of the three ways to the
+ * prior year screen, which has no menu entry. It locks nothing; whoever opens first can still
+ * capture the year before later (backend ADR-0125). Shown with `ACCOUNTING_CLOSE` only, because
+ * that is the right the screen behind the link writes with.
  */
 export function OpeningEntryStep({
   tenantId,
@@ -170,6 +179,17 @@ export function OpeningEntryStep({
             Was Sie hier buchen, <strong>ersetzt</strong> sie: die bestehende wird storniert und
             die neue gebucht, beides in einem Schritt. Beide bleiben im Journal stehen.
           </WarningNotice>
+        )}
+
+        {mayClose && (
+          <p className="text-[13px] text-text-secondary">
+            Brauchen Sie Vergleichszahlen nach OR Art. 958d Abs. 2, erfassen Sie zuerst das
+            Vorjahr —{' '}
+            <Link to={PRIOR_YEAR_PATH} className="text-accent-text underline underline-offset-2">
+              Vorjahressaldi erfassen
+            </Link>
+            . Sonst bleibt die Vorjahresspalte leer und trägt ihren Vermerk.
+          </p>
         )}
 
         <fieldset className="grid gap-2">

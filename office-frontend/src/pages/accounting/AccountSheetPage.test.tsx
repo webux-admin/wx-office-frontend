@@ -13,6 +13,21 @@ import { AccountSheetPage } from './AccountSheetPage'
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom has neither a print dialog nor a way to open a tab, so the two ways out of the toolbar
+// are stood in for. Which of them a click reaches for, and with which address, is what the
+// tests below watch; what each of them does is tested in `lib/print.test.ts` and
+// `lib/files.test.ts`.
+const printFile = vi.hoisted(() =>
+  vi.fn<(file: { fileName: string; blob: Blob }) => Promise<void>>(),
+)
+vi.mock('../../lib/print', () => ({
+  printFile,
+  PrintNotPossibleError: class PrintNotPossibleError extends Error {},
+}))
+
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../../lib/files', () => ({ showFile }))
+
 const TENANT = 1
 
 const AUTH: AuthState = {
@@ -93,6 +108,9 @@ function json(body: unknown) {
 beforeEach(() => {
   asked = []
   answer = sheetOf([line()])
+  printFile.mockReset()
+  printFile.mockResolvedValue(undefined)
+  showFile.mockReset()
   vi.stubGlobal('fetch', (url: string) => {
     asked.push(url)
     return json(answer)
@@ -245,21 +263,71 @@ describe('AccountSheetPage', () => {
     expect(container.textContent).toContain('Die Buchhaltung war vom 14.03.2026')
   })
 
-  /** Printing this one account asks for the sheets of exactly it. */
+  /**
+   * <b>The toolbar stands in the head, and «Drucken» asks for the PDF of exactly this account.</b>
+   * The PDF goes to the print dialog and not into a tab (ADR-0009).
+   */
   it('printAsksForThisOneAccountTest', async () => {
     await paint()
 
-    const print = [...container.querySelectorAll('button')].find(
-      (entry) => entry.textContent === 'Drucken',
-    ) as HTMLButtonElement | undefined
-    await act(async () => {
-      print?.click()
-    })
+    await press(buttonNamed('Drucken'))
 
-    expect(
-      asked.some((url) =>
-        url === '/api/tenants/1/accounting/print/account-sheets?fiscalYearId=3&accountId=17',
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/account-sheets?fiscalYearId=3&accountId=17',
+    )
+    expect(printFile).toHaveBeenCalledTimes(1)
+    expect(showFile).not.toHaveBeenCalled()
+  })
+
+  /** The day the screen is cut to travels with the paper, so the sheet shows what the screen showed. */
+  it('printCarriesTheCutOffDayTest', async () => {
+    await paint('?fiscalYearId=3&asOf=2026-06-30')
+
+    await press(buttonNamed('Drucken'))
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/account-sheets?fiscalYearId=3&accountId=17&asOf=2026-06-30',
+    )
+  })
+
+  /**
+   * <b>The HTML page of #94 stays reachable.</b> «Im Browser anzeigen» asks for the printable
+   * page under the same query and hands it to a tab — the way that works without a PDF.
+   */
+  it('browserViewAsksForThePrintablePageTest', async () => {
+    await paint()
+
+    await press(container.querySelector('button[aria-haspopup="menu"]'))
+    await press(
+      [...container.querySelectorAll('[role="menuitem"]')].find((item) =>
+        item.textContent?.includes('Im Browser anzeigen'),
       ),
-    ).toBe(true)
+    )
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/print/account-sheets?fiscalYearId=3&accountId=17',
+    )
+    expect(showFile).toHaveBeenCalledTimes(1)
+    expect(printFile).not.toHaveBeenCalled()
   })
 })
+
+/** One button, by the start of its wording — a busy one carries the spinner's label behind it. */
+function buttonNamed(label: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll('button')].find((entry) =>
+    entry.textContent?.trim().startsWith(label),
+  ) as HTMLButtonElement | undefined
+}
+
+/** Clicks something that fetches, and lets the answer come back. */
+async function press(element: Element | null | undefined) {
+  if (!element) throw new Error('Bedienelement fehlt')
+  await act(async () => {
+    ;(element as HTMLElement).click()
+  })
+  for (let round = 0; round < 4; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+  }
+}

@@ -20,6 +20,7 @@ import {
   CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   JOURNAL_PATH,
+  PRIOR_YEAR_PATH,
   TAX_CODES_PATH,
 } from './lib/accounting'
 import { firstBasicDataPath } from './lib/basicData'
@@ -61,6 +62,7 @@ const ClosingPage = lazy(() => import('./pages/ClosingPage').then((module) => ({
 const IncomeStatementPage = lazy(() => import('./pages/IncomeStatementPage').then((module) => ({ default: module.IncomeStatementPage })))
 const AccountingSetupPage = lazy(() => import('./pages/AccountingSetupPage').then((module) => ({ default: module.AccountingSetupPage })))
 const AccountingArchivePage = lazy(() => import('./pages/accounting/AccountingArchivePage').then((module) => ({ default: module.AccountingArchivePage })))
+const PriorYearPage = lazy(() => import('./pages/accounting/PriorYearPage').then((module) => ({ default: module.PriorYearPage })))
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
 const TaxCodePage = lazy(() => import('./pages/TaxCodePage').then((module) => ({ default: module.TaxCodePage })))
@@ -242,6 +244,9 @@ export default function App() {
                 {/* The wizard has no menu entry: it is reached from the three empty states of
                     the accounting group and from the fiscal year screen. */}
                 <Route path={ACCOUNTING_SETUP_PATH} element={<AccountingSetupPage />} />
+                {/* The prior year screen has no menu entry either: it is reached from where the
+                    question arises, and by its address with the year named. */}
+                <Route path={PRIOR_YEAR_PATH} element={<PriorYearPage />} />
                 <Route path={ACCOUNTING_ARCHIVE_PATH} element={<AccountingArchivePage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />

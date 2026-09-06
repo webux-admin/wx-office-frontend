@@ -5,36 +5,61 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import { ACCOUNTING_RIGHTS } from '../lib/accounting'
+import { ACCOUNTING_RIGHTS, PRIOR_YEAR_PATH } from '../lib/accounting'
 import type { FiscalYear, FiscalYearList, Statement, StatementRow } from '../lib/types'
 import { BalanceSheetPage } from './BalanceSheetPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom has neither a print dialog nor a way to open a tab or save a file, so the three ways out
+// of the head are stood in for. What is watched here is the address «Drucken» asks for.
+const printFile = vi.hoisted(() =>
+  vi.fn<(file: { fileName: string; blob: Blob }) => Promise<void>>(),
+)
+vi.mock('../lib/print', () => ({
+  printFile,
+  PrintNotPossibleError: class PrintNotPossibleError extends Error {},
+}))
+
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+const downloadFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../lib/files', () => ({ showFile, downloadFile }))
+
 const TENANT = 1
 
-const AUTH: AuthState = {
-  user: {
-    userId: 1,
-    username: 'muster',
-    activeTenantId: TENANT,
-    superuser: false,
-    tenants: [
-      { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['ACCOUNTING'] },
-    ],
-    permissions: [ACCOUNTING_RIGHTS.read],
-  },
-  loading: false,
-  signIn: () => Promise.reject(new Error('nicht gebraucht')),
-  completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
-  sendSecondFactorCode: () => Promise.resolve(),
-  adoptSession: () => {},
-  signOut: () => Promise.resolve(),
-  switchTenant: () => Promise.resolve(),
-  refresh: () => Promise.resolve(),
-  can: (permission: string) => permission === ACCOUNTING_RIGHTS.read,
+function session(permissions: string[]): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'muster',
+      activeTenantId: TENANT,
+      superuser: false,
+      tenants: [
+        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['ACCOUNTING'] },
+      ],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
 }
+
+const READER = session([ACCOUNTING_RIGHTS.read])
+/** Holds the closing right on top: the one that may capture the prior year. */
+const CLOSER = session([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.close])
+
+/** The note the backend words where there is no prior year (OR Art. 958d Abs. 2). */
+const PRIOR_YEAR_NOTE =
+  'Vorjahreszahlen liegen nicht vor — erstes Geschäftsjahr in dieser Buchhaltung'
+  + ' (OR Art. 958d Abs. 2).'
 
 /** Wide enough that today always falls into it, whenever the suite happens to run. */
 const YEAR: FiscalYear = {
@@ -48,6 +73,7 @@ const YEAR: FiscalYear = {
   editable: false,
   spansAFullCalendarYear: true,
   postedEntries: 12,
+  postedEntriesBesidesOpening: 11,
 }
 
 const YEARS: FiscalYearList = {
@@ -166,11 +192,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function paint() {
+async function paint(auth: AuthState = READER) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <AuthContext.Provider value={AUTH}>
+      <AuthContext.Provider value={auth}>
         <QueryClientProvider client={client}>
           <MemoryRouter>
             <BalanceSheetPage />
@@ -204,6 +230,22 @@ function occurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1
 }
 
+/** One link, by the text on it, or nothing where it does not stand. */
+function linkNamed(label: string): HTMLAnchorElement | undefined {
+  return [...container.querySelectorAll('a')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+}
+
+/** The answer of a first fiscal year: no year before it, and the note that says so. */
+function firstYear(): Statement {
+  return statement({
+    priorFiscalYearId: null,
+    priorFiscalYearLabel: null,
+    notes: [{ kind: 'PRIOR_YEAR_MISSING', text: PRIOR_YEAR_NOTE }],
+  })
+}
+
 describe('BalanceSheetPage', () => {
   /** The proof stands under the figures, and it stands there even at 0.00. */
   it('balanceSheetShowsTheControlLineTest', async () => {
@@ -222,22 +264,46 @@ describe('BalanceSheetPage', () => {
    * no prior year, the note the backend worded stands under the figures.
    */
   it('balanceSheetShowsThePriorYearNoteTest', async () => {
-    answer = statement({
-      priorFiscalYearId: null,
-      priorFiscalYearLabel: null,
-      notes: [
-        {
-          kind: 'PRIOR_YEAR_MISSING',
-          text: 'Vorjahreszahlen liegen nicht vor — erstes Geschäftsjahr in dieser Buchhaltung'
-            + ' (OR Art. 958d Abs. 2).',
-        },
-      ],
-    })
+    answer = firstYear()
 
     await paint()
 
     expect(container.textContent).toContain('Vorjahreszahlen liegen nicht vor')
     expect(container.textContent).toContain('OR Art. 958d Abs. 2')
+  })
+
+  /**
+   * <b>The second of the three ways to the prior year screen.</b> The note names the gap, and
+   * beside it stands the way to close it — without a year in the address, because where the
+   * note stands there is no prior year to name.
+   */
+  it('balanceSheetOffersThePriorYearCaptureTest', async () => {
+    answer = firstYear()
+
+    await paint(CLOSER)
+
+    const way = linkNamed('Vorjahr erfassen')
+    expect(way?.getAttribute('href')).toBe(PRIOR_YEAR_PATH)
+    // Beside the note, in the same sentence block — not somewhere in the head.
+    expect(way?.closest('p')?.textContent).toContain('Vorjahreszahlen liegen nicht vor')
+  })
+
+  /** The note stands for every reader; the link stands for the right that can capture. */
+  it('balanceSheetHidesThePriorYearCaptureWithoutCloseTest', async () => {
+    answer = firstYear()
+
+    await paint(READER)
+
+    expect(container.textContent).toContain('Vorjahreszahlen liegen nicht vor')
+    expect(linkNamed('Vorjahr erfassen')).toBeUndefined()
+  })
+
+  /** Where a prior year stands, there is no note and nothing to capture from here. */
+  it('balanceSheetOffersNoPriorYearCaptureWithAPriorYearTest', async () => {
+    await paint(CLOSER)
+
+    expect(container.textContent).not.toContain('Vorjahreszahlen liegen nicht vor')
+    expect(linkNamed('Vorjahr erfassen')).toBeUndefined()
   })
 
   /** What is not in the figures is said above them, in the words the backend chose. */
@@ -287,4 +353,63 @@ describe('BalanceSheetPage', () => {
     // And the account lines are off until somebody asks for them.
     expect(container.textContent).not.toContain('1100 Forderungen aus L+L')
   })
+
+  /**
+   * <b>The toolbar stands in the head, and the paper shows what the screen showed.</b> «Drucken»
+   * asks for the PDF with the two switches as they stand, and once a day is typed and the
+   * accounts are turned on, the address carries all three.
+   */
+  it('balanceSheetPrintsThePdfWithTheSwitchesTest', async () => {
+    printFile.mockResolvedValue(undefined)
+    await paint()
+
+    await act(async () => {
+      buttonNamed('Drucken').click()
+    })
+    await settle()
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/balance-sheet?fiscalYearId=3&hideEmpty=true'
+        + '&withAccounts=false',
+    )
+    expect(printFile).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      fieldNamed('Konten zeigen').click()
+    })
+    typeInto(fieldNamed('Stichtag'), '2026-06-30')
+    await settle()
+    await act(async () => {
+      buttonNamed('Drucken').click()
+    })
+    await settle()
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/balance-sheet?fiscalYearId=3&asOf=2026-06-30'
+        + '&hideEmpty=true&withAccounts=true',
+    )
+    expect(printFile).toHaveBeenCalledTimes(2)
+  })
 })
+
+/** The control behind one label. */
+function fieldNamed(label: string): HTMLInputElement {
+  const found = [...container.querySelectorAll('label')].find(
+    (candidate) => candidate.textContent === label,
+  )
+  const input = found === undefined ? null : document.getElementById(found.htmlFor)
+  if (input === null) throw new Error(`Feld «${label}» fehlt`)
+  return input as HTMLInputElement
+}
+
+/** One keystroke, the way React notices one. */
+function typeInto(element: HTMLInputElement, value: string) {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set
+    setter?.call(element, value)
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}

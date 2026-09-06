@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useLocation, useParams } from 'react-router-dom'
-import { Button } from '../../components/Button'
 import { DataTable, type Column } from '../../components/DataTable'
 import { LoadingBlock } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { RequireTenant } from '../../layout/RequireTenant'
-import { api } from '../../lib/api'
 import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
@@ -14,15 +12,14 @@ import {
   JOURNAL_PATH,
   accountSheetKey,
   accountSheetPath,
-  accountingPrintUrl,
   fetchAccountSheet,
 } from '../../lib/accounting'
-import { printFile } from '../../lib/print'
 import { formatAmount, formatDate } from '../../lib/format'
 import { originOf, originState } from '../../lib/origin'
 import { listQuery, PAGE_SIZE } from '../../lib/paging'
 import type { AccountSheetLine } from '../../lib/types'
 import { AccountingNotices } from './AccountingNotices'
+import { ReportToolbar } from './ReportToolbar'
 
 /**
  * One account read the other way round from the journal: everything that happened on it, with a
@@ -140,14 +137,15 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
         // Back to where it was opened from, and to «Konten» only where nothing said otherwise.
         back={backTo(originOf(location.state, { from: ACCOUNT_BALANCE_PATH, label: 'Konten' }))}
       >
-        <Button
-          variant="secondary"
-          onClick={() =>
-            void printSheet(tenantId, Number(year), accountId)
-          }
-        >
-          Drucken
-        </Button>
+        {/* The paper is this one account, cut to the same day as the screen. Filing, though,
+            takes neither: the cupboard holds the sheets of every account with movement, and the
+            dialog behind «Archivieren …» says so. */}
+        <ReportToolbar
+          tenantId={tenantId}
+          report="account-sheets"
+          fiscalYearId={fiscalYearId === null ? null : Number(fiscalYearId)}
+          options={{ accountId, asOf: asOf === '' ? undefined : asOf }}
+        />
       </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
@@ -187,20 +185,6 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
       </div>
     </>
   )
-}
-
-/**
- * Prints this one account sheet.
- *
- * <p>Through the API client and a blob, never a frame pointed straight at the address: an
- * iframe on the endpoint would stay empty — Spring Security forbids framing by default — and the
- * handling of an expired session, which lives in one place in `api.ts`, would be lost with it.
- */
-async function printSheet(tenantId: number, fiscalYearId: number, accountId: number) {
-  const file = await api.file(
-    accountingPrintUrl(tenantId, 'account-sheets', fiscalYearId, { accountId }),
-  )
-  printFile(file)
 }
 
 /**

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, CircleAlert, CircleDashed } from 'lucide-react'
+import { Check, CircleAlert, CircleDashed, FileText } from 'lucide-react'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
@@ -37,9 +37,18 @@ import {
   yearLogKey,
   yearLogLabel,
 } from '../lib/accounting'
+import {
+  fetchReportArchive,
+  REPORT_NAMES,
+  reportArchiveFileUrl,
+  reportArchiveKey,
+} from '../lib/accountingReports'
+import { api } from '../lib/api'
+import { showFile } from '../lib/files'
 import { useRunsModule } from '../lib/modules'
-import { formatAmount, formatDate, formatDateTime } from '../lib/format'
+import { formatAmount, formatByteCount, formatDate, formatDateTime } from '../lib/format'
 import type {
+  ArchivedReport,
   ClosingCheck,
   ClosingEntry,
   ClosingPreview,
@@ -58,8 +67,10 @@ import {
   carryForwardHint,
   checkTone,
   CLOSING_STEPS,
+  closingRunsOf,
   closingSummarySentence,
   defaultClosingYear,
+  filedPapersSentence,
   laterYearSentence,
   nextStep,
   previousStep,
@@ -86,10 +97,11 @@ import { ReopenDialog } from './accounting/ReopenDialog'
  * <p><b>The module switch takes the two buttons away and nothing else</b> — it is not passed to
  * `RequireTenant`, and that is decided rather than forgotten. What a close did and what happened
  * to a year stay readable for ten years, module or no module (OR Art. 958f, backend ADR-0119),
- * and the three reading endpoints behind this screen answer 200 while it is off. Shutting the
- * whole page would hide the one place that says the bookkeeping was switched off — the same
- * reason the list of issued reminders carries no switch (ADR-0032). The two writing endpoints
- * answer 409, so the wizard and «Wieder öffnen» go and a `ModuleOffNotice` stands in their place.
+ * and every reading endpoint behind this screen — the years, the summary, the trail, the lines
+ * of an entry, the archive and a filed paper — answers 200 while it is off. Shutting the whole
+ * page would hide the one place that says the bookkeeping was switched off — the same reason the
+ * list of issued reminders carries no switch (ADR-0032). The two writing endpoints answer 409, so
+ * the wizard and «Wieder öffnen» go and a `ModuleOffNotice` stands in their place.
  */
 export function ClosingPage() {
   return (
@@ -255,6 +267,9 @@ function ClosingWizard({
       void queryClient.invalidateQueries({ queryKey: closingPreviewKey(tenantId, year.id) })
       // The run writes two lines into the trail — the accrual confirmation and the state.
       void queryClient.invalidateQueries({ queryKey: yearLogKey(tenantId, year.id) })
+      // And it files the five papers as its thirteenth step (backend ADR-0125): the cupboard of
+      // this year has to be read again, or a year closed a second time would show one run.
+      void queryClient.invalidateQueries({ queryKey: reportArchiveKey(tenantId, year.id) })
     },
   })
 
@@ -273,8 +288,8 @@ function ClosingWizard({
   }
 
   const data = preview.data
-  // The nine the run answered with, where it refused; otherwise the nine of the preview. The
-  // refusal carries all nine, so the list does not shrink to the red ones at the moment one
+  // The ten the run answered with, where it refused; otherwise the ten of the preview. The
+  // refusal carries all ten, so the list does not shrink to the red ones at the moment one
   // turns red.
   const refused = closingChecksOf(run.error)
   const checks = refused.length > 0 ? refused : data.checks
@@ -315,7 +330,21 @@ function ClosingWizard({
         </WarningNotice>
       )}
 
-      {run.error !== null && run.error !== undefined && <ErrorNotice error={run.error} />}
+      {run.error !== null && run.error !== undefined && (
+        <ErrorNotice error={run.error}>
+          {/* Only where the failure carries no findings — a finding says for itself what is
+              missing. A paper that could not be laid out, a ledger out of balance or a network
+              failure carry a sentence and nothing else, and the person is owed the one fact
+              that sentence leaves out: the run is one transaction, and nothing of it stands. */}
+          {refused.length === 0 && (
+            <p className="text-[12px] text-text-secondary">
+              Es wurde nichts gebucht und kein Geschäftsjahr angelegt: der Abschluss läuft als
+              eine Transaktion, und ein Fehler nimmt alles mit — auch ein Papier, das nicht
+              gezeichnet werden konnte.
+            </p>
+          )}
+        </ErrorNotice>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         {step !== 'CHECKS' && (
@@ -380,10 +409,10 @@ function StepBar({ step }: { step: ClosingStep }) {
 }
 
 /**
- * Step 1: the nine findings.
+ * Step 1: the ten findings.
  *
  * <p>Every one of them is shown, and the ones that stop the run stand first. A screen that listed
- * only what is wrong would leave somebody wondering what was checked at all — and the nine are
+ * only what is wrong would leave somebody wondering what was checked at all — and the ten are
  * the checklist a fiduciary works through.
  */
 function ChecksStep({
@@ -400,7 +429,7 @@ function ChecksStep({
     <div className="grid gap-4">
       <Panel
         title={`Prüfung für ${year.label}`}
-        description="Neun Punkte, bevor gebucht wird. Was rot ist, hält den Abschluss auf."
+        description="Zehn Punkte, bevor gebucht wird. Was rot ist, hält den Abschluss auf."
       >
         <ol className="grid gap-2.5">
           {sortedChecks(checks).map((check) => (
@@ -617,6 +646,12 @@ function CarryForwardStep({
 
           <p className="text-[13px]">{closingSummarySentence(preview, chosen)}</p>
 
+          {/* Said before the click and not after it: the run files five papers as its
+              thirteenth step and fails as a whole where one cannot be laid out (backend
+              ADR-0125). A close that stops over a printing fault is inexplicable to somebody who
+              was never told that printing is part of it. */}
+          <p className="text-[13px]">{filedPapersSentence()}</p>
+
           {preview.replacesOpeningEntry && (
             <WarningNotice>
               Das Folgejahr trägt bereits eine Eröffnungsbuchung. Sie wird storniert und durch den
@@ -745,6 +780,8 @@ function ClosedYear({
         />
       </Panel>
 
+      <FiledPapers tenantId={tenantId} year={year} />
+
       <ReopenDialog
         open={reopening}
         yearLabel={year.label}
@@ -768,6 +805,112 @@ function ClosedYear({
         onClose={() => setReopening(false)}
       />
     </div>
+  )
+}
+
+/**
+ * The papers the close filed, run by run, from `GET /report-archive?fiscalYearId=…`.
+ *
+ * <p><b>Every run of the year, each under its own number.</b> A year that was reopened and closed
+ * again shows both sets of five, and that is the visible proof that a second close overwrites
+ * nothing (backend ADR-0125, GeBüV Art. 3). A click fetches the bytes that were written at the
+ * close — never a fresh render — and shows them the way every other PDF of this application is
+ * shown. Papers filed by hand are not what a close did; they stand on the archive screen.
+ *
+ * <p>Read while the module is off, like the entries and the trail: a filed balance sheet is part
+ * of the books and stays legible for ten years (OR Art. 958f).
+ *
+ * <p>One `opening` and one `openFailure`, the way the report toolbar and the stock list do it:
+ * the clicked paper shows busy, the others wait, and a failure stands under the list rather than
+ * replacing it.
+ */
+function FiledPapers({ tenantId, year }: { tenantId: number; year: FiscalYear }) {
+  const archive = useQuery({
+    queryKey: reportArchiveKey(tenantId, year.id),
+    queryFn: () => fetchReportArchive(tenantId, year.id),
+  })
+  const [opening, setOpening] = useState<number | null>(null)
+  const [openFailure, setOpenFailure] = useState<unknown>(null)
+
+  const open = async (paper: ArchivedReport) => {
+    setOpening(paper.id)
+    setOpenFailure(null)
+    try {
+      showFile(await api.file(reportArchiveFileUrl(tenantId, paper.id)))
+    } catch (failure) {
+      setOpenFailure(failure)
+    } finally {
+      setOpening(null)
+    }
+  }
+
+  const runs = closingRunsOf(archive.data ?? [])
+
+  // Unpadded like the two table panels beside it: the loading block and the empty state bring
+  // their own spacing, and only the list needs some.
+  return (
+    <Panel
+      title="Papiere des Abschlusses"
+      description="Fünf PDF je Durchgang, beim Abschluss abgelegt und seither unverändert."
+      padded={false}
+    >
+      {archive.error !== null && archive.error !== undefined ? (
+        <div className="p-5">
+          <ErrorNotice error={archive.error} />
+        </div>
+      ) : archive.isPending ? (
+        <LoadingBlock />
+      ) : runs.length === 0 ? (
+        <EmptyState title="Keine Papiere abgelegt">
+          {`Beim Abschluss von ${year.label} wurden keine Papiere abgelegt. Sie lassen sich`}
+          {' unter Buchhaltung → Archiv jederzeit von Hand ablegen — dann mit der Herkunft'}
+          {' «von Hand», damit niemand sie für die Papiere des Abschlusstages hält.'}
+        </EmptyState>
+      ) : (
+        <div className="grid gap-4 p-5">
+          {runs.map((run) => (
+            <section
+              key={run.closingNumber}
+              aria-label={`Abschluss Nr. ${run.closingNumber}`}
+              className="grid gap-1.5"
+            >
+              <h3 className="text-[12px] font-medium text-text-secondary">
+                Abschluss Nr. {run.closingNumber}
+              </h3>
+              <ul className="grid gap-1">
+                {run.papers.map((paper) => (
+                  <li
+                    key={paper.id}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1"
+                  >
+                    <Button
+                      variant="ghost"
+                      onClick={() => void open(paper)}
+                      busy={opening === paper.id}
+                      disabled={opening !== null && opening !== paper.id}
+                    >
+                      <FileText size={15} aria-hidden />
+                      {REPORT_NAMES[paper.report]}
+                    </Button>
+                    <span className="text-[12px] text-text-secondary">
+                      {`Stand ${formatDate(paper.asOfDate)} · ${formatByteCount(paper.byteCount)}`}
+                      {` · abgelegt am ${formatDateTime(paper.createdAt)} von ${paper.createdBy}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+
+          {openFailure !== null && <ErrorNotice error={openFailure} />}
+
+          <p className="text-[12px] text-text-secondary">
+            Ein Klick öffnet das Papier so, wie es abgelegt wurde. Diese Papiere ändern sich nicht
+            mehr; von Hand abgelegte stehen unter Buchhaltung → Archiv.
+          </p>
+        </div>
+      )}
+    </Panel>
   )
 }
 

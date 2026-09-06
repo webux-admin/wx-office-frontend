@@ -69,12 +69,19 @@ import {
   accountSheetUrl,
   accountingExportUrl,
   accountingPrintUrl,
+  accountingUrl,
+  reportQuery,
   balanceSheetKey,
   balanceSheetUrl,
   incomeStatementKey,
   incomeStatementUrl,
   openingEntryKey,
   openingEntryUrl,
+  PRIOR_YEAR_PATH,
+  capturePriorYearBalances,
+  fetchPriorYearBalances,
+  priorYearBalancesKey,
+  priorYearBalancesUrl,
   blockingChecks,
   closingChecksOf,
   closingKey,
@@ -786,6 +793,149 @@ describe('accountingPrintUrl', () => {
     expect(accountingPrintUrl(7, 'account-sheets', 3, { accountId: 412 })).toBe(
       '/api/tenants/7/accounting/print/account-sheets?fiscalYearId=3&accountId=412',
     )
+  })
+})
+
+describe('accountingUrl', () => {
+  /** The one spelling of the base, for the addresses in `accountingReports.ts` as well. */
+  it('accountingUrlTest', () => {
+    expect(accountingUrl(7)).toBe('/api/tenants/7/accounting')
+    expect(accountingPrintUrl(7, 'journal', 3).startsWith(accountingUrl(7))).toBe(true)
+  })
+})
+
+describe('reportQuery', () => {
+  /** The year first, then the account, the day and the two switches — one order for both ways. */
+  it('reportQueryTest', () => {
+    expect(
+      reportQuery(3, { accountId: 412, asOf: '2026-06-30', hideEmpty: true, withAccounts: false }),
+    ).toBe('fiscalYearId=3&accountId=412&asOf=2026-06-30&hideEmpty=true&withAccounts=false')
+  })
+
+  /** Without options only the year stands there; an empty day is the whole year. */
+  it('reportQueryWithoutOptionsTest', () => {
+    expect(reportQuery(3)).toBe('fiscalYearId=3')
+    expect(reportQuery(3, {})).toBe('fiscalYearId=3')
+    expect(reportQuery(3, { asOf: '' })).toBe('fiscalYearId=3')
+  })
+
+  /** A switch that is off is sent as `false`, not left out: left out means «the default». */
+  it('reportQueryWithSwitchesOffTest', () => {
+    expect(reportQuery(3, { hideEmpty: false, withAccounts: false })).toBe(
+      'fiscalYearId=3&hideEmpty=false&withAccounts=false',
+    )
+  })
+})
+
+describe('the prior year balances', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** The year stands in the path and the day in none of it — the server derives the day. */
+  it('priorYearBalancesUrlTest', () => {
+    expect(priorYearBalancesUrl(7, 3)).toBe(
+      '/api/tenants/7/accounting/fiscal-years/3/prior-year-balances',
+    )
+    expect(PRIOR_YEAR_PATH).toBe('/buchhaltung/vorjahr')
+  })
+
+  it('priorYearBalancesKeyTest', () => {
+    expect(priorYearBalancesKey(7, 3)).toEqual(['accounting-prior-year-balances', 7, 3])
+    expect(priorYearBalancesKey(7, 3)).not.toEqual(priorYearBalancesKey(7, 4))
+  })
+
+  /** A year without figures answers 200 with `captured: false`, never 404. */
+  it('fetchPriorYearBalancesTest', async () => {
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/fiscal-years/3/prior-year-balances')
+      expect(init?.method ?? 'GET').toBe('GET')
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            captured: false,
+            entryId: null,
+            entryNumber: null,
+            bookingDate: null,
+            lines: [],
+            debitTotal: 0,
+            creditTotal: 0,
+            blockedBy: null,
+            notice: null,
+            followingYearEntryNumber: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    const balances = await fetchPriorYearBalances(7, 3)
+
+    expect(balances.captured).toBe(false)
+    expect(balances.lines).toEqual([])
+  })
+
+  /** A `PUT` with the lines and the replacement flag, and no booking date anywhere in it. */
+  it('capturePriorYearBalancesTest', async () => {
+    let sent: { method?: string; body: unknown } | undefined
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      expect(url).toBe('/api/tenants/7/accounting/fiscal-years/3/prior-year-balances')
+      sent = { method: init?.method, body: JSON.parse(String(init?.body)) }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            entryId: 91,
+            entryNumber: '2025-000001',
+            bookingDate: '2025-12-31',
+            replacedEntryNumber: null,
+            reversalEntryNumber: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    const outcome = await capturePriorYearBalances(7, 3, {
+      lines: [
+        { accountId: 1, debit: 48210.55, credit: null, text: null, taxCodeId: null },
+        { accountId: 2, debit: null, credit: 48210.55, text: null, taxCodeId: null },
+      ],
+      replaceExisting: false,
+      reason: null,
+    })
+
+    expect(sent?.method).toBe('PUT')
+    expect(sent?.body).toEqual({
+      lines: [
+        { accountId: 1, debit: 48210.55, credit: null, text: null, taxCodeId: null },
+        { accountId: 2, debit: null, credit: 48210.55, text: null, taxCodeId: null },
+      ],
+      replaceExisting: false,
+      reason: null,
+    })
+    expect(sent?.body).not.toHaveProperty('bookingDate')
+    expect(outcome.entryNumber).toBe('2025-000001')
+    expect(outcome.bookingDate).toBe('2025-12-31')
+  })
+
+  /** A year that already carries an opening entry answers 409 and names its journal number. */
+  it('capturePriorYearBalancesTwiceTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ detail: 'Für 2025 besteht bereits eine Eröffnungsbuchung (2025-000001).' }),
+          { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+
+    const failure = await capturePriorYearBalances(7, 3, { lines: [] }).catch(
+      (error: unknown) => error,
+    )
+
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(409)
+    expect((failure as ApiError).message).toContain('2025-000001')
   })
 })
 
@@ -1653,7 +1803,7 @@ describe('der Jahresabschluss', () => {
   })
 
   describe('closingChecksOf', () => {
-    /** A refused close carries all nine, and the screen keeps its list. */
+    /** A refused close carries all ten, and the screen keeps its list. */
     it('closingChecksOfTest', () => {
       const error = new ApiError(400, 'Die Abgrenzungen sind nicht bestätigt.', {
         detail: 'Die Abgrenzungen sind nicht bestätigt.',

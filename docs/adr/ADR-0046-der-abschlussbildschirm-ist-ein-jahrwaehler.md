@@ -321,6 +321,35 @@ sie wegzulassen, bis #100 die maschinelle Abstimmung bringt — dann trüge die 
 kein Weg setzen kann. Sie wieder zu entfernen ist ein kleiner Schnitt, solange #100 nicht gebaut
 ist; die Stelle steht hier, damit die Entscheidung sichtbar ist und nicht im Code verschwindet.
 
+### Nachtrag aus #97: zehn Prüfungen, nicht neun
+
+Seit #97 liefert der Abschlusslauf **zehn** Befunde, nicht neun — Entscheidung A des
+Auftraggebers, festgehalten in Frontend-ADR-0047 und Backend-ADR-0125. Die neue Prüfung **4a**
+steht zwischen 4 und 5 und hält auf, wenn Erfolgskonten Saldo tragen **und** das
+Bilanzergebniskonto (`JAHRESERGEBNIS_BILANZ`) bereits einen Saldo hat. Der Grund: Vorjahressaldi
+werden **vor** der Ergebnisverwendung erfasst, und trüge beides zugleich Saldo, schöbe
+Abschlussbuchung 2 das Ergebnis ein zweites Mal ins Eigenkapital — Aktiven und Passiven gingen
+trotzdem auf, keine Kontrolle merkte es. Die Reihenfolge lautet jetzt
+`1, 2, 2a, 3, 3a, 4, 4a, 5, 7, 7a`.
+
+Dieses ADR sagt an fünf Stellen «neun» — in Abschnitt 3, in der Begründung, bei den verworfenen
+Alternativen, in Abweichung 8 und unter «Offen». Sie beschreiben den Stand von #96 und werden
+nicht umgeschrieben. Am Bildschirm ändert sich nichts als die Zahl: `sortedChecks` ordnet, was der
+Lauf liefert, und zählt nicht, und die Maske zeigt jede Zeile, die kommt. Auf zehn gezogen sind
+die Panelbeschreibung und vier Kommentarzeilen in `ClosingPage.tsx`, fünf Zeilen in
+`closingWizard.ts`, sieben in `lib/accounting.ts`, fünf Stellen in `lib/types.ts` — vier Zeilen
+und die Bezeichnerliste von `ClosingCheck.step`, die `4a` führt — und eine Zeile in
+`accounting.test.ts`, dazu vier Testfälle, zwei in `ClosingPage.test.tsx` und zwei in
+`closingWizard.test.ts`, drei davon umbenannt (Frontend-ADR-0047, Entscheidung 8, mit jeder
+Stelle).
+
+Damit ist auch der erste Eintrag unter «Offen» eingelöst: die Zusammenfassung eines
+abgeschlossenen Jahres trägt seit #97 das Panel «Papiere des Abschlusses» — die fünf PDF je
+Durchgang, unter der Abschlussnummer des Durchgangs, und ein Jahr, das nach einer Wiedereröffnung
+zweimal abgeschlossen wurde, zeigt beide Sätze. Der dritte Schritt des Assistenten sagt vor dem
+Klick, dass der Lauf fünf Papiere ablegt und als Ganzes scheitert, wenn eines davon nicht
+gezeichnet werden kann.
+
 ## Offen
 
 Zugewiesen, keine offene Frage:

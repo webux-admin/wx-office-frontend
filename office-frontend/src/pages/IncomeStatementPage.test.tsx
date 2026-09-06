@@ -5,36 +5,56 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import { ACCOUNTING_RIGHTS } from '../lib/accounting'
+import { ACCOUNTING_RIGHTS, PRIOR_YEAR_PATH } from '../lib/accounting'
 import type { FiscalYear, FiscalYearList, Statement, StatementRow } from '../lib/types'
 import { IncomeStatementPage } from './IncomeStatementPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom has neither a print dialog nor a way to open a tab or save a file, so the three ways out
+// of the head are stood in for. What is watched here is the address «Drucken» asks for.
+const printFile = vi.hoisted(() =>
+  vi.fn<(file: { fileName: string; blob: Blob }) => Promise<void>>(),
+)
+vi.mock('../lib/print', () => ({
+  printFile,
+  PrintNotPossibleError: class PrintNotPossibleError extends Error {},
+}))
+
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+const downloadFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../lib/files', () => ({ showFile, downloadFile }))
+
 const TENANT = 1
 
-const AUTH: AuthState = {
-  user: {
-    userId: 1,
-    username: 'muster',
-    activeTenantId: TENANT,
-    superuser: false,
-    tenants: [
-      { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['ACCOUNTING'] },
-    ],
-    permissions: [ACCOUNTING_RIGHTS.read],
-  },
-  loading: false,
-  signIn: () => Promise.reject(new Error('nicht gebraucht')),
-  completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
-  sendSecondFactorCode: () => Promise.resolve(),
-  adoptSession: () => {},
-  signOut: () => Promise.resolve(),
-  switchTenant: () => Promise.resolve(),
-  refresh: () => Promise.resolve(),
-  can: (permission: string) => permission === ACCOUNTING_RIGHTS.read,
+function session(permissions: string[]): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'muster',
+      activeTenantId: TENANT,
+      superuser: false,
+      tenants: [
+        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['ACCOUNTING'] },
+      ],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
 }
+
+const READER = session([ACCOUNTING_RIGHTS.read])
+/** Holds the closing right on top: the one that may capture the prior year. */
+const CLOSER = session([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.close])
 
 /** Wide enough that today always falls into it, whenever the suite happens to run. */
 const YEAR: FiscalYear = {
@@ -48,6 +68,7 @@ const YEAR: FiscalYear = {
   editable: false,
   spansAFullCalendarYear: true,
   postedEntries: 12,
+  postedEntriesBesidesOpening: 11,
 }
 
 const YEARS: FiscalYearList = {
@@ -119,6 +140,20 @@ const STATEMENT: Statement = {
   rows: ROWS,
 }
 
+/** The answer of a first fiscal year: no year before it, and the note that says so. */
+const FIRST_YEAR: Statement = {
+  ...STATEMENT,
+  priorFiscalYearId: null,
+  priorFiscalYearLabel: null,
+  notes: [
+    {
+      kind: 'PRIOR_YEAR_MISSING',
+      text: 'Vorjahreszahlen liegen nicht vor — erstes Geschäftsjahr in dieser Buchhaltung'
+        + ' (OR Art. 958d Abs. 2).',
+    },
+  ],
+}
+
 let container: HTMLDivElement
 let root: Root
 
@@ -147,11 +182,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function paint() {
+async function paint(auth: AuthState = READER) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <AuthContext.Provider value={AUTH}>
+      <AuthContext.Provider value={auth}>
         <QueryClientProvider client={client}>
           <MemoryRouter>
             <IncomeStatementPage />
@@ -187,4 +222,76 @@ describe('IncomeStatementPage', () => {
     expect(container.textContent).toContain('Jahresgewinn oder Jahresverlust')
     expect(container.textContent).not.toContain('Aktiven minus Passiven')
   })
+
+  /**
+   * <b>The toolbar stands in the head of this statement as well</b>, and «Drucken» asks for the
+   * PDF of the income statement with the two switches as they stand.
+   */
+  it('incomeStatementPrintsThePdfWithTheSwitchesTest', async () => {
+    const asked: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push(url)
+      if (url.includes('/accounting/fiscal-years')) return json(YEARS)
+      return json(STATEMENT)
+    })
+    printFile.mockResolvedValue(undefined)
+    await paint()
+
+    const print = [...container.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Drucken',
+    )
+    await act(async () => {
+      print?.click()
+    })
+    for (let round = 0; round < 4; round += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+    }
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/income-statement?fiscalYearId=3&hideEmpty=true'
+        + '&withAccounts=false',
+    )
+    expect(printFile).toHaveBeenCalledTimes(1)
+    expect(showFile).not.toHaveBeenCalled()
+  })
+
+  // --- der zweite Weg zur Vorjahresmaske, auch hier -----------------------------
+
+  /**
+   * <b>The income statement carries the way to the prior year as well</b> — it is the same
+   * screen as the balance sheet, and the note stands under both. Beside it: «Vorjahr erfassen»,
+   * for whoever holds the closing right.
+   */
+  it('incomeStatementOffersThePriorYearCaptureTest', async () => {
+    vi.stubGlobal('fetch', (url: string) => {
+      if (url.includes('/accounting/fiscal-years')) return json(YEARS)
+      return json(FIRST_YEAR)
+    })
+    await paint(CLOSER)
+
+    const way = linkNamed('Vorjahr erfassen')
+    expect(way?.getAttribute('href')).toBe(PRIOR_YEAR_PATH)
+    expect(way?.closest('p')?.textContent).toContain('Vorjahreszahlen liegen nicht vor')
+  })
+
+  /** The note stands for every reader; the link stands for the right that can capture. */
+  it('incomeStatementHidesThePriorYearCaptureWithoutCloseTest', async () => {
+    vi.stubGlobal('fetch', (url: string) => {
+      if (url.includes('/accounting/fiscal-years')) return json(YEARS)
+      return json(FIRST_YEAR)
+    })
+    await paint(READER)
+
+    expect(container.textContent).toContain('Vorjahreszahlen liegen nicht vor')
+    expect(linkNamed('Vorjahr erfassen')).toBeUndefined()
+  })
 })
+
+/** One link, by the text on it, or nothing where it does not stand. */
+function linkNamed(label: string): HTMLAnchorElement | undefined {
+  return [...container.querySelectorAll('a')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+}

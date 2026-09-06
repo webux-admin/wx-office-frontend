@@ -12,6 +12,19 @@ import { JournalPage } from './JournalPage'
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom has neither a print dialog nor a way to open a tab, so the two ways out of the toolbar
+// are stood in for. What is watched here is the address «Drucken» asks for.
+const printFile = vi.hoisted(() =>
+  vi.fn<(file: { fileName: string; blob: Blob }) => Promise<void>>(),
+)
+vi.mock('../lib/print', () => ({
+  printFile,
+  PrintNotPossibleError: class PrintNotPossibleError extends Error {},
+}))
+
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../lib/files', () => ({ showFile }))
+
 const TENANT = 1
 
 function session(permissions: string[], modules: string[] = ['ACCOUNTING']): AuthState {
@@ -566,6 +579,30 @@ describe('JournalPage', () => {
       'ist bereits storniert.',
     )
     expect(document.body.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  /**
+   * <b>The journal has a print button now, and it prints the whole journal of the year.</b>
+   * Before this toolbar the screen had none. None of the five filters travels with the paper:
+   * the endpoint takes none of them, and the journal the law asks for is the complete one
+   * (GeBüV Art. 1 Abs. 2 Bst. b), not the page somebody narrowed.
+   */
+  it('journalPrintsThePdfOfTheYearTest', async () => {
+    const asked: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push(url)
+      if (url.includes('/accounting/fiscal-years')) return json(years)
+      if (url.includes('/accounting/journal')) return json(journal)
+      return json({})
+    })
+    printFile.mockResolvedValue(undefined)
+    await render(READ_ONLY)
+
+    await click(button('Drucken'))
+
+    expect(asked).toContain('/api/tenants/1/accounting/pdf/journal?fiscalYearId=3')
+    expect(printFile).toHaveBeenCalledTimes(1)
+    expect(showFile).not.toHaveBeenCalled()
   })
 
   /**

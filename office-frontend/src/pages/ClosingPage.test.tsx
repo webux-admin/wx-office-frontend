@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
 import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
 import type {
+  AccountingReport,
+  ArchivedReport,
   ClosingPreview,
   ClosingSummary,
   FiscalYear,
@@ -18,7 +20,16 @@ import { ClosingPage } from './ClosingPage'
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+// jsdom cannot open a tab, so the way a filed paper is shown is stood in for. What `showFile`
+// does is tested in `lib/files.test.ts`; what is tested here is that a click reaches it, and
+// with which file.
+const showFile = vi.hoisted(() => vi.fn<(file: { fileName: string; blob: Blob }) => void>())
+vi.mock('../lib/files', () => ({ showFile }))
+
 const TENANT = 1
+
+/** The five papers by their screen names, in the order the run draws them. */
+const FIVE_PAPERS = ['Journal', 'Kontoblätter', 'Saldenliste', 'Bilanz', 'Erfolgsrechnung']
 
 function auth(permissions: string[], modules: string[] = [ACCOUNTING_MODULE]): AuthState {
   return {
@@ -63,6 +74,7 @@ function year(over: Partial<FiscalYear> = {}): FiscalYear {
     editable: false,
     spansAFullCalendarYear: true,
     postedEntries: 12,
+    postedEntriesBesidesOpening: 11,
     ...over,
   }
 }
@@ -117,6 +129,13 @@ function preview(over: Partial<ClosingPreview> = {}): ClosingPreview {
         detail: '',
       },
       { step: '4', passed: true, blocking: true, message: 'Es ist das erste Geschäftsjahr.', detail: '' },
+      {
+        step: '4a',
+        passed: true,
+        blocking: true,
+        message: 'Das Bilanzergebniskonto 2979 trägt noch keinen Saldo.',
+        detail: '',
+      },
       { step: '5', passed: true, blocking: true, message: 'Alle Systemkonten sind zugewiesen.', detail: '' },
       { step: '7', passed: true, blocking: true, message: 'Die Nummernserie 2027 ist frei.', detail: '' },
       { step: '7a', passed: true, blocking: true, message: 'Das Geschäftsjahr 2027 besteht noch nicht.', detail: '' },
@@ -208,12 +227,34 @@ let closeAnswer: () => Promise<Response>
 let logAnswer: YearLogLine[]
 /** Lets the year list fail, for the state in which the screen has nothing to show. */
 let yearsStatus: number
+/**
+ * What `GET /report-archive?fiscalYearId={id}` answers: everything filed for the year, newest
+ * first, the way the backend lists it. Empty unless a test files something.
+ */
+let archiveAnswer: ArchivedReport[]
+/** Lets the archive list fail, for the panel that then says so and takes nothing else with it. */
+let archiveStatus: number
+/** Lets the bytes of a filed paper fail, for the failure that stands under the list. */
+let fileStatus: number
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+}
+
+/** A file the backend hands out inline, the way `GET /report-archive/{id}` does. */
+function file(name: string, content: string) {
+  return Promise.resolve(
+    new Response(content, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${name}"`,
+      },
     }),
   )
 }
@@ -225,6 +266,10 @@ beforeEach(() => {
   summaryAnswer = summary()
   logAnswer = summaryAnswer.log
   yearsStatus = 200
+  archiveAnswer = []
+  archiveStatus = 200
+  fileStatus = 200
+  showFile.mockReset()
   closeAnswer = () =>
     json({
       entryNumbers: ['2026-000900', '2026-000901'],
@@ -232,6 +277,7 @@ beforeEach(() => {
       followingYearId: 4,
       carriedAccounts: 4,
       result: 38214.9,
+      archivedReportIds: [21, 22, 23, 24, 25],
     })
 
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
@@ -241,6 +287,17 @@ beforeEach(() => {
       method,
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     })
+    // The bytes of one paper before the list: `/report-archive/24` contains `/report-archive`.
+    if (url.includes('/report-archive/')) {
+      return fileStatus === 200
+        ? file('balance-sheet-2026.pdf', '%PDF-1.7')
+        : json({}, fileStatus)
+    }
+    if (url.includes('/report-archive')) {
+      return archiveStatus === 200
+        ? json(archiveAnswer)
+        : json({ detail: 'Das Archiv konnte nicht gelesen werden.' }, archiveStatus)
+    }
     if (url.includes('/closing/preview')) return previewAnswer ? json(previewAnswer) : json({}, 500)
     if (url.includes('/reopen')) return json({ entryNumbers: ['2026-000902'] })
     if (url.endsWith('/closing') && method === 'POST') return closeAnswer()
@@ -340,9 +397,9 @@ function checkItems(label = '2026'): HTMLLIElement[] {
  * The findings on screen, one string per row: the number of the step and its message.
  *
  * <p>Read out of the panel of step 1 rather than out of the whole page, so the list can be
- * counted as well as read. #96 asks for «neun Befunde in fester Reihenfolge» and «die Maske zeigt
- * neun Zeilen» — and a handful of `toContain` on the page text stays green on a mask that shows
- * two of the nine, which is the one thing this list has to rule out.
+ * counted as well as read. #96 asks for the findings in a fixed order and for a mask that shows
+ * every row — ten since #97 (decision A) — and a handful of `toContain` on the page text stays
+ * green on a mask that shows two of the ten, which is the one thing this list has to rule out.
  */
 function checkRows(label = '2026'): string[] {
   return checkItems(label).map((row) =>
@@ -360,6 +417,80 @@ function checkMarks(label = '2026'): (string | null)[] {
   return checkItems(label).map(
     (row) => row.querySelector('svg')?.getAttribute('aria-label') ?? null,
   )
+}
+
+/**
+ * The filed papers on screen: the labels of the buttons inside the block of one closing run, or
+ * of every run where none is named — in the order they stand.
+ *
+ * <p>Read out of the blocks headed «Abschluss Nr. n» rather than out of the whole page, so two
+ * runs can be told apart and the list can be counted: five names on a page stay green on a
+ * mask that folds two runs into one.
+ */
+function paperNames(closingNumber?: number): string[] {
+  const blocks = [...container.querySelectorAll('section[aria-label^="Abschluss Nr."]')].filter(
+    (block) =>
+      closingNumber === undefined ||
+      block.getAttribute('aria-label') === `Abschluss Nr. ${closingNumber}`,
+  )
+  return blocks.flatMap((block) =>
+    [...block.querySelectorAll('button')].map((entry) => entry.textContent?.trim() ?? ''),
+  )
+}
+
+/**
+ * The five papers one closing run filed, as the archive lists them: newest first, which within
+ * one run is the reverse of the order they were drawn in. The ids climb in drawing order, because
+ * that is how `archivedReportIds` names them.
+ */
+function filed(
+  closingNumber: number,
+  firstId = 21,
+  createdAt = '2027-03-15T09:00:30Z',
+): ArchivedReport[] {
+  const reports: AccountingReport[] = [
+    'journal',
+    'account-sheets',
+    'trial-balance',
+    'balance-sheet',
+    'income-statement',
+  ]
+  return reports
+    .map((report, index) => ({
+      id: firstId + index,
+      report,
+      origin: 'CLOSING' as const,
+      closingNumber,
+      title: FIVE_PAPERS[index],
+      asOfDate: '2026-12-31',
+      languageCode: 'de',
+      byteCount: 184_320,
+      sha256: 'a'.repeat(64),
+      entryCount: 34,
+      lastChainNumber: 1842,
+      createdAt,
+      createdBy: 'jan',
+    }))
+    .reverse()
+}
+
+/** A balance sheet filed by hand in the middle of the year — not what a close did. */
+function byHand(id: number): ArchivedReport {
+  return {
+    id,
+    report: 'balance-sheet',
+    origin: 'MANUAL',
+    closingNumber: null,
+    title: 'Bilanz',
+    asOfDate: '2026-06-30',
+    languageCode: 'de',
+    byteCount: 182_272,
+    sha256: 'b'.repeat(64),
+    entryCount: 31,
+    lastChainNumber: 900,
+    createdAt: '2026-07-04T08:12:00Z',
+    createdBy: 'muster',
+  }
 }
 
 /** A button inside the open dialog: the page behind it carries the same wording. */
@@ -443,30 +574,33 @@ async function tick(labelPart: string) {
  * The closing screen: the wizard of an open year, and the summary of a closed one.
  *
  * <p>What is checked here is what only a mounted screen can answer: that the wizard walks its
- * three steps, that «Weiter» stops at a blocking finding, that the run sends what was ticked, and
- * that a refusal keeps all nine findings on screen rather than shrinking the list to the red ones.
+ * three steps, that «Weiter» stops at a blocking finding, that the run sends what was ticked, that
+ * a refusal keeps all ten findings on screen rather than shrinking the list to the red ones, and
+ * that a closed year shows the papers its close filed.
  */
 describe('ClosingPage', () => {
   describe('the wizard', () => {
     /**
-     * <b>Step 1 lists every one of the nine, not only what is wrong — counted and in order.</b>
-     * #96 asks for it twice: «die Vorprüfung liefert neun Befunde in fester Reihenfolge, die
-     * Maske zeigt neun Zeilen». Two `toContain` on two of the messages would stay green on a mask
-     * that dropped the other seven, so the rows are read out of the panel and compared in full.
+     * <b>Step 1 lists every one of the ten, not only what is wrong — counted and in order.</b>
+     * #96 asks for the findings in a fixed order and for a mask that shows every row; #97
+     * (decision A) makes them ten. Two `toContain` on two of the messages would stay green on a
+     * mask that dropped the other eight, so the rows are read out of the panel and compared in
+     * full.
      *
-     * <p>The order is the backend's own — 1, 2, 2a, 3, 3a, 4, 5, 7, 7a, the order of
+     * <p>The order is the backend's own — 1, 2, 2a, 3, 3a, 4, 4a, 5, 7, 7a, the order of
      * `ClosingChecks.of` — because nothing blocks here and `sortedChecks` then hands the list on
      * untouched. Where something blocks it moves to the top, which is
-     * `closingPageKeepsTheNineChecksAfterARefusalTest`.
+     * `closingPageKeepsTheTenChecksAfterARefusalTest`.
      *
      * <p>And the marks are read as well: finding 3a is the one that never blocks, and it carries
      * «offen» rather than a tick, so nobody takes it for a check that was passed.
      */
-    it('closingPageShowsTheNineChecksTest', async () => {
+    it('closingPageShowsTheTenChecksTest', async () => {
       await paint()
 
       expect(text()).toContain('Prüfung für 2026')
-      expect(checkRows()).toHaveLength(9)
+      expect(text()).toContain('Zehn Punkte, bevor gebucht wird.')
+      expect(checkRows()).toHaveLength(10)
       expect(checkRows()).toEqual([
         '1 Das Geschäftsjahr ist offen.',
         '2 Keine Buchung liegt als Entwurf.',
@@ -474,6 +608,7 @@ describe('ClosingPage', () => {
         '3 Soll und Haben stimmen überein.',
         '3a Die Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss.',
         '4 Es ist das erste Geschäftsjahr.',
+        '4a Das Bilanzergebniskonto 2979 trägt noch keinen Saldo.',
         '5 Alle Systemkonten sind zugewiesen.',
         '7 Die Nummernserie 2027 ist frei.',
         '7a Das Geschäftsjahr 2027 besteht noch nicht.',
@@ -484,6 +619,7 @@ describe('ClosingPage', () => {
         'erfüllt',
         'erfüllt',
         'offen',
+        'erfüllt',
         'erfüllt',
         'erfüllt',
         'erfüllt',
@@ -569,12 +705,12 @@ describe('ClosingPage', () => {
     })
 
     /**
-     * <b>A refusal keeps all nine on screen.</b> The wizard shows the same nine before and after
-     * the attempt — counted here, not sampled; pruning the list to the red ones would make eight
-     * lines disappear at the moment the ninth turns red.
+     * <b>A refusal keeps all ten on screen.</b> The wizard shows the same ten before and after
+     * the attempt — counted here, not sampled; pruning the list to the red ones would make every
+     * other line disappear at the moment one turns red.
      *
      * <p><b>The order is the one of the run, with the red one lifted to the top.</b> That is
-     * `sortedChecks`, and this is where the mask is asked to do it: a list of nine in which the
+     * `sortedChecks`, and this is where the mask is asked to do it: a list of ten in which the
      * one that matters sits somewhere in the middle is a list nobody reads to the end.
      *
      * <p>The finding that turns red here is the one about the drafts, and that is the realistic
@@ -583,7 +719,7 @@ describe('ClosingPage', () => {
      * screen keeps the run off until the box is ticked, so a refusal about it would never be
      * asked for.
      */
-    it('closingPageKeepsTheNineChecksAfterARefusalTest', async () => {
+    it('closingPageKeepsTheTenChecksAfterARefusalTest', async () => {
       closeAnswer = () =>
         json(
           {
@@ -610,9 +746,9 @@ describe('ClosingPage', () => {
 
       await click('Zurück')
       await click('Zurück')
-      // Neun Zeilen wie vorher, keine einzige weniger — und die rote steht jetzt oben
+      // Zehn Zeilen wie vorher, keine einzige weniger — und die rote steht jetzt oben
       // (`sortedChecks`). Der Rest behält die Reihenfolge des Laufs.
-      expect(checkRows()).toHaveLength(9)
+      expect(checkRows()).toHaveLength(10)
       expect(checkRows()).toEqual([
         '2 1 Buchung liegt noch als Entwurf im Geschäftsjahr 2026.',
         '1 Das Geschäftsjahr ist offen.',
@@ -620,6 +756,7 @@ describe('ClosingPage', () => {
         '3 Soll und Haben stimmen überein.',
         '3a Die Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss.',
         '4 Es ist das erste Geschäftsjahr.',
+        '4a Das Bilanzergebniskonto 2979 trägt noch keinen Saldo.',
         '5 Alle Systemkonten sind zugewiesen.',
         '7 Die Nummernserie 2027 ist frei.',
         '7a Das Geschäftsjahr 2027 besteht noch nicht.',
@@ -676,6 +813,120 @@ describe('ClosingPage', () => {
       expect(text()).toContain('Geschäftsjahr 2026 ist abgeschlossen')
       expect(text()).toContain('Buchungen des Abschlusses')
       expect(text()).not.toContain('Prüfung für 2027')
+    })
+
+    /**
+     * <b>The last step says what the run files, before the click.</b> The close files five
+     * papers as its thirteenth step and fails as a whole where one of them cannot be laid out
+     * (backend ADR-0125); a run that stops over a printing fault is inexplicable to somebody who
+     * was never told that printing is part of it. The sentence stands on the step the run is
+     * started from, and nowhere earlier.
+     */
+    it('closingPageSaysWhatTheRunFilesBeforeItTest', async () => {
+      await paint()
+      expect(text()).not.toContain('scheitert der ganze Abschluss')
+
+      await click('Weiter')
+      expect(text()).not.toContain('scheitert der ganze Abschluss')
+      await click('Weiter')
+
+      expect(text()).toContain('legt 5 Papiere als PDF im Archiv ab')
+      expect(text()).toContain('Journal, Kontoblätter, Saldenliste, Bilanz und Erfolgsrechnung')
+      expect(text()).toContain('weder ändern noch löschen')
+      expect(text()).toContain(
+        'Kann eines davon nicht gezeichnet werden, scheitert der ganze Abschluss, und es wird' +
+          ' nichts gebucht.',
+      )
+    })
+
+    /**
+     * <b>A paper that cannot be laid out takes the close with it, and the screen says so in the
+     * backend's words.</b> Since the archiving step a `PrintingFailedException` rolls the whole
+     * run back and answers 500 with its message (`AccountingExceptionHandler.handlePrintingFailed`).
+     * Nothing on screen reads «abgeschlossen», the wizard stays on its last step, the archive of
+     * the year is not asked for — and under the sentence stands the one fact it leaves out:
+     * nothing was booked.
+     */
+    it('closingPageShowsAFailedRunTest', async () => {
+      closeAnswer = () => json({ detail: 'Die Auswertung konnte nicht aufgebaut werden' }, 500)
+      await paint()
+      await click('Weiter')
+      await tick('Abgrenzungen sind geprüft')
+      await click('Weiter')
+
+      await click('Abschluss durchführen')
+
+      expect(container.querySelector('[role=alert]')?.textContent).toContain(
+        'Die Auswertung konnte nicht aufgebaut werden',
+      )
+      expect(text()).toContain('Es wurde nichts gebucht und kein Geschäftsjahr angelegt')
+      expect(text()).not.toContain('ist abgeschlossen')
+      expect(text()).toContain('Saldovortrag')
+      expect(asked.some((call) => call.url.includes('/report-archive'))).toBe(false)
+    })
+
+    /**
+     * <b>A refusal with findings explains itself, and gets no second sentence.</b> The one about
+     * «nichts gebucht» is for a failure that carries a sentence and nothing else; beside ten
+     * findings it would say what the red one already says.
+     */
+    it('closingPageShowsNoTransactionSentenceBesideTheFindingsTest', async () => {
+      closeAnswer = () =>
+        json(
+          {
+            detail: '1 Buchung liegt noch als Entwurf im Geschäftsjahr 2026.',
+            checks: preview().checks,
+          },
+          400,
+        )
+      await paint()
+      await click('Weiter')
+      await tick('Abgrenzungen sind geprüft')
+      await click('Weiter')
+
+      await click('Abschluss durchführen')
+
+      expect(text()).toContain('1 Buchung liegt noch als Entwurf im Geschäftsjahr 2026.')
+      expect(text()).not.toContain('Es wurde nichts gebucht und kein Geschäftsjahr angelegt')
+    })
+
+    /**
+     * <b>After the run the papers it filed stand on the summary, under the number of the
+     * run.</b> The answer of the run carries their ids (`archivedReportIds`); what the screen
+     * shows is read from the archive of the year, which the run invalidates — the same list a
+     * visitor sees tomorrow, and the one that knows the closing number.
+     */
+    it('closingPageShowsTheFiledPapersAfterTheRunTest', async () => {
+      archiveAnswer = filed(1)
+      await paint()
+      await click('Weiter')
+      await tick('Abgrenzungen sind geprüft')
+      await click('Weiter')
+      // Vor dem Lauf fragt niemand nach dem Archiv: das Panel gehört zum abgeschlossenen Jahr.
+      expect(asked.some((call) => call.url.includes('/report-archive'))).toBe(false)
+      yearList = years([
+        year({ status: 'CLOSED' }),
+        year({
+          id: 4,
+          label: '2027',
+          numberYear: 2027,
+          startDate: '2027-01-01',
+          endDate: '2027-12-31',
+          status: 'OPEN',
+        }),
+      ])
+
+      await click('Abschluss durchführen')
+
+      expect(text()).toContain('Geschäftsjahr 2026 ist abgeschlossen')
+      expect(
+        asked.some((call) =>
+          call.url.endsWith('/api/tenants/1/accounting/report-archive?fiscalYearId=3'),
+        ),
+      ).toBe(true)
+      expect(text()).toContain('Papiere des Abschlusses')
+      expect(text()).toContain('Abschluss Nr. 1')
+      expect(paperNames()).toEqual(FIVE_PAPERS)
     })
 
     /** A locked year is closed all the same: that is what the state is for. */
@@ -1025,6 +1276,151 @@ describe('ClosingPage', () => {
       expect(text()).toContain('2026-000900')
       expect(text()).toContain('JA-2026-2')
       expect(text()).toContain('Modul nicht eingeschaltet')
+      expect(button('Wieder öffnen')).toBeUndefined()
+    })
+
+    /**
+     * <b>The five papers of the close, under its number.</b> Read from the archive of the year
+     * and not from the answer of the run — a visitor tomorrow has no answer, and the archive is
+     * what knows the closing number. In the order the run drew them, although the archive lists
+     * them the other way round, with the day, the size and who filed them beside each.
+     */
+    it('closingPageShowsTheFiledPapersTest', async () => {
+      archiveAnswer = filed(1)
+      await paint()
+
+      expect(
+        asked.some((call) =>
+          call.url.endsWith('/api/tenants/1/accounting/report-archive?fiscalYearId=3'),
+        ),
+      ).toBe(true)
+      expect(text()).toContain('Papiere des Abschlusses')
+      expect(text()).toContain('Abschluss Nr. 1')
+      expect(paperNames()).toEqual(FIVE_PAPERS)
+      expect(text()).toContain('Stand 31.12.2026')
+      expect(text()).toContain('180 KB')
+      expect(text()).toContain('abgelegt am')
+      expect(text()).toContain('von jan')
+      expect(text()).toContain('Ein Klick öffnet das Papier so, wie es abgelegt wurde.')
+    })
+
+    /** A click fetches the bytes that were filed, under the id of that paper, and shows them. */
+    it('closingPageOpensAFiledPaperTest', async () => {
+      archiveAnswer = filed(1)
+      await paint()
+
+      await click('Bilanz')
+
+      expect(
+        asked.some((call) => call.url.endsWith('/api/tenants/1/accounting/report-archive/24')),
+      ).toBe(true)
+      expect(showFile).toHaveBeenCalledTimes(1)
+      expect(showFile.mock.calls[0][0].fileName).toBe('balance-sheet-2026.pdf')
+      expect(await showFile.mock.calls[0][0].blob.text()).toBe('%PDF-1.7')
+    })
+
+    /**
+     * <b>Two closes, two sets, nothing overwritten.</b> A year that was reopened and closed again
+     * holds ten papers under two numbers: the newer run stands first, each run keeps its own
+     * five, and a click in the second run opens the paper of the second run. The balance sheet
+     * filed by hand in between is not what a close did and is not in this list — it stands on
+     * the archive screen (GeBüV Art. 3, backend ADR-0125).
+     */
+    it('closingPageShowsTwoClosingRunsApartTest', async () => {
+      archiveAnswer = [
+        ...filed(2, 31, '2027-05-02T10:30:00Z'),
+        byHand(29),
+        ...filed(1, 21, '2027-03-15T09:00:30Z'),
+      ]
+      await paint()
+
+      expect(text().indexOf('Abschluss Nr. 2')).toBeLessThan(text().indexOf('Abschluss Nr. 1'))
+      expect(paperNames(2)).toEqual(FIVE_PAPERS)
+      expect(paperNames(1)).toEqual(FIVE_PAPERS)
+      expect(paperNames()).toHaveLength(10)
+      expect(text()).not.toContain('30.06.2026')
+
+      const secondBalanceSheet = [
+        ...container.querySelectorAll('section[aria-label="Abschluss Nr. 2"] button'),
+      ].find((candidate) => candidate.textContent?.trim() === 'Bilanz')
+      expect(secondBalanceSheet).toBeDefined()
+      await act(async () => {
+        secondBalanceSheet?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      await settle()
+
+      expect(asked.some((call) => call.url.endsWith('/report-archive/34'))).toBe(true)
+      expect(asked.some((call) => call.url.endsWith('/report-archive/24'))).toBe(false)
+    })
+
+    /**
+     * <b>A year closed before the archiving step says so, and says the way out.</b> Nothing is
+     * rendered after the fact: a PDF drawn in December for a close of March would claim to be the
+     * paper of the closing day and be nothing of the sort. The papers can be filed by hand on the
+     * archive screen, and then carry «von Hand».
+     */
+    it('closingPageWithoutFiledPapersTest', async () => {
+      archiveAnswer = []
+      await paint()
+
+      expect(text()).toContain('Keine Papiere abgelegt')
+      expect(text()).toContain('Beim Abschluss von 2026 wurden keine Papiere abgelegt.')
+      expect(text()).toContain('von Hand')
+      expect(paperNames()).toEqual([])
+    })
+
+    /** A paper that cannot be fetched says so under the list, and the list stays. */
+    it('closingPageShowsAFailedPaperOpeningTest', async () => {
+      archiveAnswer = filed(1)
+      fileStatus = 500
+      await paint()
+
+      await click('Bilanz')
+
+      expect(container.querySelector('[role=alert]')?.textContent).toContain(
+        'Das Backend meldet einen Fehler.',
+      )
+      expect(showFile).not.toHaveBeenCalled()
+      expect(paperNames()).toHaveLength(5)
+      expect(button('Bilanz')?.disabled).toBe(false)
+    })
+
+    /**
+     * An archive that cannot be read says so in its own panel and takes nothing else with it:
+     * the result, the entries and the trail of the year stand as before.
+     */
+    it('closingPageShowsAnArchiveErrorTest', async () => {
+      archiveStatus = 500
+      await paint()
+
+      expect(text()).toContain('Das Archiv konnte nicht gelesen werden.')
+      expect(text()).toContain('Geschäftsjahr 2026 ist abgeschlossen')
+      expect(text()).toContain('2026-000900')
+      expect(text()).not.toContain('Keine Papiere abgelegt')
+    })
+
+    /**
+     * <b>Module off, and the papers still read.</b> A filed balance sheet is part of the books
+     * and stays legible for ten years whether or not the tenant still runs the bookkeeping
+     * (OR Art. 958f); the list and the bytes answer while the module is off.
+     */
+    it('closingPageShowsTheFiledPapersWithTheModuleOffTest', async () => {
+      archiveAnswer = filed(1)
+      await paint(OFFLINE)
+
+      expect(text()).toContain('Modul nicht eingeschaltet')
+      expect(paperNames()).toEqual(FIVE_PAPERS)
+
+      await click('Bilanz')
+      expect(showFile).toHaveBeenCalledTimes(1)
+    })
+
+    /** Reading the papers takes the reading right, not the closing right. */
+    it('closingPageShowsTheFiledPapersToAReaderTest', async () => {
+      archiveAnswer = filed(1)
+      await paint(READER)
+
+      expect(paperNames()).toEqual(FIVE_PAPERS)
       expect(button('Wieder öffnen')).toBeUndefined()
     })
   })

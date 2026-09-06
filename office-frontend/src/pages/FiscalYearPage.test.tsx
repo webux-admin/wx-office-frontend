@@ -9,6 +9,7 @@ import {
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
   FISCAL_YEARS_PATH,
+  PRIOR_YEAR_PATH,
 } from '../lib/accounting'
 import type { FiscalYear, FiscalYearList, FiscalYearPreview, Tenant } from '../lib/types'
 import { FiscalYearPage } from './FiscalYearPage'
@@ -61,6 +62,7 @@ function year(overrides: Partial<FiscalYear> = {}): FiscalYear {
     editable: true,
     spansAFullCalendarYear: false,
     postedEntries: 0,
+    postedEntriesBesidesOpening: 0,
     ...overrides,
   }
 }
@@ -837,5 +839,127 @@ describe('FiscalYearPage', () => {
     })
 
     expect(menuItems()).toHaveLength(0)
+  })
+
+  // --- der erste Weg zur Vorjahresmaske ---------------------------------------
+
+  /** The rows that link into the prior year screen, in table order. */
+  function priorYearLinks(): HTMLAnchorElement[] {
+    return [...document.querySelectorAll('a')].filter((entry) =>
+      entry.getAttribute('href')?.startsWith(PRIOR_YEAR_PATH),
+    )
+  }
+
+  /**
+   * A 2025 before the 2026 that carries the opening entry and eleven postings beside it — the
+   * changeover as it is. What 2025 carries is the case of each test: nothing, its own captured
+   * balances, or postings of its own.
+   */
+  function changeover(before: Partial<FiscalYear> = {}): FiscalYearList {
+    return list({
+      years: [
+        year({ postedEntries: 12, postedEntriesBesidesOpening: 11 }),
+        year({
+          id: 11,
+          label: '2025',
+          numberYear: 2025,
+          startDate: '2025-01-01',
+          endDate: '2025-12-31',
+          ...before,
+        }),
+      ],
+    })
+  }
+
+  /**
+   * <b>The first of the three ways to the prior year screen.</b> On the empty year before the
+   * changeover the way is called «erfassen»; it names the year in the address, so the screen
+   * opens on it — and it stands on that row only: the changeover year carries postings and gets
+   * none.
+   */
+  it('fiscalYearOffersThePriorYearCaptureTest', async () => {
+    years = changeover()
+    await render()
+
+    const ways = priorYearLinks()
+    expect(ways).toHaveLength(1)
+    expect(ways[0].textContent?.trim()).toBe('Vorjahressaldi erfassen')
+    expect(ways[0].getAttribute('href')).toBe(`${PRIOR_YEAR_PATH}?fiscalYearId=11`)
+    expect(ways[0].closest('tr')?.textContent).toContain('2025')
+  })
+
+  /** Capturing writes with `ACCOUNTING_CLOSE`; whoever may only read sees the years and no way in. */
+  it('fiscalYearHidesThePriorYearCaptureWithoutCloseTest', async () => {
+    years = changeover()
+    await render(READER)
+
+    expect(priorYearLinks()).toHaveLength(0)
+    expect(text()).toContain('2025')
+  })
+
+  /**
+   * The captured balances are the opening entry of 2025 and no reason to lose the way: one
+   * posted entry, none besides the opening. The way stays on the row and says what saving on
+   * the screen does — the word its own button uses.
+   */
+  it('fiscalYearOffersThePriorYearReplacementTest', async () => {
+    years = changeover({ postedEntries: 1, postedEntriesBesidesOpening: 0 })
+    await render()
+
+    const ways = priorYearLinks()
+    expect(ways).toHaveLength(1)
+    expect(ways[0].textContent?.trim()).toBe('Vorjahressaldi ersetzen')
+    expect(ways[0].getAttribute('href')).toBe(`${PRIOR_YEAR_PATH}?fiscalYearId=11`)
+    expect(ways[0].closest('tr')?.textContent).toContain('2025')
+  })
+
+  /** Replacing writes with the same right; without it the row shows the year and no way in. */
+  it('fiscalYearHidesThePriorYearReplacementWithoutCloseTest', async () => {
+    years = changeover({ postedEntries: 1, postedEntriesBesidesOpening: 0 })
+    await render(READER)
+
+    expect(priorYearLinks()).toHaveLength(0)
+    expect(text()).toContain('2025')
+  })
+
+  /**
+   * A year with postings of its own gets no way in: the backend refuses the capture on that
+   * count («Für 2025 sind bereits 14 Buchungen verbucht»), and a button whose only outcome is a
+   * refusal is a trap. Its opening entry among the fifteen changes nothing.
+   */
+  it('fiscalYearOffersNoPriorYearCaptureOnAYearWithOtherPostingsTest', async () => {
+    years = changeover({ postedEntries: 15, postedEntriesBesidesOpening: 14 })
+    await render()
+
+    expect(priorYearLinks()).toHaveLength(0)
+    expect(text()).toContain('2025')
+  })
+
+  /** Without the right the same row is bare as well — nothing to show, nothing to hide. */
+  it('fiscalYearOffersNoPriorYearCaptureOnAYearWithOtherPostingsWithoutCloseTest', async () => {
+    years = changeover({ postedEntries: 15, postedEntriesBesidesOpening: 14 })
+    await render(READER)
+
+    expect(priorYearLinks()).toHaveLength(0)
+    expect(text()).toContain('2025')
+  })
+
+  /** Two empty years in a row: nobody has changed over yet, and the wizard is the way. */
+  it('fiscalYearOffersNoPriorYearCaptureWithoutAPostedYearTest', async () => {
+    years = list({
+      years: [
+        year(),
+        year({
+          id: 11,
+          label: '2025',
+          numberYear: 2025,
+          startDate: '2025-01-01',
+          endDate: '2025-12-31',
+        }),
+      ],
+    })
+    await render()
+
+    expect(priorYearLinks()).toHaveLength(0)
   })
 })

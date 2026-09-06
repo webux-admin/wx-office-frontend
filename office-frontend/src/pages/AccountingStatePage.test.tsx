@@ -83,6 +83,7 @@ const YEAR_2026: FiscalYear = {
   editable: true,
   spansAFullCalendarYear: false,
   postedEntries: 0,
+  postedEntriesBesidesOpening: 0,
 }
 
 /**

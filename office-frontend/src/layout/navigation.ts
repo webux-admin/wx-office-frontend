@@ -504,7 +504,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // **The setup wizard gets no entry here, and that is decided.** A menu entry for something
       // a tenant does once in its life would stand there for ever afterwards. It is reached from
       // the three empty states of this group and from the fiscal year screen, and `navigation`
-      // deliberately does not know its path — `navHasNoSetupEntryTest` holds that.
+      // deliberately does not know its path — `navHasNoSetupEntryTest` holds that. The prior
+      // year screen («Vorjahressaldi») is the second such screen, for the same reason:
+      // `navHasNoPriorYearEntryTest`.
       //
       // **The one entry of this group without a `module`, and that is the whole point of it.**
       // Switching the module off closes the writing ways; it must not hide the books. GeBüV
