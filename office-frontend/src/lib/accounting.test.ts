@@ -95,6 +95,18 @@ import {
   yearLogLabel,
   yearLogUrl,
   trialBalanceUrl,
+  ACCESS_LOG_ACTIONS,
+  ACCESS_LOG_ACTION_PARAM,
+  ACCESS_LOG_DEFAULT_SORT,
+  ACCESS_LOG_FINDINGS_PARAM,
+  ACCESS_LOG_SORT_FIELDS,
+  ACCOUNTING_INTEGRITY_PATH,
+  accessLogActionOf,
+  accessLogKey,
+  accessLogUrl,
+  fetchAccessLog,
+  fetchIntegrity,
+  findingsOnlyOf,
   integrityKey,
   integrityUrl,
   journalKey,
@@ -769,6 +781,15 @@ describe('accountSheetPath', () => {
     expect(ACCOUNT_BALANCE_PATH).toBe('/buchhaltung/konten')
     expect(ACCOUNTING_ARCHIVE_PATH).toBe('/buchhaltung/archiv')
   })
+
+  /**
+   * The integrity screen sits under the archive, and its address says so: it is a sub-page of
+   * the one screen that stays reachable with the module off, not a screen of the module.
+   */
+  it('accountingIntegrityPathTest', () => {
+    expect(ACCOUNTING_INTEGRITY_PATH).toBe('/buchhaltung/archiv/integritaet')
+    expect(ACCOUNTING_INTEGRITY_PATH.startsWith(`${ACCOUNTING_ARCHIVE_PATH}/`)).toBe(true)
+  })
 })
 
 describe('accountingExportUrl', () => {
@@ -942,6 +963,281 @@ describe('the prior year balances', () => {
 describe('integrityUrl', () => {
   it('integrityUrlTest', () => {
     expect(integrityUrl(7)).toBe('/api/tenants/7/accounting/integrity')
+  })
+})
+
+describe('fetchIntegrity', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * The everyday answer: the whole chain walked, nothing changed. The figures arrive without a
+   * ready-made sentence — the screen writes its own out of them.
+   */
+  it('fetchIntegrityTest', async () => {
+    let seen = ''
+    vi.stubGlobal('fetch', (url: string) => {
+      seen = url
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            checkedAt: '2026-09-07T14:12:31Z',
+            checkedBy: 'm.keller',
+            postedEntries: 1842,
+            firstChainNumber: 1,
+            lastChainNumber: 1842,
+            intact: true,
+            firstBreak: null,
+            affectedEntries: 0,
+            gaps: [],
+            durationMillis: 412,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    const found = await fetchIntegrity(7)
+
+    expect(seen).toBe('/api/tenants/7/accounting/integrity')
+    expect(found.intact).toBe(true)
+    expect(found.postedEntries).toBe(1842)
+    expect(found.firstBreak).toBeNull()
+    expect(found.gaps).toEqual([])
+  })
+
+  /**
+   * A tenant that never posted. <b>Not an error and not a finding</b>: no chain numbers, nothing
+   * broken, and the screen says so in its own words.
+   */
+  it('fetchIntegrityWithoutAnyEntryTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            checkedAt: '2026-09-07T14:12:31Z',
+            checkedBy: 'm.keller',
+            postedEntries: 0,
+            firstChainNumber: null,
+            lastChainNumber: null,
+            intact: true,
+            firstBreak: null,
+            affectedEntries: 0,
+            gaps: [],
+            durationMillis: 3,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const found = await fetchIntegrity(7)
+
+    expect(found.postedEntries).toBe(0)
+    expect(found.firstChainNumber).toBeNull()
+    expect(found.intact).toBe(true)
+  })
+
+  /** A break and a gap arrive apart, because they call for different questions. */
+  it('fetchIntegrityWithABreakTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            checkedAt: '2026-09-07T14:12:31Z',
+            checkedBy: 'm.keller',
+            postedEntries: 1842,
+            firstChainNumber: 1,
+            lastChainNumber: 1842,
+            intact: false,
+            firstBreak: {
+              chainNumber: 734,
+              entryNumber: '2026-000734',
+              bookingDate: '2026-05-12',
+              fiscalYearLabel: '2026',
+              kind: 'CONTENT',
+            },
+            affectedEntries: 1109,
+            gaps: [{ afterChainNumber: 1201, beforeChainNumber: 1205, missingCount: 3 }],
+            durationMillis: 412,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const found = await fetchIntegrity(7)
+
+    expect(found.intact).toBe(false)
+    expect(found.firstBreak?.entryNumber).toBe('2026-000734')
+    expect(found.firstBreak?.kind).toBe('CONTENT')
+    expect(found.affectedEntries).toBe(1109)
+    expect(found.gaps[0].missingCount).toBe(3)
+  })
+})
+
+describe('accessLogUrl', () => {
+  /** The everyday call of the list: one page, narrowed to one action. */
+  it('accessLogUrlTest', () => {
+    expect(accessLogUrl(7, 'action=EXPORT&page=0&size=50')).toBe(
+      '/api/tenants/7/accounting/access-log?action=EXPORT&page=0&size=50',
+    )
+  })
+
+  /** Nothing asked for leaves the question mark off — an empty `?` is not a filter. */
+  it('accessLogUrlWithoutQueryTest', () => {
+    expect(accessLogUrl(7)).toBe('/api/tenants/7/accounting/access-log')
+    expect(accessLogUrl(7, '')).toBe('/api/tenants/7/accounting/access-log')
+  })
+})
+
+describe('accessLogKey', () => {
+  /** Written twice, this key is a cache that goes stale in one of the two places. */
+  it('accessLogKeyTest', () => {
+    expect(accessLogKey(7, 'page=1')).toEqual(['accounting-access-log', 7, 'page=1'])
+    expect(accessLogKey(7)).toEqual(['accounting-access-log', 7, ''])
+  })
+
+  /** Per tenant and per question, like every other key of this module. */
+  it('accessLogKeyIsPerTenantTest', () => {
+    expect(accessLogKey(8, 'page=1')).not.toEqual(accessLogKey(7, 'page=1'))
+    expect(accessLogKey(7, 'page=2')).not.toEqual(accessLogKey(7, 'page=1'))
+  })
+})
+
+describe('ACCESS_LOG_SORT_FIELDS', () => {
+  /** Word for word the whitelist of the endpoint: anything else answers 400. */
+  it('accessLogSortFieldsTest', () => {
+    expect([...ACCESS_LOG_SORT_FIELDS]).toEqual([
+      'accessedAt',
+      'accessedBy',
+      'action',
+      'fiscalYearLabel',
+      'outcome',
+    ])
+    // The order the list opens in, and it has to be one of the five above.
+    expect(ACCESS_LOG_SORT_FIELDS).toContain(ACCESS_LOG_DEFAULT_SORT.split(',')[0])
+    expect(ACCESS_LOG_DEFAULT_SORT).toBe('accessedAt,desc')
+  })
+})
+
+describe('fetchAccessLog', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * One page of the log. <b>The quick search parameter is called `search` and not `q`</b> — the
+   * four older accounting lists call it `q`, this one follows the rest of the application.
+   */
+  it('fetchAccessLogTest', async () => {
+    let seen = ''
+    vi.stubGlobal('fetch', (url: string) => {
+      seen = url
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            content: [
+              {
+                id: 12,
+                accessedAt: '2026-09-07T14:12:31Z',
+                accessedBy: 'm.keller',
+                action: 'ARCHIVE_READ',
+                actionLabel: 'Aus dem Archiv geholt',
+                report: 'BALANCE_SHEET',
+                reportLabel: 'Bilanz',
+                fiscalYearLabel: '2025',
+                outcome: 'OK',
+                outcomeLabel: 'in Ordnung',
+                detail: null,
+                checkedCount: null,
+                durationMillis: null,
+                moduleActive: true,
+              },
+            ],
+            page: 0,
+            size: 50,
+            totalElements: 1,
+            totalPages: 1,
+            sort: 'accessedAt,desc',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    })
+
+    const found = await fetchAccessLog(7, 'search=keller&page=0&size=50')
+
+    expect(seen).toBe('/api/tenants/7/accounting/access-log?search=keller&page=0&size=50')
+    expect(found.content[0].actionLabel).toBe('Aus dem Archiv geholt')
+    expect(found.content[0].reportLabel).toBe('Bilanz')
+    expect(found.totalElements).toBe(1)
+  })
+
+  /** An action outside the four is refused with a German sentence rather than answered empty. */
+  it('fetchAccessLogWithAnUnknownActionTest', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'Unbekannter Vorgang: LOOKED_AT.' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/problem+json' },
+        }),
+      ),
+    )
+
+    const failure = await fetchAccessLog(7, 'action=LOOKED_AT').catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(400)
+    expect((failure as ApiError).message).toContain('Unbekannter Vorgang')
+  })
+})
+
+describe('accessLogActionOf', () => {
+  /** The four the endpoint knows, and their wording is the wording the backend sends. */
+  it('accessLogActionOfTest', () => {
+    expect(accessLogActionOf('ARCHIVE_READ')).toBe('ARCHIVE_READ')
+    expect(ACCESS_LOG_ACTIONS.map((entry) => entry.value)).toEqual([
+      'EXPORT',
+      'PRINT',
+      'ARCHIVE_READ',
+      'INTEGRITY_CHECK',
+    ])
+    expect(ACCESS_LOG_ACTIONS.map((entry) => entry.label)).toEqual([
+      'Export gezogen',
+      'Ausdruck gezogen',
+      'Aus dem Archiv geholt',
+      'Integrität geprüft',
+    ])
+  })
+
+  /**
+   * Anything else is «alle Vorgänge». A hand-edited address must not put the list into a state
+   * the endpoint refuses with 400.
+   */
+  it('accessLogActionOfSomethingElseTest', () => {
+    expect(accessLogActionOf(null)).toBe('')
+    expect(accessLogActionOf('')).toBe('')
+    expect(accessLogActionOf('archive_read')).toBe('')
+    expect(accessLogActionOf('LOOKED_AT')).toBe('')
+  })
+})
+
+describe('findingsOnlyOf', () => {
+  /** Only the literal `true` narrows the list; the parameter is what a link carries. */
+  it('findingsOnlyOfTest', () => {
+    expect(findingsOnlyOf('true')).toBe(true)
+    expect(ACCESS_LOG_FINDINGS_PARAM).toBe('befunde')
+    expect(ACCESS_LOG_ACTION_PARAM).toBe('vorgang')
+  })
+
+  /** Everything else leaves the whole log showing, which is the state that hides nothing. */
+  it('findingsOnlyOfSomethingElseTest', () => {
+    expect(findingsOnlyOf(null)).toBe(false)
+    expect(findingsOnlyOf('')).toBe(false)
+    expect(findingsOnlyOf('TRUE')).toBe(false)
+    expect(findingsOnlyOf('ja')).toBe(false)
   })
 })
 

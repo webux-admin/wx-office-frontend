@@ -43,6 +43,15 @@ import { ReportToolbar } from './accounting/ReportToolbar'
  * in this frontend. A German label written in here would be the one place a tenant cannot change
  * the wording, and it would be the first thing to drift when a value is added (ADR-0017).
  *
+ * <p><b>The cut-off day belongs to the paper alone.</b> Moved, it narrows the PDF, the printable
+ * page and the filed copy; the list keeps showing the whole year, because `GET /journal` takes no
+ * such day. That is said under the field instead of being papered over — a filter that quietly
+ * does nothing is worse than none.
+ *
+ * <p><b>Left where it starts, it is not sent at all.</b> The field is prefilled with the last day
+ * of the year, and an untouched field means «no cut-off day» — the same paper as before the day
+ * was offered at all.
+ *
  * <p>A row opens to its lines. A counter entry is marked as one and leads to the entry it
  * reverses; that entry leads back, as far as both are on the page being read.
  */
@@ -69,6 +78,8 @@ function Journal({ tenantId }: { tenantId: number }) {
   })
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  // The cut-off day of the paper, and of nothing else on this screen — see the field below.
+  const [asOf, setAsOf] = useState('')
   const [entryKind, setEntryKind] = useState('')
   const [source, setSource] = useState('')
   const [page, setPage] = useState(0)
@@ -98,6 +109,33 @@ function Journal({ tenantId }: { tenantId: number }) {
   // The year is compulsory at the endpoint, so the screen has to choose one before it may ask
   // at all: the one today falls into, and the latest one otherwise.
   const chosen = fiscalYearId ?? defaultYearOf(available)?.id ?? null
+  const chosenYear = available.find((year) => year.id === chosen)
+
+  // The cut-off day follows the year. It starts on the last day of the year on screen, and
+  // choosing another year moves it to the last day of that one: a day left standing from the
+  // year before would fall outside the new one, and the endpoint refuses such a day with 400.
+  //
+  // Adjusted while rendering, the technique `ReverseDialog` further down uses; an effect would
+  // draw the empty field once before filling it. Held against the end date rather than the id,
+  // because the id can come out of the address before the years have arrived — kept on the id,
+  // the prefill would never happen for whoever is sent here from an account sheet.
+  const [prefilled, setPrefilled] = useState('')
+  if ((chosenYear?.endDate ?? '') !== prefilled) {
+    setPrefilled(chosenYear?.endDate ?? '')
+    setAsOf(chosenYear?.endDate ?? '')
+  }
+
+  // What travels to the paper: the day only where somebody moved it off the prefill.
+  //
+  // The prefill is the last day of the year, which means «the whole year» and not a cut-off day.
+  // The PDF cannot tell the two apart — a missing day falls back to the year end there (backend
+  // `AccountingPrintouts.paper`) — but the printable page can: its subtitle carries
+  // « · Stichtag 31.12.2026» wherever a day arrives (backend `AccountingReports.subtitleOf`).
+  // Sending the prefill would print a cut-off day onto the sheet that stands for GeBüV Art. 6
+  // Abs. 3 where the whole year is meant. The filed copy is keyed by the day drawn on the sheet,
+  // and that is the year end either way — so leaving the prefill out files neither twice nor
+  // under another key (backend `ReportArchiveManagement.archiveByHand`).
+  const cutOff = asOf === '' || asOf === chosenYear?.endDate ? undefined : asOf
 
   const query = listQuery({
     fiscalYearId: chosen,
@@ -249,14 +287,17 @@ function Journal({ tenantId }: { tenantId: number }) {
         // navigation the journal shows no way back at all (frontend ADR-0003).
         back={backOf(location.state)}
       >
-        {/* The paper is the whole journal of the year. None of the five filters travels with
-            it: the endpoint takes none of them, and the journal the law asks for is the
-            complete one (GeBüV Art. 1 Abs. 2 Bst. b), not the page somebody narrowed. */}
+        {/* The paper is the journal of the year, and of the year up to the cut-off day where
+            somebody moved it — see `cutOff` above. The day is the only thing that travels; the
+            five filters of the list — «Von», «Bis», «Buchungsart», «Herkunft» and the search —
+            stay behind, because the endpoint takes none of them and the journal the law asks for
+            is the complete one (GeBüV Art. 1 Abs. 2 Bst. b), not the page somebody narrowed. */}
         <ReportToolbar
           tenantId={tenantId}
           report="journal"
           fiscalYearId={chosen}
-          yearLabel={available.find((year) => year.id === chosen)?.label}
+          yearLabel={chosenYear?.label}
+          options={{ asOf: cutOff }}
         />
       </PageHeader>
 
@@ -277,6 +318,23 @@ function Journal({ tenantId }: { tenantId: number }) {
               </option>
             ))}
           </SelectField>
+          {/* Only for the paper. `GET /journal` takes no cut-off day: it knows `from` and
+              `to` and nothing else of the kind (backend `JournalController.getJournal`). So a day
+              moved off the prefill narrows the PDF, the printable page and the filed copy, and
+              the list below keeps showing the whole year. The hint says so rather than letting
+              the field pretend to a filtering it does not do — «Von» and «Bis» beside it are what
+              narrows the list. */}
+          <TextField
+            label="Stichtag"
+            type="date"
+            value={asOf}
+            // The endpoint refuses a day outside the year with 400, so the picker offers none.
+            min={chosenYear?.startDate}
+            max={chosenYear?.endDate}
+            onChange={(event) => setAsOf(event.target.value)}
+            className="w-[160px]"
+            hint="Nur fürs Papier. Für die Liste unten gelten «Von» und «Bis»."
+          />
           <TextField
             label="Von"
             type="date"

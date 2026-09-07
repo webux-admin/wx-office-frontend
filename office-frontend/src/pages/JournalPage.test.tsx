@@ -51,21 +51,40 @@ function session(permissions: string[], modules: string[] = ['ACCOUNTING']): Aut
 
 const POSTING = session([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.post])
 const READ_ONLY = session([ACCOUNTING_RIGHTS.read])
+/** Filing writes an unchangeable row, so it hangs on the closing right and not on the read one. */
+const CLOSING = session([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.close])
+
+const YEAR_2026 = {
+  id: 3,
+  label: '2026',
+  numberYear: 2026,
+  startDate: '2026-01-01',
+  endDate: '2026-12-31',
+  status: 'OPEN',
+  deletable: false,
+  editable: false,
+  spansAFullCalendarYear: true,
+}
+
+/**
+ * The year before, for the tests about switching.
+ *
+ * <p>Deliberately the earlier one: the screen opens on the year today falls into and, where
+ * today falls into none, on the one that ends last — so 2026 stays the preselected year
+ * whichever of the two branches the clock takes the test down.
+ */
+const YEAR_2025 = {
+  ...YEAR_2026,
+  id: 2,
+  label: '2025',
+  numberYear: 2025,
+  startDate: '2025-01-01',
+  endDate: '2025-12-31',
+  status: 'CLOSED',
+}
 
 const YEARS = {
-  years: [
-    {
-      id: 3,
-      label: '2026',
-      numberYear: 2026,
-      startDate: '2026-01-01',
-      endDate: '2026-12-31',
-      status: 'OPEN',
-      deletable: false,
-      editable: false,
-      spansAFullCalendarYear: true,
-    },
-  ],
+  years: [YEAR_2026],
   boundary: { source: 'NONE', message: '' },
   expiry: { warn: false },
 }
@@ -166,6 +185,8 @@ let root: Root
 let journal: Page<JournalRow>
 let years: unknown
 let reversed: { url: string; body: unknown } | null
+/** What the toolbar sent to the cupboard, so a test can read the day it filed. */
+let filed: { url: string; body: unknown } | null
 /** Set where a test is about the request failing. */
 let journalStatus: number
 /** Set where a test is about the reversal being refused. */
@@ -194,6 +215,27 @@ function stubFetch() {
         ? json(journal)
         : json({ detail: 'Das Backend meldet einen Fehler.' }, journalStatus)
     }
+    if (url.includes('/report-archive')) {
+      filed = { url, body: JSON.parse(String(init?.body)) }
+      return json(
+        {
+          id: 14,
+          report: 'journal',
+          origin: 'MANUAL',
+          closingNumber: null,
+          title: 'Journal',
+          asOfDate: '2026-06-30',
+          languageCode: 'de',
+          byteCount: 4096,
+          sha256: 'a'.repeat(64),
+          entryCount: 3,
+          lastChainNumber: 47,
+          createdAt: '2026-07-04T08:12:00Z',
+          createdBy: 'muster',
+        },
+        201,
+      )
+    }
     if (url.includes('/catalogues')) {
       return json({
         // Renamed by the tenant on purpose: the labels the screen shows have to come from
@@ -220,8 +262,14 @@ beforeEach(() => {
   journal = pageOf(ROWS)
   years = YEARS
   reversed = null
+  filed = null
   journalStatus = 200
   reverseStatus = 200
+  // The two ways out of the toolbar are module mocks and live longer than one test, so their
+  // record is wiped between tests — «not called» has to mean this test, not this file. Same
+  // handling as in `ReportToolbar.test.tsx`.
+  printFile.mockReset()
+  showFile.mockReset()
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -308,12 +356,78 @@ function select(label: string): HTMLSelectElement {
   return control as HTMLSelectElement
 }
 
+/** A labelled input of the filter row, found the same way as the two dropdowns beside it. */
+function field(label: string): HTMLInputElement {
+  const found = [...container.querySelectorAll('label')].find(
+    (candidate) => candidate.textContent === label,
+  )
+  const control = found === undefined ? null : document.getElementById(found.htmlFor)
+  if (control === null) throw new Error(`Feld «${label}» fehlt`)
+  return control as HTMLInputElement
+}
+
+/** Writes into a controlled field the way a person does: through the native setter, then input. */
+async function typeInto(label: string, value: string) {
+  const input = field(label)
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set
+    setter?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await settle()
+}
+
+/** Picks a value in one of the dropdowns of the filter row. */
+async function chooseIn(label: string, value: string) {
+  const control = select(label)
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      'value',
+    )?.set
+    setter?.call(control, value)
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+}
+
+/** The entries behind the arrow of the report toolbar — the rarer ways to the same paper. */
+function menuItems(): HTMLButtonElement[] {
+  return [...container.querySelectorAll('[role="menuitem"]')] as HTMLButtonElement[]
+}
+
+/** Opens the menu behind the arrow and picks one of its entries. */
+async function pickInMenu(label: string) {
+  const toggle = container.querySelector('button[aria-haspopup="menu"]')
+  await click(toggle === null ? undefined : (toggle as HTMLButtonElement))
+  await click(menuItems().find((item) => item.textContent?.includes(label)))
+}
+
 async function click(element: HTMLElement | undefined) {
   if (element === undefined) throw new Error('Bedienelement fehlt')
   await act(async () => {
     element.click()
   })
   await settle()
+}
+
+/**
+ * Writes down every address asked for, and answers it the way `beforeEach` does.
+ *
+ * <p>The tests about the three ways to the paper are all about the address one of them builds,
+ * and a recorder wrapped around the standing stub keeps them from each carrying a second one.
+ */
+function watchAddresses(): string[] {
+  const asked: string[] = []
+  const answer = globalThis.fetch
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    asked.push(url)
+    return answer(url, init)
+  })
+  return asked
 }
 
 describe('JournalPage', () => {
@@ -582,27 +696,237 @@ describe('JournalPage', () => {
   })
 
   /**
-   * <b>The journal has a print button now, and it prints the whole journal of the year.</b>
-   * Before this toolbar the screen had none. None of the five filters travels with the paper:
-   * the endpoint takes none of them, and the journal the law asks for is the complete one
-   * (GeBüV Art. 1 Abs. 2 Bst. b), not the page somebody narrowed.
+   * <b>The journal has a print button now, and untouched it prints the whole journal of the
+   * year.</b> Before this toolbar the screen had none.
+   *
+   * <p><b>The untouched cut-off day does not ride along.</b> The field is prefilled with the
+   * last day of the year, and that means «the whole year», not a cut-off day — sending it would
+   * write « · Stichtag 31.12.2026» into the head of the printable page (backend
+   * `AccountingReports.subtitleOf`). The five filters of the list stay behind too, because the
+   * endpoint takes none of them and the journal the law asks for is the complete one (GeBüV
+   * Art. 1 Abs. 2 Bst. b), not the page somebody narrowed.
    */
   it('journalPrintsThePdfOfTheYearTest', async () => {
-    const asked: string[] = []
-    vi.stubGlobal('fetch', (url: string) => {
-      asked.push(url)
-      if (url.includes('/accounting/fiscal-years')) return json(years)
-      if (url.includes('/accounting/journal')) return json(journal)
-      return json({})
-    })
+    const asked = watchAddresses()
     printFile.mockResolvedValue(undefined)
     await render(READ_ONLY)
 
     await click(button('Drucken'))
 
     expect(asked).toContain('/api/tenants/1/accounting/pdf/journal?fiscalYearId=3')
+    expect(
+      asked.some((url) => url.includes('/accounting/pdf/journal') && url.includes('asOf')),
+    ).toBe(false)
     expect(printFile).toHaveBeenCalledTimes(1)
     expect(showFile).not.toHaveBeenCalled()
+  })
+
+  /**
+   * <b>The cut-off day starts on the last day of the year.</b> That is the journal everybody
+   * means when they say «das Journal 2026», and it is what the paper showed before the day was
+   * offered at all — so nobody has to fill a field to get the usual paper.
+   */
+  it('prefillsTheCutOffWithTheYearEndTest', async () => {
+    await render()
+
+    expect(field('Stichtag').value).toBe('2026-12-31')
+  })
+
+  /**
+   * The prefill also reaches whoever is sent here from an account sheet, with the year already
+   * named in the address.
+   *
+   * <p>The year is known from the query before the year list has arrived. Held against the id,
+   * the field would stay empty for exactly this way in — which is the way the drill-down takes.
+   */
+  it('prefillsTheCutOffWithTheYearFromTheQueryTest', async () => {
+    await render(POSTING, `${JOURNAL_PATH}?fiscalYearId=3&entryId=45`)
+
+    expect(field('Stichtag').value).toBe('2026-12-31')
+  })
+
+  /**
+   * The endpoint refuses a day outside the year with 400 («Der Stichtag muss in das
+   * Geschäftsjahr … fallen»), so the picker does not offer one.
+   */
+  it('boundsTheCutOffToTheFiscalYearTest', async () => {
+    await render()
+
+    expect(field('Stichtag').min).toBe('2026-01-01')
+    expect(field('Stichtag').max).toBe('2026-12-31')
+  })
+
+  /**
+   * <b>The day narrows the paper and not the list, and the screen says so.</b> `GET /journal`
+   * knows `from` and `to` and no cut-off day (backend `JournalController.getJournal`), so a
+   * field that looked like a filter would be one that quietly does nothing — the worst kind.
+   */
+  it('keepsTheCutOffOutOfTheListTest', async () => {
+    const asked = watchAddresses()
+    await render()
+
+    await typeInto('Stichtag', '2026-06-30')
+
+    expect(asked.filter((url) => url.includes('/accounting/journal'))).not.toHaveLength(0)
+    expect(asked.some((url) => url.includes('/accounting/journal') && url.includes('asOf'))).toBe(
+      false,
+    )
+    expect(container.textContent).toContain('Nur fürs Papier.')
+  })
+
+  /** A day somebody chose travels to the paper. */
+  it('sendsTheCutOffToThePdfTest', async () => {
+    const asked = watchAddresses()
+    printFile.mockResolvedValue(undefined)
+    await render(READ_ONLY)
+
+    await typeInto('Stichtag', '2026-06-30')
+    await click(button('Drucken'))
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/pdf/journal?fiscalYearId=3&asOf=2026-06-30',
+    )
+  })
+
+  /**
+   * <b>«Im Browser anzeigen» is the third way of the toolbar, and untouched it asks for the whole
+   * year too.</b> This is the way the day must be kept off: `GET /print/journal` writes a cut-off
+   * day it is given into the head of the sheet — « · Stichtag 31.12.2026» (backend
+   * `AccountingReports.subtitleOf`) — and that sheet is the one printed for GeBüV Art. 6 Abs. 3.
+   * The PDF cannot show the difference, because a missing day falls back to the year end there.
+   */
+  it('showsThePageOfTheYearTest', async () => {
+    const asked = watchAddresses()
+    await render(READ_ONLY)
+
+    await pickInMenu('Im Browser anzeigen')
+
+    expect(asked).toContain('/api/tenants/1/accounting/print/journal?fiscalYearId=3')
+    expect(
+      asked.some((url) => url.includes('/accounting/print/journal') && url.includes('asOf')),
+    ).toBe(false)
+    expect(showFile).toHaveBeenCalledTimes(1)
+    expect(printFile).not.toHaveBeenCalled()
+  })
+
+  /** A day somebody chose travels to the printable page as well, and stands in its head. */
+  it('sendsTheCutOffToThePageTest', async () => {
+    const asked = watchAddresses()
+    await render(READ_ONLY)
+
+    await typeInto('Stichtag', '2026-06-30')
+    await pickInMenu('Im Browser anzeigen')
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/print/journal?fiscalYearId=3&asOf=2026-06-30',
+    )
+  })
+
+  /**
+   * <b>Typed back onto the last day of the year, the day is gone again.</b> What counts is the
+   * day, not whether the field was touched: the paper of «31.12.2026» is the paper of the whole
+   * year, and after moving the day back nothing should tell the two apart on either way out.
+   */
+  it('dropsTheCutOffPutBackOnTheYearEndTest', async () => {
+    const asked = watchAddresses()
+    await render(READ_ONLY)
+
+    await typeInto('Stichtag', '2026-06-30')
+    await typeInto('Stichtag', '2026-12-31')
+    await pickInMenu('Im Browser anzeigen')
+
+    expect(asked).toContain('/api/tenants/1/accounting/print/journal?fiscalYearId=3')
+    expect(
+      asked.some((url) => url.includes('/accounting/print/journal') && url.includes('asOf')),
+    ).toBe(false)
+  })
+
+  /**
+   * <b>The first day of the year is a cut-off day like any other.</b> It sits on the other edge
+   * of what `min`/`max` allow, and it must not be mistaken for the empty field — a journal up to
+   * 1 January is a paper somebody may well ask for.
+   */
+  it('sendsTheFirstDayOfTheYearAsACutOffTest', async () => {
+    const asked = watchAddresses()
+    await render(READ_ONLY)
+
+    await typeInto('Stichtag', '2026-01-01')
+    await pickInMenu('Im Browser anzeigen')
+
+    expect(asked).toContain(
+      '/api/tenants/1/accounting/print/journal?fiscalYearId=3&asOf=2026-01-01',
+    )
+  })
+
+  /**
+   * <b>The day the screen shows is the day that goes into the cupboard.</b> A filed paper can
+   * never be changed, so it is worth knowing that the cut-off day of the field is the one written
+   * into it and not the year end the dialog would otherwise fall back to.
+   */
+  it('filesTheCutOffWithTheReportTest', async () => {
+    await render(CLOSING)
+
+    await typeInto('Stichtag', '2026-06-30')
+    await pickInMenu('Archivieren …')
+
+    expect(document.body.textContent).toContain('Journal per 30.06.2026 wird als PDF abgelegt.')
+
+    await click(inDialog('Archivieren'))
+
+    expect(filed?.body).toEqual({ report: 'journal', fiscalYearId: 3, asOf: '2026-06-30' })
+  })
+
+  /**
+   * <b>Untouched, the cupboard gets the year and no day — and that is the same row as before.</b>
+   * The backend keys a filed paper by the day drawn on the sheet, and without a cut-off day it
+   * draws the end of the year (backend `ReportArchiveManagement.archiveByHand` over
+   * `AccountingPrintouts.paper`). So `asOf: null` files under the same key as `2026-12-31` would:
+   * no second row for the same paper, and no key nobody can find again.
+   */
+  it('filesTheYearWithoutACutOffTest', async () => {
+    await render(CLOSING)
+
+    await pickInMenu('Archivieren …')
+
+    expect(document.body.textContent).toContain('Journal 2026 wird als PDF abgelegt.')
+
+    await click(inDialog('Archivieren'))
+
+    expect(filed?.body).toEqual({ report: 'journal', fiscalYearId: 3, asOf: null })
+  })
+
+  /**
+   * <b>Choosing another year takes the day with it.</b> Left standing, the day of the year
+   * before would fall outside the new one, and the endpoint refuses such a day with 400 — a
+   * refusal nobody could make sense of, because nothing on the screen was touched but the year.
+   */
+  it('resetsTheCutOffWithTheFiscalYearTest', async () => {
+    years = { ...YEARS, years: [YEAR_2026, YEAR_2025] }
+    await render()
+    await typeInto('Stichtag', '2026-06-30')
+    expect(field('Stichtag').value).toBe('2026-06-30')
+
+    await chooseIn('Geschäftsjahr', '2')
+
+    expect(field('Stichtag').value).toBe('2025-12-31')
+    expect(field('Stichtag').min).toBe('2025-01-01')
+    expect(field('Stichtag').max).toBe('2025-12-31')
+  })
+
+  /**
+   * Filing writes a row that can never be changed or removed, which is why the backend asks
+   * `ACCOUNTING_CLOSE` for it. Whoever may only read and post is not offered an entry that ends
+   * in a 403 — the two other ways to the same paper stay.
+   */
+  it('offersNoFilingWithoutTheClosingRightTest', async () => {
+    await render(POSTING)
+
+    await click(container.querySelector('button[aria-haspopup="menu"]') as HTMLButtonElement)
+
+    expect(menuItems().map((item) => item.textContent)).toEqual([
+      expect.stringContaining('Als PDF speichern'),
+      expect.stringContaining('Im Browser anzeigen'),
+    ])
   })
 
   /**

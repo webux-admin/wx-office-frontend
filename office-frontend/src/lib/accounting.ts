@@ -17,6 +17,8 @@ import {
   writeSessionText,
 } from './preferences'
 import type {
+  AccessAction,
+  AccessLogRow,
   Account,
   AccountingReport,
   AccountingSettings,
@@ -850,6 +852,19 @@ export const ACCOUNT_BALANCE_PATH = '/buchhaltung/konten'
 export const ACCOUNTING_ARCHIVE_PATH = '/buchhaltung/archiv'
 
 /**
+ * Path of the integrity screen, a sub-page of the archive.
+ *
+ * <p><b>It has no menu entry, and that is decided.</b> The proof that the books are unchanged is
+ * asked for from the archive, where somebody already stands when the question arises; a menu
+ * entry of its own would put a red button into the sidebar for a screen that is green all year.
+ *
+ * <p>Like the archive above it, its route carries no `module`: switching the module off closes
+ * the writing ways and must not hide the proof that what is posted is unchanged (OR Art. 958f,
+ * GeBüV Art. 6 Abs. 1, backend ADR-0126).
+ */
+export const ACCOUNTING_INTEGRITY_PATH = '/buchhaltung/archiv/integritaet'
+
+/**
  * Path of one account sheet, which has no menu entry of its own.
  *
  * @param accountId the account
@@ -1348,6 +1363,104 @@ export function integrityKey(tenantId: number): readonly unknown[] {
 }
 
 /**
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns address of the access log of that tenant
+ */
+export function accessLogUrl(tenantId: number, query = ''): string {
+  return `${accountingUrl(tenantId)}/access-log${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the filter and paging values the page was asked for
+ * @returns cache key of one page of the access log
+ */
+export function accessLogKey(tenantId: number, query = ''): readonly unknown[] {
+  return ['accounting-access-log', tenantId, query]
+}
+
+/**
+ * The fields the access log may be sorted by — word for word the whitelist of the server.
+ *
+ * <p>Anything else answers 400 rather than being ignored, so a column offering a sort the
+ * endpoint does not know would be a table nobody can click (backend ADR-0026).
+ */
+export const ACCESS_LOG_SORT_FIELDS = [
+  'accessedAt',
+  'accessedBy',
+  'action',
+  'fiscalYearLabel',
+  'outcome',
+] as const
+
+/**
+ * One field out of {@link ACCESS_LOG_SORT_FIELDS}.
+ *
+ * <p>The whitelist as a type, so the columns of the log carry it instead of a plain string: a
+ * sort key the endpoint does not know is then a build error here and never a 400 in front of a
+ * reader.
+ */
+export type AccessLogSortField = (typeof ACCESS_LOG_SORT_FIELDS)[number]
+
+/** The order the access log is read in unless somebody clicks a column: newest first. */
+export const ACCESS_LOG_DEFAULT_SORT = 'accessedAt,desc'
+
+/**
+ * The four actions a reader may narrow the access log to, with their wording.
+ *
+ * <p><b>This is not a translation table for the rows.</b> A row shows `actionLabel` as the
+ * server sent it, and this list is never consulted for one — it exists because a filter has to
+ * offer choices that may not be on the page being read, and there is no endpoint that hands out
+ * the catalogue. The wording is the same as `AccessLogConverter.actionLabel`, and the stored
+ * values are pinned by a `CHECK` constraint on the column.
+ */
+export const ACCESS_LOG_ACTIONS: readonly { value: AccessAction; label: string }[] = [
+  { value: 'EXPORT', label: 'Export gezogen' },
+  { value: 'PRINT', label: 'Ausdruck gezogen' },
+  { value: 'ARCHIVE_READ', label: 'Aus dem Archiv geholt' },
+  { value: 'INTEGRITY_CHECK', label: 'Integrität geprüft' },
+]
+
+/**
+ * Name of the search parameter carrying the action filter of the access log.
+ *
+ * <p>In the address and not only in the component, so «schau dir die Befunde an» can be sent as
+ * a link and a reload keeps what somebody narrowed to.
+ */
+export const ACCESS_LOG_ACTION_PARAM = 'vorgang'
+
+/** Name of the search parameter carrying the «nur Befunde» filter, for the same reason. */
+export const ACCESS_LOG_FINDINGS_PARAM = 'befunde'
+
+/**
+ * Reads the action filter out of a query string.
+ *
+ * <p>Anything outside the four is «alle Vorgänge»: a hand-edited address must not put the list
+ * into a state the endpoint refuses with 400.
+ *
+ * @param value what stood in the address, may be anything
+ * @returns the action, or the empty string for no filter
+ */
+export function accessLogActionOf(value: string | null): AccessAction | '' {
+  const known = ACCESS_LOG_ACTIONS.find((entry) => entry.value === value)
+  return known === undefined ? '' : known.value
+}
+
+/**
+ * Reads the «nur Befunde» filter out of a query string.
+ *
+ * <p>Only the literal `true` switches it on. Anything else — an empty value, a hand-typed word,
+ * nothing at all — leaves the whole log showing, which is the state that hides nothing.
+ *
+ * @param value what stood in the address, may be anything
+ * @returns whether only the lines with a finding are wanted
+ */
+export function findingsOnlyOf(value: string | null): boolean {
+  return value === 'true'
+}
+
+/**
  * One page of drafts. Answers while the module is off.
  *
  * @param tenantId the tenant
@@ -1424,13 +1537,33 @@ export function fetchJournal(tenantId: number, query = ''): Promise<Page<Journal
 }
 
 /**
- * Walks the hash chain and says whether it is intact.
+ * Walks the hash chain over the whole journal and says whether anything was changed underneath
+ * it.
+ *
+ * <p>Every fiscal year, every posted entry, and no way to narrow it: a run over part of the
+ * books carries no statement. It answers while the module is off, and it appends a line to the
+ * access log — which is why the screen invalidates {@link accessLogKey} after a run.
  *
  * @param tenantId the tenant
- * @returns what the run found, with the German sentence to show
+ * @returns what the run found: the figures, the first break and the gaps, without a sentence
  */
 export function fetchIntegrity(tenantId: number): Promise<ChainIntegrity> {
   return api.get<ChainIntegrity>(integrityUrl(tenantId))
+}
+
+/**
+ * One page of the access log: who pulled the books out of this application, and when.
+ *
+ * <p>Answers while the module is off, like everything else that reads here. <b>The quick search
+ * parameter is called `search` and not `q`</b> — the four older accounting lists call it `q`,
+ * this one follows the rest of the application (backend ADR-0126).
+ *
+ * @param tenantId the tenant
+ * @param query the filter and paging values, as a query string without the `?`
+ * @returns the matching page, newest first unless another order was asked for
+ */
+export function fetchAccessLog(tenantId: number, query = ''): Promise<Page<AccessLogRow>> {
+  return api.get<Page<AccessLogRow>>(accessLogUrl(tenantId, query))
 }
 
 /**

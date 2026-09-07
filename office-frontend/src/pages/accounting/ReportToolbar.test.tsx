@@ -485,6 +485,22 @@ describe('ReportToolbar', () => {
   })
 
   /**
+   * <b>With a cut-off day the dialog promises no whole year.</b> The day is the one thing of the
+   * screen that travels into the cupboard, so the second sentence may not say «das ganze Papier»
+   * beside a first one reading «Journal per 30.06.2026» — two sentences about the same paper, one
+   * of them wrong, over a filing that can never be corrected.
+   */
+  it('reportToolbarPromisesNoWholeYearWithADayTest', async () => {
+    await render({ report: 'journal', options: { asOf: '2026-06-30' } })
+
+    await pick('Archivieren …')
+
+    expect(dialog()?.textContent).toContain('Journal per 30.06.2026 wird als PDF abgelegt.')
+    expect(dialog()?.textContent).toContain('ohne Suche und Filter')
+    expect(dialog()?.textContent).not.toContain('ganze')
+  })
+
+  /**
    * The second filing starts on the question, not on the answer of the first: the box stays in
    * the tree while it is shut, and «liegt jetzt im Archiv» over a paper nobody has filed yet
    * would read as if it had been.

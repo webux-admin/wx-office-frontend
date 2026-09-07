@@ -4491,18 +4491,132 @@ export type JournalRow = {
 }
 
 /**
- * What a run over the hash chain found, as `IntegrityDto` sends it.
+ * Which kind of break a run over the hash chain found — `IntegrityBreakDto.kind`.
  *
- * <p>A break and a gap are reported separately: a break means a stored entry no longer matches
- * its hash, a gap means a chain number is missing (backend ADR-0115).
+ * <p>`CONTENT` means a stored entry no longer matches its own hash — a column was changed
+ * underneath the journal. `LINK` means it no longer hangs off its predecessor — an entry was
+ * removed, inserted or re-hung.
+ */
+export type ChainBreakKind = 'CONTENT' | 'LINK'
+
+/**
+ * Where the hash chain stopped adding up, as `IntegrityBreakDto` sends it.
+ *
+ * <p>Only the first one is reported: from there on no statement about the content is worth
+ * anything. The journal number and the booking date travel with the chain number because those
+ * are the two things a fiduciary can look up (backend ADR-0115).
+ */
+export type ChainBreak = {
+  chainNumber: number
+  entryNumber: string
+  bookingDate: string
+  /**
+   * What the fiscal year of the broken entry is called, and absent where that year is no longer
+   * there: `AccountingReports.breakOf` looks the label up and hands over nothing when the row is
+   * gone. `non_null` inclusion then leaves the field out instead of sending a null, so a reader
+   * has to survive both.
+   */
+  fiscalYearLabel?: string | null
+  kind: ChainBreakKind
+}
+
+/**
+ * A stretch of chain numbers that is not there, as `ChainGapDto` sends it.
+ *
+ * <p>`afterChainNumber` is `0` where the chain does not start at one.
+ */
+export type ChainGap = {
+  afterChainNumber: number
+  beforeChainNumber: number
+  missingCount: number
+}
+
+/**
+ * What a run over the hash chain found, as `IntegrityReportDto` sends it.
+ *
+ * <p><b>A break and a gap travel apart.</b> A break means a stored entry no longer matches its
+ * hash, a gap means a chain number is missing — the two call for different questions, and one
+ * field covering both would be useless (backend ADR-0115).
+ *
+ * <p><b>There is no ready-made sentence in here.</b> The screen builds its own wording out of
+ * these figures, because what it has to show in the bad case says what the reader must *not* do
+ * (backend ADR-0126).
+ *
+ * <p>A tenant that has never posted answers `intact` with `postedEntries: 0` and no chain
+ * numbers. That is not a finding.
  */
 export type ChainIntegrity = {
   checkedAt: string
-  entryCount: number
+  checkedBy: string
+  /** How many posted entries were walked — all of them, never a sample. */
+  postedEntries: number
+  firstChainNumber?: number | null
+  lastChainNumber?: number | null
   intact: boolean
-  brokenAt?: number | null
-  gapAt?: number | null
-  message: string
+  firstBreak?: ChainBreak | null
+  /** How many entries stand from the break to the end; `0` where there is none. */
+  affectedEntries: number
+  gaps: ChainGap[]
+  durationMillis: number
+}
+
+/**
+ * The four things the access log records — `AccessLogRowDto.action`.
+ *
+ * <p>Four and only four: the archive export, the printout, the reach into the archive and the
+ * run over the chain. Not every look at a screen — a log over that would be a system for
+ * watching how employees behave at work, and Art. 26 Abs. 1 ArGV 3 forbids those (backend
+ * ADR-0126).
+ */
+export type AccessAction = 'EXPORT' | 'PRINT' | 'ARCHIVE_READ' | 'INTEGRITY_CHECK'
+
+/**
+ * The five papers by the name the access log stores — `AccessLogRowDto.report`.
+ *
+ * <p><b>Not {@link AccountingReport}.</b> That one is the key an endpoint takes
+ * (`balance-sheet`); this one is the enum name in the column (`BALANCE_SHEET`), and it is what
+ * stays the same for ten years.
+ */
+export type AccessLogReport =
+  | 'BALANCE_SHEET'
+  | 'INCOME_STATEMENT'
+  | 'TRIAL_BALANCE'
+  | 'JOURNAL'
+  | 'ACCOUNT_SHEETS'
+
+/** Whether a logged access had anything to report — `AccessLogRowDto.outcome`. */
+export type AccessOutcome = 'OK' | 'FINDING'
+
+/**
+ * One line of the access log, as `AccessLogRowDto` sends it.
+ *
+ * <p><b>Every catalogue travels twice: as the stored value and as the German wording.</b> The
+ * value is what a filter and a sort are built on; the wording is what a reader sees. So the
+ * screen shows `actionLabel`, `reportLabel` and `outcomeLabel` and never translates a value of
+ * its own — a second table would be the second place the wording drifts.
+ */
+export type AccessLogRow = {
+  id: number
+  accessedAt: string
+  accessedBy: string
+  action: AccessAction
+  /** The action in German, for example «Aus dem Archiv geholt». */
+  actionLabel: string
+  /** Absent for an export and for a chain run. */
+  report?: AccessLogReport | null
+  reportLabel?: string | null
+  /** Frozen when the line was written; absent on a chain run, which spans every year. */
+  fiscalYearLabel?: string | null
+  outcome: AccessOutcome
+  outcomeLabel: string
+  /** The finding in plain German, absent where there is none. */
+  detail?: string | null
+  /** How many entries the run walked; absent off the run. */
+  checkedCount?: number | null
+  /** How long it took; absent off the run. */
+  durationMillis?: number | null
+  /** Whether the module was switched on at that moment. */
+  moduleActive: boolean
 }
 
 /** Where a filed paper came from — `ArchivedReportDto.origin`. */

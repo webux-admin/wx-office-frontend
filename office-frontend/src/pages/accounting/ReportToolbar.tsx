@@ -283,8 +283,12 @@ function filingSentence(report: AccountingReport, asOf?: string, yearLabel?: str
 
 /**
  * Which form goes into the cupboard, said before the click because it is not the one on the
- * screen: the statutory presentation without the switches, every account and not one, the whole
- * year and not the filter (backend ADR-0125).
+ * screen: the statutory presentation without the switches, every account and not one, every row
+ * and not the page somebody narrowed (backend ADR-0125).
+ *
+ * <p><b>The cut-off day is the one thing of the screen that does travel</b>, so no sentence here
+ * promises the whole year. Which period is filed stands in {@link filingSentence} right above:
+ * the day where one was chosen, the year where none was.
  */
 function presentationSentence(report: AccountingReport): string {
   switch (report) {
@@ -302,8 +306,8 @@ function presentationSentence(report: AccountingReport): string {
     case 'trial-balance':
     case 'journal':
       return (
-        'Abgelegt wird das ganze Papier — ohne Suche und Filter des Bildschirms, in der Sprache'
-        + ' des Mandanten.'
+        'Abgelegt wird das Papier, das der Satz oben nennt — mit jeder Zeile, ohne Suche und'
+        + ' Filter des Bildschirms, in der Sprache des Mandanten.'
       )
   }
 }

@@ -71,12 +71,15 @@ Die fünf Masken: Bilanz und Erfolgsrechnung über `StatementView.tsx:120` mit `
 und `withAccounts` (`:125`); das Kontoblatt über `AccountSheetPage.tsx:143` mit `accountId`
 **und** dem Stichtag des Bildschirms (`:147`); die Saldenliste über
 `AccountBalanceListPage.tsx:137` nur mit `asOf` (`:142`) — Suche und «Nur Konten mit Bewegung»
-reisen nicht mit; das Journal über `JournalPage.tsx:255` ganz ohne Filter (`:252-254`). **Zwei
-der fünf hatten vorher gar keinen Druckknopf** — Saldenliste und Journal —, die drei anderen
-einen einfachen «Drucken», der die HTML-Seite holte; `printStatement` (StatementView) und
-`printSheet` (AccountSheetPage) sind entfernt, weil die Leiste denselben Weg als «Im Browser
-anzeigen» führt. «Als CSV» bleibt ausserhalb der Leiste stehen, wo es steht
-(`StatementView.tsx:106-116`).
+reisen nicht mit; das Journal über `JournalPage.tsx:295` ebenfalls nur mit `asOf` — und auch das
+nur, wenn der Tag vom Jahresende abweicht (`:300` über `cutOff`, `:128-138`); die fünf Filter der
+Liste reisen nicht mit. (Diese Stelle ist berichtigt: sie sagte zum Stand von #97 «das Journal
+über `JournalPage.tsx:255` ganz ohne Filter (`:252-254`)», weil das Journal damals keinen
+Stichtag hatte — siehe Nachtrag unten.) **Zwei der fünf hatten vorher gar keinen
+Druckknopf** — Saldenliste und Journal —, die drei anderen einen einfachen «Drucken», der die
+HTML-Seite holte; `printStatement` (StatementView) und `printSheet` (AccountSheetPage) sind
+entfernt, weil die Leiste denselben Weg als «Im Browser anzeigen» führt. «Als CSV» bleibt
+ausserhalb der Leiste stehen, wo es steht (`StatementView.tsx:106-116`).
 
 ### 2. `lib/accountingReports.ts` neben `accounting.ts`; die Union in `types.ts`; ein Bauer für Seite und PDF
 
@@ -98,11 +101,14 @@ Parameter in derselben Reihenfolge.
 
 `ArchiveDialog` (`ReportToolbar.tsx:172`) nennt Papier und Tag — «Bilanz per 30.06.2026 wird
 als PDF abgelegt.», ohne Tag das Jahr, für die Kontoblätter im Plural (`:272-282`) —, den Satz
-«nicht mehr ändern und nicht mehr löschen», und **je Papier, was abgelegt wird** (`:289-308`):
+«nicht mehr ändern und nicht mehr löschen», und **je Papier, was abgelegt wird** (`:293-312`):
 für Bilanz und Erfolgsrechnung die gesetzliche Darstellung ohne Kontozeilen und leere
 Positionen, für das Kontoblatt die Blätter **aller** Konten mit Bewegung und nicht das Konto auf
-dem Bildschirm, für Saldenliste und Journal das ganze Papier ohne Suche und Filter — jedes Mal
-«in der Sprache des Mandanten». Gesendet werden genau die drei Felder von `ArchiveReportBody`
+dem Bildschirm, für Saldenliste und Journal das Papier, das der Satz darüber nennt, mit jeder
+Zeile und ohne Suche und Filter — jedes Mal «in der Sprache des Mandanten». (Der letzte Punkt ist
+berichtigt: er lautete zum Stand von #97 «das ganze Papier ohne Suche und Filter», was für ein
+Journal mit gesetztem Stichtag nicht mehr stimmt — siehe Nachtrag unten.) Gesendet werden genau
+die drei Felder von `ArchiveReportBody`
 (`:192-196`, `ArchiveReportBody.java:25-31`): `report`, `fiscalYearId`, `asOf`.
 
 Nach dem Ablegen wird der Dialog zur Antwort mit dem Link «Im Archiv ansehen» (`:232-236`); beim
@@ -576,6 +582,147 @@ Adresse des Assistenten, der bei `nextStep === 'DONE'` auf seinem letzten Schrit
 Tag ausserhalb jedes Jahres (`EntryPage.tsx:362-375`); der Hinweis «Eröffnung erfassen» auf der
 Jahresliste steht nur bei `nextStep === 'OPENING'` (`FiscalYearPage.tsx:258-274`). Als
 Ersatzweg zum Ersetzen braucht es ihn nicht mehr: das Wort steht auf der Zeile selbst.
+
+## Nachtrag: das Journal hat einen Stichtag — er wählt das Papier, nicht die Liste
+
+Abschnitt 1 sagte zum Journal, die Leiste reise «ganz ohne Filter». Seit die Journalmaske ein
+Feld «Stichtag» trägt, stimmt das nicht mehr; die Stelle ist oben berichtigt statt stehen
+gelassen, weil ein ADR, das den eigenen Code falsch beschreibt, schlimmer ist als keines. Was
+hier steht, ist der **gebaute** Zustand.
+
+**Was die Maske anbietet.** Zwischen «Geschäftsjahr» und «Von» steht ein Datumsfeld «Stichtag»
+(`JournalPage.tsx:327-337`). Vorbelegt ist der **letzte Tag des gewählten Geschäftsjahres**, und
+er folgt einem Wechsel des Jahres: die Angleichung steht im Rendern und hängt am Enddatum des
+Jahres, nicht an seiner Id (`:122-126`) — die Id kann aus der Adresse kommen, bevor die
+Jahresliste da ist, und genau das ist der Weg aus dem Kontoblatt. Das Feld ist auf das Jahr
+begrenzt, `min` auf dessen ersten und `max` auf dessen letzten Tag (`:332-333`).
+
+**Die Vorbelegung wird nicht gesendet — ein unangetastetes Feld heisst «kein Stichtag».** An die
+Leiste geht `options={{ asOf: cutOff }}` (`:300`), und `cutOff` trägt den Tag nur, wenn er vom
+Enddatum des Jahres abweicht (`:128-138`). Vor dieser Änderung hatte das Journal kein solches
+Feld und schickte nie einen Tag; unangetastet schickt es weiterhin keinen.
+
+**Der Grund ist der Druckweg, nicht das PDF.** Die drei Wege der Leiste laufen serverseitig
+nicht durch dieselbe Methode:
+
+- **PDF** («Drucken», «Als PDF speichern»): `AccountingPrintouts.paper` setzt einen fehlenden Tag
+  auf das Jahresende (`AccountingPrintouts.java:353`), und der Kopf nennt daneben ohnehin die
+  Periode aus Start und Ende des Jahres (`:370-375`). Mit `asOf=31.12.` und ohne `asOf` entsteht
+  dasselbe Blatt.
+- **Druckseite** («Im Browser anzeigen», `GET /print/{report}`): `AccountingReports.printOf`
+  (`AccountingReports.java:463-473`) baut den Untertitel über `subtitleOf` (`:470`), und dort gilt
+  `String cut = asOf == null ? "" : " · Stichtag " + format.date(asOf);` (`:1108`, in `subtitleOf`
+  `:1105-1111`). Ein gesendeter Tag steht also im Kopf. Die Vorbelegung mitzuschicken hätte im
+  **Regelfall** «… · Stichtag 31.12.2026 · Erstellt …» auf ein Blatt geschrieben, das das ganze
+  Jahr meint — und genau dieses Blatt erfüllt die Lesbarkeit ohne Hilfsmittel nach GeBüV Art. 6
+  Abs. 3. Das war eine Regression: bestellt war ein wählbarer Stichtag, nicht ein neuer Satz im
+  Kopf des Regelausdrucks.
+- **Ablage** («Archivieren …»): `archiveByHand` prüft die Doppelablage mit `printed.asOfDate()`,
+  also mit dem Tag, der auf dem gezeichneten Blatt steht (`ReportArchiveManagement.java:150-162`,
+  Abfrage `:158`) — und der ist über `AccountingPrintouts.java:353` in beiden Fällen der 31.12.
+  **Es entsteht damit weder eine Doppelablage noch ein anderer Schlüssel als vorher.**
+
+Die Zeilen sind in allen drei Fällen dieselben: `journalRowsOf` reicht `asOf` an `eachJournalLine`
+weiter (`AccountingReports.java:688-698`, `:692`), und die Abfrage lässt ohne Tag alles durch —
+`AND (CAST(:asOf AS date) IS NULL OR e.booking_date <= :asOf)` (`AccountingQueries.java:1936`).
+Ein Buchungsdatum liegt immer im Geschäftsjahr (`AccountingRules.java:193-194`), also wählt
+`asOf = Jahresende` dieselben Zeilen wie kein Tag.
+
+**Beide Hälften der Abmachung sind festgenagelt.** Diese Maske schickt den vorbelegten Tag nicht
+(`dropsTheCutOffPutBackOnTheYearEndTest`, `JournalPage.test.tsx:830`); dass der Server ohne Tag
+auch keinen in den Kopf schreibt, hält der Gegenpart im Backend fest —
+`printOfWithTheJournalAndNoCutOffDayTest` (`AccountingReportsTest.java`) prüft, dass die druckbare
+Seite des ganzen Jahres das Wort «Stichtag» nicht enthält. Ohne diesen zweiten Test wäre genau die
+Eigenschaft ungeprüft, um derentwillen die Vorbelegung überhaupt zurückgehalten wird.
+
+**Der Tag beschneidet das Papier — PDF, Druck und Ablage — und nicht die Bildschirmliste.** Wo er
+gesetzt ist, baut `openReport` daraus die Adresse für «Drucken», «Als PDF speichern» und «Im
+Browser anzeigen» (`ReportToolbar.tsx:86-89`), und derselbe Wert liegt am Archivdialog (`:153`),
+der ihn als `asOf` im Rumpf sendet (`:195`). `reportQuery` hängt ihn an (`accounting.ts:1164-1166`),
+und der Server zeichnet das Journal bis zu diesem Tag (`AccountingReports.java:568-570` für das
+PDF, `:473` für die Druckseite).
+
+**Die Liste unten zeigt weiter das ganze Jahr, und die Maske sagt das.** `GET /journal` kennt
+keinen Stichtag: es nimmt `fiscalYearId`, `from`, `to`, `accountId`, `entryKind`, `source`,
+`q`, `page`, `size` und `sort` (Backend `JournalController.java:84-96`). `listQuery` der Maske
+sendet genau diese und keinen Tag (`JournalPage.tsx:140-150`). Unter dem Feld steht deshalb der
+Hinweis «Nur fürs Papier. Für die Liste unten gelten «Von» und «Bis».» (`:336`), gezeichnet als
+Absatz unter dem Feld (`Field.tsx:64-68`) und über `aria-describedby` angehängt
+(`TextField.tsx:57`). Ein Feld, das aussieht wie ein Filter und keiner ist, wäre schlimmer als
+kein Feld.
+
+**Begründung.**
+
+- **Nicht auf den vorhandenen Listenparameter `to` abgebildet.** Zwei Bedienelemente auf
+  derselben Obergrenze wären zwei Wahrheiten über denselben Ausschnitt, und «Bis» gehört bereits
+  der Liste (`JournalPage.tsx:348-357`).
+- **Verglichen wird der Tag, nicht ein «angefasst»-Merker.** `cutOff` misst den Wert am Enddatum
+  des Jahres (`:138`). Wer den Tag verstellt und wieder auf den 31.12. zurücksetzt, bekommt
+  dasselbe Papier wie jemand, der das Feld nie berührt hat — ein Merker hätte für dieselbe Eingabe
+  zwei verschiedene Blätter erzeugt.
+- **`min`/`max` statt einer Fehlermeldung.** Ein Tag ausserhalb des Jahres wird mit 400
+  abgewiesen — «Der Stichtag muss in das Geschäftsjahr … fallen»
+  (`AccountingReports.java:373-382`). Denselben Griff hat das Haus in
+  `OpeningEntryStep.tsx:219-220`. Die beiden anderen Berichtsmasken haben ihn **nicht**: ihr
+  Stichtagsfeld trägt weder `min` noch `max` (`StatementView.tsx:145-151`,
+  `AccountBalanceListPage.tsx:163-172`). Sie sind bewusst nicht angefasst — nicht beauftragt.
+  `min`/`max` binden ausserdem nur den Datumswähler, nicht die Tastatureingabe: ein getippter Tag
+  ausserhalb des Jahres wird gesetzt, durchgereicht und erst vom Server abgewiesen. Es gibt keinen
+  Riegel vor dem Absenden, und dieser Absatz behauptet keinen.
+- **Zweite Sperre gegen denselben 400:** der Tag folgt dem Geschäftsjahr (`:122-126`), so dass
+  ein stehengebliebener Tag des Vorjahres gar nicht erst hinausgeht.
+
+**Was sich am Archivdialog ändert — nichts am Regelfall, zwei Sätze am Sonderfall.** Ohne
+gewählten Tag heisst es weiter «Journal 2026 wird als PDF abgelegt.», mit einem «Journal per
+30.06.2026 …»: `filingSentence` zieht den Tag dem Jahresnamen vor (`ReportToolbar.tsx:272-282`,
+Tagzweig `:275-277`). Berichtigt sind dagegen **zwei Stellen, die dem Journal mit Stichtag
+widersprachen**: der zweite Satz des Dialogs sagte «Abgelegt wird das **ganze** Papier — ohne
+Suche und Filter des Bildschirms» neben einer Zeile, die «Journal per 30.06.2026» nennt, und der
+JSDoc darüber behauptete ausdrücklich «the whole year and not the filter». Der Satz lautet jetzt
+«Abgelegt wird das Papier, das der Satz oben nennt — mit jeder Zeile, ohne Suche und Filter des
+Bildschirms, in der Sprache des Mandanten.» (`ReportToolbar.tsx:306-311`), der JSDoc nennt statt
+des Jahres «every row and not the page somebody narrowed» und hält fest, dass der Stichtag das
+eine ist, was vom Bildschirm mitreist (`:284-292`). Entscheidung 3 oben zitiert diesen Satz und
+ist mitberichtigt. Beides gilt jetzt für alle fünf Papiere, mit und ohne Stichtag; die Zweige
+für Bilanz/Erfolgsrechnung (`:295-300`) und Kontoblätter
+(`:301-305`) behaupteten nie ein ganzes Jahr und bleiben Wort für Wort stehen. Alle Belegstellen
+von Abschnitt 1 auf `StatementView.tsx`, `AccountSheetPage.tsx` und `AccountBalanceListPage.tsx`
+gelten unverändert — diese drei Masken belegen ihr Stichtagsfeld nicht vor
+(`StatementView.tsx:77`, `AccountBalanceListPage.tsx:52`), für sie ändert sich nichts.
+
+**Tests.** In `JournalPage.test.tsx` stehen die Fälle beider Wege, damit keiner mehr ungeprüft
+wandern kann:
+
+- Druckseite: `showsThePageOfTheYearTest` (`:798`) — unangetastet, die Adresse von
+  `/print/journal` trägt **kein** `asOf`; `sendsTheCutOffToThePageTest` (`:813`) — ein
+  abweichender Tag, sie trägt ihn.
+- PDF: `journalPrintsThePdfOfTheYearTest` (`:709`) — unangetastet, kein `asOf`;
+  `sendsTheCutOffToThePdfTest` (`:778`) — ein abweichender Tag, mit ihm.
+- Randfälle: `dropsTheCutOffPutBackOnTheYearEndTest` (`:830`) — auf das Jahresende
+  zurückgestellt, der Tag ist wieder weg; `sendsTheFirstDayOfTheYearAsACutOffTest` (`:849`) — der
+  erste Tag des Jahres ist ein Stichtag wie jeder andere und wird gesendet.
+- Ablage: `filesTheCutOffWithTheReportTest` (`:866`) — der gewählte Tag steht im Rumpf;
+  `filesTheYearWithoutACutOffTest` (`:886`) — unangetastet geht `asOf: null` hinaus, und der
+  Kommentar nennt die Belegstelle, warum das derselbe Schlüssel ist.
+- Unverändert: `prefillsTheCutOffWithTheYearEndTest` (`:729`),
+  `prefillsTheCutOffWithTheYearFromTheQueryTest` (`:742`),
+  `boundsTheCutOffToTheFiscalYearTest` (`:752`), `keepsTheCutOffOutOfTheListTest` (`:764`),
+  `resetsTheCutOffWithTheFiscalYearTest` (`:903`) und
+  `offersNoFilingWithoutTheClosingRightTest` (`:921`).
+
+`journalPrintsThePdfOfTheYearTest` ist **verschärft und nicht abgeschwächt**: die Adresse
+`…/pdf/journal?fiscalYearId=3` stand dort schon, neu ist die negative Zusicherung daneben, dass
+**keine** gerufene Adresse ein `asOf` trägt (`:716-719`). Sieben Fälle teilen sich den Rekorder
+`watchAddresses` (`:417-431`); einer davon trug zuvor einen eigenen `fetch`-Stub, die übrigen sind
+mit dieser Änderung entstanden. `printFile` und
+`showFile` werden jetzt in `beforeEach` zurückgesetzt (`:271-272`), wie in
+`ReportToolbar.test.tsx` — «nicht aufgerufen» muss diesen Test meinen und nicht diese Datei. In
+`ReportToolbar.test.tsx` kommt `reportToolbarPromisesNoWholeYearWithADayTest` (`:493`) dazu: mit
+gesetztem Stichtag steht im Dialog kein «ganze» mehr. Die Zeile unter «Konsequenzen», die für
+`JournalPage.test.tsx` **einen** neuen Fall nennt, beschreibt den Stand von #97 und wird nicht
+umgeschrieben.
+
+Nichts davon ist offen; «Offen» unten bleibt leer.
 
 ## Offen
 

@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '../../components/Button'
+import { LinkButton } from '../../components/LinkButton'
 import { EmptyState, LoadingBlock } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { Panel } from '../../components/Panel'
 import { RequireTenant } from '../../layout/RequireTenant'
 import { api } from '../../lib/api'
 import {
+  ACCOUNTING_INTEGRITY_PATH,
   ACCOUNTING_RIGHTS,
   accountingExportUrl,
   accountingPrintUrl,
@@ -85,7 +87,15 @@ function Archive({ tenantId }: { tenantId: number }) {
             : `${posted} verbuchte ${posted === 1 ? 'Buchung' : 'Buchungen'} in `
               + `${available.length} ${available.length === 1 ? 'Geschäftsjahr' : 'Geschäftsjahren'}.`
         }
-      />
+      >
+        {/* The proof that what stands in the cupboard is unchanged. A sub-page and not a panel
+            here: it runs the chain over the whole journal and carries the access log under it,
+            which is a screen of its own — and it is asked for from here, where somebody already
+            stands when the question arises. */}
+        <LinkButton to={ACCOUNTING_INTEGRITY_PATH} variant="secondary">
+          Integrität prüfen
+        </LinkButton>
+      </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
         <Panel>

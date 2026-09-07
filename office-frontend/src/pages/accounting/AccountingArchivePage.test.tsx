@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
-import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
+import { ACCOUNTING_INTEGRITY_PATH, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import type { ArchivedReport, FiscalYear, FiscalYearList } from '../../lib/types'
 import { AccountingArchivePage } from './AccountingArchivePage'
 
@@ -310,6 +310,21 @@ describe('AccountingArchivePage', () => {
       container.querySelector('button[aria-label="Bilanz per 31.12.2026 anzeigen"]'),
     ).not.toBeNull()
     expect(container.textContent).not.toContain('nicht eingeschaltet')
+  })
+
+  /**
+   * <b>The proof hangs off the archive and nowhere else.</b> It is a link and not a button, so
+   * it can be opened in a new tab; and it stays a sub-page, because the run over the chain
+   * carries the access log under it and that is a screen of its own.
+   */
+  it('integrityButtonLeadsToTheSubPageTest', async () => {
+    await paint([year()])
+
+    const link = [...container.querySelectorAll('a')].find(
+      (entry) => entry.textContent === 'Integrität prüfen',
+    )
+    expect(link).toBeDefined()
+    expect(link?.getAttribute('href')).toBe(ACCOUNTING_INTEGRITY_PATH)
   })
 
   /** The two ways out satisfy two different rules, and the page says which is which. */

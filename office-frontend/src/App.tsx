@@ -14,6 +14,7 @@ import {
   ENTRY_PATH,
   FISCAL_YEARS_PATH,
   ACCOUNTING_ARCHIVE_PATH,
+  ACCOUNTING_INTEGRITY_PATH,
   ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
@@ -62,6 +63,7 @@ const ClosingPage = lazy(() => import('./pages/ClosingPage').then((module) => ({
 const IncomeStatementPage = lazy(() => import('./pages/IncomeStatementPage').then((module) => ({ default: module.IncomeStatementPage })))
 const AccountingSetupPage = lazy(() => import('./pages/AccountingSetupPage').then((module) => ({ default: module.AccountingSetupPage })))
 const AccountingArchivePage = lazy(() => import('./pages/accounting/AccountingArchivePage').then((module) => ({ default: module.AccountingArchivePage })))
+const AccountingIntegrityPage = lazy(() => import('./pages/accounting/AccountingIntegrityPage').then((module) => ({ default: module.AccountingIntegrityPage })))
 const PriorYearPage = lazy(() => import('./pages/accounting/PriorYearPage').then((module) => ({ default: module.PriorYearPage })))
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
@@ -248,6 +250,9 @@ export default function App() {
                     question arises, and by its address with the year named. */}
                 <Route path={PRIOR_YEAR_PATH} element={<PriorYearPage />} />
                 <Route path={ACCOUNTING_ARCHIVE_PATH} element={<AccountingArchivePage />} />
+                {/* The integrity screen has no menu entry either: it is a sub-page of the
+                    archive and is reached from the button there. */}
+                <Route path={ACCOUNTING_INTEGRITY_PATH} element={<AccountingIntegrityPage />} />
                 <Route path="/mahnvorschlag" element={<DunningWorklistPage />} />
                 <Route path="/mahnungen" element={<DunningNoticePage />} />
                 <Route path="/mahnstopps" element={<DunningBlockPage />} />
