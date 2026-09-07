@@ -19,11 +19,13 @@ import {
   accountingSettingsUrl,
   fetchFiscalYears,
   fiscalYearsKey,
+  updateAccountingSettings,
 } from '../lib/accounting'
 import { api } from '../lib/api'
 import { formatDate, isCompleteIsoDate } from '../lib/format'
 import { MODULE_PATH } from '../lib/modules'
 import type { AccountingSettings } from '../lib/types'
+import { AccountSelect } from './accounting/AccountSelect'
 
 /**
  * The settings of the bookkeeping of this tenant, and the state it is in.
@@ -92,7 +94,7 @@ function AccountingState({ tenantId }: { tenantId: number }) {
   return (
     <Frame>
       <State
-        key={settings.data.postingsLockedUntil ?? ''}
+        key={`${settings.data.postingsLockedUntil ?? ''}-${settings.data.defaultRevenueAccountNo ?? ''}`}
         tenantId={tenantId}
         stored={settings.data}
       />
@@ -126,7 +128,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
     // missing field read as «leeren» would let step 3, which knows only the changeover day,
     // lift the bolt on its way past (backend ADR-0119).
     mutationFn: (day: string) =>
-      api.put<AccountingSettings>(accountingSettingsUrl(tenantId), {
+      updateAccountingSettings(tenantId, {
         postingsLockedUntil: day === '' ? null : day,
         clearPostingsLock: day === '',
       }),
@@ -215,6 +217,8 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         )}
       </Panel>
 
+      <DefaultRevenueAccountPanel tenantId={tenantId} stored={stored} />
+
       <FiscalYearSection tenantId={tenantId} />
 
       {/* The honest sentence of this stage: the chart is there, the postings are not. */}
@@ -232,6 +236,94 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         </p>
       </Panel>
     </>
+  )
+}
+
+/**
+ * The account a document line falls back to when its product names none.
+ *
+ * <p>Step 2 of the three-step chain: product, this default, system account. What stands here is
+ * frozen onto the line at the moment it is written, so changing it moves no document that
+ * already exists (backend ADR-0127).
+ *
+ * <p>Its own save button and its own payload. `PUT /settings` reads a missing field as
+ * «unverändert» and takes a clearing outright, so this panel sends its two keys and nothing
+ * else — the posting lock beside it stays where it is.
+ */
+function DefaultRevenueAccountPanel({
+  tenantId,
+  stored,
+}: {
+  tenantId: number
+  stored: AccountingSettings
+}) {
+  const { can } = useAuth()
+  const queryClient = useQueryClient()
+  const mayConfigure = can(ACCOUNTING_RIGHTS.configure)
+
+  const [account, setAccount] = useState(stored.defaultRevenueAccountNo ?? '')
+
+  const save = useMutation({
+    // Emptying the field says «leeren» with the flag; a set account sends the account. Neither
+    // payload names the posting lock or the changeover day, and that is the point of the
+    // contract: a screen that does not know a field sends no key for it (backend ADR-0127).
+    mutationFn: (chosen: string) =>
+      updateAccountingSettings(
+        tenantId,
+        chosen === ''
+          ? { clearDefaultRevenueAccountNo: true }
+          : { defaultRevenueAccountNo: chosen },
+      ),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(accountingSettingsKey(tenantId), settings)
+    },
+  })
+
+  const changed = account !== (stored.defaultRevenueAccountNo ?? '')
+
+  return (
+    <Panel
+      title="Ertragskonto"
+      description="Worauf eine Belegzeile gebucht wird, deren Produkt kein eigenes Konto trägt."
+    >
+      {mayConfigure ? (
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <span className="w-full max-w-[320px]">
+              <AccountSelect
+                label="Vorgabe"
+                tenantId={tenantId}
+                value={account}
+                onChange={setAccount}
+                emptyLabel="Ohne Vorgabe"
+                hint="Ohne Vorgabe gilt das Systemkonto, sofern der Kontenplan eines führt."
+              />
+            </span>
+            <Button
+              onClick={() => save.mutate(account)}
+              busy={save.isPending}
+              disabled={!changed}
+            >
+              Speichern
+            </Button>
+          </div>
+          {save.error !== null && <ErrorNotice error={save.error} />}
+        </div>
+      ) : (
+        <div className="grid gap-3 text-[13px]">
+          <p>
+            Vorgabe{' '}
+            <span className="font-mono tabular-nums">
+              {stored.defaultRevenueAccountNo ?? 'nicht gesetzt'}
+            </span>
+          </p>
+          <p className="text-[12px] text-text-secondary">
+            Ändern lässt sich das Konto mit dem Recht{' '}
+            <span className="font-mono text-[12px]">{ACCOUNTING_RIGHTS.configure}</span>.
+          </p>
+        </div>
+      )}
+    </Panel>
   )
 }
 

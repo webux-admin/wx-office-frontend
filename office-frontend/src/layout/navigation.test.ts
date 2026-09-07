@@ -68,6 +68,21 @@ describe('NAV_GROUPS', () => {
   })
 
   /**
+   * The revenue accounts left the menu.
+   *
+   * <p>They are no maintained list any more: a document line carries a number out of
+   * the chart of accounts, and it is chosen with the account picker (backend ADR-0127). The
+   * endpoint answers on and deletes no row — ten-year-old documents quote those codes — but
+   * the screen behind that address is gone, and a menu entry pointing at it would land on
+   * the first list instead.
+   */
+  it('navGroupsDropTheRevenueAccountListTest', () => {
+    const hrefs = allEntries().map((entry) => entry.href)
+
+    expect(hrefs).not.toContain('/basisdaten/ertragskonten')
+  })
+
+  /**
    * Menu and routes are built from one table, and this says so: a kind of document added there
    * has to be reachable through the menu too, under its own address and behind its own read
    * right — not only by typing the path.
@@ -417,7 +432,7 @@ describe('folderFor', () => {
   })
 
   /**
-   * Eleven maintained lists share one route and sit in three different folders.
+   * Ten maintained lists share one route and sit in three different folders.
    *
    * <p>The strip is chosen by the ADDRESS and not by the route — which is why wrapping
    * `/basisdaten/:liste` once is enough, and why the units and the dunning types get
@@ -426,7 +441,7 @@ describe('folderFor', () => {
   it('folderForOnAListEntryTest', () => {
     expect(folderFor('/basisdaten/einheiten', all, runsAll)?.label).toBe('Werte')
     expect(folderFor('/basisdaten/mahnarten', all, runsAll)?.label).toBe('Belege')
-    expect(folderFor('/basisdaten/ertragskonten', all, runsAll)?.label).toBe('Produkte')
+    expect(folderFor('/basisdaten/anreden', all, runsAll)?.label).toBe('Werte')
     expect(labels('/basisdaten/sprachen')).toContain('/basisdaten/laender')
   })
 

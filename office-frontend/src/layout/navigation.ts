@@ -904,8 +904,10 @@ export const NAV_GROUPS: NavGroup[] = [
             href: '/produkt-freifelder',
             permission: 'PRODUCT_READ',
           },
-          // Assigned on the product; the accounting that reads them comes later.
-          listEntry('ertragskonten', BookOpen),
+          // No «Ertragskonten» any more: the revenue account is a number out of the chart of
+          // accounts and is chosen with `AccountSelect`, not maintained as a selection
+          // list (backend ADR-0127). The endpoint goes on answering — ten-year-old documents
+          // quote those codes — only the way into the menu is gone.
         ],
       },
     ],

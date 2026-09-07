@@ -9,6 +9,8 @@ import { SelectField } from '../components/SelectField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS, isAccountNumber } from '../lib/accounting'
+import { useRunsModule } from '../lib/modules'
 import {
   DUNNING_GROUPINGS,
   DUNNING_GROUPING_HINTS,
@@ -20,8 +22,18 @@ import {
   fetchDunningSettings,
   saveDunningSettings,
 } from '../lib/dunning'
-import { useMasterDataList } from '../masterdata/useMasterData'
 import type { DunningGrouping, DunningSettings, FeeBooking, FeeVatMode } from '../lib/types'
+import { AccountSelect } from './accounting/AccountSelect'
+
+/**
+ * What is said under the account field when a typed number cannot be stored.
+ *
+ * <p>The same rule the backend checks at its writing border, so the mask refuses what would
+ * come back as a 400 anyway (backend ADR-0127).
+ */
+const ACCOUNT_COMPLAINT =
+  'Eine Kontonummer besteht aus Ziffern und Punkten, beginnt mit einer Ziffer und ist '
+  + 'höchstens 20 Zeichen lang.'
 
 /** What the mask edits. Strings, because a half-typed amount is not a number. */
 type SettingsForm = {
@@ -31,7 +43,7 @@ type SettingsForm = {
   grouping: DunningGrouping
   feeBooking: FeeBooking
   feeVatMode: FeeVatMode
-  feeRevenueAccountId: string
+  feeRevenueAccountNo: string
   attachInvoiceCopies: boolean
   noticeBcc: string
 }
@@ -44,8 +56,7 @@ function formOf(settings: DunningSettings): SettingsForm {
     grouping: settings.grouping,
     feeBooking: settings.feeBooking,
     feeVatMode: settings.feeVatMode,
-    feeRevenueAccountId:
-      settings.feeRevenueAccountId === undefined ? '' : String(settings.feeRevenueAccountId),
+    feeRevenueAccountNo: settings.feeRevenueAccountNo ?? '',
     attachInvoiceCopies: settings.attachInvoiceCopies,
     noticeBcc: settings.noticeBcc ?? '',
   }
@@ -98,7 +109,7 @@ function Settings({ tenantId }: { tenantId: number }) {
   // typed has to give way when a save or another user rewrites the state underneath it.
   return (
     <SettingsMask
-      key={`${settings.data.numberRangeCode}-${settings.data.minimumOpenAmount}-${settings.data.grouping}-${settings.data.feeBooking}-${settings.data.feeVatMode}-${settings.data.feeRevenueAccountId ?? ''}-${settings.data.attachInvoiceCopies}-${settings.data.noticeBcc ?? ''}`}
+      key={`${settings.data.numberRangeCode}-${settings.data.minimumOpenAmount}-${settings.data.grouping}-${settings.data.feeBooking}-${settings.data.feeVatMode}-${settings.data.feeRevenueAccountNo ?? ''}-${settings.data.attachInvoiceCopies}-${settings.data.noticeBcc ?? ''}`}
       tenantId={tenantId}
       stored={settings.data}
     />
@@ -110,9 +121,21 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
   const queryClient = useQueryClient()
   const mayConfigure = can(DUNNING_RIGHTS.configure)
 
-  const accounts = useMasterDataList(tenantId, 'revenue-accounts')
+  const runs = useRunsModule()
 
   const [form, setForm] = useState<SettingsForm>(() => formOf(stored))
+
+  // Whether the account is chosen from the chart or typed. `GET /accounts` runs on
+  // ACCOUNTING_READ and a tenant without the module has no chart, so a dunning clerk without
+  // that right would be shown an empty dropdown and no way to fill the field. Hiding it as the
+  // product mask does is not open here: this field is what the panel is about, and whoever may
+  // configure the dunning has to be able to set it. The value is the same string either way
+  // (backend ADR-0127).
+  const picksFromTheChart = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
+
+  const typedAccount = form.feeRevenueAccountNo.trim()
+  const accountComplaint =
+    typedAccount !== '' && !isAccountNumber(typedAccount) ? ACCOUNT_COMPLAINT : null
 
   const save = useMutation({
     mutationFn: (body: SettingsForm) =>
@@ -123,8 +146,8 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
         grouping: body.grouping,
         feeBooking: body.feeBooking,
         feeVatMode: body.feeVatMode,
-        feeRevenueAccountId:
-          body.feeRevenueAccountId === '' ? null : Number(body.feeRevenueAccountId),
+        feeRevenueAccountNo:
+          body.feeRevenueAccountNo.trim() === '' ? null : body.feeRevenueAccountNo.trim(),
         attachInvoiceCopies: body.attachInvoiceCopies,
         noticeBcc: body.noticeBcc.trim() === '' ? null : body.noticeBcc.trim(),
       }),
@@ -140,7 +163,11 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
         subtitle={`${stored.activeLevelCount} Mahnstufen aktiv`}
       >
         {mayConfigure && (
-          <Button onClick={() => save.mutate(form)} busy={save.isPending}>
+          <Button
+            onClick={() => save.mutate(form)}
+            busy={save.isPending}
+            disabled={accountComplaint !== null}
+          >
             Speichern
           </Button>
         )}
@@ -279,22 +306,33 @@ function SettingsMask({ tenantId, stored }: { tenantId: number; stored: DunningS
               </SelectField>
             </div>
 
-            <SelectField
-              label="Ertragskonto der Gebühr"
-              value={form.feeRevenueAccountId}
-              onChange={(event) =>
-                setForm({ ...form, feeRevenueAccountId: event.target.value })
-              }
-              disabled={!mayConfigure || form.feeBooking === 'ON_DUNNING_ONLY'}
-              hint="Aus der Liste «Ertragskonten». Nötig, sobald eine Stufe eine Gebühr verlangt."
-            >
-              <option value="">– kein Konto –</option>
-              {(accounts.data ?? []).map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.code} · {entry.name}
-                </option>
-              ))}
-            </SelectField>
+            {picksFromTheChart ? (
+              <AccountSelect
+                label="Ertragskonto der Gebühr"
+                tenantId={tenantId}
+                value={form.feeRevenueAccountNo}
+                onChange={(code) => setForm({ ...form, feeRevenueAccountNo: code })}
+                disabled={!mayConfigure || form.feeBooking === 'ON_DUNNING_ONLY'}
+                emptyLabel="– kein Konto –"
+                hint="Aus dem Kontenplan. Nötig, sobald eine Stufe eine Gebühr verlangt."
+              />
+            ) : (
+              <TextField
+                label="Ertragskonto der Gebühr"
+                value={form.feeRevenueAccountNo}
+                onChange={(event) =>
+                  setForm({ ...form, feeRevenueAccountNo: event.target.value })
+                }
+                disabled={!mayConfigure || form.feeBooking === 'ON_DUNNING_ONLY'}
+                invalid={accountComplaint !== null}
+                placeholder="3200"
+                hint={
+                  accountComplaint ??
+                  'Die Kontonummer aus dem Kontenplan, zum Beispiel 3200. Auswählen lässt sie '
+                    + `sich mit dem Recht ${ACCOUNTING_RIGHTS.read}.`
+                }
+              />
+            )}
 
             {!stored.feeBookable && (
               <p className="text-[12px] text-text-secondary">

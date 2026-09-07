@@ -11,7 +11,7 @@ import {
   FISCAL_YEARS_PATH,
   accountingSettingsKey,
 } from '../lib/accounting'
-import type { AccountingSettings, FiscalYear, FiscalYearList } from '../lib/types'
+import type { Account, AccountingSettings, FiscalYear, FiscalYearList, Page } from '../lib/types'
 import { AccountingStatePage } from './AccountingStatePage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -131,18 +131,76 @@ function json(body: unknown) {
   )
 }
 
+/**
+ * What the backend makes of one payload, spelled out here because the contract is unusual.
+ *
+ * <p>A field that is not named stays as it is, and the two values that are ever really cleared
+ * say so with a flag. Written out rather than shortened to «take what came in»: a screen that
+ * sent a stray null would otherwise go on passing while it wiped a neighbour's field in
+ * production (backend ADR-0119, ADR-0127).
+ *
+ * @param body what the mask sent
+ * @returns the settings as they stand afterwards
+ */
+function applyUpdate(body: Record<string, unknown>): AccountingSettings {
+  const next = { ...settings }
+  if (body.clearPostingsLock === true) next.postingsLockedUntil = undefined
+  else if (typeof body.postingsLockedUntil === 'string') {
+    next.postingsLockedUntil = body.postingsLockedUntil
+  }
+  if (body.clearDefaultRevenueAccountNo === true) next.defaultRevenueAccountNo = undefined
+  else if (typeof body.defaultRevenueAccountNo === 'string') {
+    next.defaultRevenueAccountNo = body.defaultRevenueAccountNo
+  }
+  return next
+}
+
+/** The revenue accounts the picker is offered. */
+const REVENUE_ACCOUNTS: Account[] = [
+  {
+    id: 3,
+    accountNumber: '3000',
+    name: 'Warenertrag',
+    accountType: 'REVENUE',
+    orPosition: 'ER_NETTOERLOESE',
+    directPostingAllowed: true,
+    active: true,
+  },
+  {
+    id: 9,
+    accountNumber: '3200',
+    name: 'Dienstleistungsertrag',
+    accountType: 'REVENUE',
+    orPosition: 'ER_NETTOERLOESE',
+    directPostingAllowed: true,
+    active: true,
+  },
+]
+
+function accountPage(): Page<Account> {
+  return {
+    content: REVENUE_ACCOUNTS,
+    page: 0,
+    size: 200,
+    totalElements: REVENUE_ACCOUNTS.length,
+    totalPages: 1,
+    sort: 'accountNumber,asc',
+  }
+}
+
 function stubFetch() {
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     if (method !== 'GET') {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
       written.push({ url, method, body })
-      settings = { ...settings, postingsLockedUntil: body.postingsLockedUntil ?? undefined }
+      settings = applyUpdate(body)
       return json(settings)
     }
     read.push(url)
     if (url.endsWith('/roles')) return json(roles)
     if (url.includes('/fiscal-years')) return json(years)
+    if (url.includes('/accounting/accounts')) return json(accountPage())
     return json(settings)
   })
 }
@@ -238,6 +296,33 @@ async function type(label: string, value: string) {
   })
   await settle()
 }
+
+
+/** The card carrying the given heading, so two «Speichern» buttons stay apart. */
+function panel(title: string): HTMLElement | undefined {
+  return [...container.querySelectorAll('section')].find(
+    (entry) => entry.querySelector('h2')?.textContent === title,
+  ) as HTMLElement | undefined
+}
+
+function panelButton(title: string, text: string): HTMLButtonElement | undefined {
+  return [...(panel(title)?.querySelectorAll('button') ?? [])].find((entry) =>
+    entry.textContent?.includes(text),
+  ) as HTMLButtonElement | undefined
+}
+
+/** Picks an option in one panel the way a person would. */
+async function chooseIn(title: string, value: string) {
+  const select = panel(title)?.querySelector('select') ?? undefined
+  expect(select).toBeDefined()
+  await act(async () => {
+    if (select !== undefined) select.value = value
+    select?.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+}
+
+const ACCOUNT_PANEL = 'Ertragskonto'
 
 describe('AccountingStatePage', () => {
   it('rendersLedgerCurrencyTest', async () => {
@@ -459,5 +544,117 @@ describe('AccountingStatePage', () => {
 
     expect(container.textContent).not.toContain(HINT)
     expect(read.some((url) => url.endsWith('/roles'))).toBe(false)
+  })
+
+  // --- das Vorgabe-Ertragskonto (backend ADR-0127) ---------------------------
+
+  /**
+   * Step 2 of the three-step chain, set here and nowhere else.
+   *
+   * <p>The payload names its own field and nothing else. That is the whole point of the
+   * contract this endpoint carries: three screens write this one row, each knows one field of
+   * it, and a key nobody named must stay untouched.
+   */
+  it('savesTheDefaultRevenueAccountTest', async () => {
+    await render()
+
+    await chooseIn(ACCOUNT_PANEL, '3000')
+    await act(async () => {
+      panelButton(ACCOUNT_PANEL, 'Speichern')?.click()
+    })
+    await settle()
+
+    const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
+    expect(put?.method).toBe('PUT')
+    expect(put?.body).toEqual({ defaultRevenueAccountNo: '3000' })
+  })
+
+  /**
+   * Emptying the field says «leeren» with the flag.
+   *
+   * <p>A payload carrying `defaultRevenueAccountNo: null` without it would be read as
+   * «unverändert», and the tenant would sit in front of an empty field whose default was still
+   * set.
+   */
+  it('clearsTheDefaultRevenueAccountTest', async () => {
+    settings = { ...STORED, defaultRevenueAccountNo: '3200' }
+    await render()
+
+    await chooseIn(ACCOUNT_PANEL, '')
+    await act(async () => {
+      panelButton(ACCOUNT_PANEL, 'Speichern')?.click()
+    })
+    await settle()
+
+    const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
+    expect(put?.body).toEqual({ clearDefaultRevenueAccountNo: true })
+    expect(settings.defaultRevenueAccountNo).toBeUndefined()
+  })
+
+  /**
+   * The proof test of the contract: saving the account leaves the posting lock where it is.
+   *
+   * <p>Read the other way round, this is the fault the flag exists to prevent — a payload that
+   * left the lock out and was read as «leeren» would lift the bolt of a tenant whose bookkeeper
+   * only picked an account.
+   */
+  it('keepsThePostingLockWhileSavingTheAccountTest', async () => {
+    settings = { ...STORED, postingsLockedUntil: '2026-12-31' }
+    await render()
+
+    await chooseIn(ACCOUNT_PANEL, '3000')
+    await act(async () => {
+      panelButton(ACCOUNT_PANEL, 'Speichern')?.click()
+    })
+    await settle()
+
+    const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
+    expect(put?.body).not.toHaveProperty('postingsLockedUntil')
+    expect(put?.body).not.toHaveProperty('clearPostingsLock')
+    expect(settings.postingsLockedUntil).toBe('2026-12-31')
+  })
+
+  /** And the same in the other direction: moving the bolt names no account. */
+  it('keepsTheDefaultRevenueAccountWhileSavingTheLockTest', async () => {
+    settings = { ...STORED, defaultRevenueAccountNo: '3200' }
+    await render()
+
+    await type('Gesperrt bis', '2026-12-31')
+    await act(async () => {
+      button('Speichern')?.click()
+    })
+    await settle()
+
+    const put = written.find((entry) => entry.url.endsWith('/accounting/settings'))
+    expect(put?.body).not.toHaveProperty('defaultRevenueAccountNo')
+    expect(put?.body).not.toHaveProperty('clearDefaultRevenueAccountNo')
+    expect(settings.defaultRevenueAccountNo).toBe('3200')
+  })
+
+  /** The stored account is what the picker opens on, by number and name. */
+  it('rendersTheStoredDefaultRevenueAccountTest', async () => {
+    settings = { ...STORED, defaultRevenueAccountNo: '3200' }
+    await render()
+
+    const select = panel(ACCOUNT_PANEL)?.querySelector('select')
+    expect(select?.value).toBe('3200')
+    expect(panel(ACCOUNT_PANEL)?.textContent).toContain('3200 · Dienstleistungsertrag')
+  })
+
+  /** Reading the settings is one right, setting the account is another. */
+  it('hidesTheDefaultRevenueAccountPickerWithoutConfigureTest', async () => {
+    settings = { ...STORED, defaultRevenueAccountNo: '3200' }
+    await render(READ_ONLY)
+
+    expect(panel(ACCOUNT_PANEL)?.querySelector('select')).toBeNull()
+    // Shown all the same: whoever may read the settings may read what is set.
+    expect(panel(ACCOUNT_PANEL)?.textContent).toContain('3200')
+  })
+
+  /** Nothing set is a state of its own, and it is said rather than left blank. */
+  it('rendersWithoutADefaultRevenueAccountTest', async () => {
+    await render(READ_ONLY)
+
+    expect(panel(ACCOUNT_PANEL)?.textContent).toContain('nicht gesetzt')
   })
 })

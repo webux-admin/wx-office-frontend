@@ -2681,7 +2681,13 @@ export type DunningSettings = {
   feeBooking: FeeBooking
   feeVatMode: FeeVatMode
   feeVatCategory?: string
-  feeRevenueAccountId?: number
+  /**
+   * Revenue account of the fee, as a number out of the chart of accounts.
+   *
+   * <p>A string and not an id: the account travels as a code, and the dunning module stores it
+   * with a format check without ever reading the chart (backend ADR-0127).
+   */
+  feeRevenueAccountNo?: string
   feeDocumentTypeId?: number
   /** Hangs the PDFs of the chased invoices onto a mailed reminder. Off by default. */
   attachInvoiceCopies: boolean
@@ -3396,6 +3402,11 @@ export type AccountingSettings = {
    */
   suggestedEquityLayout?: EquityLayout
   carryForwardAccount?: string
+  /**
+   * The account a document line falls back to when its product names none — step 2 of the
+   * three-step chain (backend ADR-0127). Empty where the tenant has set none.
+   */
+  defaultRevenueAccountNo?: string
   chartSource?: string
   profitAndLossForm?: ProfitAndLossForm
   /** Why this tenant cannot keep books here, in German. Empty where it can. */

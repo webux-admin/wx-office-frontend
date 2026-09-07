@@ -25,6 +25,7 @@ import {
   chartTemplatesKey,
   chartTemplatesUrl,
   fetchPositionSuggestion,
+  isAccountNumber,
   positionSuggestionKey,
   someRoleHoldsAccounting,
   systemKeysKey,
@@ -133,6 +134,45 @@ import type { Account, TaxCode, YearLogLine } from './types'
 function role(permissions: string[]) {
   return { permissions }
 }
+
+describe('isAccountNumber', () => {
+  it('isAccountNumberTest', () => {
+    expect(isAccountNumber('3200')).toBe(true)
+  })
+
+  /** A sub-account carries dots, and the chart of accounts ships some. */
+  it('isAccountNumberWithDotsTest', () => {
+    expect(isAccountNumber('3000.10')).toBe(true)
+  })
+
+  it('isAccountNumberWithOneDigitTest', () => {
+    expect(isAccountNumber('3')).toBe(true)
+  })
+
+  /** Twenty characters is what the column holds; twenty-one is refused. */
+  it('isAccountNumberAtTheLengthLimitTest', () => {
+    expect(isAccountNumber('3'.repeat(20))).toBe(true)
+    expect(isAccountNumber('3'.repeat(21))).toBe(false)
+  })
+
+  /** An empty field is «no account» and is said with an empty payload, not with this. */
+  it('isAccountNumberWithEmptyValueTest', () => {
+    expect(isAccountNumber('')).toBe(false)
+  })
+
+  it('isAccountNumberWithALeadingDotTest', () => {
+    expect(isAccountNumber('.3200')).toBe(false)
+  })
+
+  it('isAccountNumberWithALetterTest', () => {
+    expect(isAccountNumber('A3200')).toBe(false)
+  })
+
+  /** Untrimmed on purpose: whoever asks decides what to do with the blanks. */
+  it('isAccountNumberWithSurroundingBlanksTest', () => {
+    expect(isAccountNumber(' 3200 ')).toBe(false)
+  })
+})
 
 describe('accountingSettingsUrl', () => {
   it('accountingSettingsUrlTest', () => {

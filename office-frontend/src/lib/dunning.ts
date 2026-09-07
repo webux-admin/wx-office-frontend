@@ -107,7 +107,8 @@ export type DunningSettingsBody = {
   feeBooking: FeeBooking
   feeVatMode: FeeVatMode
   feeVatCategory?: string | null
-  feeRevenueAccountId?: number | null
+  /** The fee account as a chart number, `null` to take it off. */
+  feeRevenueAccountNo?: string | null
   feeDocumentTypeId?: number | null
   attachInvoiceCopies: boolean
   noticeBcc?: string | null

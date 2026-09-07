@@ -90,12 +90,6 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
     label: 'Anreden',
     description: 'Wie eine Person angeschrieben wird.',
   },
-  {
-    slug: 'ertragskonten',
-    list: 'revenue-accounts',
-    label: 'Ertragskonten',
-    description: 'Konten, auf die eine Belegzeile gebucht wird. Der Code ist die Kontonummer.',
-  },
 ]
 
 /**

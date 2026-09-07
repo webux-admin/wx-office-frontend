@@ -140,6 +140,29 @@ export function someRoleHoldsAccounting(
 export const CHART_OF_ACCOUNTS_PATH = '/buchhaltung/kontenplan'
 
 /**
+ * The shape of an account number, as every writing border of the backend checks it.
+ *
+ * <p>Digits and dots, beginning with a digit, at most twenty characters — the same
+ * `^[0-9][0-9.]{0,19}$` that stands on the product, on the dunning settings and on these
+ * settings (backend ADR-0127). Held here so a mask that offers a typed field rather than the
+ * picker refuses the same values the backend would, instead of answering 400.
+ */
+const ACCOUNT_NUMBER = /^[0-9][0-9.]{0,19}$/
+
+/**
+ * Whether a typed account number could be stored at all.
+ *
+ * <p>Says nothing about whether the chart of accounts holds it: a number the tenant has since
+ * renumbered stays valid, and only the backend knows the chart.
+ *
+ * @param value what somebody typed, untrimmed
+ * @returns true where the format would pass the backend
+ */
+export function isAccountNumber(value: string): boolean {
+  return ACCOUNT_NUMBER.test(value)
+}
+
+/**
  * Address everything the accounting of one tenant is served under.
  *
  * <p>Exported for `accountingReports.ts`, which builds the addresses of the PDF and the archive
@@ -2464,6 +2487,19 @@ export type AccountingSettingsUpdate = {
    * step away.
    */
   clearPostingStartsOn?: boolean
+  /**
+   * The account a document line falls back to when its product names none — step 2 of the
+   * chain (backend ADR-0127). Left out, the stored default stays as it is.
+   */
+  defaultRevenueAccountNo?: string
+  /**
+   * Takes the default away again, so the chain walks on to the system account.
+   *
+   * <p>Said with a flag and not with an absence, like the two above it: a screen that does not
+   * know this field sends neither key, and an absence read as «leeren» would let it wipe the
+   * default on its way past.
+   */
+  clearDefaultRevenueAccountNo?: boolean
 }
 
 /**

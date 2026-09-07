@@ -35,7 +35,19 @@ describe('basicDataFor', () => {
   })
 
   it('basicDataForLastEntryTest', () => {
-    expect(basicDataFor('ertragskonten')?.list).toBe('revenue-accounts')
+    expect(basicDataFor('anreden')?.list).toBe('salutations')
+  })
+
+  /**
+   * The revenue accounts are no maintained list any more.
+   *
+   * <p>They are numbers out of the chart of accounts, chosen with the account picker
+   * (backend ADR-0127). The endpoint goes on answering and no row is ever deleted —
+   * ten-year-old documents quote those codes — but the screen and its menu entry are gone.
+   */
+  it('basicDataForRetiredRevenueAccountsTest', () => {
+    expect(basicDataFor('ertragskonten')).toBeUndefined()
+    expect(BASIC_DATA_LISTS.map((entry) => entry.list)).not.toContain('revenue-accounts')
   })
 
   /** An address someone typed or a link from an older version of the menu. */
