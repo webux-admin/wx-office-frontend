@@ -3,6 +3,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
+import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import type { DocumentLine } from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
 import type { FreeLine } from './lineForm'
@@ -15,12 +17,52 @@ const TENANT = 1
 let container: HTMLDivElement
 let root: Root
 
+/**
+ * A session, with the modules and rights a case needs.
+ *
+ * <p>Nobody signed in by default: the account field then stays away, which is what every case
+ * written before it existed expects to see.
+ */
+function auth(modules: string[] = [], permissions: string[] = []): AuthState {
+  return {
+    user:
+      modules.length === 0
+        ? null
+        : {
+            userId: 1,
+            username: 'muster',
+            activeTenantId: TENANT,
+            superuser: false,
+            tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+            permissions,
+          },
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    completeSecondFactor: () => Promise.reject(new Error('not in this test')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
+
 /** Answers the two lists the dialog reads, caught at `fetch` rather than at `lib/api`. */
 function stubFetch() {
   vi.stubGlobal('fetch', (url: string) => {
-    const body = url.includes('/catalogues')
-      ? { 'vat-category': [{ code: 'STANDARD', name: 'Normalsatz' }] }
-      : [{ code: 'PIECE', name: 'Stück', shortName: 'Stk', isDefault: true }]
+    const body = url.includes('/accounting/accounts')
+      ? {
+          content: [
+            { id: 1, accountNumber: '3200', name: 'Handelserlöse', accountType: 'REVENUE' },
+            { id: 2, accountNumber: '3400', name: 'Dienstleistungserlöse', accountType: 'REVENUE' },
+          ],
+          page: { number: 0, size: 50, totalElements: 2, totalPages: 1 },
+        }
+      : url.includes('/catalogues')
+        ? { 'vat-category': [{ code: 'STANDARD', name: 'Normalsatz' }] }
+        : [{ code: 'PIECE', name: 'Stück', shortName: 'Stk', isDefault: true }]
     return Promise.resolve(
       new Response(JSON.stringify(body), {
         status: 200,
@@ -52,11 +94,16 @@ type Calls = { sent: FreeLine[] }
  * @param stored the line being edited; left out the dialog adds a new one
  * @param defaultPriceIncludesVat the price base the document is written in
  */
-async function render(stored?: DocumentLine, defaultPriceIncludesVat = false): Promise<Calls> {
+async function render(
+  stored?: DocumentLine,
+  defaultPriceIncludesVat = false,
+  session: AuthState = auth(),
+): Promise<Calls> {
   const calls: Calls = { sent: [] }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
+      <AuthContext.Provider value={session}>
       <QueryClientProvider client={client}>
         <FreeLineDialog
           tenantId={TENANT}
@@ -67,7 +114,8 @@ async function render(stored?: DocumentLine, defaultPriceIncludesVat = false): P
           defaultPriceIncludesVat={defaultPriceIncludesVat}
           busy={false}
         />
-      </QueryClientProvider>,
+      </QueryClientProvider>
+      </AuthContext.Provider>,
     )
   })
   await act(async () => {
@@ -77,6 +125,9 @@ async function render(stored?: DocumentLine, defaultPriceIncludesVat = false): P
 }
 
 const text = () => container.textContent ?? ''
+
+/** A session that keeps books here and may read the chart of accounts. */
+const ACCOUNTING = auth(['ACCOUNTING'], [ACCOUNTING_RIGHTS.read])
 
 function field(label: string): HTMLInputElement | HTMLTextAreaElement {
   const owner = [...container.querySelectorAll('label')].find(
@@ -105,6 +156,28 @@ function button(label: string): HTMLButtonElement {
   )
   if (!found) throw new Error(`Kein Knopf mit der Aufschrift "${label}"`)
   return found
+}
+
+/** The dropdown behind a label, which `field` cannot return: a select is neither. */
+function selectField(label: string): HTMLSelectElement {
+  const owner = [...container.querySelectorAll('label')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  const id = owner?.getAttribute('for')
+  const control = id ? container.querySelector<HTMLSelectElement>(`[id="${id}"]`) : null
+  if (!control) throw new Error(`Keine Auswahl mit der Beschriftung "${label}"`)
+  return control
+}
+
+/** Picks an option the way a browser does. */
+function choose(control: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
+    control,
+    value,
+  )
+  act(() => {
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }
 
 function click(element: HTMLElement) {
@@ -157,6 +230,69 @@ describe('FreeLineDialog', () => {
     // Nothing in the fold, nothing to say about it.
     expect(button('Weitere Angaben').getAttribute('aria-expanded')).toBe('false')
     expect(text()).not.toContain('Leistung ab')
+  })
+
+  it('freeLineDialogWithoutTheAccountingModuleTest', async () => {
+    const calls = await render()
+
+    type(field('Bezeichnung'), 'Anfahrt')
+    type(field('Einzelpreis'), '120')
+    click(button('Hinzufügen'))
+
+    // No module, no field -- and nothing about an account in what goes out.
+    expect(text()).not.toContain('Ertragskonto')
+    expect(calls.sent[0].revenueAccount).toBeUndefined()
+  })
+
+  it('freeLineDialogSendsTheChosenRevenueAccountTest', async () => {
+    const calls = await render(undefined, false, ACCOUNTING)
+
+    type(field('Bezeichnung'), 'Anfahrt')
+    type(field('Einzelpreis'), '120')
+    choose(selectField('Ertragskonto'), '3400')
+    click(button('Hinzufügen'))
+
+    expect(calls.sent[0].revenueAccount).toBe('3400')
+  })
+
+  it('freeLineDialogLeavesTheDefaultUnsentTest', async () => {
+    const calls = await render(undefined, false, ACCOUNTING)
+
+    type(field('Bezeichnung'), 'Anfahrt')
+    type(field('Einzelpreis'), '120')
+    click(button('Hinzufügen'))
+
+    // The field stands on «Vorgabe», and «Vorgabe» is a key that is not sent: an empty string
+    // would be a chosen account, and the backend would look for one under that number.
+    expect(selectField('Ertragskonto').value).toBe('')
+    expect(calls.sent[0]).not.toHaveProperty('revenueAccount')
+  })
+
+  it('freeLineDialogKeepsTheAccountOfTheStoredLineTest', async () => {
+    const calls = await render(
+      {
+        kind: 'ITEM',
+        lineNumber: 1,
+        description: 'Anfahrt',
+        quantity: 1,
+        unit: 'PIECE',
+        unitPrice: 120,
+        priceIncludesVat: false,
+        vatCategory: 'STANDARD',
+        revenueAccount: '3400',
+        lineNet: 120,
+        lineVat: 0,
+        lineGross: 120,
+      },
+      false,
+      ACCOUNTING,
+    )
+
+    click(button('Übernehmen'))
+
+    // What the position shows is what a correction keeps. Starting on «Vorgabe» would move
+    // the line to another account the moment somebody fixes a typo in its description.
+    expect(calls.sent[0].revenueAccount).toBe('3400')
   })
 
   it('freeLineDialogRefusesADiscountThatIsNotANumberTest', async () => {

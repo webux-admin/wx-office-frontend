@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
+import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { originState } from '../../lib/origin'
 import type { DocumentLine, LotProposal, Product, StockEffect } from '../../lib/types'
 import { ProductLineDialog } from './ProductLineDialog'
@@ -148,6 +149,15 @@ function stubFetch() {
         ? json({ detail: 'Kein Satz an diesem Tag.' }, 400)
         : json({ STANDARD: 8.1, REDUCED: 2.6 })
     }
+    if (url.includes('/accounting/accounts')) {
+      return json({
+        content: [
+          { id: 1, accountNumber: '3200', name: 'Handelserlöse', accountType: 'REVENUE' },
+          { id: 2, accountNumber: '3600', name: 'Übrige Erlöse', accountType: 'REVENUE' },
+        ],
+        page: { number: 0, size: 50, totalElements: 2, totalPages: 1 },
+      })
+    }
     if (url.includes('/catalogues')) return json({ 'vat-category': [{ code: 'STANDARD', name: 'Normalsatz' }] })
     // Matched before the single product below, whose path this one carries as well.
     if (url.includes('/lot-proposal')) return json(lotProposal(url))
@@ -189,9 +199,19 @@ function json(body: unknown, status = 200) {
  * <p>The real application always has one; the components ask it before they fire a request
  * that would come back 403 for a user without the right.
  */
-function auth(): AuthState {
+function auth(modules: string[] = [], permissions: string[] = []): AuthState {
   return {
-    user: null,
+    user:
+      modules.length === 0
+        ? null
+        : {
+            userId: 1,
+            username: 'muster',
+            activeTenantId: TENANT,
+            superuser: false,
+            tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+            permissions,
+          },
     loading: false,
     signIn: () => Promise.reject(new Error('not in this test')),
     completeSecondFactor: () => Promise.reject(new Error('not in this test')),
@@ -203,6 +223,9 @@ function auth(): AuthState {
     can: () => true,
   }
 }
+
+/** A session that keeps books here and may read the chart of accounts. */
+const ACCOUNTING = auth(['ACCOUNTING'], [ACCOUNTING_RIGHTS.read])
 
 beforeEach(() => {
   stubFetch()
@@ -271,13 +294,18 @@ function Harness({ line, refused, stock }: { line?: DocumentLine; refused: boole
   )
 }
 
-async function render(line?: DocumentLine, refused = false, stock: Stock = {}): Promise<Calls> {
+async function render(
+  line?: DocumentLine,
+  refused = false,
+  stock: Stock = {},
+  session: AuthState = auth(),
+): Promise<Calls> {
   calls = { sent: [], closed: 0 }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <AuthContext.Provider value={auth()}>
+        <AuthContext.Provider value={session}>
           <QueryClientProvider client={client}>
             <Harness line={line} refused={refused} stock={stock} />
           </QueryClientProvider>
@@ -319,6 +347,30 @@ function button(label: string): HTMLButtonElement {
   )
   if (!found) throw new Error(`Kein Knopf mit der Aufschrift "${label}"`)
   return found
+}
+
+/** The dropdown behind a label: a select is neither an input nor a textarea. */
+function selectField(label: string): HTMLSelectElement {
+  const owner = [...container.querySelectorAll('label')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  const id = owner?.getAttribute('for')
+  const control = id
+    ? container.querySelector<HTMLSelectElement>(`[id="${id}"]`)
+    : null
+  if (!control) throw new Error(`Keine Auswahl mit der Beschriftung "${label}"`)
+  return control
+}
+
+/** Picks an option the way a browser does. */
+function choose(control: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(
+    control,
+    value,
+  )
+  act(() => {
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }
 
 function click(element: HTMLElement) {
@@ -426,6 +478,42 @@ function storedSerialLine(): DocumentLine {
 }
 
 describe('ProductLineDialog', () => {
+  it('productLineDialogWithoutTheAccountingModuleTest', async () => {
+    const calls = await render()
+
+    takeFirstProduct()
+    click(button('Weitere Angaben'))
+
+    // No module, no field, and nothing about an account in what goes out: the position keeps
+    // the one its product names. Asked for the control and not for the word — the fact box
+    // above names the account of the product, and that stays either way.
+    expect(() => selectField('Ertragskonto')).toThrow()
+
+    click(button('Hinzufügen'))
+    expect(calls.sent[0]).not.toHaveProperty('revenueAccount')
+  })
+
+  it('productLineDialogSendsTheChosenRevenueAccountTest', async () => {
+    const calls = await render(undefined, false, {}, ACCOUNTING)
+
+    takeFirstProduct()
+    click(button('Weitere Angaben'))
+    choose(selectField('Ertragskonto'), '3600')
+    click(button('Hinzufügen'))
+
+    expect(calls.sent[0].revenueAccount).toBe('3600')
+  })
+
+  it('productLineDialogLeavesTheAccountOfTheProductUnsentTest', async () => {
+    const calls = await render(undefined, false, {}, ACCOUNTING)
+
+    takeFirstProduct()
+    click(button('Hinzufügen'))
+
+    // Untouched means «the account of the product», and that is a key that is not sent.
+    expect(calls.sent[0]).not.toHaveProperty('revenueAccount')
+  })
+
   it('productLineDialogOpensWithTheFocusInTheSearchTest', async () => {
     await render()
 

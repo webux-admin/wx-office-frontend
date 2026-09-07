@@ -1,12 +1,16 @@
 import { useState } from 'react'
+import { useAuth } from '../../auth/useAuth'
 import { Button } from '../../components/Button'
 import { CheckboxField } from '../../components/CheckboxField'
 import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
 import { TextAreaField } from '../../components/TextAreaField'
 import { TextField } from '../../components/TextField'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { parseDecimal } from '../../lib/format'
+import { useRunsModule } from '../../lib/modules'
 import type { DocumentLine, VatCategory } from '../../lib/types'
+import { AccountSelect } from '../accounting/AccountSelect'
 import { CatalogueSelect } from '../../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import { DiscountPair, MoreDetails, ServiceDateFields } from './LineDialogParts'
@@ -57,6 +61,12 @@ export function FreeLineDialog({
   /** Why the last attempt was refused; the dialog stays open until one goes through. */
   error?: unknown
 }) {
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  // Both, not just the right: a tenant that keeps no books here has no chart to pick from, so
+  // the dropdown would stand empty even though the endpoint itself answers.
+  const showsAccount = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
+
   const [description, setDescription] = useState(line?.description ?? '')
   const [subtitle, setSubtitle] = useState(line?.subtitle ?? '')
   const [note, setNote] = useState(line?.note ?? '')
@@ -76,6 +86,10 @@ export function FreeLineDialog({
   )
   const [from, setFrom] = useState(line?.serviceDateFrom ?? '')
   const [to, setTo] = useState(line?.serviceDateTo ?? '')
+  // Prefilled from the line and not left empty: the position visibly carries an account, and a
+  // field that says «Vorgabe» next to it would move the line the moment somebody corrects the
+  // quantity. What the line shows is what it keeps.
+  const [revenueAccount, setRevenueAccount] = useState(line?.revenueAccount ?? '')
   const [touched, setTouched] = useState(NOTHING_TOUCHED)
 
   const touch = (field: LineField) => setTouched((current) => withTouched(current, field))
@@ -124,6 +138,9 @@ export function FreeLineDialog({
                 priceIncludesVat,
                 serviceDateFrom: from || undefined,
                 serviceDateTo: to || undefined,
+                // The key is left out, not sent empty: «no account» has to mean the fallback
+                // chain, and an empty string would be a chosen one no chart of accounts knows.
+                ...(revenueAccount ? { revenueAccount } : {}),
               })
             }}
           >
@@ -211,6 +228,20 @@ export function FreeLineDialog({
           onChange={(code) => setVatCategory(code as VatCategory)}
           className="sm:col-span-2"
         />
+
+        {/* Only where this tenant keeps books and this session may read them: the dropdown
+            behind it runs on ACCOUNTING_READ and would stand empty otherwise. */}
+        {showsAccount && (
+          <AccountSelect
+            label="Ertragskonto"
+            tenantId={tenantId}
+            value={revenueAccount}
+            onChange={setRevenueAccount}
+            emptyLabel="– Vorgabe –"
+            hint="Leer heisst: das Konto aus der Vorgabe des Mandanten."
+            className="sm:col-span-2"
+          />
+        )}
       </div>
 
       {/* The hint says what breaking the base costs, not what keeping it earns: on a document

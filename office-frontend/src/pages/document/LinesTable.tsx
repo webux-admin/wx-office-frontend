@@ -8,9 +8,12 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
+import { useAuth } from '../../auth/useAuth'
 import { EmptyState } from '../../components/Notice'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { formatAmount, formatPercent, formatQuantity } from '../../lib/format'
 import { shortLabelForCode, type SelectableEntry } from '../../lib/masterData'
+import { useRunsModule } from '../../lib/modules'
 import { exceedsOpenQuantity } from '../../lib/openQuantity'
 import type { DocumentLine, OpenLineQuantity, SalesDocument } from '../../lib/types'
 import { useCatalogueLabel, useMasterDataEntries } from '../../masterdata/useMasterData'
@@ -25,6 +28,7 @@ import { lotSummary } from './lineForm'
 const COLUMNS: { key: string; header: string; right: boolean; width: string }[] = [
   { key: 'position', header: 'Pos', right: false, width: 'w-[60px]' },
   { key: 'description', header: 'Bezeichnung', right: false, width: '' },
+  { key: 'account', header: 'Konto', right: false, width: 'w-[80px]' },
   { key: 'quantity', header: 'Menge', right: true, width: 'w-[110px]' },
   { key: 'open', header: 'Offen', right: true, width: 'w-[90px]' },
   { key: 'unitPrice', header: 'Einzelpreis', right: true, width: 'w-[120px]' },
@@ -43,13 +47,19 @@ const COLUMNS: { key: string; header: string; right: boolean; width: string }[] 
  *
  * @param lines    the lines of the document
  * @param showsOpen whether what is still open on each position is known
+ * @param showsAccount whether this tenant keeps books and this session may read them
  * @returns the columns to draw, in the order they are printed
  */
-function columnsFor(lines: readonly DocumentLine[], showsOpen: boolean) {
+function columnsFor(
+  lines: readonly DocumentLine[],
+  showsOpen: boolean,
+  showsAccount: boolean,
+) {
   return COLUMNS.filter(
     (column) =>
       (column.key !== 'discount' || hasDiscount(lines)) &&
-      (column.key !== 'open' || showsOpen),
+      (column.key !== 'open' || showsOpen) &&
+      (column.key !== 'account' || showsAccount),
   )
 }
 
@@ -137,6 +147,8 @@ export function LinesTable({
    */
   shortfalls?: ReadonlyMap<number, string>
 }) {
+  const { can } = useAuth()
+  const runs = useRunsModule()
   const units = useMasterDataEntries(tenantId, 'units')
   const kindLabel = useCatalogueLabel(tenantId, 'line-kind')
   const lines = document.lines ?? []
@@ -283,7 +295,13 @@ export function LinesTable({
       </td>
     ) : null
 
-  const columns = columnsFor(lines, openOfOwnLines !== undefined)
+  // Both, not just the right: without the module there is no chart of accounts, and a column
+  // of dashes says less than no column at all.
+  const columns = columnsFor(
+    lines,
+    openOfOwnLines !== undefined,
+    runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read),
+  )
   // Everything but "Pos": the span a row uses that has no figures of its own.
   const valueColumns = columns.length - 1
   const totalSpan = valueColumns + (editable ? 1 : 0)
@@ -344,6 +362,7 @@ export function LinesTable({
                 kindLabel={kindLabel}
                 valueColumns={valueColumns}
                 showsDiscount={columns.some((column) => column.key === 'discount')}
+                showsAccount={columns.some((column) => column.key === 'account')}
                 showsOpen={openOfOwnLines !== undefined}
                 open={openOfOwnLines?.get(line.lineNumber)}
                 openOfPredecessor={
@@ -446,6 +465,7 @@ function LineCells({
   kindLabel,
   valueColumns,
   showsDiscount,
+  showsAccount,
   showsOpen,
   open,
   openOfPredecessor,
@@ -462,6 +482,8 @@ function LineCells({
   valueColumns: number
   /** False where no line of this document has a discount, so the column is not drawn. */
   showsDiscount: boolean
+  /** False where the session has no business seeing the chart of accounts. */
+  showsAccount: boolean
   /** False where the open quantities of this document are unknown, so no column is drawn. */
   showsOpen: boolean
   /** What is still open on this very position, when it is known. */
@@ -553,6 +575,14 @@ function LineCells({
           </span>
         )}
       </td>
+      {/* A dash and not an empty cell on a line that carries no account: existing lines from
+          before the chain resolved one are never migrated (backend ADR-0127), and an empty
+          cell reads as a rendering fault. */}
+      {showsAccount && (
+        <td className={`${CELL} font-mono text-[12px] text-text-tertiary`}>
+          {line.revenueAccount ?? '–'}
+        </td>
+      )}
       <td className={NUMBER_CELL}>
         {formatQuantity(line.quantity)}{' '}
         <span className="text-text-tertiary">{shortLabelForCode(units, line.unit)}</span>

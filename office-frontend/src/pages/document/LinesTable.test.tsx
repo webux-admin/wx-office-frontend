@@ -3,6 +3,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
+import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import type {
   DocumentLine,
   DocumentStatus,
@@ -24,6 +26,38 @@ const CATALOGUES = {
 }
 
 const UNITS = [{ code: 'PIECE', name: 'Stück', shortName: 'Stk', isDefault: true }]
+
+/**
+ * A session, with the modules and rights a case needs.
+ *
+ * <p>Nobody signed in by default: the Konto column then stays away, which is what every case
+ * written before the account existed expects to see.
+ */
+function auth(modules: string[] = [], permissions: string[] = []): AuthState {
+  return {
+    user:
+      modules.length === 0
+        ? null
+        : {
+            userId: 1,
+            username: 'muster',
+            activeTenantId: TENANT,
+            superuser: false,
+            tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+            permissions,
+          },
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    completeSecondFactor: () => Promise.reject(new Error('not in this test')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
 
 function line(fields: Partial<DocumentLine> & { lineNumber: number }): DocumentLine {
   return {
@@ -134,9 +168,11 @@ async function draw(
   editable = true,
   busy = false,
   open: OpenProps = {},
+  session: AuthState = auth(),
 ) {
   await act(async () => {
     root.render(
+      <AuthContext.Provider value={session}>
       <QueryClientProvider client={client}>
         <LinesTable
           tenantId={TENANT}
@@ -149,7 +185,8 @@ async function draw(
           openOfOwnLines={open.openOfOwnLines}
           openOfPredecessorLines={open.openOfPredecessorLines}
         />
-      </QueryClientProvider>,
+      </QueryClientProvider>
+      </AuthContext.Provider>,
     )
   })
   for (let round = 0; round < 5; round += 1) {
@@ -162,6 +199,9 @@ async function draw(
 function text(): string {
   return container.textContent ?? ''
 }
+
+/** A session that keeps books here and may read the chart of accounts. */
+const ACCOUNTING = auth(['ACCOUNTING'], [ACCOUNTING_RIGHTS.read])
 
 /** One answer of the open-quantity endpoint, with only the numbers spelled out. */
 function openLine(
@@ -231,6 +271,39 @@ function drag(element: HTMLElement, step: 'dragstart' | 'dragover' | 'drop') {
 }
 
 describe('LinesTable', () => {
+  it('linesTableWithoutTheAccountingModuleTest', async () => {
+    await draw(order(LINES))
+
+    // No module, no chart, no column: a row of dashes would answer a question nobody asked.
+    expect(text()).not.toContain('Konto')
+  })
+
+  it('linesTableShowsTheRevenueAccountTest', async () => {
+    const booked = [
+      line({ ...LINES[0], lineNumber: 1, revenueAccount: '3400' }),
+      // An existing line from before the chain resolved anything: never migrated, because a
+      // finalised line is a booking voucher (backend ADR-0127).
+      line({ lineNumber: 2, description: 'Altbestand', quantity: 1, unit: 'PIECE', unitPrice: 50 }),
+    ]
+
+    await draw(order(booked), true, false, {}, ACCOUNTING)
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    expect(text()).toContain('Konto')
+    // Second cell after the grip and the position number, which is where the column sits.
+    expect(body.rows[0].cells[3].textContent).toBe('3400')
+    // A line from before the chain resolved anything: a dash, never an empty cell.
+    expect(body.rows[1].cells[3].textContent).toBe('–')
+  })
+
+  it('linesTableHidesTheAccountWithoutTheRightTest', async () => {
+    await draw(order(LINES), true, false, {}, auth(['ACCOUNTING']))
+
+    // The module runs, the session may not read the chart: the endpoint behind the column
+    // would answer 403, so the column stays away rather than standing empty.
+    expect(text()).not.toContain('Konto')
+  })
+
   it('linesTableTotalsStandUnderTheLineAmountsTest', async () => {
     await draw(order(LINES))
 

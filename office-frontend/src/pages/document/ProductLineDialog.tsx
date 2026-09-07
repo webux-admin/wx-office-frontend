@@ -5,6 +5,9 @@ import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
 import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
+import { useAuth } from '../../auth/useAuth'
+import { useRunsModule } from '../../lib/modules'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { api } from '../../lib/api'
 import { parseDecimal } from '../../lib/format'
 import { booksStock, tracksLots } from '../../lib/inventory'
@@ -19,6 +22,7 @@ import type {
 import { DiscountPair, MoreDetails, ServiceDateFields } from './LineDialogParts'
 import { ProductFacts } from './ProductFacts'
 import { ProductQuickSearch } from './ProductQuickSearch'
+import { AccountSelect } from '../accounting/AccountSelect'
 import { LotAllocationField } from '../inventory/LotAllocationField'
 import {
   carriedLots,
@@ -102,6 +106,11 @@ export function ProductLineDialog({
    */
   stockEffect?: StockEffect
 }) {
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  // The same pair the free-line dialog and the product mask use.
+  const showsAccount = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
+
   const [picked, setPicked] = useState<Product | undefined>(undefined)
   // True while the field names a product rather than a search term. A line being edited opens
   // that way; typing over the name gives the product up until another one is picked.
@@ -111,6 +120,9 @@ export function ProductLineDialog({
   const [discount, setDiscount] = useState(discountFieldsOf(line))
   const [from, setFrom] = useState(line?.serviceDateFrom ?? '')
   const [to, setTo] = useState(line?.serviceDateTo ?? '')
+  // Prefilled from the line for the same reason as in the free-line dialog: what the position
+  // shows is what a correction keeps, whether the account came from the product or was chosen.
+  const [revenueAccount, setRevenueAccount] = useState(line?.revenueAccount ?? '')
   // The numbers this position moves, counted in pieces, and the product they were picked for.
   // Held here because the field that collects them is the inventory's and knows nothing about
   // a document line. The sign is put on when they are read — a position can still turn from an
@@ -234,6 +246,8 @@ export function ProductLineDialog({
       ...(allowsDiscount ? discountPayload(discount) : {}),
       serviceDateFrom: from || undefined,
       serviceDateTo: to || undefined,
+      // Left out rather than sent empty: it has to mean the account of the product.
+      ...(revenueAccount ? { revenueAccount } : {}),
       // Left out rather than sent empty: the server refuses any entry on a product nobody
       // follows, and an empty array would be one.
       ...(numbers.length === 0 ? {} : { lots: numbers }),
@@ -472,6 +486,22 @@ export function ProductLineDialog({
           <div className="mt-4">
             <ServiceDateFields from={from} to={to} onFrom={setFrom} onTo={setTo} />
           </div>
+
+          {/* Under «Weitere Angaben» and not in the body above: a catalogue line gets its
+              account from the product, and naming another one is the exception. The free-line
+              dialog carries the field in its body because a free line has no product to ask. */}
+          {showsAccount && (
+            <div className="mt-4 sm:max-w-[50%]">
+              <AccountSelect
+                label="Ertragskonto"
+                tenantId={tenantId}
+                value={revenueAccount}
+                onChange={setRevenueAccount}
+                emptyLabel="– Konto des Produkts –"
+                hint="Leer heisst: das Konto aus Produkt oder Vorgabe."
+              />
+            </div>
+          )}
         </MoreDetails>
 
         <p className="mt-4 text-[11px] text-text-tertiary">

@@ -34,6 +34,12 @@ export type ProductLine = {
    * a product nobody follows (backend ADR-0069).
    */
   lots?: LineLotEntry[]
+  /**
+   * The account this position is booked to, as a number out of the chart of accounts. Left
+   * out it is the account of the product, and the tenant default behind it; a number sent
+   * here wins over both (backend ADR-0127).
+   */
+  revenueAccount?: string
 }
 
 /**
@@ -69,6 +75,12 @@ export type FreeLine = {
   serviceDateTo?: string
   /** Where the line goes; left out it is appended. Never sent when a line is edited. */
   position?: number
+  /**
+   * The account this position is booked to, as a number out of the chart of accounts. Left
+   * out it is the tenant default. A free line has no product, so this is the only place its
+   * account can be named (backend ADR-0127).
+   */
+  revenueAccount?: string
 }
 
 /** The kinds of line that shape the document instead of charging for something. */
