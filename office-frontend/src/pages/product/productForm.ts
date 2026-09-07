@@ -34,6 +34,11 @@ export type ProductForm = {
   eanCode: string
   discountable: boolean
   active: boolean
+  /**
+   * Account number out of the chart, empty for «the account of the tenant applies». Filled
+   * from the stored product even where the mask hides the field, because every save sends it
+   * back and an absent one clears the stored account.
+   */
   revenueAccount: string
   vatCategory: VatCategory
   /** Whether the stock of this product is followed at all. Only goods may. */
@@ -161,6 +166,11 @@ export function toFreeFieldPayload(
  * article number as well, and there it has a consequence worth knowing: an emptied number is
  * absent from the payload, so the update keeps the stored one. The number can be replaced
  * but not removed — which is what the mask says at the field.
+ *
+ * <p><b>The revenue account is one the mask must not lose.</b> Unlike the article number the
+ * backend replaces the stored account with whatever the payload carries, so a save that leaves
+ * it out clears it. A mask that hides the field — a clerk without a bookkeeping right sees none
+ * — therefore has to keep the stored number in the form, which {@link toForm} does.
  *
  * <p>Whether the product is still offered is **not** part of it. That flag has its own
  * endpoint and its own right, so a master data payload cannot change it on the side.

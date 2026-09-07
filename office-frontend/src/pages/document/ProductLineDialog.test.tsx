@@ -26,7 +26,6 @@ const PRODUCTS: Product[] = [
     unit: 'HOUR',
     unitLabel: 'Std',
     revenueAccount: '3400',
-    revenueAccountLabel: 'Dienstleistungsertrag',
     vatCategory: 'STANDARD',
     tracking: 'NONE',
   },
@@ -520,8 +519,8 @@ describe('ProductLineDialog', () => {
     await settle(0)
 
     expect(text()).toContain('Std')
+    // The bare account number: the product endpoint carries no name for it any more.
     expect(text()).toContain('3400')
-    expect(text()).toContain('Dienstleistungsertrag')
     expect(text()).toContain('8.1 %')
     // The resolved price of this customer, and the rule that decided it.
     expect(text()).toContain('120.00 CHF')

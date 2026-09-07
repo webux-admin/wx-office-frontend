@@ -515,9 +515,21 @@ export type Product = {
   unitId?: number
   unit: string
   unitLabel?: string
-  revenueAccountId?: number
+  /**
+   * Always `null`. The revenue account left the maintained list and lives in the chart of
+   * accounts, where it is addressed by its number; it is kept in the payload until the
+   * backend drops it, and nothing here may read it any more.
+   */
+  revenueAccountId?: null
+  /**
+   * The account lines with this product are booked to, as a **number out of the chart**.
+   *
+   * <p>Empty means the account from the tenant settings applies. Always sent back on a save:
+   * a payload without it clears the stored account.
+   */
   revenueAccount?: string
-  revenueAccountLabel?: string
+  /** Always `null`, for the same reason as {@link revenueAccountId}. */
+  revenueAccountLabel?: null
   vatCategory?: VatCategory
   /**
    * Read-only: the base price in force today, read from `prices`.

@@ -71,12 +71,10 @@ export function ProductFacts({
   const facts: Fact[] = []
   if (product !== undefined) {
     facts.push({ label: 'Einheit', value: product.unitLabel ?? product.unit })
+    // The bare number, without a name beside it: the account is one out of the chart now, and
+    // the product endpoint carries no label for it any more.
     if (product.revenueAccount) {
-      facts.push({
-        label: 'Ertragskonto',
-        value: product.revenueAccount,
-        hint: product.revenueAccountLabel,
-      })
+      facts.push({ label: 'Ertragskonto', value: product.revenueAccount })
     }
     const vat = vatOf(product.vatCategory)
     if (vat !== undefined) {

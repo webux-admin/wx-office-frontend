@@ -12,6 +12,7 @@ import { Tabs } from '../components/Tabs'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
 import { INVENTORY_MODULE } from '../lib/inventory'
 import { useRunsModule } from '../lib/modules'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -28,6 +29,7 @@ import type {
 } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
+import { AccountSelect } from './accounting/AccountSelect'
 import { ProductFreeFields } from './product/ProductFreeFields'
 import { ProductPrices } from './product/ProductPrices'
 import { ProductStock } from './product/ProductStock'
@@ -144,6 +146,12 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
       : []),
     ...(freeFields.length === 0 ? [] : [{ id: 'freifelder' as const, label: 'Freifelder' }]),
   ]
+
+  // Whether the revenue account is offered at all. Both answers again, and for the same two
+  // reasons as the stock: the chart of accounts is read with `ACCOUNTING_READ`, so a clerk
+  // holding only the product rights would be shown a dropdown that answers 403 — and a tenant
+  // that keeps no books here has no chart to pick from (backend ADR-0119).
+  const showsRevenueAccount = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
 
   // Which register is actually shown. Derived rather than corrected in an effect: a register
   // can disappear under the mask — the module gets switched off in another tab, the last free
@@ -437,17 +445,21 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                 }
               />
 
-              <MasterDataSelect
-                label="Ertragskonto"
-                tenantId={tenantId}
-                list="revenue-accounts"
-                value={form.revenueAccount}
-                storedLabel={product?.revenueAccountLabel}
-                onChange={(code) => set('revenueAccount', code)}
-                disabled={!mayWrite}
-                emptyLabel="Konto des Mandanten"
-                hint="Leer heisst: das Konto aus den Mandanteneinstellungen gilt."
-              />
+              {/* Hidden, never emptied: `form.revenueAccount` still carries what the product
+                  stored, and `toPayload` sends it back untouched. A payload without
+                  `revenueAccount` clears the stored account, so a clerk without a bookkeeping
+                  right would otherwise wipe it off every article they correct. */}
+              {showsRevenueAccount && (
+                <AccountSelect
+                  label="Ertragskonto"
+                  tenantId={tenantId}
+                  value={form.revenueAccount}
+                  onChange={(code) => set('revenueAccount', code)}
+                  disabled={!mayWrite}
+                  emptyLabel="Konto des Mandanten"
+                  hint="Leer heisst: das Konto aus den Mandanteneinstellungen gilt."
+                />
+              )}
             </div>
           </Panel>
         )}
