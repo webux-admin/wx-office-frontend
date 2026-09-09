@@ -18,6 +18,7 @@ import {
   ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
+  RECONCILIATION_PATH,
   CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   JOURNAL_PATH,
@@ -62,6 +63,7 @@ const AccountSheetPage = lazy(() => import('./pages/accounting/AccountSheetPage'
 const BalanceSheetPage = lazy(() => import('./pages/BalanceSheetPage').then((module) => ({ default: module.BalanceSheetPage })))
 const ClosingPage = lazy(() => import('./pages/ClosingPage').then((module) => ({ default: module.ClosingPage })))
 const IncomeStatementPage = lazy(() => import('./pages/IncomeStatementPage').then((module) => ({ default: module.IncomeStatementPage })))
+const ReconciliationPage = lazy(() => import('./pages/accounting/ReconciliationPage').then((module) => ({ default: module.ReconciliationPage })))
 const AccountingSetupPage = lazy(() => import('./pages/AccountingSetupPage').then((module) => ({ default: module.AccountingSetupPage })))
 const AccountingArchivePage = lazy(() => import('./pages/accounting/AccountingArchivePage').then((module) => ({ default: module.AccountingArchivePage })))
 const AccountingIntegrityPage = lazy(() => import('./pages/accounting/AccountingIntegrityPage').then((module) => ({ default: module.AccountingIntegrityPage })))
@@ -244,6 +246,7 @@ export default function App() {
                 <Route path="/buchhaltung/konten/:accountId" element={<AccountSheetPage />} />
                 <Route path={BALANCE_SHEET_PATH} element={<BalanceSheetPage />} />
                 <Route path={INCOME_STATEMENT_PATH} element={<IncomeStatementPage />} />
+                <Route path={RECONCILIATION_PATH} element={<ReconciliationPage />} />
                 <Route path={CLOSING_PATH} element={<ClosingPage />} />
                 {/* The wizard has no menu entry: it is reached from the three empty states of
                     the accounting group and from the fiscal year screen. */}

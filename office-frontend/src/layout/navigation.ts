@@ -64,6 +64,7 @@ import {
   ACCOUNTING_SETTINGS_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
+  RECONCILIATION_PATH,
   CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   DRAFT_PATH,
@@ -486,6 +487,16 @@ export const NAV_GROUPS: NavGroup[] = [
         href: INCOME_STATEMENT_PATH,
         permission: ACCOUNTING_RIGHTS.read,
         module: ACCOUNTING_MODULE,
+      },
+      // After the two statements and before the close: the reconciliation is what somebody
+      // reads every month, and what the close asks about in its step 3a. On `ACCOUNTING_READ`
+      // and **without** a module switch, like the archive — switching the bookkeeping off
+      // closes the writing ways and must not hide what stands open (OR Art. 958f).
+      {
+        label: 'Abstimmung',
+        icon: Scale,
+        href: RECONCILIATION_PATH,
+        permission: ACCOUNTING_RIGHTS.read,
       },
       // After the two statements, because the close is what is done once they read right — and
       // before the archive, because the archive is what is left when everything is done.

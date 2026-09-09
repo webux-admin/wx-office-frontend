@@ -19,12 +19,13 @@ import {
   fiscalYearsKey,
   trialBalanceKey,
 } from '../../lib/accounting'
-import { formatAmount, toIsoDate } from '../../lib/format'
+import { formatAmount } from '../../lib/format'
 import { originState } from '../../lib/origin'
 import { listQuery, PAGE_SIZE } from '../../lib/paging'
-import type { FiscalYear, TrialBalanceRow } from '../../lib/types'
+import type { TrialBalanceRow } from '../../lib/types'
 import { AccountingNotices } from './AccountingNotices'
 import { ReportToolbar } from './ReportToolbar'
+import { defaultYearOf } from './fiscalYears'
 
 /**
  * «Konten»: every account of the chart with its two sums, and the proof underneath.
@@ -254,10 +255,3 @@ function Balances({ tenantId }: { tenantId: number }) {
   )
 }
 
-/** The year today falls into, and the latest one where today falls into none. */
-function defaultYearOf(years: readonly FiscalYear[]): FiscalYear | undefined {
-  const today = toIsoDate()
-  const running = years.find((year) => year.startDate <= today && today <= year.endDate)
-  if (running !== undefined) return running
-  return [...years].sort((one, other) => one.endDate.localeCompare(other.endDate)).at(-1)
-}

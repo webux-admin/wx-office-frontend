@@ -26,13 +26,14 @@ import {
   reversalReasonRoom,
   reverseEntry,
 } from '../lib/accounting'
-import { formatAmount, formatDate, formatDateTime, toIsoDate } from '../lib/format'
+import { formatAmount, formatDate, formatDateTime } from '../lib/format'
 import { selectOptions } from '../lib/masterData'
 import { optionalOriginOf } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
-import type { EntryLine, FiscalYear, JournalRow } from '../lib/types'
+import type { EntryLine, JournalRow } from '../lib/types'
 import { useCatalogue } from '../masterdata/useMasterData'
 import { ReportToolbar } from './accounting/ReportToolbar'
+import { defaultYearOf } from './accounting/fiscalYears'
 
 /**
  * «Journal»: everything that is in the books, in the order it was written.
@@ -611,19 +612,6 @@ function counterOf(
   row: JournalRow,
 ): JournalRow | undefined {
   return rows.find((candidate) => candidate.reversesEntryId === row.id)
-}
-
-/**
- * The year the journal opens on: the one today falls into, and the latest one otherwise.
- *
- * @param years the fiscal years of the tenant, in any order
- * @returns the year to preselect, or undefined where the tenant has none
- */
-function defaultYearOf(years: readonly FiscalYear[]): FiscalYear | undefined {
-  const today = toIsoDate()
-  const running = years.find((year) => year.startDate <= today && today <= year.endDate)
-  if (running !== undefined) return running
-  return [...years].sort((one, other) => one.endDate.localeCompare(other.endDate)).at(-1)
 }
 
 /**

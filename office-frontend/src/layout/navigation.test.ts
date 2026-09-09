@@ -6,6 +6,7 @@ import {
   ACCOUNTING_SETUP_PATH,
   ACCOUNT_BALANCE_PATH,
   BALANCE_SHEET_PATH,
+  RECONCILIATION_PATH,
   CLOSING_PATH,
   INCOME_STATEMENT_PATH,
   DRAFT_PATH,
@@ -941,6 +942,7 @@ describe('the accounting group', () => {
       'Konten',
       'Bilanz',
       'Erfolgsrechnung',
+      'Abstimmung',
       'Abschluss',
       'Archiv',
     ])
@@ -951,6 +953,7 @@ describe('the accounting group', () => {
       ACCOUNT_BALANCE_PATH,
       BALANCE_SHEET_PATH,
       INCOME_STATEMENT_PATH,
+      RECONCILIATION_PATH,
       CLOSING_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
@@ -963,6 +966,7 @@ describe('the accounting group', () => {
     // closing right would leave a bookkeeper unable to see whether the year is closed at all.
     expect(entries.map((entry) => entry.permission)).toEqual([
       ACCOUNTING_RIGHTS.write,
+      ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
@@ -999,19 +1003,21 @@ describe('the accounting group', () => {
   })
 
   /**
-   * <b>The archive carries no module, and every other entry of the group does.</b> That one
-   * missing field is what keeps the books reachable after the switch goes off: GeBüV Art. 6
-   * Abs. 1 wants a person holding the read right to be able to look at them within a reasonable
-   * time, and a fiduciary hired afterwards could otherwise never get at them.
+   * <b>Two entries carry no module, not one.</b> The archive keeps the books readable after the
+   * switch went off (GeBüV Art. 6 Abs. 1), and the reconciliation says what stands open — it is
+   * exactly then that somebody asks (OR Art. 958f, backend ADR-0119).
    */
   it('archiveEntryHasNoModuleTest', () => {
     const entries = flattenNav(group()?.entries ?? [])
 
     const archive = entries.find((entry) => entry.href === ACCOUNTING_ARCHIVE_PATH)
     expect(archive?.module).toBeUndefined()
+    const reconciliation = entries.find((entry) => entry.href === RECONCILIATION_PATH)
+    expect(reconciliation?.module).toBeUndefined()
     expect(
       entries
         .filter((entry) => entry.href !== ACCOUNTING_ARCHIVE_PATH)
+        .filter((entry) => entry.href !== RECONCILIATION_PATH)
         .map((entry) => entry.module),
     ).toEqual([
       'ACCOUNTING',
@@ -1067,6 +1073,7 @@ describe('the accounting group', () => {
     const group = withoutAccounting.find((candidate) => candidate.title === 'Buchhaltung')
     expect(group).toBeDefined()
     expect(flattenNav(group?.entries ?? []).map((entry) => entry.href)).toEqual([
+      RECONCILIATION_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])
     const reachable = withoutAccounting
@@ -1110,6 +1117,7 @@ describe('the accounting group', () => {
       ACCOUNT_BALANCE_PATH,
       BALANCE_SHEET_PATH,
       INCOME_STATEMENT_PATH,
+      RECONCILIATION_PATH,
       CLOSING_PATH,
       ACCOUNTING_ARCHIVE_PATH,
     ])

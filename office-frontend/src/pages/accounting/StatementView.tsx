@@ -20,9 +20,10 @@ import {
 } from '../../lib/accounting'
 import { api } from '../../lib/api'
 import { downloadFile } from '../../lib/files'
-import { formatAmount, formatDate, toIsoDate } from '../../lib/format'
+import { formatAmount, formatDate } from '../../lib/format'
 import { originState } from '../../lib/origin'
-import type { FiscalYear, Statement, StatementRow } from '../../lib/types'
+import type { Statement, StatementRow } from '../../lib/types'
+import { defaultYearOf } from './fiscalYears'
 import { ReportToolbar } from './ReportToolbar'
 import {
   columnDateOf,
@@ -321,13 +322,6 @@ function accountPathOf(row: StatementRow): string | undefined {
   return accountSheetPath(row.accountId)
 }
 
-/** The year today falls into, and the latest one where today falls into none. */
-function defaultYearOf(years: readonly FiscalYear[]): FiscalYear | undefined {
-  const today = toIsoDate()
-  const running = years.find((year) => year.startDate <= today && today <= year.endDate)
-  if (running !== undefined) return running
-  return [...years].sort((one, other) => one.endDate.localeCompare(other.endDate)).at(-1)
-}
 
 /**
  * Fetches the archive of the year and hands it to the download folder.

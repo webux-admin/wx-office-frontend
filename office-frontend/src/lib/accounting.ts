@@ -995,6 +995,109 @@ export function accountSheetPath(accountId: number): string {
 /** Path of the balance sheet within the application. */
 export const BALANCE_SHEET_PATH = '/buchhaltung/bilanz'
 
+
+/**
+ * Path of the reconciliation report.
+ *
+ * <p><b>Its route carries no `module`</b>, like the archive: switching the bookkeeping off
+ * closes the writing ways and must not hide what stands open. It is exactly then that somebody
+ * asks (OR Art. 958f, backend ADR-0119).
+ */
+export const RECONCILIATION_PATH = '/buchhaltung/abstimmung'
+
+/** One collective account, held against the subsidiary ledger behind it. */
+export type ReconciliationRow = {
+  systemKey: string
+  /** Absent where the tenant has not assigned the key — then nothing was compared either. */
+  accountNumber?: string
+  accountName?: string
+  ledgerAmount?: number
+  subsidiaryAmount?: number
+  /**
+   * Ledger minus subsidiary ledger, absent where one of the two is missing.
+   *
+   * <p>Absent and **never zero** in that case: a difference of nothing where nothing was
+   * compared reads as «geprüft und in Ordnung», which is the worse answer.
+   */
+  difference?: number
+  /** Why nothing was compared, absent where it was. */
+  reason?: string
+  /** Whether the two were compared and agree. */
+  balanced: boolean
+}
+
+/** The reconciliation report of one day. */
+export type Reconciliation = {
+  asOf?: string
+  rows: ReconciliationRow[]
+}
+
+/** One record of a subsidiary ledger that never reached the ledger. */
+export type UnpostedSource = {
+  sourceKind: string
+  sourceId: number
+  /** What it is called in the subsidiary ledger — a document number, a reference. */
+  reference: string
+  day: string
+  amount: number
+}
+
+/**
+ * @param tenantId the tenant
+ * @param query the year and the cut-off day, as a query string without the `?`
+ * @returns the key the report is cached under
+ */
+export function reconciliationKey(tenantId: number, query: string): readonly unknown[] {
+  return ['accounting-reconciliation', tenantId, query]
+}
+
+/**
+ * Holds every collective account against the subsidiary ledger behind it.
+ *
+ * <p>Answers while the module is off, like every other evaluation.
+ */
+export function fetchReconciliation(tenantId: number, query: string): Promise<Reconciliation> {
+  return api.get<Reconciliation>(
+    `${accountingUrl(tenantId)}/reconciliation${query === '' ? '' : `?${query}`}`,
+  )
+}
+
+/**
+ * @param tenantId the tenant
+ * @param systemKey the collective account
+ * @param query the year and the cut-off day
+ * @returns the key one expansion is cached under
+ */
+export function reconciliationDetailKey(
+  tenantId: number,
+  systemKey: string,
+  what: string,
+  query: string,
+): readonly unknown[] {
+  return ['accounting-reconciliation', tenantId, systemKey, what, query]
+}
+
+/** The hand entries that stand on one collective account. */
+export function fetchManualEntriesOn(
+  tenantId: number,
+  systemKey: string,
+  query: string,
+): Promise<Page<JournalRow>> {
+  return api.get<Page<JournalRow>>(
+    `${accountingUrl(tenantId)}/reconciliation/${systemKey}/manual-entries?${query}`,
+  )
+}
+
+/** The records of one subsidiary ledger that never reached the ledger. */
+export function fetchSourcesWithoutEntry(
+  tenantId: number,
+  systemKey: string,
+  query: string,
+): Promise<UnpostedSource[]> {
+  return api.get<UnpostedSource[]>(
+    `${accountingUrl(tenantId)}/reconciliation/${systemKey}/sources-without-entry?${query}`,
+  )
+}
 /** Path of the income statement within the application. */
 export const INCOME_STATEMENT_PATH = '/buchhaltung/erfolgsrechnung'
 
