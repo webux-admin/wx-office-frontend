@@ -86,7 +86,6 @@ type TenantForm = {
   overpaymentRoundingLimit: string
   overpaymentKeepLimit: string
   overpaymentKeepMaximum: string
-  defaultRevenueAccount: string
   invoiceFooterText: string
 }
 
@@ -129,7 +128,6 @@ function initial(tenant: Tenant | null): TenantForm {
     overpaymentRoundingLimit: tenant?.overpaymentRoundingLimit?.toString() ?? '0.05',
     overpaymentKeepLimit: tenant?.overpaymentKeepLimit?.toString() ?? '1.00',
     overpaymentKeepMaximum: tenant?.overpaymentKeepMaximum?.toString() ?? '5.00',
-    defaultRevenueAccount: tenant?.defaultRevenueAccount ?? '',
     invoiceFooterText: tenant?.invoiceFooterText ?? '',
   }
 }
@@ -214,7 +212,6 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     overpaymentRoundingLimit: parseDecimal(form.overpaymentRoundingLimit) ?? undefined,
     overpaymentKeepLimit: parseDecimal(form.overpaymentKeepLimit) ?? undefined,
     overpaymentKeepMaximum: parseDecimal(form.overpaymentKeepMaximum) ?? undefined,
-    defaultRevenueAccount: form.defaultRevenueAccount || undefined,
     invoiceFooterText: form.invoiceFooterText.trim() || undefined,
     // Neither the module switch nor the two count thresholds are sent any more. They live on
     // «Systemeinstellungen → Module», and a payload that leaves a field out changes nothing
@@ -569,17 +566,11 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 disabled={!mayWrite || creating}
                 hint={creating ? AFTER_CREATION : 'Vorgabe für neue Belege.'}
               />
-              <MasterDataSelect
-                label="Ertragskonto"
-                tenantId={tenantId}
-                list="revenue-accounts"
-                value={form.defaultRevenueAccount}
-                storedLabel={tenant?.defaultRevenueAccountLabel}
-                onChange={(code) => set('defaultRevenueAccount', code)}
-                disabled={!mayWrite || creating}
-                emptyLabel="Ohne Vorgabe"
-                hint={creating ? AFTER_CREATION : 'Gilt, wo eine Zeile kein eigenes Konto trägt.'}
-              />
+              {/* The revenue account is gone from here. It is a number out of the chart of
+                  accounts now, not a value of a maintained list, and it is set under
+                  «Buchhaltung → Einstellungen». The backend stopped taking it from this payload
+                  in the same step, so a control left standing here would swallow what somebody
+                  typed into it (backend ADR-0127). */}
               <CheckboxField
                 label="Rappenrundung"
                 hint="Rundet den Endbetrag auf das eingestellte Vielfache."
