@@ -14,7 +14,10 @@ import { Tabs } from '../components/Tabs'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { formatAmount, formatDate } from '../lib/format'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
 import { BANKING_MODULE, referenceLabel } from '../lib/banking'
+import { useRunsModule } from '../lib/modules'
+import { AccountBookingDialog } from './banking/AccountBookingDialog'
 import { CONFIDENCE_NAMES, CONFIDENCE_TONES } from '../lib/matching'
 import {
   CLEARING_RIGHTS,
@@ -83,6 +86,12 @@ function Clearing({ tenantId }: { tenantId: number }) {
   const [runDialog, setRunDialog] = useState(false)
   const [runResult, setRunResult] = useState<MatchRunResult | null>(null)
   const [withdrawing, setWithdrawing] = useState<WorklistRow | null>(null)
+  const [booking, setBooking] = useState<WorklistRow | null>(null)
+
+  const runs = useRunsModule()
+  // Both, not just the right: without the module there is no chart to book onto. The basket
+  // itself hangs on BANKING and stays usable either way.
+  const mayBookToAccount = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.post)
 
   const query = {
     state: 'NEW',
@@ -447,10 +456,28 @@ function Clearing({ tenantId }: { tenantId: number }) {
                     </p>
                   )}
                   {tab === 'sonstiges' && (
-                    <p className="pb-5 text-[13px] text-text-secondary">
-                      Vorauszahlung, Ausbuchen und Rückstellung führen über die bestehenden
-                      Vorgänge — sie sind hier noch nicht verdrahtet.
-                    </p>
+                    <div className="grid gap-3 pb-5">
+                      <p className="text-[13px] text-text-secondary">
+                        Nicht jeder Eingang gehört zu einer Rechnung. Was ohne Beleg dieses
+                        Hauses kam, wird direkt auf ein Konto der Buchhaltung gebucht — es
+                        entsteht keine Ausgleichszeile und kein offener Posten bewegt sich.
+                      </p>
+                      {mayBookToAccount ? (
+                        <span>
+                          <Button variant="secondary" onClick={() => setBooking(open)}>
+                            Auf ein Konto buchen
+                          </Button>
+                        </span>
+                      ) : (
+                        <p className="text-[12px] text-text-tertiary">
+                          Dafür braucht es das Buchhaltungsmodul und das Recht «Buchen».
+                        </p>
+                      )}
+                      <p className="text-[12px] text-text-tertiary">
+                        Vorauszahlung, Ausbuchen und Rückstellung führen über die bestehenden
+                        Vorgänge — sie sind hier noch nicht verdrahtet.
+                      </p>
+                    </div>
                   )}
                 </div>
               </Panel>
@@ -472,6 +499,35 @@ function Clearing({ tenantId }: { tenantId: number }) {
         importId={rows.at(0)?.importId}
       />
 
+
+      {/* Every row of the basket is a credit — the worklist query filters on it — so the
+          direction is known without asking the row for it. */}
+      <AccountBookingDialog
+        open={booking !== null}
+        tenantId={tenantId}
+        movement={
+          booking === null
+            ? null
+            : {
+                id: booking.id,
+                amount: booking.amount,
+                currency: booking.currencyCode,
+                creditDebit: 'CRDT',
+                accountIban: booking.accountIban,
+                bookingDate: booking.bookingDate,
+                valueDate: booking.valueDate,
+                debtorName: booking.debtorName,
+                remittanceUnstructured: booking.remittanceUnstructured,
+              }
+        }
+        onClose={() => setBooking(null)}
+        onSaved={(entryNumber) => {
+          setAnnouncement(`Bankposten gebucht, Journalnummer ${entryNumber}`)
+          setOpenId(null)
+          void queryClient.invalidateQueries({ queryKey: worklistKey(tenantId) })
+          void queryClient.invalidateQueries({ queryKey: worklistCountKey(tenantId) })
+        }}
+      />
       <WithdrawDialog
         tenantId={tenantId}
         row={withdrawing}

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '../components/Badge'
+import { Button } from '../components/Button'
 import { DataTable, type Column } from '../components/DataTable'
 import { CheckboxField } from '../components/CheckboxField'
 import { EmptyState } from '../components/Notice'
@@ -9,8 +10,13 @@ import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
 import { TextField } from '../components/TextField'
+import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { formatAmount, formatDate } from '../lib/format'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
+import { useRunsModule } from '../lib/modules'
+import { AccountBookingDialog } from './banking/AccountBookingDialog'
+import { WithdrawAccountBookingDialog } from './banking/WithdrawAccountBookingDialog'
 import {
   BANKING_RIGHTS,
   TRANSACTION_STATES,
@@ -53,6 +59,16 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [creditsOnly, setCreditsOnly] = useState(false)
+  const [booking, setBooking] = useState<BankTransaction | null>(null)
+  const [withdrawing, setWithdrawing] = useState<BankTransaction | null>(null)
+  const [announcement, setAnnouncement] = useState('')
+
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  const queryClient = useQueryClient()
+  // Both, not just the right: without the module there is no chart to book onto. The list
+  // itself hangs on BANKING and stays usable either way.
+  const mayBookToAccount = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.post)
 
   const query = {
     importId: importId === null ? undefined : Number(importId),
@@ -160,6 +176,34 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
     },
   ]
 
+  // Only where this tenant keeps books here and the session may post. A movement that is
+  // assigned to an invoice is out of both ways: it is already in the ledger through its
+  // settlement line, and the way back for that one is the withdrawal of the assignment.
+  if (mayBookToAccount) {
+    columns.push({
+      key: 'account-booking',
+      header: '',
+      align: 'right',
+      render: (item) => {
+        if (item.state === 'ACCOUNTED') {
+          return (
+            <Button variant="secondary" onClick={() => setWithdrawing(item)}>
+              Zurücknehmen
+            </Button>
+          )
+        }
+        if (item.state === 'MATCHED' || item.state === 'POSTED') {
+          return null
+        }
+        return (
+          <Button variant="secondary" onClick={() => setBooking(item)}>
+            Auf Konto buchen
+          </Button>
+        )
+      },
+    })
+  }
+
   return (
     <>
       <PageHeader
@@ -237,6 +281,32 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
           />
         </Panel>
       </div>
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
+      <AccountBookingDialog
+        open={booking !== null}
+        tenantId={tenantId}
+        movement={booking}
+        onClose={() => setBooking(null)}
+        onSaved={(entryNumber) => {
+          setAnnouncement(`Bankposten gebucht, Journalnummer ${entryNumber}`)
+          void queryClient.invalidateQueries({ queryKey: bankTransactionsKey(tenantId) })
+        }}
+      />
+
+      <WithdrawAccountBookingDialog
+        open={withdrawing !== null}
+        tenantId={tenantId}
+        movement={withdrawing}
+        onClose={() => setWithdrawing(null)}
+        onSaved={(entryNumber) => {
+          setAnnouncement(`Kontobuchung zurückgenommen, Gegenbuchung ${entryNumber}`)
+          void queryClient.invalidateQueries({ queryKey: bankTransactionsKey(tenantId) })
+        }}
+      />
     </>
   )
 }

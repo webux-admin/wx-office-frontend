@@ -11,9 +11,10 @@ type AccountSelectProps = Omit<ComponentProps<typeof CodeSelect>, 'entries'> & {
   tenantId: number
   /**
    * Which kind of account is offered. Revenue accounts by default, because that is what a
-   * product and a dunning fee are booked to.
+   * product and a dunning fee are booked to; `ALL` offers every postable account,
+   * which is what a bank movement needs — rent is an expense, a refund a revenue.
    */
-  accountType?: AccountType
+  accountType?: AccountType | 'ALL'
 }
 
 /**
@@ -29,9 +30,9 @@ type AccountSelectProps = Omit<ComponentProps<typeof CodeSelect>, 'entries'> & {
  * @param accountType the kind of account to offer
  * @returns the query string, without the leading `?`
  */
-function chartQuery(accountType: AccountType): string {
+function chartQuery(accountType: AccountType | 'ALL'): string {
   return listQuery({
-    accountType,
+    accountType: accountType === 'ALL' ? undefined : accountType,
     activeOnly: true,
     postable: true,
     size: PICKER_SIZE,
