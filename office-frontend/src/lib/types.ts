@@ -2978,8 +2978,20 @@ export type DunningRunResult = {
 /** Where an imported statement file stands. */
 export type ImportState = 'RECEIVED' | 'PARSED' | 'FAILED'
 
-/** Where a single payment off a statement stands. */
-export type TransactionState = 'NEW' | 'MATCHED' | 'POSTED' | 'UNMATCHED' | 'IGNORED'
+/**
+ * How far one item of a statement has got.
+ *
+ * <p>`POSTED` and `ACCOUNTED` are two different facts and not two words for one: the first
+ * means a settlement line was made out of the movement, the second that it was booked straight
+ * onto an account of the chart, without an invoice behind it. The labels say which.
+ */
+export type TransactionState =
+  | 'NEW'
+  | 'MATCHED'
+  | 'POSTED'
+  | 'ACCOUNTED'
+  | 'UNMATCHED'
+  | 'IGNORED'
 
 /**
  * What kind of reference a bank statement item carries, decided by its format.

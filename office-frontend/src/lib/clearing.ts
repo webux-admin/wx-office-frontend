@@ -196,6 +196,64 @@ export function withdrawAssignment(
   )
 }
 
+/** What the ledger wrote for a movement: the id a screen navigates by and the journal number. */
+export type AccountBooking = {
+  entryId: number
+  entryNumber: string
+}
+
+/** What the dialog sends to book a movement onto an account of the chart. */
+export type AccountBookingBody = {
+  /** The account of the chart, as a number. The bank side is resolved over the IBAN. */
+  accountNumber: string
+  /**
+   * The tax code out of the catalogue of this tenant, left out where nothing is owed.
+   *
+   * <p>A code and not a rate: `VSM81` and `VSI81` are the same 8.1 % on two different accounts
+   * and two different ESTV digits, and that choice belongs to the person (backend ADR-0128).
+   */
+  taxCode?: string
+  /** The day the entry sits on; left out means the day the bank booked it. */
+  bookingDate?: string
+  /** The Buchungstext; left out means the remittance information of the movement. */
+  description?: string
+}
+
+/**
+ * Books a movement straight onto an account of the chart.
+ *
+ * <p>The third way out of the basket, for money that moved without an invoice of this house
+ * behind it: rent, a bank charge, a tax payment. No settlement line is written and no open item
+ * moves.
+ */
+export function bookTransactionToAccount(
+  tenantId: number,
+  transactionId: number,
+  body: AccountBookingBody,
+): Promise<AccountBooking> {
+  return api.post<AccountBooking>(
+    `/api/tenants/${tenantId}/banking/transactions/${transactionId}/account-booking`,
+    body,
+  )
+}
+
+/**
+ * Takes an account booking back.
+ *
+ * <p>A counter entry, never a deletion. The movement goes back to «neu» and reappears in the
+ * basket — undecided, which is exactly what it was.
+ */
+export function withdrawAccountBooking(
+  tenantId: number,
+  transactionId: number,
+  reason: string,
+): Promise<AccountBooking> {
+  return api.post<AccountBooking>(
+    `/api/tenants/${tenantId}/banking/transactions/${transactionId}/account-booking/withdraw`,
+    { reason },
+  )
+}
+
 /**
  * @param tenantId      the tenant
  * @param transactionId the movement

@@ -58,11 +58,19 @@ export const IMPORT_STATES: Record<ImportState, string> = {
   FAILED: 'Fehlgeschlagen',
 }
 
-/** What each state of a single payment is called on screen. */
+/**
+ * What each state of a single payment is called on screen.
+ *
+ * <p><b>«Verbucht» alone would not do any more.</b> Two states now say that something was
+ * booked, and they mean different things — out of one a settlement line on an invoice was made,
+ * the other went straight onto an account of the chart. So both labels say **what for**, and a
+ * reader can tell them apart at a glance.
+ */
 export const TRANSACTION_STATES: Record<TransactionState, string> = {
   NEW: 'Neu',
   MATCHED: 'Zugeordnet',
-  POSTED: 'Verbucht',
+  POSTED: 'Als Zahlung verbucht',
+  ACCOUNTED: 'Auf ein Konto gebucht',
   UNMATCHED: 'Nicht zuordenbar',
   IGNORED: 'Ignoriert',
 }
@@ -72,6 +80,7 @@ export const TRANSACTION_STATE_ORDER: TransactionState[] = [
   'NEW',
   'MATCHED',
   'POSTED',
+  'ACCOUNTED',
   'UNMATCHED',
   'IGNORED',
 ]
