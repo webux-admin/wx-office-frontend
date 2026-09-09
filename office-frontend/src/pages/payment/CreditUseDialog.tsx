@@ -15,6 +15,10 @@ import {
   releaseCredit,
 } from '../../lib/customerCredit'
 import type { CreditUseReason, CustomerCredit } from '../../lib/types'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
+import { useRunsModule } from '../../lib/modules'
+import { useAuth } from '../../auth/useAuth'
+import { AccountSelect } from '../accounting/AccountSelect'
 import {
   MAX_IBAN_LENGTH,
   MAX_NOTE_LENGTH,
@@ -33,6 +37,11 @@ import {
  *
  * <p>The IBAN field disappears on a release: it pays nothing out, and an account would be a
  * receipt for a payment that never happened. The database refuses it too.
+ *
+ * <p><b>The money account goes with the IBAN and is not the same fact.</b> The IBAN says where
+ * the money went, the account says out of which of the tenant's own accounts it left — and only
+ * the latter decides whether the refund is booked. A release needs neither: it books the
+ * advances against income all by itself (backend ADR-0128).
  *
  * @param credit  the credit being used up, for the ceiling and the pre-fill
  * @param mode    whether this pays out or releases
@@ -83,6 +92,10 @@ export function CreditUseDialog({
 
   const complaint = creditUseComplaint(form, credit.remaining, today)
   const isRefund = mode === 'refund'
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  // Both, not just the right: without the module there is no chart to pick from.
+  const booksHere = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
 
   return (
     <Dialog
@@ -149,6 +162,22 @@ export function CreditUseDialog({
           />
         )}
 
+        {/* Only on a refund, and only where this tenant keeps books here. A release moves
+            nothing in a bank — it books 2030 against income by itself — so there is no money
+            account to name. The IBAN above is a different fact: it says where the money went,
+            this says out of which of the tenant's own accounts (backend ADR-0128). */}
+        {isRefund && booksHere && (
+          <AccountSelect
+            label="Geldkonto"
+            tenantId={tenantId}
+            accountType="ASSET"
+            value={form.ledgerAccount}
+            onChange={(number) => setForm({ ...form, ledgerAccount: number })}
+            emptyLabel="– nicht buchen –"
+            hint="Von welchem Konto das Geld abging. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
+          />
+        )}
+
         <TextField
           label="Bemerkung"
           value={form.note}
@@ -161,8 +190,9 @@ export function CreditUseDialog({
           <p className="text-[12px] text-text-secondary">
             Eine Auflösung ist eine Entscheidung des Mandanten, keine der Software: die
             Verjährung ist eine Einrede, die ein Richter nicht von Amtes wegen berücksichtigt
-            (OR Art. 142). Ob sie eine MWST-Folge hat, ist offen — diese Anwendung hält Betrag,
-            Datum und Grund fest und rechnet keine Steuer.
+            (OR Art. 142). Gebucht wird 2030 gegen «Übrige Erlöse» — ohne Steuercode, weil das
+            Entgelt beim Mandanten bleibt. Ob das die richtige MWST-Folge ist, ist offen und
+            liegt beim Treuhänder.
           </p>
         )}
 

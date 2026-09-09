@@ -20,6 +20,8 @@ export type AdvanceForm = {
   valueDate: string
   payerName: string
   payerReference: string
+  /** The account of the chart the money landed on; empty means «nicht buchen». */
+  ledgerAccount: string
   note: string
 }
 
@@ -31,6 +33,8 @@ export type CreditUseForm = {
   /** The day it was decided, `yyyy-MM-dd`. */
   bookingDate: string
   refundIban: string
+  /** The account of the chart the money left from; only a refund uses it. */
+  ledgerAccount: string
   note: string
 }
 
@@ -53,6 +57,7 @@ export function emptyAdvance(currency = 'CHF', today = toIsoDate()): AdvanceForm
     valueDate: today,
     payerName: '',
     payerReference: '',
+    ledgerAccount: '',
     note: '',
   }
 }
@@ -74,6 +79,7 @@ export function proposedUse(reason: CreditUseReason, remaining: number | undefin
     amount: remaining !== undefined && remaining > 0 ? remaining.toFixed(2) : '',
     bookingDate: today,
     refundIban: '',
+    ledgerAccount: '',
     note: '',
   }
 }
@@ -171,6 +177,7 @@ export function toAdvancePayload(form: AdvanceForm, partnerId: number): RecordAd
     currency: form.currency.trim().toUpperCase(),
     valueDate: form.valueDate,
     payerReference: payerReference === '' ? undefined : payerReference,
+    ledgerAccount: form.ledgerAccount === '' ? undefined : form.ledgerAccount,
     note: note === '' ? undefined : note,
   }
 }
@@ -193,6 +200,9 @@ export function toCreditUsePayload(form: CreditUseForm): CreditUseBody {
     amount: parseDecimal(form.amount) ?? 0,
     bookingDate: form.bookingDate,
     refundIban: isRefund && refundIban !== '' ? refundIban : undefined,
+    // Only a refund names a money account: a release books against income by itself, and the
+    // server would have nothing to do with one here (backend ADR-0128).
+    ledgerAccount: isRefund && form.ledgerAccount !== '' ? form.ledgerAccount : undefined,
     note: note === '' ? undefined : note,
   }
 }

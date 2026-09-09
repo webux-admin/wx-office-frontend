@@ -165,6 +165,17 @@ describe('toAdvancePayload', () => {
     expect(body.payerName).toBeUndefined()
     expect(body.note).toBeUndefined()
   })
+
+  /**
+   * The field that decides whether the prepayment reaches the ledger at all.
+   *
+   * <p>Empty is a real answer and not a missing one: recorded and not booked. Nothing is
+   * guessed from the payment account printed on an invoice.
+   */
+  it('toAdvancePayloadWithALedgerAccountTest', () => {
+    expect(toAdvancePayload(advance({ ledgerAccount: '1020' }), 42).ledgerAccount).toBe('1020')
+    expect(toAdvancePayload(advance(), 42).ledgerAccount).toBeUndefined()
+  })
 })
 
 describe('toCreditUsePayload', () => {
@@ -188,5 +199,19 @@ describe('toCreditUsePayload', () => {
       use({ reason: 'RELEASE_UNCLAIMED', refundIban: 'CH4431999123000889012' }))
 
     expect(body.refundIban).toBeUndefined()
+  })
+
+  /**
+   * Only a refund names a money account.
+   *
+   * <p>A release moves nothing in a bank — it books the advances against income by itself —
+   * so an account here would say something that did not happen.
+   */
+  it('toCreditUsePayloadWithALedgerAccountTest', () => {
+    expect(toCreditUsePayload(use({ ledgerAccount: '1020' })).ledgerAccount).toBe('1020')
+    expect(toCreditUsePayload(use()).ledgerAccount).toBeUndefined()
+    expect(toCreditUsePayload(
+      use({ reason: 'RELEASE_UNCLAIMED', ledgerAccount: '1020' })).ledgerAccount)
+      .toBeUndefined()
   })
 })

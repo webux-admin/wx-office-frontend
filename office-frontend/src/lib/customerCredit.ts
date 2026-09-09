@@ -212,6 +212,14 @@ export type RecordAdvanceBody = {
   valueDate?: string
   payerReference?: string
   note?: string
+  /**
+   * The account of the chart the money landed on, as a number.
+   *
+   * <p>Left out means the prepayment is recorded and not booked. Nothing is guessed from the
+   * payment account printed on an invoice — the money may never have touched it (backend
+   * ADR-0128).
+   */
+  ledgerAccount?: string
 }
 
 /**
@@ -253,6 +261,13 @@ export type CreditUseBody = {
   /** Only on a refund; the server refuses it on a release. */
   refundIban?: string
   note?: string
+  /**
+   * The account of the chart the money left from, as a number.
+   *
+   * <p>Only a refund uses it: a release moves nothing in a bank and books against income by
+   * itself. Left out means the refund is recorded and not booked (backend ADR-0128).
+   */
+  ledgerAccount?: string
 }
 
 /** Pays a credit back. */

@@ -7,6 +7,10 @@ import { TextField } from '../../components/TextField'
 import { toIsoDate } from '../../lib/format'
 import { recordAdvance } from '../../lib/customerCredit'
 import type { Partner } from '../../lib/types'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
+import { useRunsModule } from '../../lib/modules'
+import { useAuth } from '../../auth/useAuth'
+import { AccountSelect } from '../accounting/AccountSelect'
 import { PartnerQuickSearch } from '../document/PartnerQuickSearch'
 import {
   MAX_IBAN_LENGTH,
@@ -28,6 +32,11 @@ import {
  * that is exactly where the mistake sits: a prepayment is <b>not</b> tax free until the service
  * is delivered.
  *
+ * <p><b>The money account decides whether anything is booked.</b> Named, the amount moves in
+ * the ledger from that account onto 2030 «Erhaltene Anzahlungen»; left empty, the prepayment
+ * is recorded and not booked. The field only appears where this tenant keeps books here and
+ * the session may read the chart (backend ADR-0128).
+ *
  * @param onSaved called after a prepayment was stored, so the caller can refresh its lists
  */
 export function AdvanceDialog({
@@ -47,6 +56,11 @@ export function AdvanceDialog({
   const [form, setForm] = useState<AdvanceForm>(() => emptyAdvance(currency, today))
   const [partner, setPartner] = useState<Partner | undefined>(undefined)
   const [partnerTerm, setPartnerTerm] = useState('')
+
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  // Both, not just the right: without the module there is no chart to pick from.
+  const booksHere = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
 
   // Adjusted while rendering rather than in an effect: a dialog reopened must not keep what
   // the last one held. Same technique as WriteOffDialog.
@@ -141,6 +155,21 @@ export function AdvanceDialog({
             maxLength={MAX_IBAN_LENGTH}
           />
         </div>
+
+        {/* Only where this tenant keeps books here and the session may read the chart. The
+            field decides whether the prepayment is booked at all: left empty it is recorded
+            and not booked, and nothing is guessed from an IBAN (backend ADR-0128). */}
+        {booksHere && (
+          <AccountSelect
+            label="Geldkonto"
+            tenantId={tenantId}
+            accountType="ASSET"
+            value={form.ledgerAccount}
+            onChange={(number) => setForm({ ...form, ledgerAccount: number })}
+            emptyLabel="– nicht buchen –"
+            hint="Auf welches Konto das Geld gelangt ist. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
+          />
+        )}
 
         <TextField
           label="Notiz"
