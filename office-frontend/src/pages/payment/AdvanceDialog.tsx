@@ -181,8 +181,11 @@ export function AdvanceDialog({
 
         <p className="text-[12px] text-text-secondary">
           Eine Vorauszahlung ist steuerbar, sobald das Geld eingegangen ist — nicht erst mit der
-          Leistung (MWSTG Art. 40 Abs. 1 Bst. c). Ein MWST-Satz wird hier nicht erfasst: der
-          Regelweg dafür ist die Akontorechnung, die ihn festhält.
+          Leistung (MWSTG Art. 40 Abs. 1 Bst. c). Hier wird kein MWST-Satz erfasst, und deshalb
+          steht dieser Weg nur Mandanten offen, die keine Mehrwertsteuer abrechnen. Ist der
+          Mandant steuerpflichtig, weist der Server die Erfassung ab: dann gehört eine
+          Akontorechnung geschrieben, die den Satz festhält — die Zahlung darauf wird wie bisher
+          als Kundenguthaben geführt.
         </p>
 
         {complaint !== null && (
