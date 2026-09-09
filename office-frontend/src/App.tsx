@@ -23,6 +23,7 @@ import {
   JOURNAL_PATH,
   PRIOR_YEAR_PATH,
   TAX_CODES_PATH,
+  WRITE_OFF_ACCOUNTS_PATH,
 } from './lib/accounting'
 import { firstBasicDataPath } from './lib/basicData'
 import { STOCK_AS_OF_PATH } from './lib/inventory'
@@ -68,6 +69,7 @@ const PriorYearPage = lazy(() => import('./pages/accounting/PriorYearPage').then
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((module) => ({ default: module.ChartOfAccountsPage })))
 const FiscalYearPage = lazy(() => import('./pages/FiscalYearPage').then((module) => ({ default: module.FiscalYearPage })))
 const TaxCodePage = lazy(() => import('./pages/TaxCodePage').then((module) => ({ default: module.TaxCodePage })))
+const WriteOffAccountPage = lazy(() => import('./pages/accounting/WriteOffAccountPage').then((module) => ({ default: module.WriteOffAccountPage })))
 const CataloguePage = lazy(() => import('./pages/CataloguePage').then((module) => ({ default: module.CataloguePage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const DocumentTypeListPage = lazy(() => import('./pages/DocumentTypeListPage').then((module) => ({ default: module.DocumentTypeListPage })))
@@ -289,6 +291,7 @@ export default function App() {
                       register strip. */}
                   <Route path={CHART_OF_ACCOUNTS_PATH} element={<ChartOfAccountsPage />} />
                   <Route path={TAX_CODES_PATH} element={<TaxCodePage />} />
+                  <Route path={WRITE_OFF_ACCOUNTS_PATH} element={<WriteOffAccountPage />} />
                   <Route path={FISCAL_YEARS_PATH} element={<FiscalYearPage />} />
                   <Route path={ACCOUNTING_SETTINGS_PATH} element={<AccountingStatePage />} />
 

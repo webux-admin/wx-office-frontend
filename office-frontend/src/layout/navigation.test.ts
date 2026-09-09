@@ -14,6 +14,7 @@ import {
   CHART_OF_ACCOUNTS_PATH,
   JOURNAL_PATH,
   PRIOR_YEAR_PATH,
+  WRITE_OFF_ACCOUNTS_PATH,
   TAX_CODES_PATH,
 } from '../lib/accounting'
 import { BASIC_DATA_LISTS } from '../lib/basicData'
@@ -841,9 +842,12 @@ describe('the accounting folder', () => {
     // The chart of accounts stands first: it is what a tenant lays out on the first day. The
     // tax codes follow it, because a copy from a template lays out both in one step. The fiscal
     // years come before the settings — the lock date over there only bites once a year exists.
+    // The write-off accounts follow the codes: they say which kind of correction a reason
+    // is, and the kinds are the codes.
     expect(folder.children.map((child) => child.href)).toEqual([
       CHART_OF_ACCOUNTS_PATH,
       TAX_CODES_PATH,
+      WRITE_OFF_ACCOUNTS_PATH,
       FISCAL_YEARS_PATH,
       ACCOUNTING_SETTINGS_PATH,
     ])
@@ -852,6 +856,7 @@ describe('the accounting folder', () => {
     expect(folder.children.map((child) => child.label)).toEqual([
       'Kontenplan',
       'Steuercodes',
+      'Ausbuchungskonten',
       'Geschäftsjahre',
       'Einstellungen',
     ])
@@ -861,8 +866,10 @@ describe('the accounting folder', () => {
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
       ACCOUNTING_RIGHTS.read,
+      ACCOUNTING_RIGHTS.read,
     ])
     expect(folder.children.map((child) => child.module)).toEqual([
+      'ACCOUNTING',
       'ACCOUNTING',
       'ACCOUNTING',
       'ACCOUNTING',

@@ -23,6 +23,7 @@ import type {
   AccountingReport,
   AccountingSettings,
   BankLedgerAccount,
+  WriteOffAccount,
   AccountSheet,
   AccountRequest,
   AccountType,
@@ -242,6 +243,53 @@ export function fetchAccounts(tenantId: number, query = ''): Promise<Page<Accoun
  */
 export function accountUrl(tenantId: number, accountId: number): string {
   return `${accountingUrl(tenantId)}/accounts/${accountId}`
+}
+
+/**
+ * Where the write-off accounts are maintained.
+ *
+ * <p>Under `/buchhaltung/` like every other screen of this folder. The issue proposes
+ * `/einstellungen/buchhaltung/...`, which no path of this application uses — the folder in the
+ * menu is one thing, the address another (backend ADR-0128).
+ */
+export const WRITE_OFF_ACCOUNTS_PATH = '/buchhaltung/ausbuchungskonten'
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the accounts a write-off reason is booked on
+ */
+export function writeOffAccountsKey(tenantId: number): readonly unknown[] {
+  return ['accounting', 'write-off-accounts', tenantId]
+}
+
+/**
+ * On which accounts this tenant books each of its write-off reasons.
+ *
+ * <p>Answers empty for a tenant that has assigned nothing, which is every tenant on the day it
+ * lays its chart out: none of these accounts is shipped.
+ *
+ * @param tenantId the tenant
+ * @returns the mappings, reason by reason
+ */
+export function fetchWriteOffAccounts(tenantId: number): Promise<WriteOffAccount[]> {
+  return api.get<WriteOffAccount[]>(`${accountingUrl(tenantId)}/write-off-accounts`)
+}
+
+/**
+ * Says on which accounts one reason is booked.
+ *
+ * <p>The row is replaced as a whole, so both accounts travel every time — sending one of the
+ * two would clear the other.
+ *
+ * @param tenantId the tenant
+ * @param body the reason and its two accounts
+ * @returns the mapping as it now stands
+ */
+export function saveWriteOffAccount(
+  tenantId: number,
+  body: { reason: string; debitAccount: string; creditAccount: string; taxCode?: string },
+): Promise<WriteOffAccount> {
+  return api.put<WriteOffAccount>(`${accountingUrl(tenantId)}/write-off-accounts`, body)
 }
 
 /**

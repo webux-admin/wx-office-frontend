@@ -3378,6 +3378,26 @@ export type ProfitAndLossForm = 'PRODUCTION'
  * (backend ADR-0110).
  */
 /**
+ * On which accounts one write-off reason is booked, as the backend answers it.
+ *
+ * <p>Two accounts, because the direction is not fixed: an exchange difference is a loss or a
+ * gain depending on its sign. On six of the seven reasons they are the same.
+ */
+export type WriteOffAccount = {
+  /** The constant of the reason: `SKONTO`, `DEBITORENVERLUST` and the five others. */
+  reason: string
+  debitAccountNumber?: string
+  debitAccountName?: string
+  creditAccountNumber?: string
+  creditAccountName?: string
+  /**
+   * The code that decides direction and kind of the tax line, absent where the reason changes
+   * no consideration. Never a rate: that comes from the invoice being corrected.
+   */
+  taxCode?: string
+}
+
+/**
  * Which account of the chart carries a bank account, as the backend answers it.
  *
  * @see BankAccount for the bank account itself, which lives in the banking module

@@ -72,6 +72,7 @@ import {
   CHART_OF_ACCOUNTS_PATH,
   JOURNAL_PATH,
   TAX_CODES_PATH,
+  WRITE_OFF_ACCOUNTS_PATH,
 } from '../lib/accounting'
 import { basicDataFor } from '../lib/basicData'
 import { STOCK_AS_OF_PATH } from '../lib/inventory'
@@ -821,6 +822,15 @@ export const NAV_GROUPS: NavGroup[] = [
             label: 'Steuercodes',
             icon: Percent,
             href: TAX_CODES_PATH,
+            permission: ACCOUNTING_RIGHTS.read,
+            module: ACCOUNTING_MODULE,
+          },
+          // After the codes, because it uses them: the entry says which kind of correction a
+          // reason is, and the kinds are the codes.
+          {
+            label: 'Ausbuchungskonten',
+            icon: Percent,
+            href: WRITE_OFF_ACCOUNTS_PATH,
             permission: ACCOUNTING_RIGHTS.read,
             module: ACCOUNTING_MODULE,
           },
