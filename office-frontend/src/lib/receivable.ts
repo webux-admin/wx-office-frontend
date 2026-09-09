@@ -86,6 +86,14 @@ export type RecordPaymentBody = {
   /** The day of the rate; required together with the rate. */
   exchangeRateDate?: string
   note?: string
+  /**
+   * The account of the chart the money landed on, as a number — the bank, the cash box.
+   *
+   * <p>Left out where the tenant keeps no books here, and then nothing is booked. It is not
+   * guessed from the payment account printed on the invoice: that is the IBAN the customer was
+   * told, not necessarily the one the money arrived on (backend ADR-0128).
+   */
+  ledgerAccount?: string
 }
 
 /**

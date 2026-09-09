@@ -22,6 +22,7 @@ import type {
   Account,
   AccountingReport,
   AccountingSettings,
+  BankLedgerAccount,
   AccountSheet,
   AccountRequest,
   AccountType,
@@ -241,6 +242,52 @@ export function fetchAccounts(tenantId: number, query = ''): Promise<Page<Accoun
  */
 export function accountUrl(tenantId: number, accountId: number): string {
   return `${accountingUrl(tenantId)}/accounts/${accountId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the bank accounts mapped onto the chart
+ */
+export function bankLedgerAccountsKey(tenantId: number): readonly unknown[] {
+  return ['accounting', 'bank-accounts', tenantId]
+}
+
+/**
+ * Which account of the chart carries which bank account. Answers while the module is off:
+ * what a tenant mapped explains the entries it already has.
+ *
+ * @param tenantId the tenant
+ * @returns the mappings, IBAN by IBAN
+ */
+export function fetchBankLedgerAccounts(tenantId: number): Promise<BankLedgerAccount[]> {
+  return api.get<BankLedgerAccount[]>(`${accountingUrl(tenantId)}/bank-accounts`)
+}
+
+/**
+ * Maps a bank account onto the chart, or changes the mapping it has.
+ *
+ * <p>Keyed by the IBAN: sending the same one twice changes the one mapping instead of adding
+ * a second. The IBAN may carry spaces here — the backend normalises it away.
+ *
+ * @param tenantId the tenant
+ * @param body the IBAN and the number of the account that carries it
+ * @returns the mapping as it now stands
+ */
+export function saveBankLedgerAccount(
+  tenantId: number,
+  body: { accountIban: string; accountNumber: string; active?: boolean },
+): Promise<BankLedgerAccount> {
+  return api.put<BankLedgerAccount>(`${accountingUrl(tenantId)}/bank-accounts`, body)
+}
+
+/**
+ * Takes a mapping away. What it booked stays in the journal.
+ *
+ * @param tenantId the tenant
+ * @param id the mapping
+ */
+export function deleteBankLedgerAccount(tenantId: number, id: number): Promise<void> {
+  return api.delete<void>(`${accountingUrl(tenantId)}/bank-accounts/${id}`)
 }
 
 /**

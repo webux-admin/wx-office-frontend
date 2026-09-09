@@ -11,6 +11,15 @@ import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
+import { useRunsModule } from '../lib/modules'
+import {
+  ACCOUNTING_MODULE,
+  ACCOUNTING_RIGHTS,
+  bankLedgerAccountsKey,
+  fetchBankLedgerAccounts,
+  saveBankLedgerAccount,
+} from '../lib/accounting'
+import { AccountSelect } from './accounting/AccountSelect'
 import {
   BANKING_MODULE,
   BANKING_RIGHTS,
@@ -18,7 +27,7 @@ import {
   fetchBankAccounts,
   saveBankAccount,
 } from '../lib/banking'
-import type { BankAccount, BankAccountRequest } from '../lib/types'
+import type { BankAccount, BankAccountRequest, BankLedgerAccount } from '../lib/types'
 
 /**
  * The accounts this tenant receives statements for.
@@ -90,6 +99,8 @@ function BankAccounts({ tenantId }: { tenantId: number }) {
             }
           />
         </Panel>
+
+        <LedgerAccountPanel tenantId={tenantId} accounts={accounts.data ?? []} />
       </div>
 
       <AccountDialog
@@ -98,6 +109,88 @@ function BankAccounts({ tenantId }: { tenantId: number }) {
         onClose={() => setEditing(null)}
       />
     </>
+  )
+}
+
+/**
+ * Which account of the chart carries which of these bank accounts.
+ *
+ * <p>Its own panel and not a column of the table above: the two live in different modules and
+ * are written by two endpoints with two rights. A clerk who may import statements is not
+ * thereby somebody who decides where the money is booked.
+ *
+ * <p>Shown only where this tenant keeps books here and the session may read the chart —
+ * without a chart the picker would stand empty, and a row of dashes answers a question nobody
+ * asked.
+ */
+function LedgerAccountPanel({
+  tenantId,
+  accounts,
+}: {
+  tenantId: number
+  /** The bank accounts this tenant receives statements for. */
+  accounts: readonly BankAccount[]
+}) {
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  const queryClient = useQueryClient()
+  const shows = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
+  const mayWrite = can(ACCOUNTING_RIGHTS.configure)
+
+  const mappings = useQuery({
+    queryKey: bankLedgerAccountsKey(tenantId),
+    queryFn: () => fetchBankLedgerAccounts(tenantId),
+    enabled: shows,
+  })
+
+  const save = useMutation({
+    mutationFn: (body: { accountIban: string; accountNumber: string }) =>
+      saveBankLedgerAccount(tenantId, body),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: bankLedgerAccountsKey(tenantId) }),
+  })
+
+  if (!shows) return null
+
+  /** The mapping of one IBAN, compared the way the backend stores it. */
+  const mappingOf = (iban: string): BankLedgerAccount | undefined =>
+    (mappings.data ?? []).find(
+      (one) => one.accountIban === iban.replace(/\s/g, '').toUpperCase(),
+    )
+
+  return (
+    <Panel
+      title="Fibu-Konten"
+      description="Auf welches Konto des Kontenplans eine Zahlung auf dieses Bankkonto gebucht wird. Ohne Zuordnung wird nichts gebucht."
+    >
+      {accounts.length === 0 ? (
+        <EmptyState
+          title="Noch kein Bankkonto"
+          description="Erfassen Sie zuerst ein Bankkonto; danach lässt sich sagen, welches Konto es führt."
+        />
+      ) : (
+        <div className="grid gap-4">
+          {save.error !== null && save.error !== undefined && (
+            <ErrorNotice error={save.error} />
+          )}
+          {accounts.map((account) => (
+            <AccountSelect
+              key={account.id}
+              label={`${account.label} · ${account.iban}`}
+              tenantId={tenantId}
+              accountType="ASSET"
+              value={mappingOf(account.iban)?.accountNumber ?? ''}
+              onChange={(number) => {
+                if (number === '') return
+                save.mutate({ accountIban: account.iban, accountNumber: number })
+              }}
+              emptyLabel="– kein Konto –"
+              disabled={!mayWrite || save.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </Panel>
   )
 }
 

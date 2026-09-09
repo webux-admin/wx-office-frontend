@@ -8,6 +8,10 @@ import { ErrorNotice } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
+import { useAuth } from '../../auth/useAuth'
+import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
+import { useRunsModule } from '../../lib/modules'
+import { AccountSelect } from '../accounting/AccountSelect'
 import { formatAmount, formatDate, formatDateTime, toIsoDate } from '../../lib/format'
 import {
   PAYMENT_KINDS,
@@ -46,6 +50,8 @@ type PaymentForm = {
   exchangeRateUnit: string
   exchangeRateDate: string
   note: string
+  /** The account of the chart the money landed on; empty means nothing is booked. */
+  ledgerAccount: string
 }
 
 /**
@@ -68,6 +74,7 @@ function proposedForm(open: number | undefined, currency = 'CHF'): PaymentForm {
     exchangeRateUnit: '1',
     exchangeRateDate: '',
     note: '',
+    ledgerAccount: '',
   }
 }
 
@@ -132,6 +139,11 @@ export function DocumentReceivablePanel({
     void queryClient.invalidateQueries({ queryKey: openItemsKey(tenantId) })
   }
 
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  // Both, not just the right: without the module there is no chart to pick from.
+  const booksHere = runs(ACCOUNTING_MODULE) && can(ACCOUNTING_RIGHTS.read)
+
   const record = useMutation({
     mutationFn: () =>
       recordPayment(tenantId, documentId, {
@@ -146,6 +158,9 @@ export function DocumentReceivablePanel({
         exchangeRateUnit: converts ? Number(form.exchangeRateUnit) : undefined,
         exchangeRateDate: converts ? form.exchangeRateDate : undefined,
         note: form.note.trim() === '' ? undefined : form.note.trim(),
+        // Left out rather than sent empty: «no account» has to mean the booking is skipped,
+        // and an empty string would be an account number no chart of accounts knows.
+        ledgerAccount: form.ledgerAccount === '' ? undefined : form.ledgerAccount,
       }),
     onSuccess: () => {
       refresh()
@@ -460,9 +475,25 @@ export function DocumentReceivablePanel({
           {REDUCES_CONSIDERATION.includes(form.kind) && (
             <p className="text-[12px] text-text-secondary">
               {PAYMENT_KINDS[form.kind]} mindert das Entgelt und hat eine MWST-Folge nach
-              MWSTG Art. 41. Diese Anwendung führt kein Hauptbuch und bucht sie nicht — die
-              Korrektur der Umsatzsteuer erfolgt ausserhalb.
+              MWSTG Art. 41. Erfassen Sie das über «Ausbuchen»: dort steht der Grund, und dort
+              wird die Steuerkorrektur festgehalten.
             </p>
+          )}
+
+          {/* Only where this tenant keeps books here and the session may read the chart. The
+              field decides whether the settlement is booked at all: left empty nothing is
+              booked, and nothing is guessed from the IBAN printed on the invoice either
+              (backend ADR-0128). */}
+          {booksHere && (
+            <AccountSelect
+              label="Geldkonto"
+              tenantId={tenantId}
+              accountType="ASSET"
+              value={form.ledgerAccount}
+              onChange={(number) => setForm({ ...form, ledgerAccount: number })}
+              emptyLabel="– nicht buchen –"
+              hint="Auf welches Konto das Geld gelangt ist. Leer heisst: die Zahlung wird erfasst und nicht gebucht."
+            />
           )}
 
           <TextField

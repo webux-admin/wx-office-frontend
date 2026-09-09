@@ -4,6 +4,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
+import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { salesDocumentFor } from '../../lib/salesDocument'
 import type { OpenItem, Payment } from '../../lib/types'
 import type { OverpaymentAdvice } from '../../lib/receivable'
@@ -110,12 +112,47 @@ async function settle() {
  * The panel takes the two rights as props rather than reading them itself, so the tests do
  * the same instead of building a session around them.
  */
-async function render(mayRecord = true, mayWriteOff = true) {
+/**
+ * A session, with the modules and rights a case needs.
+ *
+ * <p>Nobody signed in by default: the Geldkonto field then stays away, which is what every case
+ * written before it existed expects to see.
+ */
+function auth(modules: string[] = [], permissions: string[] = []): AuthState {
+  return {
+    user:
+      modules.length === 0
+        ? null
+        : {
+            userId: 1,
+            username: 'muster',
+            activeTenantId: TENANT,
+            superuser: false,
+            tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+            permissions,
+          },
+    loading: false,
+    signIn: () => Promise.reject(new Error('not in this test')),
+    completeSecondFactor: () => Promise.reject(new Error('not in this test')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
+/** A session that keeps books here and may read the chart of accounts. */
+const ACCOUNTING = auth(['ACCOUNTING'], [ACCOUNTING_RIGHTS.read])
+
+async function render(mayRecord = true, mayWriteOff = true, session: AuthState = auth()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const kind = salesDocumentFor('INVOICE')!
   await act(async () => {
     root.render(
       <MemoryRouter>
+        <AuthContext.Provider value={session}>
         <QueryClientProvider client={client}>
           <DocumentReceivablePanel
             kind={kind}
@@ -126,6 +163,7 @@ async function render(mayRecord = true, mayWriteOff = true) {
             mayWriteOff={mayWriteOff}
           />
         </QueryClientProvider>
+        </AuthContext.Provider>
       </MemoryRouter>,
     )
   })
@@ -264,6 +302,33 @@ describe('DocumentReceivablePanel', () => {
    * <p>Paying in the currency of the invoice is the everyday case, and the dialog for it is
    * exactly what it was.
    */
+  it('documentReceivablePanelHidesTheMoneyAccountWithoutTheModuleTest', async () => {
+    await render()
+
+    await act(async () => {
+      button('Zahlung erfassen')?.click()
+    })
+    await settle()
+
+    // No bookkeeping here, no field: the settlement is recorded and nothing is booked, the
+    // way it was before the ledger existed.
+    expect(text()).not.toContain('Geldkonto')
+  })
+
+  it('documentReceivablePanelAsksForTheMoneyAccountTest', async () => {
+    await render(true, true, ACCOUNTING)
+
+    await act(async () => {
+      button('Zahlung erfassen')?.click()
+    })
+    await settle()
+
+    // The field decides whether the settlement is booked at all, and it starts on «do not
+    // book»: nothing is guessed from the IBAN printed on the invoice.
+    expect(text()).toContain('Geldkonto')
+    expect(text()).toContain('nicht buchen')
+  })
+
   it('documentReceivablePanelHidesTheRateFieldsByDefaultTest', async () => {
     await render()
     await act(async () => {

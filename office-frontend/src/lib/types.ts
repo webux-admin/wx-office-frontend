@@ -3377,6 +3377,23 @@ export type ProfitAndLossForm = 'PRODUCTION'
  * the place that explanation belongs, and a 400 would put a red error page there instead
  * (backend ADR-0110).
  */
+/**
+ * Which account of the chart carries a bank account, as the backend answers it.
+ *
+ * @see BankAccount for the bank account itself, which lives in the banking module
+ */
+export type BankLedgerAccount = {
+  id: number
+  /** The IBAN, normalised: no spaces, capitals. */
+  accountIban: string
+  accountId: number
+  /** Number and name of the account, so a row reads without a second question. */
+  accountNumber?: string
+  accountName?: string
+  /** A mapping that was switched off is not booked to any more. */
+  active: boolean
+}
+
 export type AccountingSettings = {
   /** Always `CHF` while there is a row: the books are kept in francs and in nothing else. */
   ledgerCurrency?: string
