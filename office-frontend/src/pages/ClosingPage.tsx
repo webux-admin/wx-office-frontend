@@ -565,12 +565,24 @@ function AccrualsStep({
             onChange={(event) => onAccrualsChange(event.target.checked)}
           />
 
-          <CheckboxField
-            label="Debitoren und Kreditoren sind gegen die offenen Posten abgestimmt."
-            hint="Freiwillig: die maschinelle Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss."
-            checked={reconciliationConfirmed}
-            onChange={(event) => onReconciliationChange(event.target.checked)}
-          />
+          {/* The reconciliation. Mandatory only where step 3a found a difference — then the
+              close is refused without it — and shown as the voluntary note otherwise, so
+              nobody is asked to confirm something the machine already checked. */}
+          {reconciliationDiffers(preview) ? (
+            <CheckboxField
+              label="Ich habe die Differenz geprüft und schliesse das Jahr trotzdem ab."
+              hint="Pflicht: Hauptbuch und Nebenbuch weichen voneinander ab. Die Bestätigung steht mit Ihrem Namen im Protokoll des Geschäftsjahres."
+              checked={reconciliationConfirmed}
+              onChange={(event) => onReconciliationChange(event.target.checked)}
+            />
+          ) : (
+            <CheckboxField
+              label="Debitoren und Kreditoren sind gegen die offenen Posten abgestimmt."
+              hint="Freiwillig: die Abstimmung gegen die Nebenbücher stimmt bereits überein."
+              checked={reconciliationConfirmed}
+              onChange={(event) => onReconciliationChange(event.target.checked)}
+            />
+          )}
         </div>
       </Panel>
     </div>
@@ -1011,3 +1023,14 @@ const LOG_COLUMNS: Column<YearLogLine>[] = [
   { key: 'changedBy', header: 'Wer', width: 'w-[150px]', render: (line) => line.changedBy },
   { key: 'note', header: 'Grund', render: (line) => line.note ?? '' },
 ]
+
+/**
+ * Whether step 3a found a difference the person closing has to answer for.
+ *
+ * <p>The check is the one place that decides; the mask reads its finding rather than comparing
+ * figures of its own, so the two cannot say different things.
+ */
+function reconciliationDiffers(preview: ClosingPreview): boolean {
+  const check = preview.checks.find((candidate) => candidate.step === '3a')
+  return check !== undefined && check.blocking && !check.passed
+}

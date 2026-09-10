@@ -123,9 +123,9 @@ function preview(over: Partial<ClosingPreview> = {}): ClosingPreview {
       { step: '3', passed: true, blocking: true, message: 'Soll und Haben stimmen überein.', detail: '' },
       {
         step: '3a',
-        passed: false,
-        blocking: false,
-        message: 'Die Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss.',
+        passed: true,
+        blocking: true,
+        message: 'Die Sammelkonten stimmen mit den Nebenbüchern überein.',
         detail: '',
       },
       { step: '4', passed: true, blocking: true, message: 'Es ist das erste Geschäftsjahr.', detail: '' },
@@ -592,8 +592,8 @@ describe('ClosingPage', () => {
      * untouched. Where something blocks it moves to the top, which is
      * `closingPageKeepsTheTenChecksAfterARefusalTest`.
      *
-     * <p>And the marks are read as well: finding 3a is the one that never blocks, and it carries
-     * «offen» rather than a tick, so nobody takes it for a check that was passed.
+     * <p>And the marks are read as well: all ten are ticked here, 3a included — the empty tick it
+     * once carried is filled since the document connection.
      */
     it('closingPageShowsTheTenChecksTest', async () => {
       await paint()
@@ -606,7 +606,7 @@ describe('ClosingPage', () => {
         '2 Keine Buchung liegt als Entwurf.',
         '2a Die Abgrenzungen werden im nächsten Schritt bestätigt.',
         '3 Soll und Haben stimmen überein.',
-        '3a Die Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss.',
+        '3a Die Sammelkonten stimmen mit den Nebenbüchern überein.',
         '4 Es ist das erste Geschäftsjahr.',
         '4a Das Bilanzergebniskonto 2979 trägt noch keinen Saldo.',
         '5 Alle Systemkonten sind zugewiesen.',
@@ -618,7 +618,7 @@ describe('ClosingPage', () => {
         'erfüllt',
         'erfüllt',
         'erfüllt',
-        'offen',
+        'erfüllt',
         'erfüllt',
         'erfüllt',
         'erfüllt',
@@ -754,7 +754,7 @@ describe('ClosingPage', () => {
         '1 Das Geschäftsjahr ist offen.',
         '2a Die Abgrenzungen werden im nächsten Schritt bestätigt.',
         '3 Soll und Haben stimmen überein.',
-        '3a Die Abstimmung gegen die Nebenbücher kommt mit dem Beleganschluss.',
+        '3a Die Sammelkonten stimmen mit den Nebenbüchern überein.',
         '4 Es ist das erste Geschäftsjahr.',
         '4a Das Bilanzergebniskonto 2979 trägt noch keinen Saldo.',
         '5 Alle Systemkonten sind zugewiesen.',
