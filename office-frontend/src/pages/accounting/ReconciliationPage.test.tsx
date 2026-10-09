@@ -17,6 +17,7 @@ let container: HTMLDivElement
 let root: Root
 let rows: unknown[] = []
 let asked: string[] = []
+let orphans: unknown[] = []
 
 function auth(permissions: string[]): AuthState {
   return {
@@ -62,6 +63,8 @@ function stubFetch() {
           },
         ],
       }
+    } else if (url.includes('entries-without-source')) {
+      body = orphans
     } else if (url.includes('/reconciliation')) {
       body = { asOf: null, rows }
     }
@@ -104,6 +107,17 @@ beforeEach(() => {
       balanced: false,
     },
   ]
+  orphans = [
+    {
+      id: 4711,
+      entryNumber: '2026-000901',
+      bookingDate: '2026-03-04',
+      description: 'Rechnung',
+      sourceKind: 'DOCUMENT',
+      sourceId: 999999,
+      lines: [],
+    },
+  ]
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -129,11 +143,34 @@ async function render(session: AuthState = READER) {
       </MemoryRouter>,
     )
   })
+  await settle()
+}
+
+/** Lets the queries resolve: five turns of the loop, which is more than the page ever needs. */
+async function settle() {
   for (let round = 0; round < 5; round += 1) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
   }
+}
+
+/**
+ * Opens the first expansion with that summary. jsdom does not toggle a `details` on a click,
+ * so the flag is set and the event the screen listens for is raised by hand.
+ */
+async function open(summary: string) {
+  const expansion = Array.from(container.querySelectorAll('details')).find(
+    (node) => node.querySelector('summary')?.textContent === summary,
+  )
+  if (expansion === undefined) {
+    throw new Error(`keine Aufklappung «${summary}»`)
+  }
+  await act(async () => {
+    expansion.open = true
+    expansion.dispatchEvent(new Event('toggle'))
+  })
+  await settle()
 }
 
 const text = () => container.textContent ?? ''
@@ -184,5 +221,30 @@ describe('ReconciliationPage', () => {
 
     expect(asked.some((url) => url.includes('manual-entries'))).toBe(false)
     expect(asked.some((url) => url.includes('sources-without-entry'))).toBe(false)
+    expect(asked.some((url) => url.includes('entries-without-source'))).toBe(false)
+  })
+
+  /**
+   * <b>The third expansion.</b> An entry whose record the subsidiary ledger no longer holds —
+   * the right way round, because an entry is kept for ten years and the record it came from
+   * need not be. Opened, it names the entry so nobody hunts for a document that is not there.
+   */
+  it('reconciliationPageShowsAnEntryWithoutItsSourceTest', async () => {
+    await render()
+
+    await open('Buchungen ohne Beleg')
+
+    expect(asked.some((url) => url.includes('entries-without-source'))).toBe(true)
+    expect(text()).toContain('2026-000901')
+  })
+
+  /** Opened with nothing behind it, the expansion says so rather than staying blank. */
+  it('reconciliationPageShowsNoEntryWithoutItsSourceTest', async () => {
+    orphans = []
+    await render()
+
+    await open('Buchungen ohne Beleg')
+
+    expect(text()).toContain('Zu jeder Buchung auf diesem Konto steht ihr Beleg.')
   })
 })

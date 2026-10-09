@@ -15,6 +15,7 @@ import {
   fetchFiscalYears,
   fetchManualEntriesOn,
   fetchReconciliation,
+  fetchEntriesWithoutSource,
   fetchSourcesWithoutEntry,
   fiscalYearsKey,
   reconciliationDetailKey,
@@ -192,7 +193,7 @@ function Reconciliation({ tenantId }: { tenantId: number }) {
 }
 
 /**
- * The two expansions under one collective account.
+ * The three expansions under one collective account.
  *
  * <p>They answer «warum», because a difference without an explanation only moves the question.
  * Loaded when opened and not before: a screen that asks four questions for every row pays for
@@ -215,6 +216,7 @@ function Expansions({
 }) {
   const manualKey = `${row.systemKey}:manual`
   const waitingKey = `${row.systemKey}:waiting`
+  const orphanKey = `${row.systemKey}:orphans`
   const cutOff = asOf === '' ? undefined : asOf
 
   const manual = useQuery({
@@ -233,6 +235,17 @@ function Expansions({
     queryFn: () =>
       fetchSourcesWithoutEntry(tenantId, row.systemKey, listQuery({ asOf: cutOff, limit: 50 })),
     enabled: opened === waitingKey,
+  })
+
+  const orphans = useQuery({
+    queryKey: reconciliationDetailKey(tenantId, row.systemKey, 'orphans', asOf),
+    queryFn: () =>
+      fetchEntriesWithoutSource(
+        tenantId,
+        row.systemKey,
+        listQuery({ fiscalYearId: fiscalYearId ?? undefined, asOf: cutOff, limit: 50 }),
+      ),
+    enabled: opened === orphanKey && fiscalYearId !== null,
   })
 
   return (
@@ -281,6 +294,30 @@ function Expansions({
                 <span className="font-mono">{source.reference}</span>
                 <span>{formatDate(source.day)}</span>
                 <span>{formatAmount(source.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+
+        <details
+          open={opened === orphanKey}
+          onToggle={(event) =>
+            onOpen(event.currentTarget.open ? orphanKey : opened === orphanKey ? null : opened)
+          }
+        >
+          <summary className="cursor-pointer text-[13px]">Buchungen ohne Beleg</summary>
+          <div className="pt-2 text-[13px]">
+            {orphans.error !== null && <ErrorNotice error={orphans.error} />}
+            {(orphans.data ?? []).length === 0 && !orphans.isLoading && (
+              <p className="text-text-tertiary">
+                Zu jeder Buchung auf diesem Konto steht ihr Beleg.
+              </p>
+            )}
+            {(orphans.data ?? []).map((entry) => (
+              <div key={entry.id} className="flex flex-wrap gap-x-4">
+                <span className="font-mono">{entry.entryNumber}</span>
+                <span>{formatDate(entry.bookingDate)}</span>
+                <span>{entry.description}</span>
               </div>
             ))}
           </div>

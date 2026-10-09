@@ -1098,6 +1098,18 @@ export function fetchSourcesWithoutEntry(
     `${accountingUrl(tenantId)}/reconciliation/${systemKey}/sources-without-entry?${query}`,
   )
 }
+
+/** The entries on one collective account whose source the subsidiary ledger no longer holds. */
+export function fetchEntriesWithoutSource(
+  tenantId: number,
+  systemKey: string,
+  query: string,
+): Promise<JournalRow[]> {
+  return api.get<JournalRow[]>(
+    `${accountingUrl(tenantId)}/reconciliation/${systemKey}/entries-without-source?${query}`,
+  )
+}
+
 /** Path of the income statement within the application. */
 export const INCOME_STATEMENT_PATH = '/buchhaltung/erfolgsrechnung'
 
