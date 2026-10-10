@@ -86,7 +86,15 @@ function sheetOf(lines: AccountSheetLine[], over: Partial<AccountSheet> = {}): A
       totalPages: 1,
       sort: '',
     },
-    notices: { drafts: 0, draftTotal: null, currencyCode: 'CHF', moduleGaps: [] },
+    notices: {
+      drafts: 0,
+      draftTotal: null,
+      currencyCode: 'CHF',
+      moduleGaps: [],
+      unpostedDocuments: 0,
+      unpostedBankTransactions: 0,
+      postingStartsOn: '2026-01-01',
+    },
     ...over,
   }
 }
@@ -254,6 +262,9 @@ describe('AccountSheetPage', () => {
         draftTotal: 900,
         currencyCode: 'CHF',
         moduleGaps: [{ from: '2026-03-14', to: '2026-07-02', open: false }],
+        unpostedDocuments: 0,
+        unpostedBankTransactions: 0,
+        postingStartsOn: '2026-01-01',
       },
     })
 

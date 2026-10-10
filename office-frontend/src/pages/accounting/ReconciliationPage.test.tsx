@@ -18,6 +18,12 @@ let root: Root
 let rows: unknown[] = []
 let asked: string[] = []
 let orphans: unknown[] = []
+/** What `GET /entries/attention` answers: the counters and the changeover day. */
+let attention: Record<string, unknown> = {}
+/** The stretches the bookkeeping was off, as the report carries them. */
+let offPeriods: unknown[] = []
+/** What the register «Nicht gebucht» lists. */
+let waiting: unknown[] = []
 
 function auth(permissions: string[]): AuthState {
   return {
@@ -63,10 +69,14 @@ function stubFetch() {
           },
         ],
       }
+    } else if (url.includes('/entries/attention')) {
+      body = attention
     } else if (url.includes('entries-without-source')) {
       body = orphans
+    } else if (url.includes('sources-without-entry')) {
+      body = waiting
     } else if (url.includes('/reconciliation')) {
-      body = { asOf: null, rows }
+      body = { asOf: null, rows, moduleOffPeriods: offPeriods }
     }
     return Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -79,6 +89,23 @@ function stubFetch() {
 
 beforeEach(() => {
   asked = []
+  attention = {
+    drafts: 0,
+    draftTotal: 0,
+    unpostedDocuments: 12,
+    unpostedBankTransactions: 0,
+    postingStartsOn: '2026-07-01',
+  }
+  offPeriods = []
+  waiting = [
+    {
+      sourceKind: 'DOCUMENT',
+      sourceId: 31,
+      reference: 'RE-2026-0412',
+      day: '2026-08-18',
+      amount: 1080.1,
+    },
+  ]
   rows = [
     {
       systemKey: 'DEBITOR_SAMMEL',
@@ -130,11 +157,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function render(session: AuthState = READER) {
+async function render(session: AuthState = READER, path = '/buchhaltung/abstimmung') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <AuthContext.Provider value={session}>
           <QueryClientProvider client={client}>
             <ReconciliationPage />
@@ -246,5 +273,85 @@ describe('ReconciliationPage', () => {
     await open('Buchungen ohne Beleg')
 
     expect(text()).toContain('Zu jeder Buchung auf diesem Konto steht ihr Beleg.')
+  })
+
+  /**
+   * <b>The sentence under the report.</b> When the books were not kept, and how many invoices
+   * that left without an entry — the example of the decision, word for word.
+   */
+  it('reconciliationPageNamesTheSwitchedOffStretchTest', async () => {
+    offPeriods = [{ from: '2026-03-14', to: '2026-07-02', open: false, unpostedDocuments: 41 }]
+
+    await render()
+
+    expect(text()).toContain(
+      'Die Buchhaltung war vom 14.03.2026 bis 02.07.2026 abgeschaltet. In dieser Zeit sind 41'
+        + ' Belege ausgestellt worden, zu denen keine Buchung besteht.',
+    )
+  })
+
+  /** The register carries the counter, from the same answer the evaluations read. */
+  it('reconciliationPageCountsTheUnpostedInvoicesOnTheRegisterTest', async () => {
+    await render()
+
+    expect(text()).toContain('Nicht gebucht (12)')
+  })
+
+  /**
+   * «Ansehen» beside the counter lands on the register itself. With a confirmed day it lists the
+   * invoices — and offers no button, because the catch-up run that would book them comes later.
+   */
+  it('reconciliationPageOpensOnTheUnpostedRegisterTest', async () => {
+    await render(READER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    expect(text()).toContain('RE-2026-0412')
+    expect(text()).not.toContain('Geschäftsjahr')
+    expect(text()).not.toContain('Nachbuchen')
+  })
+
+  /**
+   * <b>Without a confirmed day the register is a sentence and a way.</b> Nothing books itself
+   * and nothing is caught up until the day stands; the link leads to the confirmation dialog.
+   */
+  it('reconciliationPageWithoutAChangeoverDayLeadsToTheDialogTest', async () => {
+    attention = { ...attention, postingStartsOn: null }
+
+    await render(READER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    expect(text()).toContain(
+      'Solange kein Stichtag bestätigt ist, wird nichts gebucht und nichts nachgetragen.',
+    )
+    const link = Array.from(container.querySelectorAll('a')).find(
+      (candidate) => candidate.textContent === 'Stichtag bestätigen',
+    )
+    expect(link?.getAttribute('href')).toBe('/buchhaltung/einstellungen')
+    expect(asked.some((url) => url.includes('sources-without-entry'))).toBe(false)
+  })
+
+  /**
+   * The expansion «Belege ohne Buchung» is the third way to the dialog: without a day it says
+   * why it lists every issued document, and where to change that.
+   */
+  it('reconciliationPageExpansionLeadsToTheDialogTest', async () => {
+    attention = { ...attention, postingStartsOn: null }
+    await render()
+
+    await open('Belege ohne Buchung')
+
+    expect(text()).toContain('Es ist noch kein Stichtag bestätigt')
+    const links = Array.from(container.querySelectorAll('a')).filter(
+      (candidate) => candidate.textContent === 'Stichtag bestätigen',
+    )
+    expect(links.length).toBeGreaterThan(0)
+    expect(links[0].getAttribute('href')).toBe('/buchhaltung/einstellungen')
+  })
+
+  /** With a confirmed day the expansion says nothing about the dialog. */
+  it('reconciliationPageExpansionWithAChangeoverDayTest', async () => {
+    await render()
+
+    await open('Belege ohne Buchung')
+
+    expect(text()).not.toContain('Es ist noch kein Stichtag bestätigt')
   })
 })

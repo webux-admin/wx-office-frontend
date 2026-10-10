@@ -24,7 +24,16 @@ afterEach(() => {
 })
 
 function notices(over: Partial<ReportNotices> = {}): ReportNotices {
-  return { drafts: 0, draftTotal: null, currencyCode: 'CHF', moduleGaps: [], ...over }
+  return {
+    drafts: 0,
+    draftTotal: null,
+    currencyCode: 'CHF',
+    moduleGaps: [],
+    unpostedDocuments: 0,
+    unpostedBankTransactions: 0,
+    postingStartsOn: '2026-01-01',
+    ...over,
+  }
 }
 
 function paint(value: ReportNotices) {
@@ -115,7 +124,44 @@ describe('AccountingNotices', () => {
     expect(container.textContent).toContain('seit dem 01.08.2026')
   })
 
-  /** Both boxes at once, in the order they are read: what is missing, then when nothing ran. */
+  /**
+   * <b>The two counters replaced the sentence that nothing books itself yet.</b> Each stands with
+   * its way: the invoices to the register «Nicht gebucht», the movements to the bank list.
+   */
+  it('unpostedNoticeShowsBothCountersWithTheirWayTest', () => {
+    paint(notices({ unpostedDocuments: 12, unpostedBankTransactions: 7 }))
+
+    expect(container.textContent).toContain('12 ausgestellte Rechnungen sind noch nicht verbucht.')
+    expect(container.textContent).toContain('7 Bankposten sind noch nicht gebucht.')
+    const ways = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+    expect(ways).toEqual(['/buchhaltung/abstimmung?ansicht=nicht-gebucht', '/bankposten'])
+    expect(container.textContent).not.toContain('automatisch')
+  })
+
+  /**
+   * Without a confirmed changeover day the reason stands above the counters, with the way to the
+   * confirmation dialog — one of the three ways that lead there.
+   */
+  it('unpostedNoticeWithoutAChangeoverDayTest', () => {
+    paint(notices({ postingStartsOn: null, unpostedDocuments: 3 }))
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('Es ist noch kein Stichtag bestätigt — bis dahin wird nichts gebucht.')
+    expect(text.indexOf('Stichtag')).toBeLessThan(text.indexOf('3 ausgestellte Rechnungen'))
+    const first = container.querySelector('a')
+    expect(first?.getAttribute('href')).toBe('/buchhaltung/einstellungen')
+    expect(first?.textContent).toBe('Stichtag bestätigen')
+  })
+
+  /** One counter alone: the other is not shown as zero. */
+  it('unpostedNoticeWithOnlyOneCounterTest', () => {
+    paint(notices({ unpostedBankTransactions: 1 }))
+
+    expect(container.textContent).toContain('1 Bankposten ist noch nicht gebucht.')
+    expect(container.textContent).not.toContain('Rechnung')
+  })
+
+
   it('accountingNoticesShowsBothTest', () => {
     paint(
       notices({

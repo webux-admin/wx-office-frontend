@@ -17,8 +17,13 @@ import {
   FISCAL_YEARS_PATH,
   accountingSettingsKey,
   accountingSettingsUrl,
+  attentionKey,
   fetchFiscalYears,
+  fetchPostingStartProposal,
   fiscalYearsKey,
+  handEntriesSentence,
+  postingStartProposalKey,
+  setupStateKey,
   updateAccountingSettings,
 } from '../lib/accounting'
 import { api } from '../lib/api'
@@ -147,6 +152,8 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
 
   return (
     <>
+      <PostingStartPanel key={stored.postingStartsOn ?? ''} tenantId={tenantId} stored={stored} />
+
       <Panel title="Zustand">
         <dl className="grid gap-3 text-[13px]">
           {/* Can only ever read «eingeschaltet»: folder and entry carry the module switch, and
@@ -236,6 +243,121 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         </p>
       </Panel>
     </>
+  )
+}
+
+/**
+ * «Ab wann buchen Ihre Belege selbst?» — the confirmation dialog for the changeover day.
+ *
+ * <p><b>A question of the mask, not a second endpoint.</b> The day is written through
+ * `PUT /settings` with `ACCOUNTING_CONFIGURE`, the same way and the same right as every other
+ * setting here; the opening entry derives its booking date from the same column, and two writers
+ * for one date would be a second truth (backend ADR-0120). What this panel adds is the proposal:
+ * the first day after the last month somebody booked by hand on a collective account, and how
+ * many hand entries stand there.
+ *
+ * <p><b>Why it matters.</b> Without a confirmed day nothing books itself — not forwards and not
+ * backwards — because the application cannot tell which invoices were already booked by hand.
+ * A day too early would book them a second time; the hand entries are shown so nobody picks one.
+ *
+ * <p>Once confirmed it shrinks to one line with the day and the way to change it.
+ */
+function PostingStartPanel({ tenantId, stored }: { tenantId: number; stored: AccountingSettings }) {
+  const { can } = useAuth()
+  const queryClient = useQueryClient()
+  const mayConfigure = can(ACCOUNTING_RIGHTS.configure)
+  const confirmed = stored.postingStartsOn ?? null
+
+  const proposal = useQuery({
+    queryKey: postingStartProposalKey(tenantId),
+    queryFn: () => fetchPostingStartProposal(tenantId),
+  })
+
+  // `null` until somebody types: the field shows the proposal, and a proposal arriving late
+  // must not be overwritten by an empty string typed before it was there.
+  const [typed, setTyped] = useState<string | null>(null)
+  const [changing, setChanging] = useState(false)
+  const shown = typed ?? confirmed ?? proposal.data?.proposedStartsOn ?? ''
+
+  const save = useMutation({
+    // The changeover day and nothing else: `PUT /settings` leaves every field it is not given
+    // where it stands, so the bolt and the revenue account beside it are not touched.
+    mutationFn: (day: string) => updateAccountingSettings(tenantId, { postingStartsOn: day }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(accountingSettingsKey(tenantId), settings)
+      // The counters above every evaluation and the register «Nicht gebucht» count from this day
+      // on, and the setup wizard reads it as its third step.
+      void queryClient.invalidateQueries({ queryKey: attentionKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: postingStartProposalKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: setupStateKey(tenantId) })
+    },
+  })
+
+  const complete = isCompleteIsoDate(shown)
+
+  if (confirmed !== null && !changing) {
+    return (
+      <Panel title="Ab wann buchen Ihre Belege selbst?">
+        <div className="flex flex-wrap items-center gap-3 text-[13px]">
+          <span>
+            Ab dem <span className="font-mono tabular-nums">{formatDate(confirmed)}</span>{' '}
+            erzeugt jede ausgestellte Rechnung ihre Buchung selbst.
+          </span>
+          {mayConfigure && (
+            <Button variant="secondary" onClick={() => setChanging(true)}>
+              Ändern
+            </Button>
+          )}
+        </div>
+      </Panel>
+    )
+  }
+
+  return (
+    <Panel title="Ab wann buchen Ihre Belege selbst?">
+      <div className="grid gap-3 text-[13px]">
+        {confirmed === null && (
+          <WarningNotice>
+            Noch nicht bestätigt. Solange kein Stichtag bestätigt ist, wird nichts gebucht —
+            keine ausgestellte Rechnung erzeugt eine Buchung.
+          </WarningNotice>
+        )}
+        {proposal.error !== null && <ErrorNotice error={proposal.error} />}
+        {(proposal.data?.accounts ?? []).map((account) => (
+          <p key={account.systemKey}>{handEntriesSentence(account)}</p>
+        ))}
+        <p>Für die Zeit davor haben Sie von Hand gebucht — dort wird nichts nachgetragen.</p>
+        {mayConfigure ? (
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <span className="w-full max-w-[200px]">
+                <TextField
+                  label={confirmed === null ? 'Vorschlag' : 'Stichtag'}
+                  type="date"
+                  value={shown}
+                  onChange={(event) => setTyped(event.target.value)}
+                  hint="Der erste Tag, an dem die Belege selbst buchen."
+                />
+              </span>
+              <Button onClick={() => save.mutate(shown)} busy={save.isPending} disabled={!complete}>
+                Stichtag bestätigen
+              </Button>
+              {changing && (
+                <Button variant="secondary" onClick={() => setChanging(false)}>
+                  Abbrechen
+                </Button>
+              )}
+            </div>
+            {save.error !== null && <ErrorNotice error={save.error} />}
+          </div>
+        ) : (
+          <p className="text-[12px] text-text-secondary">
+            Bestätigen lässt sich der Stichtag mit dem Recht{' '}
+            <span className="font-mono text-[12px]">{ACCOUNTING_RIGHTS.configure}</span>.
+          </p>
+        )}
+      </div>
+    </Panel>
   )
 }
 

@@ -1,17 +1,23 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
 import { DataTable, type Column } from '../../components/DataTable'
-import { EmptyState, ErrorNotice } from '../../components/Notice'
+import { EmptyState, ErrorNotice, WarningNotice } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
+import { Tabs } from '../../components/Tabs'
 import { TextField } from '../../components/TextField'
 import { RequireTenant } from '../../layout/RequireTenant'
 import { formatAmount, formatDate } from '../../lib/format'
 import { listQuery } from '../../lib/paging'
 import {
   ACCOUNTING_RIGHTS,
+  ACCOUNTING_SETTINGS_PATH,
+  UNPOSTED_REGISTER,
+  attentionKey,
+  fetchAttention,
   fetchFiscalYears,
   fetchManualEntriesOn,
   fetchReconciliation,
@@ -20,7 +26,9 @@ import {
   fiscalYearsKey,
   reconciliationDetailKey,
   reconciliationKey,
+  switchedOffSentence,
   type ReconciliationRow,
+  type UnpostedSource,
 } from '../../lib/accounting'
 import { defaultYearOf } from './fiscalYears'
 
@@ -39,6 +47,12 @@ import { defaultYearOf } from './fiscalYears'
  * <p><b>It reads with the module switched off</b>, like the archive: switching off closes the
  * writing ways and must not hide what stands open. It is exactly then that somebody asks (OR
  * Art. 958f, backend ADR-0119).
+ *
+ * <p><b>Two registers.</b> «Abstimmung» holds the accounts against the subsidiary ledgers;
+ * «Nicht gebucht» lists the issued invoices that never reached the ledger. The second one is
+ * reached from the counter above every evaluation, so the register it opens on stands in the
+ * address (`?ansicht=nicht-gebucht`). Choosing rows and booking them afterwards is the catch-up
+ * run, which comes later; until then the register lists and explains.
  */
 export function ReconciliationPage() {
   return (
@@ -48,7 +62,68 @@ export function ReconciliationPage() {
   )
 }
 
+type Register = 'reconciliation' | 'unposted'
+
 function Reconciliation({ tenantId }: { tenantId: number }) {
+  const [params] = useSearchParams()
+  const [register, setRegister] = useState<Register>(
+    params.get('ansicht') === UNPOSTED_REGISTER ? 'unposted' : 'reconciliation',
+  )
+
+  // The counter on the register and whether a changeover day stands. One answer for both, the
+  // same the draft list reads, so the register cannot name a different figure than the counter
+  // above the evaluations.
+  const attention = useQuery({
+    queryKey: attentionKey(tenantId),
+    queryFn: () => fetchAttention(tenantId),
+  })
+  const unpostedCount = attention.data?.unpostedDocuments
+  // Undefined until the answer is there: nothing is claimed about the day before it is known — a
+  // notice that flashes up and vanishes again would read as a fault, and a list asked for too
+  // early would be one nobody should see.
+  const startConfirmed =
+    attention.data === undefined ? undefined : Boolean(attention.data.postingStartsOn)
+
+  return (
+    <>
+      <PageHeader
+        title="Abstimmung"
+        subtitle="Was das Hauptbuch auf den Sammelkonten führt, gehalten gegen die Nebenbücher dahinter — offene Posten und Kundenguthaben."
+      />
+
+      <div className="grid gap-4 px-8 pb-12">
+        <Tabs<Register>
+          label="Abstimmung"
+          active={register}
+          onChange={setRegister}
+          tabs={[
+            { id: 'reconciliation', label: 'Abstimmung' },
+            {
+              id: 'unposted',
+              label:
+                unpostedCount === undefined ? 'Nicht gebucht' : `Nicht gebucht (${unpostedCount})`,
+            },
+          ]}
+        />
+
+        {register === 'unposted' ? (
+          <UnpostedRegister tenantId={tenantId} startConfirmed={startConfirmed} />
+        ) : (
+          <ReconciliationRegister tenantId={tenantId} startConfirmed={startConfirmed} />
+        )}
+      </div>
+    </>
+  )
+}
+
+/** The register «Abstimmung»: the collective accounts, their expansions, and the stretches. */
+function ReconciliationRegister({
+  tenantId,
+  startConfirmed,
+}: {
+  tenantId: number
+  startConfirmed: boolean | undefined
+}) {
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
   const [asOf, setAsOf] = useState('')
   const [opened, setOpened] = useState<string | null>(null)
@@ -71,6 +146,7 @@ function Reconciliation({ tenantId }: { tenantId: number }) {
   })
 
   const rows = report.data?.rows ?? []
+  const offPeriods = report.data?.moduleOffPeriods ?? []
 
   const columns: Column<ReconciliationRow>[] = [
     {
@@ -121,73 +197,165 @@ function Reconciliation({ tenantId }: { tenantId: number }) {
 
   return (
     <>
-      <PageHeader
-        title="Abstimmung"
-        subtitle="Was das Hauptbuch auf den Sammelkonten führt, gehalten gegen die Nebenbücher dahinter — offene Posten und Kundenguthaben."
-      />
-
-      <div className="grid gap-4 px-8 pb-12">
-        <div className="flex flex-wrap items-end gap-4">
-          <SelectField
-            label="Geschäftsjahr"
-            value={chosen === null ? '' : String(chosen)}
-            onChange={(event) =>
-              setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
-            }
-            className="w-[170px]"
-          >
-            {available.map((year) => (
-              <option key={year.id} value={year.id}>
-                {year.label}
-              </option>
-            ))}
-          </SelectField>
-          <TextField
-            label="Stichtag"
-            type="date"
-            value={asOf}
-            onChange={(event) => setAsOf(event.target.value)}
-            hint="Beide Seiten werden auf diesen Tag gelesen. Leer heisst: das ganze Jahr."
-          />
-        </div>
-
-        <Panel padded={false} title="Sammelkonten">
-          <DataTable
-            columns={columns}
-            rows={rows}
-            keyOf={(row) => row.systemKey}
-            loading={report.isLoading}
-            error={report.error}
-            empty={
-              <EmptyState
-                title="Keine Sammelkonten"
-                description="Für dieses Geschäftsjahr steht nichts zum Abstimmen."
-              />
-            }
-          />
-        </Panel>
-
-        {rows
-          .filter((row) => row.accountNumber !== undefined)
-          .map((row) => (
-            <Expansions
-              key={row.systemKey}
-              tenantId={tenantId}
-              row={row}
-              fiscalYearId={chosen}
-              asOf={asOf}
-              opened={opened}
-              onOpen={setOpened}
-            />
+      <div className="flex flex-wrap items-end gap-4">
+        <SelectField
+          label="Geschäftsjahr"
+          value={chosen === null ? '' : String(chosen)}
+          onChange={(event) =>
+            setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
+          }
+          className="w-[170px]"
+        >
+          {available.map((year) => (
+            <option key={year.id} value={year.id}>
+              {year.label}
+            </option>
           ))}
-
-        <p className="text-[12px] text-text-secondary">
-          Eine Differenz ist kein Fehler des Programms, sondern eine Frage an einen Menschen:
-          Belege von vor dem Umstellungstag werden bewusst nicht gebucht, eine Handbuchung
-          bewegt nur das Hauptbuch, und ein Kundenguthaben ohne genanntes Geldkonto erreicht das
-          Hauptbuch gar nicht.
-        </p>
+        </SelectField>
+        <TextField
+          label="Stichtag"
+          type="date"
+          value={asOf}
+          onChange={(event) => setAsOf(event.target.value)}
+          hint="Beide Seiten werden auf diesen Tag gelesen. Leer heisst: das ganze Jahr."
+        />
       </div>
+
+      <Panel padded={false} title="Sammelkonten">
+        <DataTable
+          columns={columns}
+          rows={rows}
+          keyOf={(row) => row.systemKey}
+          loading={report.isLoading}
+          error={report.error}
+          empty={
+            <EmptyState
+              title="Keine Sammelkonten"
+              description="Für dieses Geschäftsjahr steht nichts zum Abstimmen."
+            />
+          }
+        />
+      </Panel>
+
+      {rows
+        .filter((row) => row.accountNumber !== undefined)
+        .map((row) => (
+          <Expansions
+            key={row.systemKey}
+            tenantId={tenantId}
+            row={row}
+            fiscalYearId={chosen}
+            asOf={asOf}
+            opened={opened}
+            onOpen={setOpened}
+            startConfirmed={startConfirmed}
+          />
+        ))}
+
+      {/* The sentence the decision asked for under the report: when the books were not kept, and
+          how many invoices that left without an entry. */}
+      {offPeriods.map((period) => (
+        <WarningNotice key={`${period.from}-${period.to}`}>{switchedOffSentence(period)}</WarningNotice>
+      ))}
+
+      <p className="text-[12px] text-text-secondary">
+        Eine Differenz ist kein Fehler des Programms, sondern eine Frage an einen Menschen:
+        Belege von vor dem Umstellungstag werden bewusst nicht gebucht, eine Handbuchung
+        bewegt nur das Hauptbuch, und ein Kundenguthaben ohne genanntes Geldkonto erreicht das
+        Hauptbuch gar nicht.
+      </p>
+    </>
+  )
+}
+
+/**
+ * The way to the confirmation dialog, wherever a missing changeover day explains what is shown.
+ *
+ * <p>One of the three ways the decision names — the counter above the evaluations, the register
+ * «Nicht gebucht» and the expansion «Belege ohne Buchung» — and all three lead to the same block
+ * of the settings.
+ */
+function ConfirmStartLink() {
+  return (
+    <Link to={ACCOUNTING_SETTINGS_PATH} className="underline">
+      Stichtag bestätigen
+    </Link>
+  )
+}
+
+/**
+ * «Nicht gebucht»: the issued invoices that never reached the ledger.
+ *
+ * <p><b>Without a confirmed changeover day there is no list but a sentence.</b> Then nothing
+ * books itself and every issued invoice counts; a list of all of them would answer the wrong
+ * question — the right one is from which day on the documents book themselves.
+ *
+ * <p>Only a list for now. Choosing rows and booking them afterwards is the catch-up run, which
+ * comes with its own step and its own checks; a button here that no endpoint serves would be a
+ * promise the screen cannot keep.
+ */
+function UnpostedRegister({
+  tenantId,
+  startConfirmed,
+}: {
+  tenantId: number
+  startConfirmed: boolean | undefined
+}) {
+  const waiting = useQuery({
+    queryKey: reconciliationDetailKey(tenantId, 'DEBITOR_SAMMEL', 'unposted-register', ''),
+    queryFn: () => fetchSourcesWithoutEntry(tenantId, 'DEBITOR_SAMMEL', listQuery({ limit: 200 })),
+    enabled: startConfirmed === true,
+  })
+
+  if (startConfirmed === false) {
+    return (
+      <WarningNotice>
+        <span className="flex flex-wrap items-baseline gap-2">
+          <span>
+            Solange kein Stichtag bestätigt ist, wird nichts gebucht und nichts nachgetragen.
+          </span>
+          <ConfirmStartLink />
+        </span>
+      </WarningNotice>
+    )
+  }
+
+  const columns: Column<UnpostedSource>[] = [
+    {
+      key: 'reference',
+      header: 'Beleg',
+      render: (source) => <span className="font-mono">{source.reference}</span>,
+    },
+    { key: 'day', header: 'Datum', render: (source) => formatDate(source.day) },
+    {
+      key: 'amount',
+      header: 'Betrag',
+      align: 'right',
+      render: (source) => formatAmount(source.amount),
+    },
+  ]
+
+  return (
+    <>
+      <Panel padded={false} title="Ausgestellte Rechnungen ohne Buchung">
+        <DataTable
+          columns={columns}
+          rows={waiting.data ?? []}
+          keyOf={(source) => `${source.sourceKind}-${source.sourceId}`}
+          loading={startConfirmed === undefined || waiting.isLoading}
+          error={waiting.error}
+          empty={
+            <EmptyState
+              title="Alles gebucht"
+              description="Seit dem Stichtag hat jede ausgestellte Rechnung ihre Buchung."
+            />
+          }
+        />
+      </Panel>
+      <p className="text-[12px] text-text-secondary">
+        Rechnungen vor dem Stichtag stehen hier nicht: diese Zeit wurde von Hand gebucht, dort wird
+        nichts nachgetragen.
+      </p>
     </>
   )
 }
@@ -206,6 +374,7 @@ function Expansions({
   asOf,
   opened,
   onOpen,
+  startConfirmed,
 }: {
   tenantId: number
   row: ReconciliationRow
@@ -213,6 +382,11 @@ function Expansions({
   asOf: string
   opened: string | null
   onOpen: (key: string | null) => void
+  /**
+   * Whether a changeover day stands, `undefined` until known; without one the expansion says
+   * why it lists everything.
+   */
+  startConfirmed: boolean | undefined
 }) {
   const manualKey = `${row.systemKey}:manual`
   const waitingKey = `${row.systemKey}:waiting`
@@ -283,6 +457,17 @@ function Expansions({
         >
           <summary className="cursor-pointer text-[13px]">Belege ohne Buchung</summary>
           <div className="pt-2 text-[13px]">
+            {/* Only the receivables list documents; the customer credits never do, so the
+                sentence would claim something about them that is not so. */}
+            {startConfirmed === false && row.systemKey === 'DEBITOR_SAMMEL' && (
+              <p className="flex flex-wrap items-baseline gap-2 pb-2 text-text-secondary">
+                <span>
+                  Es ist noch kein Stichtag bestätigt — deshalb wird nichts gebucht, und jeder
+                  ausgestellte Beleg steht hier.
+                </span>
+                <ConfirmStartLink />
+              </p>
+            )}
             {waiting.error !== null && <ErrorNotice error={waiting.error} />}
             {(waiting.data ?? []).length === 0 && !waiting.isLoading && (
               <p className="text-text-tertiary">

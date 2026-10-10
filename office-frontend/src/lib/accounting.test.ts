@@ -1,6 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  NO_POSTING_START_SENTENCE,
+  UNPOSTED_PATH,
+  handEntriesSentence,
+  postingStartProposalKey,
+  postingStartProposalUrl,
+  switchedOffSentence,
+  unpostedBankSentence,
+  unpostedDocumentsSentence,
+} from './accounting'
+import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
@@ -2214,6 +2224,102 @@ describe('der Jahresabschluss', () => {
     it('yearLogLabelWithoutAStatusTest', () => {
       expect(yearLogLabel(logLine('STATUS', null))).toBe('Zustand geändert')
     })
+  })
+})
+
+describe('what has not reached the ledger', () => {
+  /** The example sentence of the decision, word for word: a closed stretch with its count. */
+  it('switchedOffSentenceTest', () => {
+    expect(
+      switchedOffSentence({ from: '2026-03-14', to: '2026-07-02', open: false, unpostedDocuments: 41 }),
+    ).toBe(
+      'Die Buchhaltung war vom 14.03.2026 bis 02.07.2026 abgeschaltet. In dieser Zeit sind 41'
+        + ' Belege ausgestellt worden, zu denen keine Buchung besteht.',
+    )
+  })
+
+  /** An open stretch says «seit dem …» and names no end; one document is one. */
+  it('switchedOffSentenceForAnOpenStretchTest', () => {
+    expect(
+      switchedOffSentence({ from: '2026-08-01', to: '2026-09-30', open: true, unpostedDocuments: 1 }),
+    ).toBe(
+      'Die Buchhaltung ist seit dem 01.08.2026 abgeschaltet. Seither ist 1 Beleg ausgestellt'
+        + ' worden, zu dem keine Buchung besteht.',
+    )
+  })
+
+  /** Nothing left behind: the sentence says so instead of «0 Belege». */
+  it('switchedOffSentenceWithoutAnyDocumentTest', () => {
+    expect(
+      switchedOffSentence({ from: '2026-03-14', to: '2026-03-20', open: false, unpostedDocuments: 0 }),
+    ).toContain('In dieser Zeit ist kein Beleg ohne Buchung ausgestellt worden.')
+  })
+
+  /** The counters say what the paper says, singular for one. */
+  it('unpostedDocumentsSentenceTest', () => {
+    expect(unpostedDocumentsSentence(12)).toBe('12 ausgestellte Rechnungen sind noch nicht verbucht.')
+    expect(unpostedDocumentsSentence(1)).toBe('1 ausgestellte Rechnung ist noch nicht verbucht.')
+  })
+
+  /** The bank counter, singular and plural. */
+  it('unpostedBankSentenceTest', () => {
+    expect(unpostedBankSentence(7)).toBe('7 Bankposten sind noch nicht gebucht.')
+    expect(unpostedBankSentence(1)).toBe('1 Bankposten ist noch nicht gebucht.')
+  })
+
+  /** The words of the backend, so the screen and the paper agree. */
+  it('noPostingStartSentenceTest', () => {
+    expect(NO_POSTING_START_SENTENCE).toBe(
+      'Es ist noch kein Stichtag bestätigt — bis dahin wird nichts gebucht.',
+    )
+  })
+
+  /** «Ansehen» lands on the register, not on the first one. */
+  it('unpostedPathTest', () => {
+    expect(UNPOSTED_PATH).toBe('/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+  })
+
+  /**
+   * <b>The proposal is a read beside the one writer.</b> It sits under the settings resource,
+   * and nothing in this module writes the day anywhere but `PUT /settings`.
+   */
+  it('postingStartProposalUrlTest', () => {
+    expect(postingStartProposalUrl(4)).toBe(
+      '/api/tenants/4/accounting/settings/posting-start-proposal',
+    )
+    expect(postingStartProposalKey(4)).toEqual(['accounting-posting-start-proposal', 4])
+  })
+
+  /** The sentence of the dialog, in the words of the decision. */
+  it('handEntriesSentenceTest', () => {
+    expect(
+      handEntriesSentence({
+        systemKey: 'DEBITOR_SAMMEL',
+        accountNumber: '1100',
+        accountName: 'Forderungen aus L+L',
+        manualEntries: 148,
+        lastBookingDate: '2026-06-17',
+        bookedUntil: '2026-06-30',
+      }),
+    ).toBe('Auf dem Konto 1100 Forderungen aus L+L stehen 148 Handbuchungen bis zum 30.06.2026.')
+  })
+
+  /** One entry is one; none says that none stands, and names no day. */
+  it('handEntriesSentenceForOneAndNoneTest', () => {
+    const account = {
+      systemKey: 'DEBITOR_SAMMEL',
+      accountNumber: '1100',
+      accountName: 'Debitoren',
+      manualEntries: 1,
+      lastBookingDate: '2026-02-03',
+      bookedUntil: '2026-02-28',
+    }
+    expect(handEntriesSentence(account)).toBe(
+      'Auf dem Konto 1100 Debitoren steht 1 Handbuchung bis zum 28.02.2026.',
+    )
+    expect(
+      handEntriesSentence({ ...account, manualEntries: 0, lastBookingDate: null, bookedUntil: null }),
+    ).toBe('Auf dem Konto 1100 Debitoren steht keine Handbuchung.')
   })
 })
 

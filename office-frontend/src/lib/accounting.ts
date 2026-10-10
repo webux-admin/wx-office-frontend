@@ -8,7 +8,7 @@
  * written twice is a cache that goes stale in one of them.
  */
 import { ApiError, api } from './api'
-import { parseDecimal } from './format'
+import { formatDate, parseDecimal } from './format'
 import { listQuery } from './paging'
 import {
   clearSessionFamily,
@@ -49,11 +49,13 @@ import type {
   FiscalYearPreview,
   FiscalYearRequest,
   FiscalYearStatus,
+  HandBookedAccount,
   JournalRow,
   OpeningEntryOutcome,
   OpeningEntryRequest,
   Page,
   PositionHint,
+  PostingStartProposal,
   PostRunPreview,
   PostRunResult,
   PriorYearBalances,
@@ -1030,6 +1032,129 @@ export type ReconciliationRow = {
 export type Reconciliation = {
   asOf?: string
   rows: ReconciliationRow[]
+  /** The stretches the bookkeeping was off in this year, oldest first. */
+  moduleOffPeriods: SwitchedOffPeriod[]
+}
+
+/** One stretch the bookkeeping was off, with the invoices it left without an entry. */
+export type SwitchedOffPeriod = {
+  from: string
+  /** Cut to the day the report is read at. */
+  to: string
+  /** Still going on — then the sentence says «seit dem …» and names no end. */
+  open: boolean
+  unpostedDocuments: number
+}
+
+/**
+ * The sentence under the reconciliation report for one switched-off stretch.
+ *
+ * <p>The first half is the one every evaluation carries; the count is the second half the
+ * decision asked for, and it arrived once the documents answered the ledger's question.
+ *
+ * @param period the stretch, with its count
+ * @returns what the reader is told, word for word the example of the decision
+ */
+export function switchedOffSentence(period: SwitchedOffPeriod): string {
+  const opening = period.open
+    ? `Die Buchhaltung ist seit dem ${formatDate(period.from)} abgeschaltet.`
+    : `Die Buchhaltung war vom ${formatDate(period.from)} bis ${formatDate(period.to)} abgeschaltet.`
+  const since = period.open ? 'Seither' : 'In dieser Zeit'
+  if (period.unpostedDocuments === 0) {
+    return `${opening} ${since} ist kein Beleg ohne Buchung ausgestellt worden.`
+  }
+  if (period.unpostedDocuments === 1) {
+    return `${opening} ${since} ist 1 Beleg ausgestellt worden, zu dem keine Buchung besteht.`
+  }
+  return `${opening} ${since} sind ${period.unpostedDocuments} Belege ausgestellt worden, zu`
+    + ' denen keine Buchung besteht.'
+}
+
+/**
+ * The register of the reconciliation screen that lists what never reached the ledger, as it
+ * stands in the address — so «Ansehen» beside a counter lands on it.
+ */
+export const UNPOSTED_REGISTER = 'nicht-gebucht'
+
+/** Where «Ansehen» beside the invoice counter leads. */
+export const UNPOSTED_PATH = `${RECONCILIATION_PATH}?ansicht=${UNPOSTED_REGISTER}`
+
+/**
+ * What stands where no changeover day is confirmed — the same words as the backend
+ * `StatementNotes.NO_POSTING_START`, so screen and paper agree.
+ */
+export const NO_POSTING_START_SENTENCE =
+  'Es ist noch kein Stichtag bestätigt — bis dahin wird nichts gebucht.'
+
+/**
+ * How many issued invoices no entry stands for — word for word the backend
+ * `StatementNotes.unpostedDocumentsSentence`.
+ *
+ * @param count how many, at least one
+ * @returns the sentence, singular for one
+ */
+export function unpostedDocumentsSentence(count: number): string {
+  return count === 1
+    ? '1 ausgestellte Rechnung ist noch nicht verbucht.'
+    : `${count} ausgestellte Rechnungen sind noch nicht verbucht.`
+}
+
+/**
+ * How many bank movements reached neither an invoice nor an account — word for word the backend
+ * `StatementNotes.unpostedBankSentence`.
+ *
+ * @param count how many, at least one
+ * @returns the sentence, singular for one
+ */
+export function unpostedBankSentence(count: number): string {
+  return count === 1
+    ? '1 Bankposten ist noch nicht gebucht.'
+    : `${count} Bankposten sind noch nicht gebucht.`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the proposal the confirmation dialog for the changeover day reads
+ */
+export function postingStartProposalUrl(tenantId: number): string {
+  return `${accountingSettingsUrl(tenantId)}/posting-start-proposal`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of that proposal
+ */
+export function postingStartProposalKey(tenantId: number): readonly unknown[] {
+  return ['accounting-posting-start-proposal', tenantId]
+}
+
+/**
+ * Reads what the confirmation dialog proposes.
+ *
+ * <p>Only a read. The day is confirmed through `PUT /settings` and nothing else: two writers
+ * for the same date would be a second truth (backend ADR-0120).
+ */
+export function fetchPostingStartProposal(tenantId: number): Promise<PostingStartProposal> {
+  return api.get<PostingStartProposal>(postingStartProposalUrl(tenantId))
+}
+
+/**
+ * The sentence the dialog says about the hand entries on one collective account.
+ *
+ * @param account the account and what stands on it
+ * @returns «Auf dem Konto 1100 … stehen 148 Handbuchungen bis zum 30.06.2026.», or that none
+ *          stands
+ */
+export function handEntriesSentence(account: HandBookedAccount): string {
+  const label = `${account.accountNumber} ${account.accountName}`
+  if (account.manualEntries === 0) {
+    return `Auf dem Konto ${label} steht keine Handbuchung.`
+  }
+  const until = ` bis zum ${formatDate(account.bookedUntil)}`
+  if (account.manualEntries === 1) {
+    return `Auf dem Konto ${label} steht 1 Handbuchung${until}.`
+  }
+  return `Auf dem Konto ${label} stehen ${account.manualEntries} Handbuchungen${until}.`
 }
 
 /** One record of a subsidiary ledger that never reached the ledger. */

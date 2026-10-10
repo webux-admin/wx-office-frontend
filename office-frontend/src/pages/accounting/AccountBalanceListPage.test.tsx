@@ -105,7 +105,15 @@ function balanceOf(rows: TrialBalanceRow[], over: Partial<TrialBalance> = {}): T
       difference: 0,
       accountCount: 132,
     },
-    notices: { drafts: 0, draftTotal: null, currencyCode: 'CHF', moduleGaps: [] },
+    notices: {
+      drafts: 0,
+      draftTotal: null,
+      currencyCode: 'CHF',
+      moduleGaps: [],
+      unpostedDocuments: 0,
+      unpostedBankTransactions: 0,
+      postingStartsOn: '2026-01-01',
+    },
     ...over,
   }
 }
@@ -258,7 +266,15 @@ describe('AccountBalanceListPage', () => {
   /** The drafts left out of the figures are named above them, with the way to look at them. */
   it('draftNoticeLinksToTheDraftsTest', async () => {
     answer = balanceOf([row()], {
-      notices: { drafts: 3, draftTotal: 12480.55, currencyCode: 'CHF', moduleGaps: [] },
+      notices: {
+        drafts: 3,
+        draftTotal: 12480.55,
+        currencyCode: 'CHF',
+        moduleGaps: [],
+        unpostedDocuments: 0,
+        unpostedBankTransactions: 0,
+        postingStartsOn: '2026-01-01',
+      },
     })
 
     await paint()

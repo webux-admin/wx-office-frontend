@@ -96,7 +96,6 @@ function statement(over: Partial<Statement> = {}): Statement {
     drafts: { count: 0, amount: 0 },
     control: { label: 'Aktiven minus Passiven', amount: 0, balanced: true },
     notes: [
-      { kind: 'MANUAL_ONLY', text: 'Diese Auswertung enthält, was gebucht wurde.' },
       { kind: 'NO_ANNUAL_ACCOUNTS', text: 'Die Jahresrechnung nach OR Art. 958 Abs. 2 …' },
     ],
     rows: ROWS,
@@ -322,6 +321,31 @@ describe('BalanceSheetPage', () => {
     await paint()
 
     expect(container.textContent).toContain('3 Buchungen sind noch nicht verbucht')
+  })
+
+  /**
+   * <b>The counters stand where the sentence «noch nicht automatisch gebucht» stood</b>, in the
+   * backend's words, each with its way — the missing day to the confirmation dialog, the
+   * invoices to the register «Nicht gebucht».
+   */
+  it('balanceSheetShowsTheUnpostedCountersWithTheirWayTest', async () => {
+    answer = statement({
+      notes: [
+        {
+          kind: 'NO_POSTING_START',
+          text: 'Es ist noch kein Stichtag bestätigt — bis dahin wird nichts gebucht.',
+        },
+        { kind: 'UNPOSTED_DOCUMENTS', text: '12 ausgestellte Rechnungen sind noch nicht verbucht.' },
+      ],
+    })
+
+    await paint()
+
+    expect(container.textContent).toContain('12 ausgestellte Rechnungen sind noch nicht verbucht.')
+    expect(linkNamed('Stichtag bestätigen')?.getAttribute('href')).toBe('/buchhaltung/einstellungen')
+    expect(linkNamed('Ansehen')?.getAttribute('href')).toBe(
+      '/buchhaltung/abstimmung?ansicht=nicht-gebucht',
+    )
   })
 
   /**

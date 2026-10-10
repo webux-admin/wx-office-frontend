@@ -148,6 +148,7 @@ function applyUpdate(body: Record<string, unknown>): AccountingSettings {
   else if (typeof body.postingsLockedUntil === 'string') {
     next.postingsLockedUntil = body.postingsLockedUntil
   }
+  if (typeof body.postingStartsOn === 'string') next.postingStartsOn = body.postingStartsOn
   if (body.clearDefaultRevenueAccountNo === true) next.defaultRevenueAccountNo = undefined
   else if (typeof body.defaultRevenueAccountNo === 'string') {
     next.defaultRevenueAccountNo = body.defaultRevenueAccountNo
@@ -201,6 +202,22 @@ function stubFetch() {
     if (url.endsWith('/roles')) return json(roles)
     if (url.includes('/fiscal-years')) return json(years)
     if (url.includes('/accounting/accounts')) return json(accountPage())
+    if (url.includes('/posting-start-proposal')) {
+      return json({
+        proposedStartsOn: '2026-07-01',
+        confirmedStartsOn: settings.postingStartsOn ?? null,
+        accounts: [
+          {
+            systemKey: 'DEBITOR_SAMMEL',
+            accountNumber: '1100',
+            accountName: 'Forderungen aus L+L',
+            manualEntries: 148,
+            lastBookingDate: '2026-06-17',
+            bookedUntil: '2026-06-30',
+          },
+        ],
+      })
+    }
     return json(settings)
   })
 }
@@ -323,6 +340,7 @@ async function chooseIn(title: string, value: string) {
 }
 
 const ACCOUNT_PANEL = 'Ertragskonto'
+const START_PANEL = 'Ab wann buchen Ihre Belege selbst?'
 
 describe('AccountingStatePage', () => {
   it('rendersLedgerCurrencyTest', async () => {
@@ -656,5 +674,82 @@ describe('AccountingStatePage', () => {
     await render(READ_ONLY)
 
     expect(panel(ACCOUNT_PANEL)?.textContent).toContain('nicht gesetzt')
+  })
+
+  // --- the confirmation dialog for the changeover day ---------------------------------------
+
+  /**
+   * <b>Without a confirmed day the block stands on top</b>, with the proposal, the hand entries
+   * on the collective account and the sentence that nothing is caught up before it.
+   */
+  it('postingStartPanelProposesTheDayTest', async () => {
+    await render()
+
+    const block = panel(START_PANEL)
+    expect(block?.textContent).toContain('Noch nicht bestätigt.')
+    expect(block?.textContent).toContain(
+      'Auf dem Konto 1100 Forderungen aus L+L stehen 148 Handbuchungen bis zum 30.06.2026.',
+    )
+    expect(block?.textContent).toContain(
+      'Für die Zeit davor haben Sie von Hand gebucht — dort wird nichts nachgetragen.',
+    )
+    expect(field('Vorschlag')?.value).toBe('2026-07-01')
+  })
+
+  /**
+   * <b>The button writes through `PUT /settings` and through nothing else</b> — the same address
+   * and the same right as every other setting, and only the one field.
+   */
+  it('postingStartPanelConfirmsThroughPutSettingsTest', async () => {
+    await render()
+
+    await act(async () => {
+      panelButton(START_PANEL, 'Stichtag bestätigen')?.click()
+    })
+    await settle()
+
+    expect(written).toEqual([
+      {
+        url: '/api/tenants/1/accounting/settings',
+        method: 'PUT',
+        body: { postingStartsOn: '2026-07-01' },
+      },
+    ])
+    expect(panel(START_PANEL)?.textContent).toContain('Ab dem 01.07.2026')
+    expect(panelButton(START_PANEL, 'Stichtag bestätigen')).toBeUndefined()
+  })
+
+  /** A day typed over the proposal is the one that is sent. */
+  it('postingStartPanelSendsTheTypedDayTest', async () => {
+    await render()
+
+    await type('Vorschlag', '2026-08-01')
+    await act(async () => {
+      panelButton(START_PANEL, 'Stichtag bestätigen')?.click()
+    })
+    await settle()
+
+    expect(written[0]?.body).toEqual({ postingStartsOn: '2026-08-01' })
+  })
+
+  /** Once confirmed the block shrinks to one line with the day and the way to change it. */
+  it('postingStartPanelShrinksOnceConfirmedTest', async () => {
+    settings = { ...STORED, postingStartsOn: '2026-07-01' }
+
+    await render()
+
+    const block = panel(START_PANEL)
+    expect(block?.textContent).toContain('Ab dem 01.07.2026')
+    expect(block?.textContent).not.toContain('Noch nicht bestätigt.')
+    expect(panelButton(START_PANEL, 'Ändern')).toBeDefined()
+    expect(field('Vorschlag')).toBeUndefined()
+  })
+
+  /** Without the right the block reads and names the right instead of offering the button. */
+  it('postingStartPanelWithoutTheRightTest', async () => {
+    await render(READ_ONLY)
+
+    expect(panelButton(START_PANEL, 'Stichtag bestätigen')).toBeUndefined()
+    expect(panel(START_PANEL)?.textContent).toContain(ACCOUNTING_RIGHTS.configure)
   })
 })

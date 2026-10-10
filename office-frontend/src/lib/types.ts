@@ -3986,6 +3986,12 @@ export type ReportNotices = {
   /** The ledger currency the total is in. Read off the books, never guessed. */
   currencyCode?: string | null
   moduleGaps: ModuleGap[]
+  /** Issued invoices of this year without an entry — from the changeover day on. */
+  unpostedDocuments: number
+  /** Bank movements of this year that reached neither an invoice nor an account. */
+  unpostedBankTransactions: number
+  /** The confirmed changeover day; absent while none is, and then nothing books itself. */
+  postingStartsOn?: string | null
 }
 
 /**
@@ -4095,7 +4101,9 @@ export type StatementRowKind =
 
 /** What a note above a statement is about — `StatementNoteDto.kind`. */
 export type StatementNoteKind =
-  | 'MANUAL_ONLY'
+  | 'NO_POSTING_START'
+  | 'UNPOSTED_DOCUMENTS'
+  | 'UNPOSTED_BANK_TRANSACTIONS'
   | 'NO_ANNUAL_ACCOUNTS'
   | 'PRIOR_YEAR_MISSING'
   | 'INTERIM'
@@ -4535,6 +4543,39 @@ export type EntryAttention = {
   oldestBookingDate?: string | null
   /** The last locked day; absent where nothing is locked. */
   lockingOn?: string | null
+  /** Issued invoices without an entry, from the changeover day to today. */
+  unpostedDocuments: number
+  /** Bank movements that reached neither an invoice nor an account, over the same window. */
+  unpostedBankTransactions: number
+  /** The confirmed changeover day; absent while none is. */
+  postingStartsOn?: string | null
+}
+
+/**
+ * What the confirmation dialog for the changeover day reads — `PostingStartProposalDto`.
+ *
+ * <p>Only a read: the day itself is confirmed through `PUT /settings` and through nothing else
+ * (backend ADR-0120).
+ */
+export type PostingStartProposal = {
+  /** The first day after the last month somebody booked by hand. */
+  proposedStartsOn: string
+  /** The day already confirmed, absent while none is. */
+  confirmedStartsOn?: string | null
+  /** The collective accounts the documents keep, with the hand entries on each. */
+  accounts: HandBookedAccount[]
+}
+
+/** One collective account and the hand entries standing on it. */
+export type HandBookedAccount = {
+  systemKey: string
+  accountNumber: string
+  accountName: string
+  manualEntries: number
+  /** The booking date of the latest hand entry, absent where none stands. */
+  lastBookingDate?: string | null
+  /** The last day of the month that entry belongs to — «bis zum 30.06.2026». */
+  bookedUntil?: string | null
 }
 
 /**

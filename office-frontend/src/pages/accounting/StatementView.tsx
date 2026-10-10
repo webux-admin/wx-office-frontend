@@ -22,7 +22,8 @@ import { api } from '../../lib/api'
 import { downloadFile } from '../../lib/files'
 import { formatAmount, formatDate } from '../../lib/format'
 import { originState } from '../../lib/origin'
-import type { Statement, StatementRow } from '../../lib/types'
+import type { Statement, StatementNoteKind, StatementRow } from '../../lib/types'
+import { NoteWithLink } from './AccountingNotices'
 import { defaultYearOf } from './fiscalYears'
 import { ReportToolbar } from './ReportToolbar'
 import {
@@ -32,6 +33,20 @@ import {
   labelOf,
   shownRows,
 } from './statementRows'
+
+/**
+ * The notes that stand over the figures as warnings, because they say what is missing from them:
+ * the missing changeover day, the two counters of what has not reached the ledger, the drafts
+ * and the stretches the books were not kept. The rest are about what the reader is holding and
+ * stand under the figures.
+ */
+const WARNING_KINDS: StatementNoteKind[] = [
+  'NO_POSTING_START',
+  'UNPOSTED_DOCUMENTS',
+  'UNPOSTED_BANK_TRANSACTIONS',
+  'DRAFTS',
+  'MODULE_OFF_PERIOD',
+]
 
 /**
  * The shared body of the balance sheet and the income statement.
@@ -169,9 +184,11 @@ export function StatementView({
         {/* Worded in the backend, so the screen and the printout say the same sentence — a note
             only the browser knew would be missing from the paper (GeBüV Art. 6 Abs. 3). */}
         {data?.notes
-          .filter((note) => note.kind === 'DRAFTS' || note.kind === 'MODULE_OFF_PERIOD')
+          .filter((note) => WARNING_KINDS.includes(note.kind))
           .map((note) => (
-            <WarningNotice key={note.kind + note.text}>{note.text}</WarningNotice>
+            <WarningNotice key={note.kind + note.text}>
+              <NoteWithLink kind={note.kind} text={note.text} />
+            </WarningNotice>
           ))}
 
         {available.length === 0 && !years.isLoading ? (
@@ -202,7 +219,7 @@ export function StatementView({
         <div className="grid gap-1 text-[12px] text-text-secondary">
           <p>«Als CSV» lädt das Archiv-ZIP dieses Geschäftsjahres mit allen fünf Dateien.</p>
           {data?.notes
-            .filter((note) => note.kind !== 'DRAFTS' && note.kind !== 'MODULE_OFF_PERIOD')
+            .filter((note) => !WARNING_KINDS.includes(note.kind))
             .map((note) => (
               <p key={note.kind + note.text}>
                 {note.text}
