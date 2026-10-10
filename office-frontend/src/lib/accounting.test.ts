@@ -2,6 +2,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   NO_POSTING_START_SENTENCE,
+  PENDING_SOURCES_LIMIT,
+  catchUpResultText,
+  chosenSources,
+  chosenTotal,
+  fetchPendingSources,
+  invoiceCountText,
+  pendingSourceKey,
+  runCatchUp,
+  type PendingSource,
   UNPOSTED_PATH,
   handEntriesSentence,
   postingStartProposalKey,
@@ -2431,3 +2440,87 @@ function logLine(
 ): YearLogLine {
   return { event, status, note: null, changedAt: '2027-03-15T09:00:00Z', changedBy: 'jan' }
 }
+
+describe('the catch-up run', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const row = (sourceId: number, amount: number, bookable = true): PendingSource => ({
+    sourceKind: 'DOCUMENT',
+    sourceId,
+    reference: `RE-2026-${sourceId}`,
+    day: '2026-08-18',
+    amount,
+    partner: 'Muster AG',
+    reason: bookable ? null : 'Nicht nachbuchbar: abgeschlossen.',
+    bookable,
+  })
+
+  it('pendingSourceKeyTest', () => {
+    expect(pendingSourceKey({ sourceKind: 'DOCUMENT', sourceId: 31 })).toBe('DOCUMENT-31')
+  })
+
+  /** The tick narrows what is booked, it never overrules a reason that came in later. */
+  it('chosenSourcesTest', () => {
+    const rows = [row(1, 100), row(2, 200, false), row(3, 300)]
+    const selected = new Set<string | number>(['DOCUMENT-1', 'DOCUMENT-2'])
+
+    expect(chosenSources(rows, selected).map((source) => source.sourceId)).toEqual([1])
+    expect(chosenSources(rows, new Set())).toEqual([])
+    expect(chosenSources([], selected)).toEqual([])
+  })
+
+  /** Added in cents: 0.1 + 0.2 is 0.3 and not 0.30000000000000004. */
+  it('chosenTotalTest', () => {
+    expect(chosenTotal([row(1, 1080.1), row(2, 250.35)])).toBe(1330.45)
+    expect(chosenTotal([row(1, 0.1), row(2, 0.2)])).toBe(0.3)
+    expect(chosenTotal([])).toBe(0)
+  })
+
+  it('invoiceCountTextTest', () => {
+    expect(invoiceCountText(12)).toBe('12 Rechnungen')
+    expect(invoiceCountText(1)).toBe('1 Rechnung')
+    expect(invoiceCountText(0)).toBe('0 Rechnungen')
+  })
+
+  it('catchUpResultTextTest', () => {
+    const outcome = { sourceKind: 'DOCUMENT', sourceId: 1, outcome: 'POSTED' as const }
+    expect(
+      catchUpResultText({
+        posted: Array.from({ length: 12 }, () => outcome),
+        skipped: [{ ...outcome, outcome: 'SKIPPED' }],
+        failed: [],
+      }),
+    ).toBe('12 gebucht, 1 übersprungen, 0 fehlgeschlagen.')
+    expect(catchUpResultText({ posted: [], skipped: [], failed: [] })).toBe(
+      '0 gebucht, 0 übersprungen, 0 fehlgeschlagen.',
+    )
+  })
+
+  /** The proposal is asked with the limit; the run sends kind and id and nothing else. */
+  it('catchUpRunCallsTest', async () => {
+    const calls: { url: string; init?: RequestInit }[] = []
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return Promise.resolve(
+        new Response(JSON.stringify({ posted: [], skipped: [], failed: [], total: 0, rows: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    await fetchPendingSources(4)
+    await runCatchUp(4, [row(31, 1080.1)])
+
+    expect(calls[0].url).toBe(
+      `/api/tenants/4/accounting/pending-sources?limit=${PENDING_SOURCES_LIMIT}`,
+    )
+    expect(calls[1].url).toBe('/api/tenants/4/accounting/catch-up-run')
+    expect(calls[1].init?.method).toBe('POST')
+    expect(JSON.parse(String(calls[1].init?.body))).toEqual({
+      sources: [{ sourceKind: 'DOCUMENT', sourceId: 31 }],
+    })
+  })
+})

@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../auth/useAuth'
 import { Badge } from '../../components/Badge'
+import { Button } from '../../components/Button'
 import { DataTable, type Column } from '../../components/DataTable'
+import { Dialog } from '../../components/Dialog'
 import { EmptyState, ErrorNotice, WarningNotice } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
 import { Panel } from '../../components/Panel'
@@ -11,24 +14,38 @@ import { Tabs } from '../../components/Tabs'
 import { TextField } from '../../components/TextField'
 import { RequireTenant } from '../../layout/RequireTenant'
 import { formatAmount, formatDate } from '../../lib/format'
+import { useRunsModule } from '../../lib/modules'
 import { listQuery } from '../../lib/paging'
 import {
+  ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETTINGS_PATH,
+  JOURNAL_PATH,
+  PENDING_SOURCES_LIMIT,
   UNPOSTED_REGISTER,
   attentionKey,
+  catchUpResultText,
+  chosenSources,
+  chosenTotal,
   fetchAttention,
   fetchFiscalYears,
   fetchManualEntriesOn,
+  fetchPendingSources,
   fetchReconciliation,
   fetchEntriesWithoutSource,
   fetchSourcesWithoutEntry,
   fiscalYearsKey,
+  invoiceCountText,
+  pendingSourceKey,
+  pendingSourcesKey,
   reconciliationDetailKey,
   reconciliationKey,
+  runCatchUp,
   switchedOffSentence,
+  type CatchUpOutcome,
+  type CatchUpRunResult,
+  type PendingSource,
   type ReconciliationRow,
-  type UnpostedSource,
 } from '../../lib/accounting'
 import { defaultYearOf } from './fiscalYears'
 
@@ -51,8 +68,7 @@ import { defaultYearOf } from './fiscalYears'
  * <p><b>Two registers.</b> «Abstimmung» holds the accounts against the subsidiary ledgers;
  * «Nicht gebucht» lists the issued invoices that never reached the ledger. The second one is
  * reached from the counter above every evaluation, so the register it opens on stands in the
- * address (`?ansicht=nicht-gebucht`). Choosing rows and booking them afterwards is the catch-up
- * run, which comes later; until then the register lists and explains.
+ * address (`?ansicht=nicht-gebucht`). Ticking rows there and booking them is the catch-up run.
  */
 export function ReconciliationPage() {
   return (
@@ -284,15 +300,22 @@ function ConfirmStartLink() {
 }
 
 /**
- * «Nicht gebucht»: the issued invoices that never reached the ledger.
+ * «Nicht gebucht»: the issued invoices that never reached the ledger, and the catch-up run that
+ * books them.
  *
  * <p><b>Without a confirmed changeover day there is no list but a sentence.</b> Then nothing
- * books itself and every issued invoice counts; a list of all of them would answer the wrong
+ * books itself and nothing is caught up; a list of all issued invoices would answer the wrong
  * question — the right one is from which day on the documents book themselves.
  *
- * <p>Only a list for now. Choosing rows and booking them afterwards is the catch-up run, which
- * comes with its own step and its own checks; a button here that no endpoint serves would be a
- * promise the screen cannot keep.
+ * <p><b>The catch-up run follows the write-off run and the clearing basket</b> (backend ADR-0102,
+ * ADR-0109): ticks in a `DataTable`, a check before anything is written, one transaction per
+ * invoice, and afterwards three lists — booked, skipped with the reason, failed. A row the
+ * backend says cannot be booked — «Nicht nachbuchbar: Geschäftsjahr 2025 abgeschlossen» — shows
+ * the reason and takes no tick; the tenant books a supplementary entry in the open year instead.
+ *
+ * <p><b>With the module off the register still lists</b>, from the reading way of the
+ * reconciliation report, but offers no run: the proposal and the run both answer 409 then, and
+ * a button that cannot work is a promise the screen cannot keep.
  */
 function UnpostedRegister({
   tenantId,
@@ -301,10 +324,52 @@ function UnpostedRegister({
   tenantId: number
   startConfirmed: boolean | undefined
 }) {
+  const { can } = useAuth()
+  const runs = useRunsModule()
+  const queryClient = useQueryClient()
+  const running = runs(ACCOUNTING_MODULE)
+  const mayRun = running && can(ACCOUNTING_RIGHTS.post)
+
+  const [selected, setSelected] = useState<Set<string | number>>(() => new Set())
+  const [confirming, setConfirming] = useState(false)
+  const [result, setResult] = useState<CatchUpRunResult | null>(null)
+
+  const proposal = useQuery({
+    queryKey: pendingSourcesKey(tenantId),
+    queryFn: () => fetchPendingSources(tenantId),
+    enabled: startConfirmed === true && running,
+  })
+  // Switched off, the proposal answers 409; what was left behind is still worth seeing, so the
+  // register reads the expansion of the report instead and offers no ticks.
   const waiting = useQuery({
     queryKey: reconciliationDetailKey(tenantId, 'DEBITOR_SAMMEL', 'unposted-register', ''),
-    queryFn: () => fetchSourcesWithoutEntry(tenantId, 'DEBITOR_SAMMEL', listQuery({ limit: 200 })),
-    enabled: startConfirmed === true,
+    queryFn: () =>
+      fetchSourcesWithoutEntry(
+        tenantId,
+        'DEBITOR_SAMMEL',
+        listQuery({ limit: PENDING_SOURCES_LIMIT }),
+      ),
+    enabled: startConfirmed === true && !running,
+  })
+
+  const rows: PendingSource[] = running
+    ? (proposal.data?.rows ?? [])
+    : (waiting.data ?? []).map((source) => ({ ...source, bookable: false }))
+  const total = running ? (proposal.data?.total ?? 0) : rows.length
+  const chosen = chosenSources(rows, selected)
+  const listing = running ? proposal : waiting
+
+  const run = useMutation({
+    mutationFn: () => runCatchUp(tenantId, chosen),
+    onSuccess: (answer) => {
+      setResult(answer)
+      setSelected(new Set())
+      setConfirming(false)
+      void queryClient.invalidateQueries({ queryKey: pendingSourcesKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: attentionKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: ['accounting-reconciliation', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['accounting-journal', tenantId] })
+    },
   })
 
   if (startConfirmed === false) {
@@ -320,7 +385,7 @@ function UnpostedRegister({
     )
   }
 
-  const columns: Column<UnpostedSource>[] = [
+  const columns: Column<PendingSource>[] = [
     {
       key: 'reference',
       header: 'Beleg',
@@ -328,36 +393,171 @@ function UnpostedRegister({
     },
     { key: 'day', header: 'Datum', render: (source) => formatDate(source.day) },
     {
+      key: 'partner',
+      header: 'Kunde',
+      hideBelow: 'sm',
+      render: (source) => source.partner ?? '–',
+    },
+    {
       key: 'amount',
       header: 'Betrag',
       align: 'right',
       render: (source) => formatAmount(source.amount),
     },
+    {
+      key: 'reason',
+      header: '',
+      render: (source) =>
+        source.reason ? (
+          <span className="text-[12px] text-text-tertiary">{source.reason}</span>
+        ) : null,
+    },
   ]
 
   return (
     <>
-      <Panel padded={false} title="Ausgestellte Rechnungen ohne Buchung">
+      {!running && (
+        <WarningNotice>
+          Die Buchhaltung ist abgeschaltet. Die Liste bleibt lesbar; nachgebucht wird erst wieder,
+          wenn sie eingeschaltet ist.
+        </WarningNotice>
+      )}
+
+      {result !== null && <CatchUpResult result={result} onClose={() => setResult(null)} />}
+
+      <Panel
+        padded={false}
+        title="Ausgestellte Rechnungen ohne Buchung"
+        action={
+          mayRun ? (
+            <Button onClick={() => setConfirming(true)} disabled={chosen.length === 0}>
+              Nachbuchen ({chosen.length})
+            </Button>
+          ) : undefined
+        }
+      >
+        {total > rows.length && (
+          <p className="px-5 pb-3 text-[12px] text-text-secondary">
+            Angezeigt werden die neuesten {rows.length} von {total} Rechnungen. Nach dem Lauf rücken
+            die übrigen nach.
+          </p>
+        )}
         <DataTable
           columns={columns}
-          rows={waiting.data ?? []}
-          keyOf={(source) => `${source.sourceKind}-${source.sourceId}`}
-          loading={startConfirmed === undefined || waiting.isLoading}
-          error={waiting.error}
+          rows={rows}
+          keyOf={pendingSourceKey}
+          loading={startConfirmed === undefined || listing.isLoading}
+          error={listing.error}
           empty={
             <EmptyState
               title="Alles gebucht"
               description="Seit dem Stichtag hat jede ausgestellte Rechnung ihre Buchung."
             />
           }
+          selected={mayRun ? selected : undefined}
+          onSelectedChange={mayRun ? setSelected : undefined}
+          selectableRow={(source) => source.bookable}
+          selectionLabel={(source) => `Rechnung ${source.reference} markieren`}
         />
       </Panel>
       <p className="text-[12px] text-text-secondary">
         Rechnungen vor dem Stichtag stehen hier nicht: diese Zeit wurde von Hand gebucht, dort wird
-        nichts nachgetragen.
+        nichts nachgetragen. Gebucht wird jede Rechnung auf ihr Belegdatum; liegt es in einem
+        abgeschlossenen Jahr, steht der Grund in der Zeile, und die Buchung gehört als
+        Nachtragsbuchung ins laufende Jahr.
       </p>
+
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Nachbuchen"
+        description="Je Rechnung entsteht eine eigene Buchung in einer eigenen Transaktion."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              onClick={() => run.mutate()}
+              busy={run.isPending}
+              disabled={chosen.length === 0}
+            >
+              Jetzt nachbuchen
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-2 text-[13px] text-text-secondary">
+          <p>
+            <strong className="text-text-primary">{invoiceCountText(chosen.length)}</strong>,
+            zusammen {formatAmount(chosenTotal(chosen))}.
+          </p>
+          <p>
+            Buchungsdatum ist jeweils das Belegdatum. Eine Rechnung, die inzwischen gebucht wurde
+            oder deren Periode gesperrt ist, wird übersprungen und mit dem Grund aufgeführt — die
+            übrigen laufen trotzdem durch.
+          </p>
+          <p className="text-[12px] text-text-tertiary">
+            Eine gebuchte Rechnung lässt sich danach nicht mehr zurückstellen; korrigiert wird über
+            Storno oder Gutschrift.
+          </p>
+          {run.error !== null && <ErrorNotice error={run.error} />}
+        </div>
+      </Dialog>
     </>
   )
+}
+
+/**
+ * The three result lists of a catch-up run, after the pattern of the write-off run and the
+ * clearing basket.
+ */
+function CatchUpResult({ result, onClose }: { result: CatchUpRunResult; onClose: () => void }) {
+  const rest = [...result.skipped, ...result.failed]
+  return (
+    <Panel title="Ergebnis des Laufs">
+      <p aria-live="polite" className="text-[13px]">
+        {catchUpResultText(result)}
+      </p>
+      {result.posted.length > 0 && (
+        <ul className="mt-3 grid gap-1 text-[13px]">
+          {result.posted.map((line) => (
+            <li key={pendingSourceKey(line)}>
+              {line.reference ?? `Beleg ${line.sourceId}`} gebucht als{' '}
+              <strong>{line.entryNumber}</strong>.
+            </li>
+          ))}
+        </ul>
+      )}
+      {rest.length > 0 && (
+        <ul className="mt-3 grid gap-1 text-[13px] text-text-secondary">
+          {rest.map((line) => (
+            <li key={`${line.outcome}-${pendingSourceKey(line)}`}>
+              <strong>
+                {CATCH_UP_OUTCOMES[line.outcome]} · {line.reference ?? `Beleg ${line.sourceId}`}:
+              </strong>{' '}
+              {line.message}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex gap-2">
+        <Link to={JOURNAL_PATH}>
+          <Button variant="secondary">Im Journal ansehen</Button>
+        </Link>
+        <Button variant="ghost" onClick={onClose}>
+          Schliessen
+        </Button>
+      </div>
+    </Panel>
+  )
+}
+
+/** What each of the three outcomes is called in front of its sentence. */
+const CATCH_UP_OUTCOMES: Record<CatchUpOutcome['outcome'], string> = {
+  POSTED: 'Gebucht',
+  SKIPPED: 'Übersprungen',
+  FAILED: 'Fehlgeschlagen',
 }
 
 /**

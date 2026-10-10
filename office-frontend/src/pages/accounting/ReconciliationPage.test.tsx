@@ -22,19 +22,23 @@ let orphans: unknown[] = []
 let attention: Record<string, unknown> = {}
 /** The stretches the bookkeeping was off, as the report carries them. */
 let offPeriods: unknown[] = []
-/** What the register «Nicht gebucht» lists. */
+/** What the register «Nicht gebucht» lists while the module is off. */
 let waiting: unknown[] = []
+/** What the proposal of the catch-up run answers. */
+let pending: Record<string, unknown> = {}
+/** What the catch-up run answers. */
+let ranResult: Record<string, unknown> = {}
+/** The bodies of every POST, by URL. */
+let posted: { url: string; body: Record<string, unknown> }[] = []
 
-function auth(permissions: string[]): AuthState {
+function auth(permissions: string[], modules: string[] = ['ACCOUNTING']): AuthState {
   return {
     user: {
       userId: 1,
       username: 'muster',
       activeTenantId: TENANT,
       superuser: false,
-      tenants: [
-        { id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['ACCOUNTING'] },
-      ],
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
       permissions,
     },
     loading: false,
@@ -50,13 +54,21 @@ function auth(permissions: string[]): AuthState {
 }
 
 const READER = auth([ACCOUNTING_RIGHTS.read])
+const POSTER = auth([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.post])
 
 function stubFetch() {
-  vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     asked.push(url)
     let body: unknown = {}
-    if (url.includes('/fiscal-years')) {
+    if (init?.method === 'POST') {
+      posted.push({ url, body: JSON.parse(String(init.body ?? '{}')) })
+    }
+    if (url.includes('/catch-up-run')) {
+      body = ranResult
+    } else if (url.includes('/pending-sources')) {
+      body = pending
+    } else if (url.includes('/fiscal-years')) {
       body = {
         years: [
           {
@@ -89,6 +101,45 @@ function stubFetch() {
 
 beforeEach(() => {
   asked = []
+  posted = []
+  pending = {
+    from: '2026-07-01',
+    total: 2,
+    rows: [
+      {
+        sourceKind: 'DOCUMENT',
+        sourceId: 31,
+        reference: 'RE-2026-0412',
+        day: '2026-08-18',
+        amount: 1080.1,
+        partner: 'Druckerei Meier AG',
+        bookable: true,
+      },
+      {
+        sourceKind: 'DOCUMENT',
+        sourceId: 32,
+        reference: 'RE-2026-0101',
+        day: '2026-07-15',
+        amount: 90,
+        partner: 'Muster AG',
+        reason: 'Nicht nachbuchbar: Das Geschäftsjahr 2026 ist abgeschlossen.',
+        bookable: false,
+      },
+    ],
+  }
+  ranResult = {
+    posted: [
+      {
+        sourceKind: 'DOCUMENT',
+        sourceId: 31,
+        reference: 'RE-2026-0412',
+        outcome: 'POSTED',
+        entryNumber: '2026-000118',
+      },
+    ],
+    skipped: [],
+    failed: [],
+  }
   attention = {
     drafts: 0,
     draftTotal: 0,
@@ -202,6 +253,37 @@ async function open(summary: string) {
 
 const text = () => container.textContent ?? ''
 
+function button(label: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll('button')].find(
+    (entry) => entry.textContent === label,
+  ) as HTMLButtonElement | undefined
+}
+
+function boxes(): HTMLInputElement[] {
+  return [...container.querySelectorAll('input[type=checkbox]')] as HTMLInputElement[]
+}
+
+/** The tick box of one row, found by the label the screen gives it. */
+function boxLabelled(label: string): HTMLInputElement | undefined {
+  const caption = [...container.querySelectorAll('label')].find(
+    (entry) => entry.textContent === label,
+  )
+  if (caption === undefined) return undefined
+  return (
+    (document.getElementById(caption.htmlFor) as HTMLInputElement | null)
+    ?? (caption.querySelector('input') as HTMLInputElement | null)
+    ?? undefined
+  )
+}
+
+async function click(element: Element | undefined) {
+  expect(element).toBeDefined()
+  await act(async () => {
+    ;(element as HTMLElement).click()
+  })
+  await settle()
+}
+
 describe('ReconciliationPage', () => {
   /**
    * <b>The report the module cut is argued from.</b> Three collective accounts, each with what
@@ -299,13 +381,99 @@ describe('ReconciliationPage', () => {
 
   /**
    * «Ansehen» beside the counter lands on the register itself. With a confirmed day it lists the
-   * invoices — and offers no button, because the catch-up run that would book them comes later.
+   * proposal of the catch-up run, with the customer; without the right to book there is no
+   * button and no tick.
    */
   it('reconciliationPageOpensOnTheUnpostedRegisterTest', async () => {
     await render(READER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
 
     expect(text()).toContain('RE-2026-0412')
-    expect(text()).not.toContain('Geschäftsjahr')
+    expect(text()).toContain('Druckerei Meier AG')
+    expect(asked.some((url) => url.includes('/pending-sources'))).toBe(true)
+    expect(text()).not.toContain('Nachbuchen')
+    expect(boxes()).toHaveLength(0)
+  })
+
+  /**
+   * <b>A row the backend says cannot be booked shows the reason and takes no tick.</b> The
+   * tenant books a supplementary entry in the open year instead.
+   */
+  it('reconciliationPageShowsTheReasonInsteadOfATickTest', async () => {
+    await render(POSTER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    expect(text()).toContain('Nicht nachbuchbar: Das Geschäftsjahr 2026 ist abgeschlossen.')
+    expect(boxLabelled('Rechnung RE-2026-0412 markieren')).toBeDefined()
+    expect(boxLabelled('Rechnung RE-2026-0101 markieren')).toBeUndefined()
+    expect(button('Nachbuchen (0)')?.disabled).toBe(true)
+  })
+
+  /**
+   * <b>Nothing is written before the check.</b> A tick, «Nachbuchen», the dialog with count and
+   * sum — and only «Jetzt nachbuchen» sends the ticked record to `POST /catch-up-run`. Afterwards
+   * the three lists stand on the screen.
+   */
+  it('reconciliationPageBooksTheTickedInvoicesAfterTheCheckTest', async () => {
+    await render(POSTER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    await click(boxLabelled('Rechnung RE-2026-0412 markieren'))
+    await click(button('Nachbuchen (1)'))
+
+    expect(text()).toContain('1 Rechnung')
+    expect(text()).toContain('Buchungsdatum ist jeweils das Belegdatum')
+    expect(posted).toHaveLength(0)
+
+    await click(button('Jetzt nachbuchen'))
+
+    expect(posted).toHaveLength(1)
+    expect(posted[0].url).toContain('/accounting/catch-up-run')
+    expect(posted[0].body).toEqual({ sources: [{ sourceKind: 'DOCUMENT', sourceId: 31 }] })
+    expect(text()).toContain('1 gebucht, 0 übersprungen, 0 fehlgeschlagen.')
+    expect(text()).toContain('2026-000118')
+  })
+
+  /** Skipped and failed records stand in the result with their sentence. */
+  it('reconciliationPageShowsTheSkippedAndFailedRecordsTest', async () => {
+    ranResult = {
+      posted: [],
+      skipped: [
+        {
+          sourceKind: 'DOCUMENT',
+          sourceId: 31,
+          reference: 'RE-2026-0412',
+          outcome: 'SKIPPED',
+          message: 'Bereits gebucht als 2026-000044. Jede Quelle wird nur einmal gebucht.',
+        },
+      ],
+      failed: [
+        { sourceKind: 'DOCUMENT', sourceId: 33, outcome: 'FAILED', message: 'connection reset' },
+      ],
+    }
+    await render(POSTER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    await click(boxLabelled('Rechnung RE-2026-0412 markieren'))
+    await click(button('Nachbuchen (1)'))
+    await click(button('Jetzt nachbuchen'))
+
+    expect(text()).toContain('0 gebucht, 1 übersprungen, 1 fehlgeschlagen.')
+    expect(text()).toContain('Bereits gebucht als 2026-000044')
+    expect(text()).toContain('Beleg 33')
+    expect(text()).toContain('connection reset')
+  })
+
+  /**
+   * <b>With the module off the register still lists, but offers no run.</b> The proposal would
+   * answer 409, so the screen does not ask it and reads the report's expansion instead.
+   */
+  it('reconciliationPageWithTheModuleOffListsWithoutARunTest', async () => {
+    await render(
+      auth([ACCOUNTING_RIGHTS.read, ACCOUNTING_RIGHTS.post], []),
+      '/buchhaltung/abstimmung?ansicht=nicht-gebucht',
+    )
+
+    expect(text()).toContain('Die Buchhaltung ist abgeschaltet.')
+    expect(text()).toContain('RE-2026-0412')
+    expect(asked.some((url) => url.includes('/pending-sources'))).toBe(false)
+    expect(asked.some((url) => url.includes('sources-without-entry'))).toBe(true)
     expect(text()).not.toContain('Nachbuchen')
   })
 
@@ -326,6 +494,7 @@ describe('ReconciliationPage', () => {
     )
     expect(link?.getAttribute('href')).toBe('/buchhaltung/einstellungen')
     expect(asked.some((url) => url.includes('sources-without-entry'))).toBe(false)
+    expect(asked.some((url) => url.includes('/pending-sources'))).toBe(false)
   })
 
   /**

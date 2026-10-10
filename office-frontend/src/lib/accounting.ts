@@ -55,6 +55,7 @@ import type {
   OpeningEntryRequest,
   Page,
   PositionHint,
+  PostOutcome,
   PostingStartProposal,
   PostRunPreview,
   PostRunResult,
@@ -1165,6 +1166,8 @@ export type UnpostedSource = {
   reference: string
   day: string
   amount: number
+  /** Whom it was issued to, as the record froze the name; absent where it names nobody. */
+  partner?: string | null
 }
 
 /**
@@ -1232,6 +1235,132 @@ export function fetchEntriesWithoutSource(
 ): Promise<JournalRow[]> {
   return api.get<JournalRow[]>(
     `${accountingUrl(tenantId)}/reconciliation/${systemKey}/entries-without-source?${query}`,
+  )
+}
+
+// --- the catch-up run --------------------------------------------------------------------------
+
+/** One row of the proposal of the catch-up run, as `PendingSourcesDto.RowDto` sends it. */
+export type PendingSource = UnpostedSource & {
+  /** Why it cannot be booked — «Nicht nachbuchbar: …»; absent where it can. */
+  reason?: string | null
+  /** Whether it may be ticked. A row with a reason may not. */
+  bookable: boolean
+}
+
+/**
+ * The proposal of the catch-up run.
+ *
+ * <p>One list and not a page: the run is chosen from it with ticks, and a tick on a page nobody
+ * looks at is a booking nobody chose. `total` says how many wait beyond the rows shown.
+ */
+export type PendingSources = {
+  /** The first day listed; absent where no changeover day is confirmed, and then it is empty. */
+  from?: string | null
+  total: number
+  rows: PendingSource[]
+}
+
+/** What became of one record in a catch-up run, as `CatchUpRunResultDto.OutcomeDto` sends it. */
+export type CatchUpOutcome = {
+  sourceKind: string
+  sourceId: number
+  /** Its number; absent where the run did not get as far as reading it. */
+  reference?: string | null
+  outcome: PostOutcome
+  /** The journal number of its booking; absent unless it was posted. */
+  entryNumber?: string | null
+  /** Why it was skipped or what went wrong; absent on a posted record. */
+  message?: string | null
+}
+
+/**
+ * What a catch-up run did: three lists, because the run opens one transaction per record and
+ * «12 gebucht» is never the whole story (backend ADR-0102, ADR-0109).
+ */
+export type CatchUpRunResult = {
+  posted: CatchUpOutcome[]
+  skipped: CatchUpOutcome[]
+  failed: CatchUpOutcome[]
+}
+
+/** How many rows the register asks for at once — the backend caps at 500. */
+export const PENDING_SOURCES_LIMIT = 200
+
+/**
+ * @param tenantId the tenant
+ * @returns the key the proposal is cached under
+ */
+export function pendingSourcesKey(tenantId: number): readonly unknown[] {
+  return ['accounting-pending-sources', tenantId]
+}
+
+/**
+ * The proposal of the catch-up run: what was issued from the changeover day on and has no entry.
+ *
+ * <p>Answers 409 while the module is off — it announces a write — and empty while no changeover
+ * day is confirmed.
+ */
+export function fetchPendingSources(tenantId: number): Promise<PendingSources> {
+  return api.get<PendingSources>(
+    `${accountingUrl(tenantId)}/pending-sources?limit=${PENDING_SOURCES_LIMIT}`,
+  )
+}
+
+/**
+ * Books the ticked records, one transaction per record.
+ *
+ * <p>`POST /catch-up-run` and not `/posting-run`: that name belongs to the run over drafts.
+ */
+export function runCatchUp(
+  tenantId: number,
+  sources: readonly Pick<UnpostedSource, 'sourceKind' | 'sourceId'>[],
+): Promise<CatchUpRunResult> {
+  return api.post<CatchUpRunResult>(`${accountingUrl(tenantId)}/catch-up-run`, {
+    sources: sources.map(({ sourceKind, sourceId }) => ({ sourceKind, sourceId })),
+  })
+}
+
+/**
+ * The key a row of the proposal is ticked under — kind and id, because the ids of two kinds of
+ * record live in different number spaces.
+ */
+export function pendingSourceKey(source: Pick<UnpostedSource, 'sourceKind' | 'sourceId'>): string {
+  return `${source.sourceKind}-${source.sourceId}`
+}
+
+/**
+ * The rows that are ticked and may be booked, in the order of the list.
+ *
+ * <p>A ticked row that has since got a reason — the proposal was asked again — is left out: the
+ * tick narrows what is booked, it never overrules the reason.
+ */
+export function chosenSources(
+  rows: readonly PendingSource[],
+  selected: ReadonlySet<string | number>,
+): PendingSource[] {
+  return rows.filter((row) => row.bookable && selected.has(pendingSourceKey(row)))
+}
+
+/**
+ * The sum of what the ticked rows would book.
+ *
+ * <p>Added up in cents, so 0.1 + 0.2 is 0.30 and not 0.30000000000000004.
+ */
+export function chosenTotal(rows: readonly Pick<UnpostedSource, 'amount'>[]): number {
+  return rows.reduce((cents, row) => cents + Math.round(row.amount * 100), 0) / 100
+}
+
+/** «1 Rechnung» or «12 Rechnungen» — the words on the button and in the dialog. */
+export function invoiceCountText(count: number): string {
+  return count === 1 ? '1 Rechnung' : `${count} Rechnungen`
+}
+
+/** The one sentence above the three lists of a finished catch-up run. */
+export function catchUpResultText(result: CatchUpRunResult): string {
+  return (
+    `${result.posted.length} gebucht, ${result.skipped.length} übersprungen, `
+    + `${result.failed.length} fehlgeschlagen.`
   )
 }
 
