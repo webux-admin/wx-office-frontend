@@ -2392,6 +2392,77 @@ export function searchAccounts(
     .slice(0, limit)
 }
 
+/**
+ * The two system keys whose hand posting lock depends on the changeover day: the receivables
+ * (1100) and the advances (2030). Both are kept by a subsidiary ledger once the documents book
+ * themselves (backend ADR-0120, `SystemAccountKey.keptBySubsidiaryLedger`).
+ */
+const COLLECTIVE_KEYS: readonly string[] = ['DEBITOR_SAMMEL', 'ERHALTENE_ANZAHLUNGEN']
+
+/**
+ * Whether an account is closed to hand entries by date rather than for good.
+ *
+ * @param account the account as the chart was read
+ * @returns true for 1100 and 2030 while they are closed to hand postings
+ */
+export function isCollectiveAccount(account: Account): boolean {
+  return !account.directPostingAllowed && COLLECTIVE_KEYS.includes(account.systemKey ?? '')
+}
+
+/**
+ * The chart as it holds for one booking day: the two collective accounts take a hand entry
+ * before `postingStartsOn` and while no day is confirmed, and are closed from that day on.
+ *
+ * <p>The same three cases as `PostingRules.accountRefusal` and the database guard. Here it only
+ * decides what the account picker offers — **a convenience and no barrier**; the server answers
+ * with its own sentence where the two disagree.
+ *
+ * @param accounts the chart as it was read
+ * @param bookingDate the day of the entry, `YYYY-MM-DD`
+ * @param postingStartsOn the confirmed changeover day, absent where none is
+ * @returns the chart with `directPostingAllowed` as it holds on that day
+ */
+export function accountsForBookingDay(
+  accounts: readonly Account[],
+  bookingDate: string,
+  postingStartsOn?: string | null,
+): Account[] {
+  const open = !postingStartsOn || (bookingDate !== '' && bookingDate < postingStartsOn)
+  return accounts.map((account) =>
+    open && isCollectiveAccount(account) ? { ...account, directPostingAllowed: true } : account,
+  )
+}
+
+/**
+ * What the chart of accounts says beside an account closed to hand postings.
+ *
+ * @param account the account as the chart was read
+ * @param postingStartsOn the confirmed changeover day, absent where none is
+ * @returns the mark and its explanation; `null` where the account takes hand entries
+ */
+export function handPostingLock(
+  account: Account,
+  postingStartsOn?: string | null,
+): { label: string; title: string } | null {
+  if (account.directPostingAllowed) {
+    return null
+  }
+  if (!isCollectiveAccount(account)) {
+    return { label: 'nur fürs System', title: 'nur fürs System — der Abschluss bucht darauf' }
+  }
+  const why =
+    'Dieses Konto wird von den Rechnungen geführt. Eine Handbuchung darauf liesse sich nicht '
+    + 'mehr gegen die offenen Posten abstimmen.'
+  if (!postingStartsOn) {
+    return {
+      label: 'noch kein Stichtag',
+      title: `${why} Noch kein Stichtag bestätigt; die Sperre greift nicht.`,
+    }
+  }
+  const day = formatDate(postingStartsOn)
+  return { label: `ab ${day} gesperrt`, title: `${why} Gesperrt für Handbuchungen ab ${day}.` }
+}
+
 /** What the two columns of the grid add up to, and what is missing between them. */
 export type EntryBalance = {
   debit: number

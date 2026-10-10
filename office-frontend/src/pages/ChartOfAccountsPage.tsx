@@ -28,6 +28,7 @@ import {
   chartTemplatesKey,
   fetchAccounts,
   fetchChartTemplates,
+  handPostingLock,
 } from '../lib/accounting'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
@@ -162,22 +163,26 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
       key: 'state',
       header: '',
       width: 'w-[150px]',
-      render: (account) => (
-        <span className="flex flex-wrap items-center justify-end gap-1">
-          {/* The mark on 9200, and no field: whoever set `direct_posting_allowed` by hand would
-              lose an account from every picker without an explanation. */}
-          {!account.directPostingAllowed && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] text-text-tertiary"
-              title="nur fürs System — der Abschluss bucht darauf"
-            >
-              <Lock size={12} aria-hidden />
-              nur fürs System
-            </span>
-          )}
-          {!account.active && <Badge tone="muted">Deaktiviert</Badge>}
-        </span>
-      ),
+      render: (account) => {
+        // The mark on 9200, and on 1100 and 2030 with the day their lock starts. No field:
+        // whoever set `direct_posting_allowed` by hand would lose an account from every picker
+        // without an explanation.
+        const lock = handPostingLock(account, settings.data?.postingStartsOn)
+        return (
+          <span className="flex flex-wrap items-center justify-end gap-1">
+            {lock !== null && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-text-tertiary"
+                title={lock.title}
+              >
+                <Lock size={12} aria-hidden />
+                {lock.label}
+              </span>
+            )}
+            {!account.active && <Badge tone="muted">Deaktiviert</Badge>}
+          </span>
+        )
+      },
     },
   ]
 

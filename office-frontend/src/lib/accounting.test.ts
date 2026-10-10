@@ -130,6 +130,9 @@ import {
   reversalReasonRoom,
   runPost,
   searchAccounts,
+  accountsForBookingDay,
+  handPostingLock,
+  isCollectiveAccount,
   suggestionsKey,
   suggestionsUrl,
   taxSplitOf,
@@ -1658,6 +1661,105 @@ describe('searchAccounts', () => {
 
   it('searchAccountsHonoursTheLimitTest', () => {
     expect(searchAccounts(CHART, '', 2)).toHaveLength(2)
+  })
+})
+
+/** 1100 and 2030 as the backend leaves them after V118, beside the closing account. */
+const RECEIVABLES = testAccount({
+  id: 11,
+  accountNumber: '1100',
+  name: 'Forderungen aus Lieferungen und Leistungen',
+  orPosition: 'UV_FORDERUNGEN_LL',
+  systemKey: 'DEBITOR_SAMMEL',
+  directPostingAllowed: false,
+})
+const ADVANCES = testAccount({
+  id: 12,
+  accountNumber: '2030',
+  name: 'Erhaltene Anzahlungen',
+  accountType: 'LIABILITY',
+  orPosition: 'KFK_UEBRIGE',
+  systemKey: 'ERHALTENE_ANZAHLUNGEN',
+  directPostingAllowed: false,
+})
+const CLOSING_ACCOUNT = testAccount({
+  id: 13,
+  accountNumber: '9200',
+  name: 'Jahresgewinn oder Jahresverlust',
+  accountType: 'CLOSING',
+  orPosition: 'ABSCHLUSS',
+  systemKey: 'JAHRESERGEBNIS_ER',
+  directPostingAllowed: false,
+})
+
+describe('isCollectiveAccount', () => {
+  it('isCollectiveAccountTest', () => {
+    expect(isCollectiveAccount(RECEIVABLES)).toBe(true)
+    expect(isCollectiveAccount(ADVANCES)).toBe(true)
+  })
+
+  /** 9200 is closed for good, and an open 1100 is not closed at all. */
+  it('isCollectiveAccountForTheClosingAndAnOpenAccountTest', () => {
+    expect(isCollectiveAccount(CLOSING_ACCOUNT)).toBe(false)
+    expect(isCollectiveAccount({ ...RECEIVABLES, directPostingAllowed: true })).toBe(false)
+  })
+})
+
+describe('accountsForBookingDay', () => {
+  const chart = [RECEIVABLES, ADVANCES, CLOSING_ACCOUNT]
+  const postable = (accounts: Account[]) =>
+    accounts
+      .filter((account) => account.directPostingAllowed)
+      .map((account) => account.accountNumber)
+
+  /** Before the changeover day the hand bookkeeping keeps 1100 and 2030; 9200 stays closed. */
+  it('accountsForBookingDayTest', () => {
+    expect(postable(accountsForBookingDay(chart, '2026-06-30', '2026-07-01'))).toEqual([
+      '1100',
+      '2030',
+    ])
+  })
+
+  /** From the changeover day on, the documents book them: the picker no longer offers them. */
+  it('accountsForBookingDayOnTheChangeoverDayTest', () => {
+    expect(postable(accountsForBookingDay(chart, '2026-07-01', '2026-07-01'))).toEqual([])
+    expect(postable(accountsForBookingDay(chart, '2026-08-15', '2026-07-01'))).toEqual([])
+  })
+
+  /** Without a confirmed day nothing is booked by the documents, so the hand entry stays open. */
+  it('accountsForBookingDayWithoutAChangeoverDayTest', () => {
+    expect(postable(accountsForBookingDay(chart, '2026-08-15', undefined))).toEqual([
+      '1100',
+      '2030',
+    ])
+    expect(postable(accountsForBookingDay(chart, '2026-08-15', null))).toEqual(['1100', '2030'])
+  })
+
+  /** A cleared date field is not a way around the lock once a day stands. */
+  it('accountsForBookingDayWithoutABookingDateTest', () => {
+    expect(postable(accountsForBookingDay(chart, '', '2026-07-01'))).toEqual([])
+    expect(accountsForBookingDay([], '2026-06-30', '2026-07-01')).toEqual([])
+  })
+})
+
+describe('handPostingLock', () => {
+  it('handPostingLockTest', () => {
+    const lock = handPostingLock(RECEIVABLES, '2027-01-01')
+
+    expect(lock?.label).toBe('ab 01.01.2027 gesperrt')
+    expect(lock?.title).toContain('Dieses Konto wird von den Rechnungen geführt.')
+  })
+
+  it('handPostingLockWithoutAChangeoverDayTest', () => {
+    expect(handPostingLock(RECEIVABLES, undefined)?.title).toContain(
+      'Noch kein Stichtag bestätigt; die Sperre greift nicht.',
+    )
+  })
+
+  /** 9200 keeps its old mark, and an account open to hand entries carries none. */
+  it('handPostingLockForTheClosingAndAnOpenAccountTest', () => {
+    expect(handPostingLock(CLOSING_ACCOUNT, '2027-01-01')?.label).toBe('nur fürs System')
+    expect(handPostingLock(CHART[0], '2027-01-01')).toBeNull()
   })
 })
 

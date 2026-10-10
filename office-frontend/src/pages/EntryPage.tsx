@@ -16,6 +16,7 @@ import {
   ACCOUNTING_MODULE,
   ACCOUNTING_RIGHTS,
   ACCOUNTING_SETUP_PATH,
+  accountsForBookingDay,
   CHART_OF_ACCOUNTS_PATH,
   DRAFT_PATH,
   FISCAL_YEARS_PATH,
@@ -492,7 +493,11 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           <EntryGrid
             rows={draft.rows}
             onRowsChange={(rows) => setDraft({ ...draft, rows })}
-            accounts={chart}
+            accounts={accountsForBookingDay(
+              chart,
+              draft.bookingDate,
+              settings.data?.postingStartsOn,
+            )}
             taxCodes={codes}
             currencyCode={currencyCode}
             disabled={busy}
