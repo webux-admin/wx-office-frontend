@@ -2555,8 +2555,8 @@ export type WriteOffVatLine = {
   vatCategory: string
   /** The rate of the **original invoice**, not today's. */
   vatRate: number
+  /** The share of the consideration, gross — what the booking is worked out from. */
   grossShare: number
-  netShare: number
   vatAmount: number
 }
 
