@@ -45,6 +45,7 @@ import {
 } from './navigation'
 import { CUSTOMER_CREDIT_PATH } from '../lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
+import { PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -145,6 +146,22 @@ describe('NAV_GROUPS', () => {
    * Three screens for the outbox, and all three carry the module: a tenant that does not send
    * mail is offered neither the account, nor the log, nor the texts (backend ADR-0086).
    */
+  it('navGroupsCoverTheProjectListTest', () => {
+    const projects = allEntries().filter((entry) => entry.href === PROJECT_PATH)
+
+    expect(projects).toHaveLength(1)
+    expect(projects[0].permission).toBe(PROJECT_RIGHTS.read)
+    expect(projects[0].module).toBe('PROJECT')
+  })
+
+  it('visibleNavGroupsHidesTheProjectsWithoutTheModuleTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'PROJECT')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(PROJECT_PATH)
+    expect(entries.map((entry) => entry.href)).toContain('/kunden')
+  })
+
   it('navGroupsCoverTheOutboxScreensTest', () => {
     const outbox = allEntries().filter((entry) =>
       [OUTBOX_ACCOUNT_PATH, OUTBOX_PATH, MAIL_TEMPLATE_PATH].includes(entry.href),

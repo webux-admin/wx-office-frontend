@@ -1,5 +1,6 @@
 import {
   Archive,
+  FolderKanban,
   BookCheck,
   ArrowDownToLine,
   ArrowLeftRight,
@@ -108,6 +109,7 @@ import {
   DUNNING_NOTICES_PATH,
   DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
+import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -417,6 +419,16 @@ export const NAV_GROUPS: NavGroup[] = [
             module: DUNNING_MODULE,
           },
         ],
+      },
+      // Last in «Verkauf», after the money: a project is what the work for a customer hangs
+      // on, and later its time and the invoice from it. Under the module switch, because a
+      // tenant that runs no projects has no list to open (backend ADR-0129).
+      {
+        label: 'Projekte',
+        icon: FolderKanban,
+        href: PROJECT_PATH,
+        permission: PROJECT_RIGHTS.read,
+        module: PROJECT_MODULE,
       },
     ],
   },

@@ -20,6 +20,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **product** — Produkte, Preisgruppen, Kundenpreise
 - **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je
   Belegart, aus `lib/salesDocument.ts` erzeugt
+- **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
+  `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
+  Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). 🚧 Statuswechsel folgen
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

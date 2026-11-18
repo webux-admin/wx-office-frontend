@@ -4964,3 +4964,68 @@ export type EntryTemplateRequest = {
   documentReference?: string | null
   lines: EntryTemplateLineRequest[]
 }
+
+/** Where a project stands, as the backend `ProjectStatus` spells it. */
+export type ProjectStatus = 'OPEN' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+
+/**
+ * A project, as `ProjectDto` of the backend sends it.
+ *
+ * <p>The names arrive already read from the partner and user modules. A name is absent when
+ * the thing it names is gone — a contact person removed at the customer — while the id stays,
+ * so a screen can tell «nobody chosen» from «chosen, but gone».
+ */
+export type Project = {
+  id: number
+  projectNumber: string
+  name: string
+  partnerId: number
+  customerName?: string | null
+  contactPersonId?: number | null
+  contactPersonName?: string | null
+  responsibleUserId?: number | null
+  responsibleName?: string | null
+  /** ISO date, `yyyy-mm-dd`. */
+  startDate?: string | null
+  /** ISO date, `yyyy-mm-dd`. */
+  endDate?: string | null
+  description?: string | null
+  status: ProjectStatus
+  createdAt?: string | null
+  createdBy?: string | null
+  changedAt?: string | null
+  changedBy?: string | null
+  version?: number | null
+}
+
+/** What the project form sends, for a `POST` as well as for a `PUT` (`ProjectRequest`). */
+export type ProjectRequest = {
+  name: string
+  partnerId: number
+  contactPersonId: number | null
+  responsibleUserId: number | null
+  startDate: string | null
+  endDate: string | null
+  description: string | null
+}
+
+/** A customer a project can be written for (`ProjectCustomer`). */
+export type ProjectCustomer = {
+  partnerId: number
+  partnerNumber?: string | null
+  name: string
+}
+
+/** A contact person at the customer of a project (`ProjectContact`). */
+export type ProjectContact = {
+  contactId: number
+  name: string
+}
+
+/** A user who can be made responsible for a project (`ProjectResponsible`). */
+export type ProjectResponsible = {
+  userId: number
+  name: string
+  /** `false` once the account was deactivated; such a user cannot be chosen anew. */
+  active: boolean
+}
