@@ -25,6 +25,7 @@ export type LicensedModuleCode =
   | 'DUNNING'
   | 'BANKING'
   | 'ACCOUNTING'
+  | 'PROJECT'
 
 /**
  * What each module is called on screen.
@@ -41,6 +42,7 @@ export const MODULE_NAMES: Record<LicensedModuleCode, string> = {
   DUNNING: 'Mahnwesen',
   BANKING: 'Bankauszug',
   ACCOUNTING: 'Buchhaltung',
+  PROJECT: 'Projekte',
 }
 
 /**

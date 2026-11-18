@@ -44,6 +44,7 @@ export const PERMISSION_MODULES: Record<string, string> = {
   DUNNING: 'Mahnwesen',
   BANKING: 'Bankauszug',
   ACCOUNTING: 'Buchhaltung',
+  PROJECT: 'Projekte',
   SUBSCRIPTION: 'Abonnemente',
   USER: 'Benutzer',
   REPORT: 'Auswertungen',

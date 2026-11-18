@@ -46,6 +46,9 @@ const CONSEQUENCES: Record<string, string> = {
     'unvollständige Buchführung berechtigt die ESTV zur Ermessenseinschätzung (MWSTG ' +
     'Art. 79). Alles bereits Gebuchte bleibt gespeichert und unter Buchhaltung → Archiv ' +
     'lesbar.',
+  PROJECT:
+    'Projekte lassen sich danach nicht mehr anlegen, ändern oder im Status weiterschalten. ' +
+    'Bestehende Projekte bleiben lesbar — gelöscht wird nichts.',
 }
 
 /** The neutral sentence, for a module nobody wrote one for. */

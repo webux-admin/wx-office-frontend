@@ -280,13 +280,24 @@ describe('ModulePage', () => {
     expect(container.textContent).not.toContain('nicht mehr per E-Mail versenden')
   })
 
-  it('modulePageWarnsNeutrallyForAModuleWithoutASentenceTest', async () => {
-    // A module the screen has never heard of gets the neutral sentence, never the one of
-    // whichever module happens to be listed first.
+  it('modulePageWarnsThatProjectsStayReadableTest', async () => {
     modules = [outbox({ code: 'PROJECT', label: 'Projekte', active: true, usage: '7 Projekte' })]
     await render()
 
     await toggle('Projekte verwenden', false)
+
+    expect(container.textContent).toContain('7 Projekte')
+    expect(container.textContent).toContain('Bestehende Projekte bleiben lesbar')
+    expect(container.textContent).not.toContain('nicht mehr per E-Mail versenden')
+  })
+
+  it('modulePageWarnsNeutrallyForAModuleWithoutASentenceTest', async () => {
+    // A module the screen has never heard of gets the neutral sentence, never the one of
+    // whichever module happens to be listed first.
+    modules = [outbox({ code: 'PAYROLL', label: 'Lohn', active: true, usage: '7 Lohnläufe' })]
+    await render()
+
+    await toggle('Lohn verwenden', false)
 
     expect(container.textContent).toContain('Was im Modul liegt, bleibt erhalten')
   })

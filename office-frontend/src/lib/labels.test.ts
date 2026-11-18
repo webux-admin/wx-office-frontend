@@ -5,6 +5,7 @@ describe('labelOf', () => {
   it('labelOfTest', () => {
     expect(labelOf(PERMISSION_MODULES, 'PARTNER')).toBe('Kunden und Lieferanten')
     expect(labelOf(PERMISSION_MODULES, 'MASTERDATA')).toBe('Stammdaten')
+    expect(labelOf(PERMISSION_MODULES, 'PROJECT')).toBe('Projekte')
   })
 
   it('labelOfWithoutValueTest', () => {
@@ -46,6 +47,7 @@ describe('PERMISSION_MODULES', () => {
       'DUNNING',
       'BANKING',
       'ACCOUNTING',
+      'PROJECT',
       'SUBSCRIPTION',
       'USER',
       'REPORT',

@@ -48,6 +48,10 @@ describe('MODULE_NAMES', () => {
   it('moduleNamesCoverAccountingTest', () => {
     expect(MODULE_NAMES.ACCOUNTING).toBe('Buchhaltung')
   })
+
+  it('moduleNamesCoverProjectsTest', () => {
+    expect(MODULE_NAMES.PROJECT).toBe('Projekte')
+  })
 })
 
 describe('runsModule', () => {
@@ -72,7 +76,7 @@ describe('runsModule', () => {
   })
 
   it('runsModuleWithAnUnknownModuleTest', () => {
-    expect(runsModule([tenant(1, ['INVENTORY'])], 1, 'PROJECT')).toBe(false)
+    expect(runsModule([tenant(1, ['INVENTORY'])], 1, 'PAYROLL')).toBe(false)
   })
 
   /** The chosen tenant is not in the list: that is no tenant to ask either. */
