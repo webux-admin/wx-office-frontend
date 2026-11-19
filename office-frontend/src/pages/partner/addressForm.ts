@@ -118,3 +118,19 @@ function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim()
   return trimmed === '' ? undefined : trimmed
 }
+
+/**
+ * The lines of an address as they are printed, without the empty ones.
+ *
+ * @param address the stored address
+ * @returns recipient, extra line, street with number, postcode with town and country
+ */
+export function addressLines(address: PartnerAddress): string[] {
+  return [
+    address.name,
+    address.addressLine,
+    [address.street, address.buildingNumber].filter(Boolean).join(' '),
+    [address.postalCode, address.town].filter(Boolean).join(' '),
+    address.countryLabel ?? address.country,
+  ].filter((line): line is string => typeof line === 'string' && line.trim() !== '')
+}

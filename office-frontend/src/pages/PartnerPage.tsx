@@ -31,11 +31,11 @@ import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf } from '../lib/origin'
 import type { Partner, PartnerContact, PartnerType } from '../lib/types'
-import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { useCatalogue, useMasterDataEntries } from '../masterdata/useMasterData'
 import { AddressFields } from './partner/AddressFields'
 import { NewContacts } from './partner/NewContacts'
+import { DefaultAddressPanel } from './partner/DefaultAddressPanel'
 import { PartnerConditionFields } from './partner/PartnerConditionFields'
 import { PartnerRoleFields } from './partner/PartnerRoleFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
@@ -73,9 +73,6 @@ type Tab =
   | 'projekte'
   | 'verlauf'
 
-/** Why the fields that identify a record no longer take input once it is stored. */
-const LOCKED = 'Steht mit dem Anlegen fest und lässt sich nicht mehr ändern.'
-
 /** The fields of the create mask that can show a message of their own. */
 const CREATE_FIELDS = [
   'name',
@@ -105,6 +102,12 @@ const CREATE_FIELDS = [
 /** The fields of the register «Stammdaten» that can show a message of their own. */
 const EDIT_FIELDS = [
   'partnerNumber',
+  'partnerType',
+  'name',
+  'legalForm',
+  'salutation',
+  'firstName',
+  'lastName',
   'uid',
   'commercialRegisterName',
   'language',
@@ -792,11 +795,12 @@ function PartnerSettings({ tenantId, partner }: { tenantId: number; partner: Par
 }
 
 /**
- * The fields of the stored record.
+ * The fields of the stored record, with its default address beside them.
  *
- * <p>What identifies the record (its kind, its name, the legal form, the name of a private
- * person) is shown locked: `PUT /partners/{id}` merges only the remaining fields into what is
- * stored, so an editable field there would take a change that the next reload undoes.
+ * <p>Everything here can be changed, the kind and the name included: a record entered as the
+ * wrong kind or with a typo is corrected, not entered again (backend ADR-0133). Documents
+ * already issued keep the name they were written to. The default address is shown, not
+ * edited in place: it is saved through its own dialog.
  */
 function BaseData({
   tenantId,
@@ -818,97 +822,127 @@ function BaseData({
   errors: FieldErrors
 }) {
   const person = form.partnerType === 'PERSON'
+  const kinds = useCatalogue(tenantId, 'partner-type')
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <Panel title="Identität">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            label={wording.numberLabel}
-            value={form.partnerNumber}
-            onChange={(event) => set('partnerNumber', event.target.value)}
+      <div className="grid gap-6 self-start">
+        <Panel title="Identität">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {kinds.length > 0 && (
+              <SegmentedControl
+                label="Art"
+                options={kinds.map((kind) => ({
+                  value: kind.code as PartnerType,
+                  label: kind.name,
+                }))}
+                value={form.partnerType}
+                onChange={(kind) => set('partnerType', kind)}
+                disabled={disabled}
+              />
+            )}
+            <TextField
+              label={wording.numberLabel}
+              value={form.partnerNumber}
+              onChange={(event) => set('partnerNumber', event.target.value)}
+              disabled={disabled}
+              maxLength={20}
+              error={errors.partnerNumber}
+              tooltip="Lässt sich durch eine andere ersetzen, die im Mandanten noch frei ist."
+            />
+
+            {person ? (
+              <>
+                <MasterDataSelect
+                  label="Anrede"
+                  tenantId={tenantId}
+                  list="salutations"
+                  value={form.salutation}
+                  storedLabel={partner.salutationLabel}
+                  onChange={(code) => set('salutation', code)}
+                  disabled={disabled}
+                  emptyLabel="Ohne Anrede"
+                  error={errors.salutation}
+                />
+                <TextField
+                  label="Vorname"
+                  value={form.firstName}
+                  onChange={(event) => set('firstName', event.target.value)}
+                  disabled={disabled}
+                  maxLength={60}
+                  error={errors.firstName}
+                />
+                <TextField
+                  label="Nachname"
+                  value={form.lastName}
+                  onChange={(event) => set('lastName', event.target.value)}
+                  disabled={disabled}
+                  maxLength={60}
+                  required
+                  error={errors.lastName}
+                  className="sm:col-span-2"
+                />
+              </>
+            ) : (
+              <>
+                <TextField
+                  label="Firmenname"
+                  value={form.name}
+                  onChange={(event) => set('name', event.target.value)}
+                  disabled={disabled}
+                  maxLength={70}
+                  required
+                  error={errors.name}
+                  className="sm:col-span-2"
+                  tooltip="Neue Belege tragen den neuen Namen, bereits ausgestellte behalten den alten."
+                />
+                <MasterDataSelect
+                  label="Rechtsform"
+                  tenantId={tenantId}
+                  list="legal-forms"
+                  value={form.legalForm}
+                  storedLabel={partner.legalFormLabel}
+                  onChange={(code) => set('legalForm', code)}
+                  disabled={disabled}
+                  emptyLabel="Bitte wählen"
+                  required
+                  error={errors.legalForm}
+                />
+                <TextField
+                  label="UID"
+                  value={form.uid}
+                  onChange={(event) => set('uid', event.target.value)}
+                  disabled={disabled}
+                  maxLength={20}
+                  placeholder="CHE-123.456.789"
+                  error={errors.uid}
+                />
+                <TextField
+                  label="Handelsregistername"
+                  value={form.commercialRegisterName}
+                  onChange={(event) => set('commercialRegisterName', event.target.value)}
+                  disabled={disabled}
+                  maxLength={140}
+                  error={errors.commercialRegisterName}
+                  tooltip="Nur ausfüllen, wenn der Eintrag im Handelsregister anders lautet als der Firmenname."
+                  className="sm:col-span-2"
+                />
+              </>
+            )}
+          </div>
+
+          <PartnerRoleFields
+            form={form}
+            set={set}
             disabled={disabled}
-            maxLength={20}
-            error={errors.partnerNumber}
-            tooltip="Lässt sich durch eine andere ersetzen, die im Mandanten noch frei ist."
+            wording={wording}
+            errors={errors}
+            className="mt-5 border-t border-line-subtle pt-4"
           />
-          <CatalogueSelect
-            label="Art"
-            tenantId={tenantId}
-            catalogue="partner-type"
-            value={form.partnerType}
-            onChange={(code) => set('partnerType', code as PartnerType)}
-            disabled
-            locked={LOCKED}
-          />
+        </Panel>
 
-          {person ? (
-            <>
-              <MasterDataSelect
-                label="Anrede"
-                tenantId={tenantId}
-                list="salutations"
-                value={form.salutation}
-                storedLabel={partner.salutationLabel}
-                onChange={(code) => set('salutation', code)}
-                disabled
-                emptyLabel="Ohne Anrede"
-                locked={LOCKED}
-              />
-              <TextField label="Vorname" value={form.firstName} disabled locked={LOCKED} />
-              <TextField
-                label="Nachname"
-                value={form.lastName}
-                disabled
-                locked={LOCKED}
-                className="sm:col-span-2"
-              />
-            </>
-          ) : (
-            <>
-              <TextField label="Firmenname" value={form.name} disabled locked={LOCKED} />
-              <MasterDataSelect
-                label="Rechtsform"
-                tenantId={tenantId}
-                list="legal-forms"
-                value={form.legalForm}
-                storedLabel={partner.legalFormLabel}
-                onChange={(code) => set('legalForm', code)}
-                disabled
-                emptyLabel="Bitte wählen"
-                locked={LOCKED}
-              />
-              <TextField
-                label="UID"
-                value={form.uid}
-                onChange={(event) => set('uid', event.target.value)}
-                disabled={disabled}
-                maxLength={20}
-                placeholder="CHE-123.456.789"
-                error={errors.uid}
-              />
-              <TextField
-                label="Handelsregistername"
-                value={form.commercialRegisterName}
-                onChange={(event) => set('commercialRegisterName', event.target.value)}
-                disabled={disabled}
-                maxLength={140}
-                error={errors.commercialRegisterName}
-                tooltip="Nur ausfüllen, wenn der Eintrag im Handelsregister anders lautet als der Firmenname."
-              />
-            </>
-          )}
-        </div>
-
-        <PartnerRoleFields
-          form={form}
-          set={set}
-          disabled={disabled}
-          wording={wording}
-          errors={errors}
-          className="mt-5 border-t border-line-subtle pt-4"
-        />
-      </Panel>
+        <DefaultAddressPanel tenantId={tenantId} partner={partner} mayWrite={!disabled} />
+      </div>
 
       <div className="grid gap-6 self-start">
         <Panel title="Kontakt">

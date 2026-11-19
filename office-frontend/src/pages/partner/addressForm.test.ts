@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addressComplaints,
+  addressLines,
   emptyAddress,
   toAddressForm,
   toAddressPayload,
@@ -141,5 +142,33 @@ describe('toAddressPayload', () => {
     const payload = toAddressPayload({ ...FILLED, usages: ['INVOICE', 'DUNNING'] })
 
     expect(payload.usages).toEqual(['INVOICE', 'DUNNING'])
+  })
+})
+
+describe('addressLines', () => {
+  it('addressLinesTest', () => {
+    expect(
+      addressLines({
+        name: 'Bäckerei Huber AG',
+        street: 'Bahnhofstrasse',
+        buildingNumber: '12',
+        postalCode: '8001',
+        town: 'Zürich',
+        country: 'CH',
+        countryLabel: 'Schweiz',
+      }),
+    ).toEqual(['Bäckerei Huber AG', 'Bahnhofstrasse 12', '8001 Zürich', 'Schweiz'])
+  })
+
+  it('addressLinesOfAPostBoxTest', () => {
+    expect(
+      addressLines({ name: 'Muster AG', addressLine: 'Postfach 12', postalCode: '3000', town: 'Bern' }),
+    ).toEqual(['Muster AG', 'Postfach 12', '3000 Bern'])
+  })
+
+  it('addressLinesWithBlankFieldsTest', () => {
+    expect(addressLines({ name: 'Muster AG', street: ' ', postalCode: '', town: '' })).toEqual([
+      'Muster AG',
+    ])
   })
 })

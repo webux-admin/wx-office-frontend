@@ -360,12 +360,48 @@ describe('PartnerPage', () => {
     expect(container.textContent).toContain('044 123 45 67')
   })
 
-  it('partnerPageLocksWhatIdentifiesTheRecordTest', async () => {
+  /** A typo in the name or the wrong kind is corrected on the stored record. */
+  it('partnerPageRenamesAStoredCustomerTest', async () => {
     await render('/kunden/7')
 
-    expect(field('Firmenname')?.disabled).toBe(true)
-    expect(container.querySelector('button[aria-label="Firmenname: nicht änderbar"]')).not.toBeNull()
-    expect(field('UID')?.disabled).toBe(false)
+    expect(field('Firmenname')?.disabled).toBe(false)
+    await type('Firmenname', 'Bäckerei Huber GmbH')
+    await click('Speichern')
+
+    expect(written).toEqual([
+      expect.objectContaining({
+        method: 'PUT',
+        body: expect.objectContaining({ name: 'Bäckerei Huber GmbH', partnerType: 'ORGANISATION' }),
+      }),
+    ])
+  })
+
+  it('partnerPageTurnsAStoredCompanyIntoAPersonTest', async () => {
+    await render('/kunden/7')
+
+    const kind = [...container.querySelectorAll('label')].find(
+      (label) => label.textContent === 'Privatperson',
+    )
+    await act(async () => kind?.click())
+    await type('Nachname', 'Huber')
+    await click('Speichern')
+
+    expect(written[0].body).toEqual(
+      expect.objectContaining({ partnerType: 'PERSON', lastName: 'Huber' }),
+    )
+    // A person has no legal form, so none is sent.
+    expect(written[0].body).not.toHaveProperty('legalForm')
+  })
+
+  it('partnerPageShowsTheDefaultAddressOnTheBaseDataTest', async () => {
+    await render('/kunden/7')
+
+    const panel = [...container.querySelectorAll('section')].find(
+      (section) => section.querySelector('h2')?.textContent === 'Standardadresse',
+    )
+    expect(panel?.textContent).toContain('Bahnhofstrasse 12')
+    expect(panel?.textContent).toContain('8001 Zürich')
+    expect(panel?.querySelector('button[aria-label="Standardadresse bearbeiten"]')).not.toBeNull()
   })
 
   it('partnerPageReactivatesADeactivatedCustomerTest', async () => {
