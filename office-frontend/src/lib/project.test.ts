@@ -3,14 +3,21 @@ import {
   PROJECT_NAME_MAX_LENGTH,
   PROJECT_RIGHTS,
   PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_TONES,
+  PROJECT_STEP_LABELS,
   emptyProjectForm,
+  isProjectDeletable,
+  isProjectEditable,
   isProjectStatus,
+  partnerProjectsUrl,
   projectComplaint,
   projectContactsUrl,
   projectCustomerUrl,
   projectCustomersUrl,
   projectPeriod,
   projectResponsiblesUrl,
+  projectStepUrl,
+  projectStepsFrom,
   projectUrl,
   projectsKey,
   projectsUrl,
@@ -247,5 +254,58 @@ describe('projectComplaint', () => {
     expect(projectComplaint(filled({ description: 'x'.repeat(4001) }))).toContain(
       'höchstens 4000 Zeichen',
     )
+  })
+})
+
+describe('status steps', () => {
+  it('projectStepsFromTest', () => {
+    expect(projectStepsFrom('OPEN')).toEqual(['start'])
+    expect(projectStepsFrom('ACTIVE')).toEqual(['complete'])
+    expect(projectStepsFrom('COMPLETED')).toEqual(['archive', 'reopen'])
+    expect(projectStepsFrom('ARCHIVED')).toEqual(['restore'])
+  })
+
+  it('projectStepsFromNeverLeadBackToOpenTest', () => {
+    // No status offers a step back to open: start is only offered from open itself.
+    const offered = (['OPEN', 'ACTIVE', 'COMPLETED', 'ARCHIVED'] as const).flatMap((status) =>
+      projectStepsFrom(status),
+    )
+    expect(offered.filter((step) => step === 'start')).toHaveLength(1)
+    expect(new Set(offered)).toEqual(new Set(Object.keys(PROJECT_STEP_LABELS)))
+  })
+
+  it('projectStepUrlTest', () => {
+    expect(projectStepUrl(3, 17, 'archive')).toBe('/api/tenants/3/projects/17/archive')
+  })
+
+  it('isProjectEditableTest', () => {
+    expect(isProjectEditable('OPEN')).toBe(true)
+    expect(isProjectEditable('ACTIVE')).toBe(true)
+    expect(isProjectEditable('COMPLETED')).toBe(true)
+    expect(isProjectEditable('ARCHIVED')).toBe(false)
+  })
+
+  it('isProjectDeletableTest', () => {
+    expect(isProjectDeletable('OPEN')).toBe(true)
+    expect(isProjectDeletable('ACTIVE')).toBe(false)
+    expect(isProjectDeletable('COMPLETED')).toBe(false)
+    expect(isProjectDeletable('ARCHIVED')).toBe(false)
+  })
+
+  it('projectStatusTonesTest', () => {
+    expect(PROJECT_STATUS_TONES.ACTIVE).toBe('accent')
+    expect(PROJECT_STATUS_TONES.ARCHIVED).toBe('muted')
+  })
+})
+
+describe('partnerProjectsUrl', () => {
+  it('partnerProjectsUrlTest', () => {
+    expect(partnerProjectsUrl(3, 11, 0, 'projectNumber,desc')).toBe(
+      '/api/tenants/3/projects?partnerId=11&includeArchived=true&page=0&size=10&sort=projectNumber%2Cdesc',
+    )
+  })
+
+  it('partnerProjectsUrlOnALaterPageTest', () => {
+    expect(partnerProjectsUrl(3, 11, 2, 'name,asc')).toContain('page=2')
   })
 })

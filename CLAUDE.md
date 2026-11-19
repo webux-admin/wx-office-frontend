@@ -22,7 +22,11 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Belegart, aus `lib/salesDocument.ts` erzeugt
 - **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
   `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
-  Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). 🚧 Statuswechsel folgen
+  Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). Die Maske bietet nur
+  die Statusschritte an, die der Status erlaubt (`projectStepsFrom`), ein archiviertes Projekt
+  ist nur lesbar, und die Liste blendet Archiviertes aus, solange der Filter nicht danach
+  fragt. Beim Kunden zeigt der Reiter «Projekte» alle seine Projekte, archivierte
+  eingeschlossen (Backend ADR-0131)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

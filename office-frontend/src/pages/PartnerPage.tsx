@@ -16,6 +16,7 @@ import { useAuth } from '../auth/useAuth'
 import { CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
 import { DUNNING_MODULE, DUNNING_RIGHTS } from '../lib/dunning'
 import { runsModule } from '../lib/modules'
+import { PROJECT_MODULE, PROJECT_RIGHTS } from '../lib/project'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf } from '../lib/origin'
@@ -32,6 +33,7 @@ import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
 import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
+import { PartnerProjects } from './partner/PartnerProjects'
 import {
   addressComplaint,
   emptyAddress,
@@ -43,7 +45,14 @@ import { emptyPartner, firstComplaint, toForm, toPayload, type PartnerForm } fro
 import { wordingFor, type PartnerRole, type RoleWording } from './partner/role'
 import { invalidateAfterPartnerChange } from './partner/partnerRefresh'
 
-type Tab = 'stammdaten' | 'adressen' | 'kontakte' | 'preise' | 'dokumente' | 'verlauf'
+type Tab =
+  | 'stammdaten'
+  | 'adressen'
+  | 'kontakte'
+  | 'preise'
+  | 'dokumente'
+  | 'projekte'
+  | 'verlauf'
 
 /** One customer or supplier, with its addresses, contact persons and agreed prices. */
 export function PartnerPage({ role }: { role: PartnerRole }) {
@@ -160,6 +169,11 @@ function PartnerMask({
   // filled in and finished without reaching for the mouse.
   useSubmitShortcut(mayWrite && tab === 'stammdaten' && !save.isPending ? submit : undefined)
 
+  const showsProjects =
+    wording.role === 'customer' &&
+    can(PROJECT_RIGHTS.read) &&
+    runsModule(user?.tenants, tenantId, PROJECT_MODULE)
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'stammdaten', label: 'Stammdaten' },
     { id: 'adressen', label: 'Adressen' },
@@ -169,6 +183,9 @@ function PartnerMask({
     // Which kind of document this partner is written with. Needs the right on the catalogue:
     // the data are kinds of document, not partner data (ADR-0054 of the backend).
     ...(can('DOCUMENT_TYPE_READ') ? [{ id: 'dokumente' as Tab, label: 'Dokumente' }] : []),
+    // A project always belongs to a customer, never to a supplier (backend ADR-0129), and the
+    // register needs the module switched on: without it there is no project list to read.
+    ...(showsProjects ? [{ id: 'projekte' as Tab, label: 'Projekte' }] : []),
     // Last on purpose: the history is what happened, and one looks it up rather than works
     // in it. For both roles — a supplier has a record with us just as a customer does.
     { id: 'verlauf', label: 'Verlauf' },
@@ -316,6 +333,10 @@ function PartnerMask({
             answers with an empty page when that is nothing. */}
         {tab === 'verlauf' && partner && (
           <PartnerHistory tenantId={tenantId} partnerId={partner.id} role={wording.role} />
+        )}
+
+        {tab === 'projekte' && partner && showsProjects && (
+          <PartnerProjects tenantId={tenantId} partnerId={partner.id} />
         )}
 
         {tab === 'preise' && partner && can('PRODUCT_READ') && (

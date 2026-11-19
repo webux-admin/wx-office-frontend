@@ -81,6 +81,8 @@ function stubFetch() {
     if (method !== 'GET') {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
       written.push({ url, method, body })
+      if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url.endsWith('/start')) return json({ ...STORED, status: 'ACTIVE' })
       return json({ ...STORED, ...body, id: 6, projectNumber: 'P-00006' }, method === 'POST' ? 201 : 200)
     }
     if (url.includes('/projects/customers/11/contacts')) return json([EVA])
@@ -91,6 +93,8 @@ function stubFetch() {
     }
     if (url.includes('/projects/responsibles')) return json([ANNA, BEAT])
     if (url.endsWith('/projects/5')) return json(STORED)
+    if (url.endsWith('/projects/7')) return json({ ...STORED, id: 7, status: 'ARCHIVED' })
+    if (url.endsWith('/projects/8')) return json({ ...STORED, id: 8, status: 'COMPLETED' })
     return json([])
   })
 }
@@ -170,11 +174,21 @@ async function choose(label: string, value: string) {
 }
 
 async function save() {
-  const button = [...container.querySelectorAll('button')].find((entry) =>
-    entry.textContent?.includes('Speichern'),
-  )
+  await press('Speichern')
+}
+
+/** The buttons on the page, by what they say. */
+const buttons = () =>
+  [...document.querySelectorAll('button')].map((entry) => entry.textContent?.trim() ?? '')
+
+/** Presses the last button that says exactly this, so a dialog wins over the header. */
+async function press(label: string) {
+  const button = [...document.querySelectorAll('button')]
+    .filter((entry) => entry.textContent?.trim() === label)
+    .at(-1)
+  if (button === undefined) throw new Error(`no button ${label}`)
   await act(async () => {
-    button?.click()
+    button.click()
   })
   await settle()
 }
@@ -302,6 +316,62 @@ describe('ProjectPage', () => {
     expect(container.querySelectorAll('label')).not.toHaveLength(0)
     expect([...container.querySelectorAll('label')].some((entry) => entry.textContent === 'Kunde suchen'))
       .toBe(false)
+  })
+
+  it('projectPageStartsAnOpenProjectTest', async () => {
+    await render('/projekte/5')
+
+    expect(buttons()).not.toContain('Archivieren')
+    await press('Starten')
+
+    expect(written).toEqual([{ url: '/api/tenants/1/projects/5/start', method: 'POST', body: {} }])
+    // A step keeps the mask open on the same project.
+    expect(text()).not.toContain('Liste')
+  })
+
+  it('projectPageOffersArchiveAndReopenOnACompletedProjectTest', async () => {
+    await render('/projekte/8')
+
+    expect(buttons()).toEqual(expect.arrayContaining(['Archivieren', 'Wieder öffnen']))
+    expect(buttons()).not.toContain('Löschen')
+    expect(buttons()).not.toContain('Starten')
+  })
+
+  it('projectPageKeepsAnArchivedProjectReadOnlyTest', async () => {
+    await render('/projekte/7')
+
+    expect(text()).toContain('Archiviert')
+    expect(text()).toContain('Dieses Projekt ist archiviert und lässt sich nur noch lesen.')
+    expect(buttons()).not.toContain('Speichern')
+    expect(buttons()).toContain('Aus dem Archiv holen')
+    expect((control('Name') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('projectPageDeletesAnOpenProjectAfterAskingTest', async () => {
+    await render('/projekte/5')
+
+    await press('Löschen')
+    expect(document.body.textContent).toContain('P-00005 löschen?')
+    expect(written).toHaveLength(0)
+
+    await press('Löschen')
+
+    expect(written).toEqual([{ url: '/api/tenants/1/projects/5', method: 'DELETE', body: {} }])
+    expect(text()).toContain('Liste')
+  })
+
+  it('projectPageOffersNoStepWithoutWriteRightTest', async () => {
+    await render('/projekte/5', ['PROJECT_READ'])
+
+    expect(buttons()).not.toContain('Starten')
+    expect(buttons()).not.toContain('Löschen')
+  })
+
+  it('projectPageOffersNoStepOnANewProjectTest', async () => {
+    await render('/projekte/neu')
+
+    expect(buttons()).not.toContain('Starten')
+    expect(buttons()).not.toContain('Löschen')
   })
 
   it('projectPageWithoutReadRightTest', async () => {

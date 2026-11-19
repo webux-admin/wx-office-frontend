@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -23,18 +24,25 @@ import {
   PROJECT_PATH,
   PROJECT_RIGHTS,
   PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_TONES,
+  PROJECT_STEP_LABELS,
   emptyProjectForm,
+  isProjectDeletable,
+  isProjectEditable,
   projectComplaint,
   projectContactsUrl,
   projectCustomerUrl,
   projectCustomersUrl,
   projectResponsiblesUrl,
+  projectStepUrl,
+  projectStepsFrom,
   projectUrl,
   projectsKey,
   projectsUrl,
   toProjectForm,
   toProjectRequest,
   type ProjectForm,
+  type ProjectStep,
 } from '../lib/project'
 import type { Project, ProjectContact, ProjectCustomer, ProjectResponsible } from '../lib/types'
 
@@ -79,7 +87,11 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
 
   const [form, setForm] = useState<ProjectForm>(project ? toProjectForm(project) : emptyProjectForm())
   const [complaint, setComplaint] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const mayWrite = can(PROJECT_RIGHTS.write)
+  // An archived project is read only, also for whoever may write: it is taken out of the
+  // archive first, and the backend refuses a change before that with 409.
+  const editable = mayWrite && (project === null || isProjectEditable(project.status))
   const set = <K extends keyof ProjectForm>(field: K, value: ProjectForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
@@ -98,13 +110,33 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
     },
   })
 
+  // A step changes the status and nothing else: the mask stays open on the same project, and
+  // what was typed but not saved stays in the fields.
+  const step = useMutation({
+    mutationFn: (next: ProjectStep) =>
+      api.post<Project>(projectStepUrl(tenantId, project?.id ?? 0, next), {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: projectsKey(tenantId) })
+    },
+  })
+
+  const remove = useMutation({
+    mutationFn: () => api.delete<void>(projectUrl(tenantId, project?.id ?? 0)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: projectsKey(tenantId) })
+      void navigate(origin.from, { replace: true })
+    },
+  })
+
   const submit = () => {
     const problem = projectComplaint(form)
     setComplaint(problem)
     if (!problem) save.mutate()
   }
 
-  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
+  useSubmitShortcut(editable && !save.isPending ? submit : undefined)
+
+  const failure = save.error ?? step.error ?? (complaint === null ? null : new Error(complaint))
 
   return (
     <>
@@ -115,14 +147,34 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
           project ? (
             <span className="flex items-center gap-2">
               <span className="font-mono text-[12px]">{project.projectNumber}</span>
-              <Badge tone="neutral">{PROJECT_STATUS_LABELS[project.status]}</Badge>
+              <Badge tone={PROJECT_STATUS_TONES[project.status]}>
+                {PROJECT_STATUS_LABELS[project.status]}
+              </Badge>
             </span>
           ) : (
             'Die Projektnummer wird beim Speichern vergeben.'
           )
         }
       >
-        {mayWrite && (
+        {project && mayWrite && isProjectDeletable(project.status) && (
+          <Button variant="secondary" onClick={() => setDeleting(true)}>
+            Löschen
+          </Button>
+        )}
+        {project &&
+          mayWrite &&
+          projectStepsFrom(project.status).map((next) => (
+            <Button
+              key={next}
+              variant="secondary"
+              onClick={() => step.mutate(next)}
+              busy={step.isPending && step.variables === next}
+              disabled={step.isPending}
+            >
+              {PROJECT_STEP_LABELS[next]}
+            </Button>
+          ))}
+        {editable && (
           <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
@@ -130,10 +182,17 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
       </PageHeader>
 
       <div className="px-8 pb-12">
-        {(complaint !== null || save.error !== null) && (
+        {failure !== null && (
           <div className="mb-6" aria-live="polite">
-            <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
+            <ErrorNotice error={failure} />
           </div>
+        )}
+
+        {project && !isProjectEditable(project.status) && (
+          <p className="mb-6 rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-[13px] text-text-secondary">
+            Dieses Projekt ist archiviert und lässt sich nur noch lesen.
+            {mayWrite ? ' Zum Bearbeiten zuerst aus dem Archiv holen.' : ''}
+          </p>
         )}
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -144,7 +203,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                 value={form.name}
                 onChange={(event) => set('name', event.target.value)}
                 maxLength={PROJECT_NAME_MAX_LENGTH}
-                disabled={!mayWrite}
+                disabled={!editable}
                 required
               />
               <div className="grid gap-4 sm:grid-cols-2">
@@ -153,14 +212,14 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                   type="date"
                   value={form.startDate}
                   onChange={(event) => set('startDate', event.target.value)}
-                  disabled={!mayWrite}
+                  disabled={!editable}
                 />
                 <TextField
                   label="Ende"
                   type="date"
                   value={form.endDate}
                   onChange={(event) => set('endDate', event.target.value)}
-                  disabled={!mayWrite}
+                  disabled={!editable}
                   hint="Leer lassen, solange das Ende offen ist."
                 />
               </div>
@@ -170,7 +229,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                 onChange={(event) => set('description', event.target.value)}
                 maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
                 rows={5}
-                disabled={!mayWrite}
+                disabled={!editable}
               />
             </div>
           </Panel>
@@ -181,7 +240,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                 tenantId={tenantId}
                 partnerId={form.partnerId}
                 knownName={project?.customerName ?? null}
-                disabled={!mayWrite}
+                disabled={!editable}
                 // Another customer has other people: a contact chosen for the last one would
                 // be refused by the backend, so it goes with the customer.
                 onChange={(partnerId) =>
@@ -192,14 +251,14 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                 tenantId={tenantId}
                 partnerId={form.partnerId}
                 contactPersonId={form.contactPersonId}
-                disabled={!mayWrite}
+                disabled={!editable}
                 onChange={(contactPersonId) => set('contactPersonId', contactPersonId)}
               />
               <ResponsibleChoice
                 tenantId={tenantId}
                 responsibleUserId={form.responsibleUserId}
                 storedUserId={project?.responsibleUserId ?? null}
-                disabled={!mayWrite}
+                disabled={!editable}
                 onChange={(responsibleUserId) => set('responsibleUserId', responsibleUserId)}
               />
             </div>
@@ -215,6 +274,27 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
           </p>
         )}
       </div>
+
+      {project && (
+        <Dialog
+          open={deleting}
+          onClose={() => setDeleting(false)}
+          title={`${project.projectNumber} löschen?`}
+          description="Das Projekt verschwindet ganz. Seine Nummer wird nicht wieder vergeben."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setDeleting(false)}>
+                Abbrechen
+              </Button>
+              <Button variant="danger" onClick={() => remove.mutate()} busy={remove.isPending}>
+                Löschen
+              </Button>
+            </>
+          }
+        >
+          {remove.error !== null && <ErrorNotice error={remove.error} />}
+        </Dialog>
+      )}
     </>
   )
 }

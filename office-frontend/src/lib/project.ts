@@ -1,3 +1,4 @@
+import type { BadgeTone } from '../components/Badge'
 import { listQuery } from './paging'
 import type { Project, ProjectRequest, ProjectStatus } from './types'
 
@@ -34,15 +35,72 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   ARCHIVED: 'Archiviert',
 }
 
+/** Work under way stands out, work put away steps back. */
+export const PROJECT_STATUS_TONES: Record<ProjectStatus, BadgeTone> = {
+  OPEN: 'neutral',
+  ACTIVE: 'accent',
+  COMPLETED: 'success',
+  ARCHIVED: 'muted',
+}
+
 /**
  * Whether a value from a select is one of the four status codes.
  *
  * @param value what the select holds
  * @returns true for `OPEN`, `ACTIVE`, `COMPLETED` and `ARCHIVED`, false for anything else,
- *          the empty «Alle» included
+ *          the empty «Ohne Archiv» included
  */
 export function isProjectStatus(value: string): value is ProjectStatus {
   return Object.hasOwn(PROJECT_STATUS_LABELS, value)
+}
+
+/** A step from one status to the next, as the backend `ProjectStatusStep` names it. */
+export type ProjectStep = 'start' | 'complete' | 'reopen' | 'archive' | 'restore'
+
+/** What the button of a step says. */
+export const PROJECT_STEP_LABELS: Record<ProjectStep, string> = {
+  start: 'Starten',
+  complete: 'Abschliessen',
+  reopen: 'Wieder öffnen',
+  archive: 'Archivieren',
+  restore: 'Aus dem Archiv holen',
+}
+
+/**
+ * The steps the backend allows from each status, forward step first.
+ *
+ * <p>The same table as `ProjectStatusStep` of the backend, which keeps it anyway: a button for
+ * a step it refuses would only end in a 409.
+ */
+const STEPS_FROM: Record<ProjectStatus, ProjectStep[]> = {
+  OPEN: ['start'],
+  ACTIVE: ['complete'],
+  COMPLETED: ['archive', 'reopen'],
+  ARCHIVED: ['restore'],
+}
+
+/**
+ * @param status where the project stands
+ * @returns the steps a project in that status can take, forward step first
+ */
+export function projectStepsFrom(status: ProjectStatus): ProjectStep[] {
+  return STEPS_FROM[status]
+}
+
+/**
+ * @param status where the project stands
+ * @returns whether its details can be changed; an archived project is read only
+ */
+export function isProjectEditable(status: ProjectStatus): boolean {
+  return status !== 'ARCHIVED'
+}
+
+/**
+ * @param status where the project stands
+ * @returns whether it can be deleted; only a project that never started can
+ */
+export function isProjectDeletable(status: ProjectStatus): boolean {
+  return status === 'OPEN'
 }
 
 /** Longest name the backend takes. */
@@ -66,6 +124,39 @@ export function projectsUrl(tenantId: number): string {
  */
 export function projectUrl(tenantId: number, projectId: number | string): string {
   return `${projectsUrl(tenantId)}/${projectId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param projectId the project
+ * @param step the step to take
+ * @returns address that moves the project one step on
+ */
+export function projectStepUrl(
+  tenantId: number,
+  projectId: number,
+  step: ProjectStep,
+): string {
+  return `${projectUrl(tenantId, projectId)}/${step}`
+}
+
+/**
+ * Every project of one customer, archived ones included: on the customer they are its history.
+ *
+ * @param tenantId the tenant
+ * @param partnerId the customer
+ * @param page zero based page
+ * @param sort field and direction
+ * @returns address of that page
+ */
+export function partnerProjectsUrl(
+  tenantId: number,
+  partnerId: number,
+  page: number,
+  sort: string,
+): string {
+  const query = listQuery({ partnerId, includeArchived: true, page, size: 10, sort })
+  return `${projectsUrl(tenantId)}?${query}`
 }
 
 /**

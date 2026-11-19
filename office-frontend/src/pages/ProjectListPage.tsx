@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { Badge, type BadgeTone } from '../components/Badge'
+import { Badge } from '../components/Badge'
 import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
@@ -22,6 +22,7 @@ import {
   PROJECT_PATH,
   PROJECT_RIGHTS,
   PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_TONES,
   isProjectStatus,
   projectPeriod,
   projectsKey,
@@ -32,19 +33,14 @@ import type { Page, Project, ProjectStatus } from '../lib/types'
 /** Where the mask returns to, and what its back link says. */
 const ORIGIN = originState(PROJECT_PATH, 'Projekte')
 
-/** Work under way stands out, work put away steps back. */
-const STATUS_TONES: Record<ProjectStatus, BadgeTone> = {
-  OPEN: 'neutral',
-  ACTIVE: 'accent',
-  COMPLETED: 'success',
-  ARCHIVED: 'muted',
-}
-
 /**
  * The projects of the tenant, newest number first.
  *
  * <p>The search looks into number, name and the name of the customer — the last one is
  * answered by the backend, which asks the partner module, so this screen never sifts rows.
+ *
+ * <p>Archived projects stay out unless the filter asks for them: put away means out of the
+ * way. The backend leaves them out by itself when no status is sent.
  */
 export function ProjectListPage() {
   return (
@@ -127,7 +123,7 @@ function ProjectList({ tenantId }: { tenantId: number }) {
       header: 'Status',
       width: 'w-[130px]',
       render: (project) => (
-        <Badge tone={STATUS_TONES[project.status]}>{PROJECT_STATUS_LABELS[project.status]}</Badge>
+        <Badge tone={PROJECT_STATUS_TONES[project.status]}>{PROJECT_STATUS_LABELS[project.status]}</Badge>
       ),
     },
   ]
@@ -167,7 +163,7 @@ function ProjectList({ tenantId }: { tenantId: number }) {
                 setPage(0)
               }}
             >
-              <option value="">Alle</option>
+              <option value="">Ohne Archiv</option>
               {Object.entries(PROJECT_STATUS_LABELS).map(([code, label]) => (
                 <option key={code} value={code}>
                   {label}
