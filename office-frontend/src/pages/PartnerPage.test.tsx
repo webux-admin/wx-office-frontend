@@ -243,18 +243,45 @@ describe('PartnerPage', () => {
     expect(document.activeElement).toBe(field('Firmenname'))
   })
 
-  /** An address is optional, but once begun it needs its postcode and town. */
-  it('partnerPageAsksForTownOnceTheAddressIsBegunTest', async () => {
+  /** Without postcode and town a customer cannot be written to, so the address is required. */
+  it('partnerPageRequiresPostcodeAndTownTest', async () => {
     await render('/kunden/neu')
     await type('Firmenname', 'Muster AG')
     await type('Rechtsform', 'AG')
 
-    await type('Strasse', 'Bahnhofstrasse')
     await click('Speichern')
 
     expect(written).toHaveLength(0)
+    expect(field('PLZ')?.getAttribute('aria-required')).toBe('true')
     expect(messageAt('Ort')).toMatch(/Ort/)
     expect(messageAt('PLZ')).toMatch(/Postleitzahl/)
+    expect(document.activeElement).toBe(field('PLZ'))
+  })
+
+  it('partnerPageCreatesACustomerWithItsContactsTest', async () => {
+    await render('/kunden/neu')
+    await type('Firmenname', 'Muster AG')
+    await type('Rechtsform', 'AG')
+    await type('PLZ', '8001')
+    await type('Ort', 'Zürich')
+
+    await click('Kontaktperson hinzufügen')
+    await type('Vorname', 'Eva')
+    await type('Nachname', 'Huber')
+    await click('Hinzufügen')
+    await click('Kontaktperson hinzufügen')
+    await type('Nachname', 'Meier')
+    await click('Hinzufügen')
+
+    expect(written).toHaveLength(0)
+    expect(container.textContent).toContain('Eva Huber')
+    await click('Speichern')
+
+    expect(written).toHaveLength(1)
+    expect(written[0].body.contacts).toEqual([
+      expect.objectContaining({ firstName: 'Eva', lastName: 'Huber', isPrimary: true }),
+      expect.objectContaining({ lastName: 'Meier', isPrimary: false }),
+    ])
   })
 
   it('partnerPageShowsABackendRefusalAtTheFieldTest', async () => {

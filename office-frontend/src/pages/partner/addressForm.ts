@@ -75,32 +75,6 @@ export function toAddressForm(address: PartnerAddress): AddressForm {
 }
 
 /**
- * Whether anything at all has been entered.
- *
- * <p>On the create mask the address is optional, so an untouched block is skipped rather than
- * sent as an empty address. The country is not counted: it is prefilled and says nothing about
- * whether somebody meant to enter an address.
- *
- * @param form the address part of the mask
- * @param ignoredName a prefilled recipient that does not count as input either
- * @returns true when at least one field carries something the user typed
- */
-export function isUntouched(form: AddressForm, ignoredName = ''): boolean {
-  const typed = [
-    form.label,
-    form.name === ignoredName ? '' : form.name,
-    form.addressLine,
-    form.street,
-    form.buildingNumber,
-    form.postalCode,
-    form.town,
-    form.email,
-    form.phone,
-  ]
-  return typed.every((value) => value.trim() === '') && form.usages.length === 0
-}
-
-/**
  * Checks what the address needs before the backend will take it, field by field.
  *
  * @param form the address part of the mask

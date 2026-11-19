@@ -34,6 +34,7 @@ export function ContactDialog({
   busy,
   error,
   contact,
+  startsAsPrimary = false,
 }: {
   tenantId: number
   open: boolean
@@ -43,8 +44,10 @@ export function ContactDialog({
   error: unknown
   /** The stored contact being changed; absent while a new one is added. */
   contact?: PartnerContact
+  /** Whether a new contact starts ticked as main contact, as the first one of a record does. */
+  startsAsPrimary?: boolean
 }) {
-  const [form, setForm] = useState(() => emptyContact())
+  const [form, setForm] = useState(() => emptyContact(startsAsPrimary))
   const [wasOpen, setWasOpen] = useState(open)
   // What the dialog was opened with; see the address dialog for why it is kept in state.
   const [edited, setEdited] = useState(contact)
@@ -61,7 +64,7 @@ export function ContactDialog({
     setWasOpen(open)
     if (open) {
       setEdited(contact)
-      setForm(contact ? toContactForm(contact) : emptyContact())
+      setForm(contact ? toContactForm(contact) : emptyContact(startsAsPrimary))
       reset()
     }
   }

@@ -4,6 +4,7 @@ import {
   emptyContact,
   toContactForm,
   toContactPayload,
+  withSinglePrimary,
 } from './contactForm'
 
 const FILLED = { ...emptyContact(), firstName: 'Claudia', lastName: 'Rüegg' }
@@ -84,5 +85,27 @@ describe('toContactPayload', () => {
 
     expect(payload.lastName).toBe('Rüegg')
     expect(payload.phone).toBe('044')
+  })
+})
+
+describe('withSinglePrimary', () => {
+  const EVA = { lastName: 'Huber', firstName: 'Eva', isPrimary: true }
+  const MAX = { lastName: 'Meier', firstName: 'Max', isPrimary: false }
+  const LEA = { lastName: 'Keller', firstName: 'Lea', isPrimary: true }
+
+  it('withSinglePrimaryTest', () => {
+    expect(withSinglePrimary([EVA, MAX, LEA], 2).map((contact) => contact.isPrimary)).toEqual([
+      false,
+      false,
+      true,
+    ])
+  })
+
+  it('withSinglePrimaryOfOneContactTest', () => {
+    expect(withSinglePrimary([LEA], 0)).toEqual([LEA])
+  })
+
+  it('withSinglePrimaryOfNoContactTest', () => {
+    expect(withSinglePrimary([], 0)).toEqual([])
   })
 })

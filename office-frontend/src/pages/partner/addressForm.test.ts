@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   addressComplaints,
   emptyAddress,
-  isUntouched,
   toAddressForm,
   toAddressPayload,
 } from './addressForm'
@@ -83,31 +82,6 @@ describe('toAddressForm', () => {
     })
 
     expect(toAddressPayload(toAddressForm(stored))).toEqual(stored)
-  })
-})
-
-describe('isUntouched', () => {
-  it('isUntouchedTest', () => {
-    expect(isUntouched(emptyAddress())).toBe(true)
-  })
-
-  it('isUntouchedIgnoresThePrefilledCountryTest', () => {
-    // The country is prefilled and says nothing about whether an address was meant.
-    expect(isUntouched({ ...emptyAddress(), country: 'CH' })).toBe(true)
-  })
-
-  it('isUntouchedIgnoresAPrefilledRecipientTest', () => {
-    expect(isUntouched(emptyAddress('Muster AG'), 'Muster AG')).toBe(true)
-    expect(isUntouched(emptyAddress('Muster AG'))).toBe(false)
-  })
-
-  it('isUntouchedWithOneFieldFilledTest', () => {
-    expect(isUntouched({ ...emptyAddress(), town: 'Zürich' })).toBe(false)
-    expect(isUntouched({ ...emptyAddress(), usages: ['INVOICE'] })).toBe(false)
-  })
-
-  it('isUntouchedTreatsWhitespaceAsEmptyTest', () => {
-    expect(isUntouched({ ...emptyAddress(), street: '   ' })).toBe(true)
   })
 })
 

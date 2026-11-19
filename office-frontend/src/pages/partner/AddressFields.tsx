@@ -22,7 +22,6 @@ export function AddressFields({
   storedCountryLabel,
   errors = {},
   variant = 'full',
-  postalRequired = true,
 }: {
   tenantId: number
   form: AddressForm
@@ -33,11 +32,6 @@ export function AddressFields({
   /** Messages per field of the address, under the names of the address itself. */
   errors?: FieldErrors
   variant?: 'full' | 'postal'
-  /**
-   * Whether postcode and town are marked as required. Off on the create mask while the address
-   * is still empty: there the whole address may be left out.
-   */
-  postalRequired?: boolean
 }) {
   // The catalogue of this name serves exactly the codes of AddressUsage: it is built from
   // that enum in the backend, so the narrowing holds as long as both names match.
@@ -116,7 +110,7 @@ export function AddressFields({
           onChange={(event) => set('postalCode')(event.target.value)}
           disabled={disabled}
           maxLength={16}
-          required={postalRequired}
+          required
           error={errors.postalCode}
         />
         <TextField
@@ -125,7 +119,7 @@ export function AddressFields({
           onChange={(event) => set('town')(event.target.value)}
           disabled={disabled}
           maxLength={35}
-          required={postalRequired}
+          required
           error={errors.town}
           className="sm:col-span-2"
         />

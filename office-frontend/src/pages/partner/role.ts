@@ -81,8 +81,7 @@ const CUSTOMER: RoleWording = {
   ownRoleLabel: 'Kunde',
   otherRoleLabel: 'Auch Lieferant',
   alsoBadge: 'Auch Lieferant',
-  addressTooltip:
-    'Wird die Standardadresse. Ohne Adresse lässt sich kein Beleg an diesen Kunden ausstellen.',
+  addressTooltip: 'Wird die Standardadresse, an sie gehen Offerten und Rechnungen.',
 }
 
 const SUPPLIER: RoleWording = {

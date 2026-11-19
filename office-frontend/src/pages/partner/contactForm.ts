@@ -96,6 +96,22 @@ export function toContactPayload(form: ContactForm): PartnerContact {
   }
 }
 
+/**
+ * Marks one contact as the main contact and takes the mark from all others.
+ *
+ * <p>A record has at most one main contact. On a stored record the backend refuses a second
+ * one; on a record not yet saved, ticking the box simply moves the mark.
+ *
+ * @param contacts the contacts entered so far
+ * @param chosen   the position of the contact that keeps the mark
+ * @returns the contacts with the mark on `chosen` only
+ */
+export function withSinglePrimary(contacts: PartnerContact[], chosen: number): PartnerContact[] {
+  return contacts.map((contact, index) =>
+    index === chosen ? contact : { ...contact, isPrimary: false },
+  )
+}
+
 function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim()
   return trimmed === '' ? undefined : trimmed

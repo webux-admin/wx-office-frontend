@@ -31,12 +31,13 @@ import { PROJECT_MODULE, PROJECT_RIGHTS } from '../lib/project'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf } from '../lib/origin'
-import type { Partner, PartnerType } from '../lib/types'
+import type { Partner, PartnerContact, PartnerType } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
 import { useCatalogue, useMasterDataEntries } from '../masterdata/useMasterData'
 import { AddressFields } from './partner/AddressFields'
+import { NewContacts } from './partner/NewContacts'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
 import { PartnerPayerAccounts } from './partner/PartnerPayerAccounts'
@@ -49,7 +50,6 @@ import { usePartnerCredit } from './partner/usePartnerCredit'
 import {
   addressComplaints,
   emptyAddress,
-  isUntouched,
   toAddressPayload,
   type AddressForm,
 } from './partner/addressForm'
@@ -189,11 +189,12 @@ function FormNotice({
 /**
  * Creating a customer or supplier: only what the first offer or order needs.
  *
- * <p>Kind, name, the postal address and how to reach them. Everything else — language,
- * currency, payment term — starts from the tenant's defaults and is changed on the stored
- * record, where the full mask is. The recipient of the address is the name of the record, and
- * the address becomes the default one. Saving closes the mask and goes back to the list
- * (ADR-0003).
+ * <p>Kind, name, the postal address, how to reach them and the contact persons. The address
+ * is required, at least its postcode and town: a customer without one cannot be written to.
+ * Everything else — language, currency, payment term — starts from the tenant's defaults and
+ * is changed on the stored record, where the full mask is. The recipient of the address is the
+ * name of the record, and the address becomes the default one. The contact persons go with the
+ * record in the same request. Saving closes the mask and goes back to the list (ADR-0003).
  */
 function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: RoleWording }) {
   const { can } = useAuth()
@@ -204,6 +205,7 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
 
   const [form, setForm] = useState<PartnerForm>(() => emptyPartner(wording.role))
   const [address, setAddress] = useState<AddressForm>(() => emptyAddress('', true))
+  const [contacts, setContacts] = useState<PartnerContact[]>([])
   const set = <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
@@ -211,7 +213,6 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
   const languages = useMasterDataEntries(tenantId, 'languages')
   // The language is not asked here; the tenant's default is what a new record starts with.
   const complete: PartnerForm = { ...form, language: form.language || defaultCodeOf(languages) }
-  const addressStarted = !isUntouched(address)
   const fullAddress: AddressForm = { ...address, name: displayNameOf(form) }
 
   const mayWrite = can('PARTNER_WRITE')
@@ -221,7 +222,8 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
     mutationFn: () =>
       api.post<Partner>(base, {
         ...toPayload(complete),
-        addresses: addressStarted ? [toAddressPayload(fullAddress)] : undefined,
+        addresses: [toAddressPayload(fullAddress)],
+        contacts: contacts.length > 0 ? contacts : undefined,
       }),
     // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
     // The entry is replaced instead of pushed: a mask that has been saved is not a place to
@@ -235,7 +237,7 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
   const { errors, own, check } = useFieldErrors(() => {
     // The recipient is the name of the record, which has a message of its own.
     const postal = Object.fromEntries(
-      Object.entries(addressStarted ? addressComplaints(fullAddress) : {}).filter(
+      Object.entries(addressComplaints(fullAddress)).filter(
         ([field]) => field !== 'name',
       ),
     )
@@ -253,7 +255,8 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
       title={wording.newTitle}
       subtitle={wording.newSubtitle}
       back={{ to: origin.from, label: origin.label }}
-      dirty={changed}
+      // A contact is entered in a dialog, which the tracker leaves out, so it counts here.
+      dirty={changed || contacts.length > 0}
       onSubmit={mayWrite && !save.isPending ? submit : undefined}
       actions={
         mayWrite && (
@@ -351,7 +354,6 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
                 disabled={!mayWrite}
                 errors={nestedErrors(errors, 'addresses.')}
                 variant="postal"
-                postalRequired={addressStarted}
               />
             </fieldset>
 
@@ -375,6 +377,18 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
                 error={errors.phone}
               />
             </div>
+
+            <fieldset className="border-t border-line-subtle pt-4">
+              <legend className="mb-3 text-small font-medium text-text-secondary">
+                Kontaktpersonen
+              </legend>
+              <NewContacts
+                tenantId={tenantId}
+                contacts={contacts}
+                onChange={setContacts}
+                disabled={!mayWrite}
+              />
+            </fieldset>
           </div>
         </Panel>
       </div>
