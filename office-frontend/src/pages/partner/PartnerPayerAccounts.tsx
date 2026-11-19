@@ -65,7 +65,7 @@ export function PartnerPayerAccounts({
 
   return (
     <Panel title="Gelernte Zahlungskonten">
-      <p className="mb-3 text-[13px] text-text-secondary">
+      <p className="mb-3 text-body text-text-secondary">
         Von diesen Konten hat dieser Kunde bezahlt. Gelernt wird nur aus bestätigten
         Zuordnungen; die Angabe hilft, eine Zahlung ohne Referenz zuzuordnen.
       </p>
@@ -76,8 +76,8 @@ export function PartnerPayerAccounts({
             className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-line px-3 py-2"
           >
             <span className="grid">
-              <span className="font-mono text-[13px]">{account.debtorIban}</span>
-              <span className="text-[12px] text-text-tertiary">
+              <span className="font-mono text-body">{account.debtorIban}</span>
+              <span className="text-small text-text-tertiary">
                 seit {formatDate(account.learnedAt)} · {account.hitCount}
                 {account.hitCount === 1 ? ' Bestätigung' : ' Bestätigungen'} · {account.learnedBy}
               </span>

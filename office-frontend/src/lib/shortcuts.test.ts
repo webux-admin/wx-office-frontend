@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  isCancelShortcut,
   isSubmitShortcut,
   onMac,
   submitShortcutLabel,
@@ -97,5 +98,23 @@ describe('onMac', () => {
     vi.stubGlobal('navigator', undefined)
 
     expect(onMac()).toBe(false)
+  })
+})
+
+describe('isCancelShortcut', () => {
+  it('isCancelShortcutTest', () => {
+    expect(isCancelShortcut(press({ key: 'Escape' }))).toBe(true)
+  })
+
+  it('isCancelShortcutWithAnotherKeyTest', () => {
+    expect(isCancelShortcut(press({ key: 'Enter' }))).toBe(false)
+  })
+
+  /** A modifier makes it a different combination, never a cancel on a near miss. */
+  it('isCancelShortcutWithAModifierTest', () => {
+    expect(isCancelShortcut(press({ key: 'Escape', shiftKey: true }))).toBe(false)
+    expect(isCancelShortcut(press({ key: 'Escape', ctrlKey: true }))).toBe(false)
+    expect(isCancelShortcut(press({ key: 'Escape', altKey: true }))).toBe(false)
+    expect(isCancelShortcut(press({ key: 'Escape', metaKey: true }))).toBe(false)
   })
 })

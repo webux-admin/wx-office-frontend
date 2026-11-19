@@ -1,8 +1,9 @@
 import { useEffect, type ReactNode } from 'react'
+import type { FieldExtras } from '../components/Field'
 import { SelectField } from '../components/SelectField'
 import { defaultCodeOf, selectOptions, type SelectableEntry } from '../lib/masterData'
 
-type CodeSelectProps = {
+type CodeSelectProps = FieldExtras & {
   label: string
   /** The values as the API returned them, in the order the tenant put them in. */
   entries: readonly SelectableEntry[]
@@ -42,6 +43,7 @@ export function CodeSelect({
   hint,
   invalid = false,
   className,
+  ...extras
 }: CodeSelectProps) {
   const options = selectOptions(entries, value, storedLabel)
   const fallback = emptyLabel === undefined ? defaultCodeOf(entries) : ''
@@ -60,6 +62,7 @@ export function CodeSelect({
       hint={hint}
       invalid={invalid}
       className={className}
+      {...extras}
     >
       {emptyLabel !== undefined && <option value="">{emptyLabel}</option>}
       {options.map((option) => (

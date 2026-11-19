@@ -1,4 +1,5 @@
 import { parseDecimal } from '../../lib/format'
+import type { FieldErrors } from '../../lib/fieldErrors'
 import type { Partner, PartnerType } from '../../lib/types'
 import type { PartnerRole, RoleWording } from './role'
 
@@ -153,28 +154,47 @@ export function toPayload(form: PartnerForm): Partial<Partner> {
 }
 
 /**
- * Checks what can be checked here, which is little.
+ * Checks what can be checked here, which is little, and says at which field.
  *
  * <p>The rules of the domain (the UID check digit, whether a number is still free) belong
- * to the backend and are answered by it. This only catches what would come back as an English
- * sentence from the domain layer, so the mask can name the field in German instead.
+ * to the backend and are answered by it, at the same fields. This only catches what is
+ * obviously missing, so the user hears about it before the request goes out.
+ *
+ * <p>The keys are the field names of the request body. `roles` stands for the two role
+ * switches together, since the rule is about the pair.
  *
  * @param form the filled in mask
  * @param wording the mask that is open, which decides what the record is called
- * @returns the German complaint, or `null` when nothing is obviously missing
+ * @returns the German message per field, empty when nothing is obviously missing
  */
-export function firstComplaint(form: PartnerForm, wording: RoleWording): string | null {
+export function partnerComplaints(form: PartnerForm, wording: RoleWording): FieldErrors {
+  const complaints: Record<string, string> = {}
   if (form.partnerType === 'PERSON') {
-    if (form.lastName.trim() === '') return wording.lastNameMissing
+    if (form.lastName.trim() === '') complaints.lastName = wording.lastNameMissing
   } else {
-    if (form.name.trim() === '') return wording.nameMissing
-    if (form.legalForm === '') return 'Eine Firma braucht eine Rechtsform.'
+    if (form.name.trim() === '') complaints.name = wording.nameMissing
+    if (form.legalForm === '') complaints.legalForm = 'Eine Firma braucht eine Rechtsform.'
   }
-  if (form.language === '') return 'Der Eintrag braucht eine Sprache.'
+  if (form.language === '') complaints.language = 'Der Eintrag braucht eine Sprache.'
   if (!form.isCustomer && !form.isSupplier) {
-    return 'Ein Eintrag ist Kunde, Lieferant oder beides. Mindestens eines muss gesetzt sein.'
+    complaints.roles = 'Ein Eintrag ist Kunde, Lieferant oder beides. Mindestens eines muss gesetzt sein.'
   }
-  return null
+  return complaints
+}
+
+/**
+ * The name the record will carry, as the backend builds it: the company name, or given and
+ * family name of a person.
+ *
+ * <p>The recipient of the first address is this name. Asking for it a second time while
+ * creating the record would only be a chance to type it differently.
+ *
+ * @param form the filled in mask
+ * @returns the name, trimmed; empty while nothing is typed
+ */
+export function displayNameOf(form: PartnerForm): string {
+  if (form.partnerType !== 'PERSON') return form.name.trim()
+  return [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(' ')
 }
 
 function blankToUndefined(value: string): string | undefined {

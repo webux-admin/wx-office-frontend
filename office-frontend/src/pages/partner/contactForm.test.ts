@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contactComplaint,
+  contactComplaints,
   emptyContact,
   toContactForm,
   toContactPayload,
@@ -47,17 +47,17 @@ describe('toContactForm', () => {
   })
 })
 
-describe('contactComplaint', () => {
-  it('contactComplaintTest', () => {
-    expect(contactComplaint(FILLED)).toBeNull()
+describe('contactComplaints', () => {
+  it('contactComplaintsTest', () => {
+    expect(contactComplaints(FILLED)).toEqual({})
   })
 
-  it('contactComplaintWithoutLastNameTest', () => {
-    expect(contactComplaint(emptyContact())).toMatch(/Nachnamen/)
+  it('contactComplaintsWithoutLastNameTest', () => {
+    expect(contactComplaints(emptyContact()).lastName).toMatch(/Nachnamen/)
   })
 
-  it('contactComplaintTreatsWhitespaceAsEmptyTest', () => {
-    expect(contactComplaint({ ...FILLED, lastName: '   ' })).toMatch(/Nachnamen/)
+  it('contactComplaintsTreatsWhitespaceAsEmptyTest', () => {
+    expect(contactComplaints({ ...FILLED, lastName: '   ' }).lastName).toMatch(/Nachnamen/)
   })
 })
 

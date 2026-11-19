@@ -95,14 +95,14 @@ export function PartnerHistory({
     {
       key: 'documentDate',
       header: 'Datum',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       sortKey: 'documentDate',
       render: (entry) => formatDate(entry.documentDate),
     },
     {
       key: 'documentType',
       header: 'Belegart',
-      width: 'w-[150px]',
+      width: 'w-column-lg',
       sortKey: 'documentType',
       // The tenant's own wording, as the server sends it. Nothing is translated here.
       //
@@ -126,10 +126,10 @@ export function PartnerHistory({
     {
       key: 'documentNumber',
       header: 'Nummer',
-      width: 'w-[150px]',
+      width: 'w-column-lg',
       sortKey: 'documentNumber',
       render: (entry) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {entry.documentNumber ?? '-'}
         </span>
       ),
@@ -137,7 +137,7 @@ export function PartnerHistory({
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (entry) => <Badge tone={TONES[entry.status]}>{statusLabel(entry.status)}</Badge>,
     },
     {
@@ -149,9 +149,9 @@ export function PartnerHistory({
     {
       key: 'predecessorDocumentNumber',
       header: 'Vorgänger',
-      width: 'w-[150px]',
+      width: 'w-column-lg',
       render: (entry) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {entry.predecessorDocumentNumber ?? '-'}
         </span>
       ),
@@ -159,7 +159,7 @@ export function PartnerHistory({
     {
       key: 'dueDate',
       header: 'Fällig',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       sortKey: 'dueDate',
       render: (entry) => formatDate(entry.dueDate),
     },
@@ -167,7 +167,7 @@ export function PartnerHistory({
       key: 'totalGross',
       header: 'Betrag',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-column-md',
       sortKey: 'totalGross',
       render: (entry) => (
         <span className="font-medium">

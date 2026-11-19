@@ -14,7 +14,7 @@ import { Spinner } from './Spinner'
 /** Placeholder while the first answer of the backend is still on its way. */
 export function LoadingBlock({ label = 'Wird geladen' }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-2.5 py-16 text-[13px] text-text-secondary">
+    <div className="flex items-center justify-center gap-2.5 py-16 text-body text-text-secondary">
       <Spinner size={16} label={label} />
       {label}
     </div>
@@ -37,9 +37,9 @@ export function EmptyState({
       <span className="mx-auto grid h-11 w-11 place-items-center rounded-[var(--radius-full)] bg-sunken text-text-tertiary">
         <Inbox size={19} aria-hidden />
       </span>
-      <h2 className="mt-3.5 text-[14px] font-semibold">{title}</h2>
+      <h2 className="mt-3.5 text-control font-semibold">{title}</h2>
       {description && (
-        <p className="mx-auto mt-1 max-w-[52ch] text-[13px] text-text-secondary">{description}</p>
+        <p className="mx-auto mt-1 max-w-[52ch] text-body text-text-secondary">{description}</p>
       )}
       {children && <div className="mt-4 flex justify-center">{children}</div>}
     </div>
@@ -63,7 +63,7 @@ export function ErrorNotice({ error, children }: { error: unknown; children?: Re
     >
       <AlertTriangle size={16} className="mt-px shrink-0 text-danger" aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] text-text-primary">{message}</p>
+        <p className="text-body text-text-primary">{message}</p>
         {children && <div className="mt-2">{children}</div>}
       </div>
     </div>
@@ -85,7 +85,7 @@ export function WarningNotice({ children }: { children: ReactNode }) {
       className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-warning/40 bg-warning/10 px-4 py-3"
     >
       <AlertTriangle size={16} className="mt-px shrink-0 text-warning" aria-hidden />
-      <p className="min-w-0 flex-1 text-[13px] text-text-primary">{children}</p>
+      <p className="min-w-0 flex-1 text-body text-text-primary">{children}</p>
     </div>
   )
 }
@@ -102,9 +102,9 @@ export function ForbiddenNotice({ permission }: { permission: string }) {
       <span className="mx-auto grid h-11 w-11 place-items-center rounded-[var(--radius-full)] bg-sunken text-text-tertiary">
         <Lock size={18} aria-hidden />
       </span>
-      <h2 className="mt-3.5 text-[14px] font-semibold">Keine Berechtigung</h2>
-      <p className="mx-auto mt-1 max-w-[52ch] text-[13px] text-text-secondary">
-        Für diesen Bereich fehlt das Recht <span className="font-mono text-[12px]">{permission}</span>.
+      <h2 className="mt-3.5 text-control font-semibold">Keine Berechtigung</h2>
+      <p className="mx-auto mt-1 max-w-[52ch] text-body text-text-secondary">
+        Für diesen Bereich fehlt das Recht <span className="font-mono text-small">{permission}</span>.
         Eine Administratorin oder ein Administrator kann es erteilen.
       </p>
     </div>
@@ -125,8 +125,8 @@ export function ModuleOffNotice({ module }: { module: LicensedModuleCode }) {
       <span className="mx-auto grid h-11 w-11 place-items-center rounded-[var(--radius-full)] bg-sunken text-text-tertiary">
         <Blocks size={18} aria-hidden />
       </span>
-      <h2 className="mt-3.5 text-[14px] font-semibold">Modul nicht eingeschaltet</h2>
-      <p className="mx-auto mt-1 max-w-[52ch] text-[13px] text-text-secondary">
+      <h2 className="mt-3.5 text-control font-semibold">Modul nicht eingeschaltet</h2>
+      <p className="mx-auto mt-1 max-w-[52ch] text-body text-text-secondary">
         {MODULE_NAMES[module]} ist für diesen Mandanten nicht eingeschaltet. Unter{' '}
         <Link to={MODULE_PATH} className="text-accent-text underline-offset-2 hover:underline">
           Systemeinstellungen → Module

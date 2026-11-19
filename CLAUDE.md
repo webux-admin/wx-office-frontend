@@ -16,7 +16,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **auth** — Anmeldung, Sitzung, Mandantenwechsel, geschützte Routen. ✅ umgesetzt
 - **shell** — Seitenleiste, Kopfzeile, Navigation. ✅ umgesetzt
 - **dashboard** — Übersicht mit Modulkacheln. ✅ umgesetzt
-- **partner** — Kunden und Lieferanten
+- **partner** — Kunden und Lieferanten. Pilot der Überarbeitung: Erfassen fragt nur Art, Name,
+  Rechtsform, Postanschrift und Kontakt; die Bearbeitungsmaske zeigt eine Faktenzeile über den
+  Registern, Reaktivieren steht im Kopf (ADR-0050)
 - **product** — Produkte, Preisgruppen, Kundenpreise
 - **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je
   Belegart, aus `lib/salesDocument.ts` erzeugt
@@ -119,6 +121,17 @@ src/
 
 ## 4. Gestaltung
 
+- **Grössen sind relativ und kommen ebenfalls aus den Tokens** — Schriftgrösse nach Rolle
+  (`text-body`, `text-small`), Control-Höhen (`h-control`), Spaltenbreiten (`w-column-sm`),
+  Dialogbreiten (`max-w-dialog`), alles in rem. Kein `[…px]` in einer Klasse, ausser 1px für
+  Rahmen und Trennlinien (ADR-0049). Noch nicht überarbeitete Module tragen die alten px-Werte;
+  wer ein Modul überarbeitet, ersetzt sie.
+- **Masken bauen auf den gemeinsamen Bausteinen**: `FormMask` für Vollmasken, `Dialog` mit
+  `DialogCancelButton` im Fuss, `ConfirmDialog` für Rückfragen. Esc bricht ab und fragt vorher,
+  wenn etwas geändert wurde; Strg+S und Strg+Enter speichern (ADR-0012, ADR-0048).
+- **Ein Hinweis zu einem Feld ist ein `tooltip`, kein Satz darunter** — und nur, wo er etwas
+  sagt, das man dem Feld nicht ansieht. Fehler stehen mit `error` am Feld, Pflichtfelder tragen
+  `required` (ADR-0050).
 - **Farben, Radien und Schriften kommen aus den Tokens in `src/index.css`.** Kein Hex-Wert
   direkt in einer Komponente, keine Tailwind-Standardfarbe wie `bg-slate-800`, auch nicht in
   einer Schattenangabe. Fehlt ein Wert, wird er als Token ergänzt und im Figma-File

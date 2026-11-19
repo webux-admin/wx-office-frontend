@@ -4,8 +4,9 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { DataTable, type Column } from '../../components/DataTable'
-import { Dialog } from '../../components/Dialog'
-import { EmptyState, ErrorNotice } from '../../components/Notice'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { IconButton } from '../../components/IconButton'
+import { EmptyState } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { api } from '../../lib/api'
 import type { Partner, PartnerContact } from '../../lib/types'
@@ -93,32 +94,26 @@ export function PartnerContacts({
     {
       key: 'primary',
       header: '',
-      width: 'w-[120px]',
+      width: 'w-column-sm',
       render: (contact) => (contact.isPrimary ? <Badge tone="accent">Hauptkontakt</Badge> : null),
     },
     {
       key: 'actions',
       header: '',
-      width: 'w-[92px]',
+      width: 'w-column-xs',
       render: (contact) =>
         mayWrite ? (
           <span className="flex justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => openEditor(contact)}
-              aria-label={`${nameOf(contact)} bearbeiten`}
-              className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              type="button"
+            <IconButton label={`${nameOf(contact)} bearbeiten`} onClick={() => openEditor(contact)}>
+              <Pencil size={14} aria-hidden />
+            </IconButton>
+            <IconButton
+              label={`${nameOf(contact)} entfernen`}
               onClick={() => openRemoval(contact)}
-              aria-label={`${nameOf(contact)} entfernen`}
-              className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-danger/12 hover:text-danger"
+              tone="danger"
             >
-              <Trash2 size={14} />
-            </button>
+              <Trash2 size={14} aria-hidden />
+            </IconButton>
           </span>
         ) : null,
     },
@@ -128,7 +123,6 @@ export function PartnerContacts({
     <>
       <Panel
         title="Kontaktpersonen"
-        description="Der Hauptkontakt wird auf Belegen angeschrieben und bestimmt deren Sprache."
         padded={false}
         action={
           mayWrite ? (
@@ -147,7 +141,6 @@ export function PartnerContacts({
           empty={
             <EmptyState
               title="Keine Kontaktperson"
-              description="Bei Firmen hilft eine Ansprechperson, bei Privatpersonen ist sie meist überflüssig."
             >
               {mayWrite && (
                 <Button variant="secondary" onClick={() => openEditor()}>
@@ -170,35 +163,19 @@ export function PartnerContacts({
         contact={editor?.contact}
       />
 
-      <Dialog
+      <ConfirmDialog
         open={removing !== null}
-        onClose={() => setRemoving(null)}
         title="Kontaktperson entfernen"
-        description="Bereits ausgestellte Belege behalten die Person, die auf ihnen steht."
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setRemoving(null)}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={() => removing?.id !== undefined && remove.mutate(removing.id)}
-              busy={remove.isPending}
-            >
-              Entfernen
-            </Button>
-          </>
-        }
+        confirmLabel="Entfernen"
+        tone="danger"
+        onConfirm={() => removing?.id !== undefined && remove.mutate(removing.id)}
+        onCancel={() => setRemoving(null)}
+        busy={remove.isPending}
+        error={remove.error}
       >
-        <p className="text-[13px] text-text-secondary">
-          {removing && nameOf(removing)} wird gelöscht. Das lässt sich nicht rückgängig
-          machen.
-        </p>
-        {remove.error !== null && (
-          <div className="mt-4">
-            <ErrorNotice error={remove.error} />
-          </div>
-        )}
-      </Dialog>
+        {removing && nameOf(removing)} wird entfernt. Bereits ausgestellte Belege behalten die
+        Person, die auf ihnen steht.
+      </ConfirmDialog>
     </>
   )
 }

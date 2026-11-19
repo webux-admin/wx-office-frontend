@@ -30,9 +30,9 @@ export function Panel({
       {title && (
         <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-5 py-3.5">
           <div className="min-w-0">
-            <h2 className="text-[14px] font-semibold tracking-[-0.2px]">{title}</h2>
+            <h2 className="text-control font-semibold tracking-tight">{title}</h2>
             {description && (
-              <p className="mt-0.5 text-[12px] text-text-secondary">{description}</p>
+              <p className="mt-0.5 text-small text-text-secondary">{description}</p>
             )}
           </div>
           {action}

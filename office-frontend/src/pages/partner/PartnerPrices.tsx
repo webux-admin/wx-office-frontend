@@ -77,14 +77,14 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
       key: 'quantity',
       header: 'Ab Menge',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (price) => formatQuantity(price.minQuantity ?? 1),
     },
     {
       key: 'validFrom',
       header: 'Gültig ab',
       align: 'right',
-      width: 'w-[120px]',
+      width: 'w-column-sm',
       // formatDate already draws a hyphen for an open start.
       render: (price) => formatDate(price.validFrom),
     },
@@ -92,20 +92,20 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
       key: 'validTo',
       header: 'Gültig bis',
       align: 'right',
-      width: 'w-[120px]',
+      width: 'w-column-sm',
       render: (price) => formatDate(price.validTo),
     },
     {
       key: 'price',
       header: 'Preis',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (price) => formatAmount(price.price),
     },
     {
       key: 'remove',
       header: '',
-      width: 'w-[60px]',
+      width: 'w-15',
       render: (price) =>
         mayWrite && price.id !== undefined ? (
           <button
@@ -136,7 +136,7 @@ export function PartnerPrices({ tenantId, partnerId }: { tenantId: number; partn
             error={assignGroup.error}
           />
         ) : (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Ändern der Preisgruppe fehlt das Recht PRODUCT_WRITE.
           </p>
         )}
@@ -204,7 +204,7 @@ function GroupAssignment({
         value={selected}
         onChange={(event) => setSelected(event.target.value)}
         disabled={loading}
-        className="min-w-[240px] flex-1"
+        className="min-w-column-xl flex-1"
       >
         <option value="">Bitte wählen</option>
         {groups.map((group) => (
@@ -219,7 +219,7 @@ function GroupAssignment({
       </Button>
 
       {done && !busy && (
-        <p role="status" className="text-[12px] text-success">
+        <p role="status" className="text-small text-success">
           Zugewiesen.
         </p>
       )}
@@ -273,7 +273,7 @@ function PriceForm({
         label="Produkt"
         value={productId}
         onChange={(event) => setProductId(event.target.value)}
-        className="min-w-[220px] flex-1"
+        className="min-w-column-xl flex-1"
       >
         <option value="">Bitte wählen</option>
         {products.map((product) => (
@@ -290,7 +290,7 @@ function PriceForm({
         onChange={(event) => setMinQuantity(event.target.value)}
         inputMode="decimal"
         numeric
-        className="w-[110px]"
+        className="w-column-sm"
       />
 
       <TextField
@@ -298,7 +298,7 @@ function PriceForm({
         value={validFrom}
         onChange={(event) => setValidFrom(event.target.value)}
         type="date"
-        className="w-[160px]"
+        className="w-column-lg"
       />
 
       <TextField
@@ -308,7 +308,7 @@ function PriceForm({
         type="date"
         invalid={backwards}
         hint={backwards ? 'Nicht vor dem Ab-Datum.' : undefined}
-        className="w-[160px]"
+        className="w-column-lg"
       />
 
       <TextField
@@ -317,7 +317,7 @@ function PriceForm({
         onChange={(event) => setPrice(event.target.value)}
         inputMode="decimal"
         numeric
-        className="w-[140px]"
+        className="w-column-md"
       />
 
       <Button type="submit" busy={busy} disabled={incomplete}>

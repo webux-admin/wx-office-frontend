@@ -1,13 +1,15 @@
 import { ChevronDown } from 'lucide-react'
 import { useId, useState, type ReactNode, type SelectHTMLAttributes } from 'react'
-import { Field } from './Field'
+import { Field, type FieldExtras } from './Field'
+import { describedBy } from './fieldDescription'
 
-type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & {
-  label: string
-  invalid?: boolean
-  hint?: ReactNode
-  children: ReactNode
-}
+type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id' | 'required'> &
+  FieldExtras & {
+    label: string
+    invalid?: boolean
+    hint?: ReactNode
+    children: ReactNode
+  }
 
 /**
  * A labelled dropdown.
@@ -26,13 +28,19 @@ export function SelectField({
   label,
   invalid = false,
   hint,
+  required = false,
+  error,
+  tooltip,
+  locked,
   className = '',
   children,
   ...rest
 }: SelectFieldProps) {
   const id = useId()
   const hintId = `${id}-hint`
+  const tooltipId = `${id}-tooltip`
   const [focused, setFocused] = useState(false)
+  const wrong = invalid || error !== undefined
 
   return (
     <Field
@@ -40,14 +48,21 @@ export function SelectField({
       htmlFor={id}
       hint={hint}
       hintId={hintId}
+      tooltipId={tooltipId}
       invalid={invalid}
       focused={focused}
+      required={required}
+      error={error}
+      tooltip={tooltip}
+      locked={locked}
       className={className}
     >
       <select
         id={id}
-        aria-invalid={invalid || undefined}
-        aria-describedby={hint ? hintId : undefined}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={wrong || undefined}
+        aria-describedby={describedBy(hintId, tooltipId, { hint, error, tooltip })}
         onFocus={(event) => {
           setFocused(true)
           rest.onFocus?.(event)
@@ -56,16 +71,13 @@ export function SelectField({
           setFocused(false)
           rest.onBlur?.(event)
         }}
-        className="h-10 w-full appearance-none bg-surface py-0 pl-3 pr-9 text-[14px] text-text-primary outline-none disabled:text-text-secondary"
+        className="h-control w-full appearance-none bg-surface py-0 pl-3 pr-9 text-control text-text-primary outline-none disabled:text-text-secondary"
         {...rest}
       >
         {children}
       </select>
 
-      <span
-        className="pointer-events-none absolute right-3 text-text-tertiary"
-        aria-hidden
-      >
+      <span className="pointer-events-none absolute right-3 text-text-tertiary" aria-hidden>
         <ChevronDown size={15} />
       </span>
     </Field>

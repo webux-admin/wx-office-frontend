@@ -1,3 +1,4 @@
+import type { FieldErrors } from '../../lib/fieldErrors'
 import type { PartnerContact } from '../../lib/types'
 
 /**
@@ -62,14 +63,14 @@ export function toContactForm(contact: PartnerContact): ContactForm {
 }
 
 /**
- * Checks what the contact needs before the backend will take it.
+ * Checks what the contact needs before the backend will take it, field by field.
  *
  * @param form the filled in contact
- * @returns the German complaint, or `null` when nothing is missing
+ * @returns the German message per field of the contact, empty when nothing is missing
  */
-export function contactComplaint(form: ContactForm): string | null {
-  if (form.lastName.trim() === '') return 'Die Kontaktperson braucht einen Nachnamen.'
-  return null
+export function contactComplaints(form: ContactForm): FieldErrors {
+  if (form.lastName.trim() === '') return { lastName: 'Die Kontaktperson braucht einen Nachnamen.' }
+  return {}
 }
 
 /**

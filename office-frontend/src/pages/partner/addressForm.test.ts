@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addressComplaint,
+  addressComplaints,
   emptyAddress,
   isUntouched,
   toAddressForm,
@@ -111,25 +111,29 @@ describe('isUntouched', () => {
   })
 })
 
-describe('addressComplaint', () => {
-  it('addressComplaintTest', () => {
-    expect(addressComplaint(FILLED)).toBeNull()
+describe('addressComplaints', () => {
+  it('addressComplaintsTest', () => {
+    expect(addressComplaints(FILLED)).toEqual({})
   })
 
-  it('addressComplaintWithoutRecipientTest', () => {
-    expect(addressComplaint({ ...FILLED, name: '' })).toMatch(/Empfänger/)
+  it('addressComplaintsWithoutRecipientTest', () => {
+    expect(addressComplaints({ ...FILLED, name: '' }).name).toMatch(/Empfänger/)
   })
 
-  it('addressComplaintWithoutPostalCodeTest', () => {
-    expect(addressComplaint({ ...FILLED, postalCode: '  ' })).toMatch(/Postleitzahl/)
+  it('addressComplaintsWithoutPostalCodeTest', () => {
+    expect(addressComplaints({ ...FILLED, postalCode: '  ' }).postalCode).toMatch(/Postleitzahl/)
   })
 
-  it('addressComplaintWithoutTownTest', () => {
-    expect(addressComplaint({ ...FILLED, town: '' })).toMatch(/Ort/)
+  it('addressComplaintsWithoutTownTest', () => {
+    expect(addressComplaints({ ...FILLED, town: '' }).town).toMatch(/Ort/)
   })
 
-  it('addressComplaintReportsTheRecipientFirstTest', () => {
-    expect(addressComplaint(emptyAddress())).toMatch(/Empfänger/)
+  it('addressComplaintsOfAnEmptyAddressTest', () => {
+    expect(Object.keys(addressComplaints(emptyAddress())).sort()).toEqual([
+      'name',
+      'postalCode',
+      'town',
+    ])
   })
 })
 

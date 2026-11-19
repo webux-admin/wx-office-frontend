@@ -72,7 +72,7 @@ export function Button({
       disabled={disabled || busy}
       aria-busy={busy}
       title={hint}
-      className={`relative inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-[13px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${block ? 'w-full' : ''} ${className}`}
+      className={`relative inline-flex h-button items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 text-body font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${block ? 'w-full' : ''} ${className}`}
       {...rest}
     >
       <span className={busy ? 'invisible inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>

@@ -1,20 +1,31 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { CheckboxField } from '../components/CheckboxField'
-import { Dialog } from '../components/Dialog'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { FactList, type Fact } from '../components/FactList'
+import { FormMask } from '../components/FormMask'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { TextAreaField } from '../components/TextAreaField'
-import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
+import { Tooltip } from '../components/Tooltip'
+import { useChangeTracker } from '../components/useChangeTracker'
+import { useFieldErrors } from '../components/useFieldErrors'
 import { useAuth } from '../auth/useAuth'
-import { CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
+import { CUSTOMER_CREDIT_PATH, CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
 import { DUNNING_MODULE, DUNNING_RIGHTS } from '../lib/dunning'
+import {
+  isToldByFields,
+  nestedErrors,
+  prefixedErrors,
+  type FieldErrors,
+} from '../lib/fieldErrors'
+import { formatAmount } from '../lib/format'
+import { defaultCodeOf } from '../lib/masterData'
 import { runsModule } from '../lib/modules'
 import { PROJECT_MODULE, PROJECT_RIGHTS } from '../lib/project'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -24,24 +35,32 @@ import type { Partner, PartnerType } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { MasterDataSelect } from '../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../masterdata/PaymentTermSelect'
+import { useCatalogue, useMasterDataEntries } from '../masterdata/useMasterData'
 import { AddressFields } from './partner/AddressFields'
 import { PartnerAddresses } from './partner/PartnerAddresses'
 import { PartnerContacts } from './partner/PartnerContacts'
-import { PartnerCreditNotice } from './partner/PartnerCreditNotice'
 import { PartnerPayerAccounts } from './partner/PartnerPayerAccounts'
 import { PartnerDocumentTypes } from './partner/PartnerDocumentTypes'
 import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
 import { PartnerProjects } from './partner/PartnerProjects'
+import { usePartnerCredit } from './partner/usePartnerCredit'
 import {
-  addressComplaint,
+  addressComplaints,
   emptyAddress,
   isUntouched,
   toAddressPayload,
   type AddressForm,
 } from './partner/addressForm'
-import { emptyPartner, firstComplaint, toForm, toPayload, type PartnerForm } from './partner/partnerForm'
+import {
+  displayNameOf,
+  emptyPartner,
+  partnerComplaints,
+  toForm,
+  toPayload,
+  type PartnerForm,
+} from './partner/partnerForm'
 import { wordingFor, type PartnerRole, type RoleWording } from './partner/role'
 import { invalidateAfterPartnerChange } from './partner/partnerRefresh'
 
@@ -50,9 +69,45 @@ type Tab =
   | 'adressen'
   | 'kontakte'
   | 'preise'
-  | 'dokumente'
+  | 'einstellungen'
   | 'projekte'
   | 'verlauf'
+
+/** Why the fields that identify a record no longer take input once it is stored. */
+const LOCKED = 'Steht mit dem Anlegen fest und lässt sich nicht mehr ändern.'
+
+/** The fields of the create mask that can show a message of their own. */
+const CREATE_FIELDS = [
+  'name',
+  'legalForm',
+  'salutation',
+  'firstName',
+  'lastName',
+  'email',
+  'phone',
+  'addresses.street',
+  'addresses.buildingNumber',
+  'addresses.postalCode',
+  'addresses.town',
+  'addresses.country',
+] as const
+
+/** The fields of the register «Stammdaten» that can show a message of their own. */
+const EDIT_FIELDS = [
+  'partnerNumber',
+  'uid',
+  'commercialRegisterName',
+  'language',
+  'email',
+  'phone',
+  'website',
+  'paymentTerm',
+  'currency',
+  'creditLimit',
+  'creditorReference',
+  'notes',
+  'roles',
+] as const
 
 /** One customer or supplier, with its addresses, contact persons and agreed prices. */
 export function PartnerPage({ role }: { role: PartnerRole }) {
@@ -74,7 +129,7 @@ function PartnerLoader({ tenantId, role }: { tenantId: number; role: PartnerRole
     enabled: !creating,
   })
 
-  if (creating) return <PartnerMask tenantId={tenantId} partner={null} wording={wording} />
+  if (creating) return <PartnerCreateMask tenantId={tenantId} wording={wording} />
   if (partner.isPending) return <LoadingBlock label={wording.loadingLabel} />
   if (partner.error) {
     return (
@@ -86,7 +141,7 @@ function PartnerLoader({ tenantId, role }: { tenantId: number; role: PartnerRole
 
   // Keyed by the record, so switching resets the mask instead of carrying values over.
   return (
-    <PartnerMask
+    <PartnerEditMask
       key={partner.data.id}
       tenantId={tenantId}
       partner={partner.data}
@@ -95,94 +150,326 @@ function PartnerLoader({ tenantId, role }: { tenantId: number; role: PartnerRole
   )
 }
 
-function PartnerMask({
+/** Where the mask was opened from, and its way back there. */
+function useOrigin(wording: RoleWording) {
+  return originOf(useLocation().state, { from: wording.path, label: wording.backLabel })
+}
+
+/** The messages that stand at no field of the mask, from its own checks. */
+function unshownMessages(own: FieldErrors, shown: readonly string[]): string[] {
+  return Object.entries(own)
+    .filter(([field]) => !shown.includes(field))
+    .map(([, message]) => message)
+}
+
+/**
+ * The notice above the form for what no field can tell: a rule about the record as a whole,
+ * or a field this mask does not show.
+ */
+function FormNotice({
+  error,
+  own,
+  shown,
+}: {
+  error: unknown
+  own: FieldErrors
+  shown: readonly string[]
+}) {
+  const messages = unshownMessages(own, shown)
+  const serverUntold = error !== null && error !== undefined && !isToldByFields(error, shown)
+  if (messages.length === 0 && !serverUntold) return null
+  return (
+    <div className="mb-6 grid gap-3" aria-live="polite">
+      {messages.length > 0 && <ErrorNotice error={new Error(messages.join(' '))} />}
+      {serverUntold && <ErrorNotice error={error} />}
+    </div>
+  )
+}
+
+/**
+ * Creating a customer or supplier: only what the first offer or order needs.
+ *
+ * <p>Kind, name, the postal address and how to reach them. Everything else — language,
+ * currency, payment term — starts from the tenant's defaults and is changed on the stored
+ * record, where the full mask is. The recipient of the address is the name of the record, and
+ * the address becomes the default one. Saving closes the mask and goes back to the list
+ * (ADR-0003).
+ */
+function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: RoleWording }) {
+  const { can } = useAuth()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const origin = useOrigin(wording)
+  const { changed, track } = useChangeTracker()
+
+  const [form, setForm] = useState<PartnerForm>(() => emptyPartner(wording.role))
+  const [address, setAddress] = useState<AddressForm>(() => emptyAddress('', true))
+  const set = <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) =>
+    setForm((current) => ({ ...current, [field]: value }))
+
+  const kinds = useCatalogue(tenantId, 'partner-type')
+  const languages = useMasterDataEntries(tenantId, 'languages')
+  // The language is not asked here; the tenant's default is what a new record starts with.
+  const complete: PartnerForm = { ...form, language: form.language || defaultCodeOf(languages) }
+  const addressStarted = !isUntouched(address)
+  const fullAddress: AddressForm = { ...address, name: displayNameOf(form) }
+
+  const mayWrite = can('PARTNER_WRITE')
+  const base = `/api/tenants/${tenantId}/partners`
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.post<Partner>(base, {
+        ...toPayload(complete),
+        addresses: addressStarted ? [toAddressPayload(fullAddress)] : undefined,
+      }),
+    // Saving finishes the mask, so it closes and gives way to the screen it was opened from.
+    // The entry is replaced instead of pushed: a mask that has been saved is not a place to
+    // return to with the back button.
+    onSuccess: () => {
+      invalidateAfterPartnerChange(queryClient, tenantId)
+      void navigate(origin.from, { replace: true })
+    },
+  })
+
+  const { errors, own, check } = useFieldErrors(() => {
+    // The recipient is the name of the record, which has a message of its own.
+    const postal = Object.fromEntries(
+      Object.entries(addressStarted ? addressComplaints(fullAddress) : {}).filter(
+        ([field]) => field !== 'name',
+      ),
+    )
+    return { ...partnerComplaints(complete, wording), ...prefixedErrors(postal, 'addresses.') }
+  }, save.error)
+
+  const submit = () => {
+    if (check()) save.mutate()
+  }
+
+  const person = form.partnerType === 'PERSON'
+
+  return (
+    <FormMask
+      title={wording.newTitle}
+      subtitle={wording.newSubtitle}
+      back={{ to: origin.from, label: origin.label }}
+      dirty={changed}
+      onSubmit={mayWrite && !save.isPending ? submit : undefined}
+      actions={
+        mayWrite && (
+          <Button onClick={submit} busy={save.isPending} shortcut>
+            Speichern
+          </Button>
+        )
+      }
+    >
+      <FormNotice error={save.error} own={own} shown={CREATE_FIELDS} />
+
+      <div {...track} className="max-w-dialog-wide">
+        <Panel>
+          <div className="grid gap-5">
+            {kinds.length > 0 && (
+              <SegmentedControl
+                label="Art"
+                options={kinds.map((kind) => ({ value: kind.code as PartnerType, label: kind.name }))}
+                value={form.partnerType}
+                onChange={(kind) => set('partnerType', kind)}
+                disabled={!mayWrite}
+              />
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-4">
+              {person ? (
+                <>
+                  <MasterDataSelect
+                    label="Anrede"
+                    tenantId={tenantId}
+                    list="salutations"
+                    value={form.salutation}
+                    onChange={(code) => set('salutation', code)}
+                    disabled={!mayWrite}
+                    emptyLabel="Ohne Anrede"
+                    error={errors.salutation}
+                  />
+                  <TextField
+                    label="Vorname"
+                    value={form.firstName}
+                    onChange={(event) => set('firstName', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={60}
+                    autoFocus
+                    error={errors.firstName}
+                  />
+                  <TextField
+                    label="Nachname"
+                    value={form.lastName}
+                    onChange={(event) => set('lastName', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={60}
+                    required
+                    error={errors.lastName}
+                    className="sm:col-span-2"
+                  />
+                </>
+              ) : (
+                <>
+                  <TextField
+                    label="Firmenname"
+                    value={form.name}
+                    onChange={(event) => set('name', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={70}
+                    required
+                    autoFocus
+                    error={errors.name}
+                    className="sm:col-span-3"
+                  />
+                  <MasterDataSelect
+                    label="Rechtsform"
+                    tenantId={tenantId}
+                    list="legal-forms"
+                    value={form.legalForm}
+                    onChange={(code) => set('legalForm', code)}
+                    disabled={!mayWrite}
+                    emptyLabel="Bitte wählen"
+                    required
+                    error={errors.legalForm}
+                  />
+                </>
+              )}
+            </div>
+
+            <fieldset className="border-t border-line-subtle pt-4">
+              <legend className="mb-3 flex items-center gap-1 text-small font-medium text-text-secondary">
+                Adresse
+                <Tooltip text={wording.addressTooltip} label="Hinweis zur Adresse" />
+              </legend>
+              <AddressFields
+                tenantId={tenantId}
+                form={address}
+                onChange={setAddress}
+                disabled={!mayWrite}
+                errors={nestedErrors(errors, 'addresses.')}
+                variant="postal"
+                postalRequired={addressStarted}
+              />
+            </fieldset>
+
+            <div className="grid gap-4 border-t border-line-subtle pt-4 sm:grid-cols-2">
+              <TextField
+                label="E-Mail"
+                type="email"
+                value={form.email}
+                onChange={(event) => set('email', event.target.value)}
+                disabled={!mayWrite}
+                maxLength={255}
+                error={errors.email}
+              />
+              <TextField
+                label="Telefon"
+                type="tel"
+                value={form.phone}
+                onChange={(event) => set('phone', event.target.value)}
+                disabled={!mayWrite}
+                maxLength={30}
+                error={errors.phone}
+              />
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </FormMask>
+  )
+}
+
+/**
+ * A stored customer or supplier, with everything that belongs to it.
+ *
+ * <p>The header answers the usual look-up — address, contact, phone, balance — without a click.
+ * The register «Stammdaten» holds the record itself; saving works from every register, since
+ * the record is the same whichever is open, and like every save it closes the mask (ADR-0003).
+ */
+function PartnerEditMask({
   tenantId,
   partner,
   wording,
 }: {
   tenantId: number
-  partner: Partner | null
+  partner: Partner
   wording: RoleWording
 }) {
   const { can, user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const origin = originOf(useLocation().state, {
-    from: wording.path,
-    label: wording.backLabel,
-  })
+  const origin = useOrigin(wording)
+  const { changed, track } = useChangeTracker()
 
-  const [form, setForm] = useState<PartnerForm>(
-    partner ? toForm(partner) : emptyPartner(wording.role),
-  )
-  // The first address of a new record travels with it: the create endpoint takes addresses in
-  // the same payload, so nothing stands half finished when the address is refused.
-  const [address, setAddress] = useState<AddressForm>(() => emptyAddress('', true))
+  const [form, setForm] = useState<PartnerForm>(() => toForm(partner))
   const [tab, setTab] = useState<Tab>('stammdaten')
-  const [complaint, setComplaint] = useState<string | null>(null)
-  const [deactivating, setDeactivating] = useState(false)
+  const [confirming, setConfirming] = useState<'deactivate' | 'reactivate' | null>(null)
 
-  const creating = partner === null
   const mayWrite = can('PARTNER_WRITE')
+  const mayDeactivate = mayWrite && can('PARTNER_DEACTIVATE')
+  const active = partner.active !== false
   const set = <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
   const refresh = () => invalidateAfterPartnerChange(queryClient, tenantId)
-
-  const base = `/api/tenants/${tenantId}/partners`
+  const base = `/api/tenants/${tenantId}/partners/${partner.id}`
 
   const save = useMutation({
-    mutationFn: () => {
-      const payload = toPayload(form)
-      if (partner) return api.put<Partner>(`${base}/${partner.id}`, payload)
-      return api.post<Partner>(base, {
-        ...payload,
-        addresses: isUntouched(address) ? undefined : [toAddressPayload(address)],
-      })
-    },
-    // Saving finishes the mask, so it closes and gives way to the screen it was opened from
-    // rather than staying open. The entry is replaced instead of pushed: a mask that has been
-    // saved is not a place to return to with the back button.
+    mutationFn: () => api.put<Partner>(base, toPayload(form)),
     onSuccess: () => {
       refresh()
       void navigate(origin.from, { replace: true })
     },
   })
 
-  const deactivate = useMutation({
-    mutationFn: () => api.delete<Partner>(`${base}/${partner?.id}`),
+  const switchActive = useMutation({
+    mutationFn: (step: 'deactivate' | 'reactivate') =>
+      step === 'deactivate'
+        ? api.delete<Partner>(base)
+        : api.put<Partner>(`${base}/reactivate`),
     onSuccess: () => {
       refresh()
-      setDeactivating(false)
+      setConfirming(null)
     },
   })
 
+  const { errors, own, check } = useFieldErrors(
+    () => partnerComplaints(form, wording),
+    save.error,
+  )
+
   const submit = () => {
-    const problem =
-      firstComplaint(form, wording) ??
-      (creating && !isUntouched(address) ? addressComplaint(address) : null)
-    setComplaint(problem)
-    if (!problem) save.mutate()
+    if (check()) {
+      save.mutate()
+      return
+    }
+    // The message stands at a field of the record; that register has to be open to show it.
+    setTab('stammdaten')
   }
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
-  // filled in and finished without reaching for the mouse.
-  useSubmitShortcut(mayWrite && tab === 'stammdaten' && !save.isPending ? submit : undefined)
+  const openConfirm = (step: 'deactivate' | 'reactivate') => {
+    switchActive.reset()
+    setConfirming(step)
+  }
 
   const showsProjects =
     wording.role === 'customer' &&
     can(PROJECT_RIGHTS.read) &&
     runsModule(user?.tenants, tenantId, PROJECT_MODULE)
 
-  const tabs: { id: Tab; label: string }[] = [
+  const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'stammdaten', label: 'Stammdaten' },
-    { id: 'adressen', label: 'Adressen' },
-    { id: 'kontakte', label: 'Kontaktpersonen' },
+    { id: 'adressen', label: 'Adressen', count: partner.addresses?.length ?? 0 },
+    { id: 'kontakte', label: 'Kontaktpersonen', count: partner.contacts?.length ?? 0 },
     // Pricing is agreed with a buyer; a supplier has no price list of ours.
-    ...(wording.role === 'customer' ? [{ id: 'preise' as Tab, label: 'Preise' }] : []),
-    // Which kind of document this partner is written with. Needs the right on the catalogue:
-    // the data are kinds of document, not partner data (ADR-0054 of the backend).
-    ...(can('DOCUMENT_TYPE_READ') ? [{ id: 'dokumente' as Tab, label: 'Dokumente' }] : []),
+    ...(wording.role === 'customer' && can('PRODUCT_READ')
+      ? [{ id: 'preise' as Tab, label: 'Preise' }]
+      : []),
+    // What this one partner does differently: document types, dunning, learned payer IBANs.
+    { id: 'einstellungen', label: 'Einstellungen' },
     // A project always belongs to a customer, never to a supplier (backend ADR-0129), and the
     // register needs the module switched on: without it there is no project list to read.
     ...(showsProjects ? [{ id: 'projekte' as Tab, label: 'Projekte' }] : []),
@@ -193,81 +480,58 @@ function PartnerMask({
 
   return (
     <>
-      <PageHeader
-        title={partner ? partner.name : wording.newTitle}
+      <FormMask
+        title={partner.name}
         back={{ to: origin.from, label: origin.label }}
+        dirty={changed}
+        onSubmit={mayWrite && !save.isPending ? submit : undefined}
         subtitle={
-          partner ? (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-[12px]">
-                {partner.partnerNumber ?? 'ohne Nummer'}
-              </span>
-              {partner.isCustomer && partner.isSupplier && (
-                <Badge tone="neutral">{wording.alsoBadge}</Badge>
-              )}
-              {partner.active === false && <Badge tone="muted">Deaktiviert</Badge>}
-            </span>
-          ) : (
-            wording.newSubtitle
-          )
-        }
-      >
-        {partner && mayWrite && partner.active !== false && can('PARTNER_DEACTIVATE') && (
-          <Button variant="secondary" onClick={() => setDeactivating(true)}>
-            Deaktivieren
-          </Button>
-        )}
-        {mayWrite && tab === 'stammdaten' && (
-          <Button onClick={submit} busy={save.isPending} shortcut>
-            Speichern
-          </Button>
-        )}
-      </PageHeader>
-
-      <div className="px-8 pb-12">
-        {partner && (
-          <Tabs tabs={tabs} active={tab} onChange={setTab} label="Register" />
-        )}
-
-        {tab === 'stammdaten' && (complaint !== null || save.error !== null) && (
-          <div className="mb-6">
-            <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
-          </div>
-        )}
-
-        {tab === 'stammdaten' && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <BaseData
-              tenantId={tenantId}
-              partner={partner}
-              form={form}
-              set={set}
-              disabled={!mayWrite}
-              stored={!creating}
-              wording={wording}
-            />
-
-            {creating && (
-              <Panel
-                title={wording.addressPanelTitle}
-                description={wording.addressPanelHint}
-                className="lg:col-span-2"
-              >
-                <AddressFields
-                  tenantId={tenantId}
-                  form={address}
-                  onChange={setAddress}
-                  disabled={!mayWrite}
-                />
-                <p className="mt-4 text-[12px] text-text-tertiary">
-                  Leer lassen ist erlaubt. Adressen lassen sich später ergänzen und ändern.
-                </p>
-              </Panel>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-small">{partner.partnerNumber ?? 'ohne Nummer'}</span>
+            {partner.isCustomer && partner.isSupplier && (
+              <Badge tone="neutral">{wording.alsoBadge}</Badge>
             )}
-          </div>
+            {!active && <Badge tone="muted">Deaktiviert</Badge>}
+          </span>
+        }
+        actions={
+          <>
+            {mayDeactivate && (
+              <Button
+                variant="secondary"
+                onClick={() => openConfirm(active ? 'deactivate' : 'reactivate')}
+              >
+                {active ? 'Deaktivieren' : 'Reaktivieren'}
+              </Button>
+            )}
+            {mayWrite && (
+              <Button onClick={submit} busy={save.isPending} shortcut>
+                Speichern
+              </Button>
+            )}
+          </>
+        }
+        summary={<PartnerSummary tenantId={tenantId} partner={partner} wording={wording} />}
+        tabs={{ items: tabs, active: tab, onChange: setTab }}
+      >
+        {tab === 'stammdaten' && (
+          <>
+            <FormNotice error={save.error} own={own} shown={EDIT_FIELDS} />
+            <div {...track}>
+              <BaseData
+                tenantId={tenantId}
+                partner={partner}
+                form={form}
+                set={set}
+                disabled={!mayWrite}
+                wording={wording}
+                errors={errors}
+              />
+            </div>
+          </>
         )}
 
-        {tab === 'adressen' && partner && (
+        {tab === 'adressen' && (
           <PartnerAddresses
             tenantId={tenantId}
             partnerId={partner.id}
@@ -277,7 +541,7 @@ function PartnerMask({
           />
         )}
 
-        {tab === 'kontakte' && partner && (
+        {tab === 'kontakte' && (
           <PartnerContacts
             tenantId={tenantId}
             partnerId={partner.id}
@@ -286,104 +550,167 @@ function PartnerMask({
           />
         )}
 
-        {tab === 'dokumente' && partner && can('DOCUMENT_TYPE_READ') && (
-          <PartnerDocumentTypes
-            tenantId={tenantId}
-            partnerId={partner.id}
-            mayWrite={can('DOCUMENT_TYPE_WRITE')}
-          />
+        {tab === 'preise' && <PartnerPrices tenantId={tenantId} partnerId={partner.id} />}
+
+        {tab === 'einstellungen' && (
+          <PartnerSettings tenantId={tenantId} partner={partner} />
         )}
 
-        {/* A hint and not a register: as long as it is one number per currency it belongs
-            beside the customer. Whoever writes an invoice for somebody who has already paid
-            should see it without going looking (backend ADR-0104). */}
-        {tab === 'dokumente' && partner && can(CUSTOMER_CREDIT_RIGHTS.read) && (
-          <PartnerCreditNotice tenantId={tenantId} partnerId={partner.id} />
-        )}
-
-        {/* Shown so it can be removed: a learned payer IBAN is a personal datum on the
-            master record: revDSG Art. 25 needs a place that shows it, and Art. 6 Abs. 4 a
-            button that erases it. The component decides for itself whether there is anything to show
-            (backend ADR-0108). */}
-        {tab === 'dokumente' && partner && (
-          <div className="mt-6">
-            <PartnerPayerAccounts tenantId={tenantId} partnerId={partner.id} />
-          </div>
-        )}
-
-        {/* Beside the per-customer printout deviations, because it is the same kind of thing:
-            what this one customer does differently. Only where the tenant runs the module —
-            a panel for a module nobody switched on would answer 409 (backend ADR-0092). */}
-        {tab === 'dokumente'
-          && partner
-          && can(DUNNING_RIGHTS.read)
-          && runsModule(user?.tenants, tenantId, DUNNING_MODULE) && (
-          <div className="mt-6">
-            <PartnerDunningPanel
-              tenantId={tenantId}
-              partnerId={partner.id}
-              partnerName={partner.name}
-              mayWrite={can(DUNNING_RIGHTS.configure)}
-              mayBlock={can(DUNNING_RIGHTS.write)}
-            />
-          </div>
+        {tab === 'projekte' && showsProjects && (
+          <PartnerProjects tenantId={tenantId} partnerId={partner.id} />
         )}
 
         {/* No permission check: the server narrows the rows to what the reader may see and
             answers with an empty page when that is nothing. */}
-        {tab === 'verlauf' && partner && (
+        {tab === 'verlauf' && (
           <PartnerHistory tenantId={tenantId} partnerId={partner.id} role={wording.role} />
         )}
+      </FormMask>
 
-        {tab === 'projekte' && partner && showsProjects && (
-          <PartnerProjects tenantId={tenantId} partnerId={partner.id} />
-        )}
-
-        {tab === 'preise' && partner && can('PRODUCT_READ') && (
-          <PartnerPrices tenantId={tenantId} partnerId={partner.id} />
-        )}
-      </div>
-
-      {partner && (
-        <Dialog
-          open={deactivating}
-          onClose={() => setDeactivating(false)}
-          title={wording.deactivateTitle}
-          description="Nichts wird gelöscht, der Eintrag verschwindet nur aus der Auswahl."
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setDeactivating(false)}>
-                Abbrechen
-              </Button>
-              <Button onClick={() => deactivate.mutate()} busy={deactivate.isPending}>
-                Deaktivieren
-              </Button>
-            </>
-          }
-        >
-          <p className="text-[13px] text-text-secondary">{wording.deactivateBody}</p>
-          <p className="mt-2 text-[12px] text-text-tertiary">
-            Ein Gegenstück dazu kennt die API nicht. Rückgängig macht das niemand über diese
-            Oberfläche.
-          </p>
-          {deactivate.error !== null && (
-            <div className="mt-4">
-              <ErrorNotice error={deactivate.error} />
-            </div>
-          )}
-        </Dialog>
-      )}
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming === 'reactivate' ? wording.reactivateTitle : wording.deactivateTitle}
+        confirmLabel={confirming === 'reactivate' ? 'Reaktivieren' : 'Deaktivieren'}
+        onConfirm={() => confirming !== null && switchActive.mutate(confirming)}
+        onCancel={() => setConfirming(null)}
+        busy={switchActive.isPending}
+        error={switchActive.error}
+      >
+        {confirming === 'reactivate' ? wording.reactivateBody : wording.deactivateBody}
+      </ConfirmDialog>
     </>
   )
 }
 
 /**
- * The fields of the record itself.
+ * The facts above the registers: the default address, the main contact, how to reach the
+ * record and, for a customer, the money lying with us.
+ */
+function PartnerSummary({
+  tenantId,
+  partner,
+  wording,
+}: {
+  tenantId: number
+  partner: Partner
+  wording: RoleWording
+}) {
+  const { can } = useAuth()
+  const credit = usePartnerCredit(
+    tenantId,
+    partner.id,
+    wording.role === 'customer' && can(CUSTOMER_CREDIT_RIGHTS.read),
+  )
+
+  const address =
+    partner.addresses?.find((entry) => entry.useAsDefault) ?? partner.addresses?.[0]
+  const contact = partner.contacts?.find((entry) => entry.isPrimary)
+
+  const facts: Fact[] = [
+    {
+      label: 'Adresse',
+      value: address
+        ? [
+            [address.street, address.buildingNumber].filter(Boolean).join(' '),
+            `${address.postalCode} ${address.town}`,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : undefined,
+    },
+    {
+      label: 'Hauptkontakt',
+      value: contact
+        ? [contact.firstName, contact.lastName].filter(Boolean).join(' ')
+        : undefined,
+    },
+    {
+      label: 'Telefon',
+      value: partner.phone ? (
+        <a className="hover:text-accent-text" href={`tel:${partner.phone}`}>
+          {partner.phone}
+        </a>
+      ) : undefined,
+    },
+    {
+      label: 'E-Mail',
+      value: partner.email ? (
+        <a className="hover:text-accent-text" href={`mailto:${partner.email}`}>
+          {partner.email}
+        </a>
+      ) : undefined,
+    },
+    {
+      label: 'Guthaben',
+      value:
+        credit.length > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="font-mono tabular-nums">
+              {credit.map((row) => `${formatAmount(row.balance)} ${row.currency}`).join(', ')}
+            </span>
+            <Tooltip
+              text="Wird nicht gegen offene Rechnungen verrechnet, dazu braucht es eine Verrechnungserklärung (OR Art. 120 ff.)."
+              label="Hinweis zum Guthaben"
+            />
+            <Link className="text-small underline" to={CUSTOMER_CREDIT_PATH}>
+              Zum Guthaben
+            </Link>
+          </span>
+        ) : undefined,
+    },
+  ]
+
+  return <FactList facts={facts} />
+}
+
+/**
+ * What this one partner does differently from the rest: its own document types, its dunning
+ * settings and the payer accounts learned from its payments.
+ */
+function PartnerSettings({ tenantId, partner }: { tenantId: number; partner: Partner }) {
+  const { can, user } = useAuth()
+  const showsDunning =
+    can(DUNNING_RIGHTS.read) && runsModule(user?.tenants, tenantId, DUNNING_MODULE)
+
+  return (
+    <div className="grid gap-6">
+      {/* Needs the right on the catalogue: the data are kinds of document, not partner data
+          (ADR-0054 of the backend). */}
+      {can('DOCUMENT_TYPE_READ') && (
+        <PartnerDocumentTypes
+          tenantId={tenantId}
+          partnerId={partner.id}
+          mayWrite={can('DOCUMENT_TYPE_WRITE')}
+        />
+      )}
+
+      {/* Only where the tenant runs the module — a panel for a module nobody switched on would
+          answer 409 (backend ADR-0092). */}
+      {showsDunning && (
+        <PartnerDunningPanel
+          tenantId={tenantId}
+          partnerId={partner.id}
+          partnerName={partner.name}
+          mayWrite={can(DUNNING_RIGHTS.configure)}
+          mayBlock={can(DUNNING_RIGHTS.write)}
+        />
+      )}
+
+      {/* Shown so it can be removed: a learned payer IBAN is a personal datum on the master
+          record. revDSG Art. 25 needs a place that shows it, and Art. 6 Abs. 4 a button that
+          erases it. The component decides for itself whether there is anything to show
+          (backend ADR-0108). */}
+      <PartnerPayerAccounts tenantId={tenantId} partnerId={partner.id} />
+    </div>
+  )
+}
+
+/**
+ * The fields of the stored record.
  *
- * <p>What identifies the record (its type, its name, the legal form, the name of a private
- * person) is asked once and shown read-only afterwards: `PUT /partners/{id}` merges only the
- * remaining fields into what is stored, so an editable field there would take a change that
- * the next reload undoes.
+ * <p>What identifies the record (its kind, its name, the legal form, the name of a private
+ * person) is shown locked: `PUT /partners/{id}` merges only the remaining fields into what is
+ * stored, so an editable field there would take a change that the next reload undoes.
  */
 function BaseData({
   tenantId,
@@ -391,35 +718,26 @@ function BaseData({
   form,
   set,
   disabled,
-  stored,
   wording,
+  errors,
 }: {
   tenantId: number
   /** The stored record, for the labels of values its lists no longer offer. */
-  partner: Partner | null
+  partner: Partner
   form: PartnerForm
   set: <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) => void
   /** True when the user holds no write permission; then nothing on the mask is editable. */
   disabled: boolean
-  /** True once the record exists, which freezes the fields that identify it. */
-  stored: boolean
   wording: RoleWording
+  errors: FieldErrors
 }) {
   const person = form.partnerType === 'PERSON'
-  const frozen = disabled || stored
   const ownRole = wording.role === 'customer' ? 'isCustomer' : 'isSupplier'
   const otherRole = wording.role === 'customer' ? 'isSupplier' : 'isCustomer'
 
   return (
-    <>
-      <Panel
-        title="Stammdaten"
-        description={
-          stored
-            ? 'Art, Name und Rechtsform stehen mit dem Anlegen fest. Das Backend ändert sie nicht mehr.'
-            : undefined
-        }
-      >
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Panel title="Identität">
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             label={wording.numberLabel}
@@ -427,20 +745,17 @@ function BaseData({
             onChange={(event) => set('partnerNumber', event.target.value)}
             disabled={disabled}
             maxLength={20}
-            hint={
-              stored
-                ? 'Muss im Mandanten eindeutig sein. Ersetzen geht, entfernen nicht.'
-                : 'Leer lassen, dann vergibt sie das Backend.'
-            }
+            error={errors.partnerNumber}
+            tooltip="Lässt sich durch eine andere ersetzen, die im Mandanten noch frei ist."
           />
-
           <CatalogueSelect
             label="Art"
             tenantId={tenantId}
             catalogue="partner-type"
             value={form.partnerType}
             onChange={(code) => set('partnerType', code as PartnerType)}
-            disabled={frozen}
+            disabled
+            locked={LOCKED}
           />
 
           {person ? (
@@ -450,48 +765,34 @@ function BaseData({
                 tenantId={tenantId}
                 list="salutations"
                 value={form.salutation}
-                storedLabel={partner?.salutationLabel}
+                storedLabel={partner.salutationLabel}
                 onChange={(code) => set('salutation', code)}
-                disabled={frozen}
+                disabled
                 emptyLabel="Ohne Anrede"
+                locked={LOCKED}
               />
-              <TextField
-                label="Vorname"
-                value={form.firstName}
-                onChange={(event) => set('firstName', event.target.value)}
-                disabled={frozen}
-                maxLength={60}
-              />
+              <TextField label="Vorname" value={form.firstName} disabled locked={LOCKED} />
               <TextField
                 label="Nachname"
                 value={form.lastName}
-                onChange={(event) => set('lastName', event.target.value)}
-                disabled={frozen}
-                maxLength={60}
-                required
-                hint="Der Name auf Belegen entsteht aus Vor- und Nachname."
+                disabled
+                locked={LOCKED}
                 className="sm:col-span-2"
               />
             </>
           ) : (
             <>
-              <TextField
-                label="Firmenname"
-                value={form.name}
-                onChange={(event) => set('name', event.target.value)}
-                disabled={frozen}
-                maxLength={70}
-                required
-              />
+              <TextField label="Firmenname" value={form.name} disabled locked={LOCKED} />
               <MasterDataSelect
                 label="Rechtsform"
                 tenantId={tenantId}
                 list="legal-forms"
                 value={form.legalForm}
-                storedLabel={partner?.legalFormLabel}
+                storedLabel={partner.legalFormLabel}
                 onChange={(code) => set('legalForm', code)}
-                disabled={frozen}
+                disabled
                 emptyLabel="Bitte wählen"
+                locked={LOCKED}
               />
               <TextField
                 label="UID"
@@ -500,7 +801,7 @@ function BaseData({
                 disabled={disabled}
                 maxLength={20}
                 placeholder="CHE-123.456.789"
-                hint="Die Prüfziffer kontrolliert das Backend."
+                error={errors.uid}
               />
               <TextField
                 label="Handelsregistername"
@@ -508,49 +809,40 @@ function BaseData({
                 onChange={(event) => set('commercialRegisterName', event.target.value)}
                 disabled={disabled}
                 maxLength={140}
-                hint="Nur nötig, wenn er vom Firmennamen abweicht."
+                error={errors.commercialRegisterName}
+                tooltip="Nur ausfüllen, wenn der Eintrag im Handelsregister anders lautet als der Firmenname."
               />
             </>
           )}
-
-          <MasterDataSelect
-            label="Sprache"
-            tenantId={tenantId}
-            list="languages"
-            value={form.language}
-            storedLabel={partner?.languageLabel}
-            onChange={(code) => set('language', code)}
-            disabled={disabled}
-            hint="Belege an diesen Eintrag werden in dieser Sprache geschrieben."
-          />
         </div>
 
         <fieldset className="mt-5 border-t border-line-subtle pt-4">
-          <legend className="sr-only">Rolle</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <legend className="text-small font-medium text-text-secondary">Rollen</legend>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <CheckboxField
               label={wording.ownRoleLabel}
-              hint={wording.ownRoleHint}
               checked={form[ownRole]}
               onChange={(event) => set(ownRole, event.target.checked)}
               disabled={disabled}
+              aria-invalid={errors.roles !== undefined || undefined}
             />
             <CheckboxField
               label={wording.otherRoleLabel}
-              hint={wording.otherRoleHint}
               checked={form[otherRole]}
               onChange={(event) => set(otherRole, event.target.checked)}
               disabled={disabled}
             />
           </div>
+          {errors.roles !== undefined && (
+            <p className="mt-2 text-small text-danger" aria-live="polite">
+              {errors.roles}
+            </p>
+          )}
         </fieldset>
       </Panel>
 
       <div className="grid gap-6 self-start">
-        <Panel
-          title="Kontakt"
-          description="Gilt für den Eintrag als Ganzes; eine Adresse kann eigene Angaben tragen."
-        >
+        <Panel title="Kontakt">
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField
               label="E-Mail"
@@ -559,20 +851,25 @@ function BaseData({
               onChange={(event) => set('email', event.target.value)}
               disabled={disabled}
               maxLength={255}
+              error={errors.email}
             />
             <TextField
               label="Telefon"
+              type="tel"
               value={form.phone}
               onChange={(event) => set('phone', event.target.value)}
               disabled={disabled}
               maxLength={30}
+              error={errors.phone}
             />
             <TextField
               label="Website"
+              type="url"
               value={form.website}
               onChange={(event) => set('website', event.target.value)}
               disabled={disabled}
               maxLength={255}
+              error={errors.website}
               className="sm:col-span-2"
             />
           </div>
@@ -585,20 +882,34 @@ function BaseData({
               tenantId={tenantId}
               value={form.paymentTerm}
               onChange={(code) => set('paymentTerm', code)}
-              storedLabel={partner?.paymentTermLabel}
+              storedLabel={partner.paymentTermLabel}
               emptyLabel="Vorgabe des Mandanten"
               disabled={disabled}
-              hint="Bestimmt Fälligkeit und Skonto auf den Belegen dieses Partners."
+              error={errors.paymentTerm}
+              tooltip="Bestimmt Fälligkeit und Skonto auf neuen Belegen."
             />
             <MasterDataSelect
               label="Währung"
               tenantId={tenantId}
               list="currencies"
               value={form.currency}
-              storedLabel={partner?.currencyLabel}
+              storedLabel={partner.currencyLabel}
               onChange={(code) => set('currency', code)}
               disabled={disabled}
-              hint="Belege an diesen Eintrag werden in dieser Währung geschrieben."
+              error={errors.currency}
+              tooltip="Neue Belege werden in dieser Währung geschrieben."
+            />
+            <MasterDataSelect
+              label="Sprache"
+              tenantId={tenantId}
+              list="languages"
+              value={form.language}
+              storedLabel={partner.languageLabel}
+              onChange={(code) => set('language', code)}
+              disabled={disabled}
+              required
+              error={errors.language}
+              tooltip="Sprache der Belege und Mails, sofern der Hauptkontakt keine eigene hat."
             />
             <TextField
               label="Kreditlimite"
@@ -607,7 +918,8 @@ function BaseData({
               disabled={disabled}
               inputMode="decimal"
               numeric
-              hint="In der Buchführungswährung des Mandanten, nicht in der Währung oben."
+              error={errors.creditLimit}
+              tooltip="In der Buchführungswährung des Mandanten, nicht in der Währung dieses Eintrags."
             />
             {form.isSupplier && (
               <TextField
@@ -616,26 +928,26 @@ function BaseData({
                 onChange={(event) => set('creditorReference', event.target.value)}
                 disabled={disabled}
                 maxLength={40}
-                hint="Die Nummer, unter der dieser Lieferant uns führt. Steht auf unserer Zahlung."
+                error={errors.creditorReference}
+                tooltip="Unsere Kundennummer bei diesem Lieferanten. Steht auf unseren Zahlungen."
                 className="sm:col-span-2"
               />
             )}
           </div>
         </Panel>
 
-        <Panel
-          title="Notiz"
-          description="Nur für das Backoffice. Erscheint auf keinem Beleg."
-        >
+        <Panel>
           <TextAreaField
-            label="Notiz"
+            label="Interne Notiz"
             value={form.notes}
             onChange={(event) => set('notes', event.target.value)}
             disabled={disabled}
-            rows={5}
+            rows={4}
+            error={errors.notes}
+            tooltip="Nur für das Backoffice, erscheint auf keinem Beleg."
           />
         </Panel>
       </div>
-    </>
+    </div>
   )
 }

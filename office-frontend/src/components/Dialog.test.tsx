@@ -3,6 +3,7 @@ import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Dialog } from './Dialog'
+import { DialogCancelButton } from './DialogCancelButton'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -25,10 +26,16 @@ afterEach(() => {
  * A mask built the way the maintenance screens are: the form state lives above the dialog, so
  * every keystroke re-renders the caller and hands the dialog a fresh `onClose`.
  */
-function Mask({ onClosed }: { onClosed?: () => void }) {
+function Mask({ onClosed, dirty }: { onClosed?: () => void; dirty?: boolean }) {
   const [value, setValue] = useState('')
   return (
-    <Dialog open onClose={() => onClosed?.()} title="Wert bearbeiten">
+    <Dialog
+      open
+      onClose={() => onClosed?.()}
+      title="Wert bearbeiten"
+      dirty={dirty}
+      footer={<DialogCancelButton />}
+    >
       <input aria-label="Bezeichnung" value={value} onChange={(event) => setValue(event.target.value)} />
     </Dialog>
   )
@@ -134,8 +141,9 @@ describe('Dialog', () => {
 
   it('dialogClosesOnEscapeAfterTypingTest', () => {
     // The handler is held in a ref, so it must still be the current one after a re-render.
+    // Said to be unchanged, so the press closes without the question about discarding.
     let closed = false
-    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    act(() => root.render(<Mask onClosed={() => (closed = true)} dirty={false} />))
     const input = container.querySelector('input') as HTMLInputElement
     type(input, 'A')
 
@@ -144,6 +152,90 @@ describe('Dialog', () => {
     })
 
     expect(closed).toBe(true)
+  })
+
+  it('dialogAsksBeforeDiscardingWhatWasTypedTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    type(container.querySelector('input') as HTMLInputElement, 'A')
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    expect(closed).toBe(false)
+    expect(container.textContent).toContain('Änderungen verwerfen?')
+  })
+
+  it('dialogDiscardsOnceConfirmedTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    type(container.querySelector('input') as HTMLInputElement, 'A')
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    click(button('Verwerfen'))
+
+    expect(closed).toBe(true)
+  })
+
+  /** Escape on the question answers it, and only it: the form behind stays open. */
+  it('dialogKeepsTheChangesOnASecondEscapeTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    const input = container.querySelector('input') as HTMLInputElement
+    type(input, 'A')
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    expect(closed).toBe(false)
+    expect(input.value).toBe('A')
+  })
+
+  it('dialogCancelButtonAsksLikeEscapeTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    type(container.querySelector('input') as HTMLInputElement, 'A')
+
+    click(button('Abbrechen'))
+
+    expect(closed).toBe(false)
+    expect(container.textContent).toContain('Änderungen verwerfen?')
+  })
+
+  it('dialogCancelButtonClosesAnUntouchedBoxTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+
+    click(button('Abbrechen'))
+
+    expect(closed).toBe(true)
+  })
+
+  /** A key a control inside has already taken is not the dialog's any more. */
+  it('dialogLeavesATakenEscapeAloneTest', () => {
+    let closed = false
+    act(() => root.render(<Mask onClosed={() => (closed = true)} />))
+    const press = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    press.preventDefault()
+
+    act(() => {
+      document.dispatchEvent(press)
+    })
+
+    expect(closed).toBe(false)
+  })
+
+  it('dialogFocusesTheFirstFieldTest', () => {
+    act(() => root.render(<Mask />))
+
+    expect(document.activeElement).toBe(container.querySelector('input'))
   })
 
   it('dialogMovesFocusIntoTheBoxWhenItOpensTest', () => {

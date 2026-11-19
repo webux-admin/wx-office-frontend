@@ -1,3 +1,4 @@
+import type { FieldErrors } from '../../lib/fieldErrors'
 import type { AddressUsage, PartnerAddress } from '../../lib/types'
 
 /**
@@ -100,16 +101,17 @@ export function isUntouched(form: AddressForm, ignoredName = ''): boolean {
 }
 
 /**
- * Checks what the address needs before the backend will take it.
+ * Checks what the address needs before the backend will take it, field by field.
  *
  * @param form the address part of the mask
- * @returns the German complaint, or `null` when nothing is missing
+ * @returns the German message per field of the address, empty when nothing is missing
  */
-export function addressComplaint(form: AddressForm): string | null {
-  if (form.name.trim() === '') return 'Die Adresse braucht einen Empfänger.'
-  if (form.postalCode.trim() === '') return 'Die Adresse braucht eine Postleitzahl.'
-  if (form.town.trim() === '') return 'Die Adresse braucht einen Ort.'
-  return null
+export function addressComplaints(form: AddressForm): FieldErrors {
+  const complaints: Record<string, string> = {}
+  if (form.name.trim() === '') complaints.name = 'Die Adresse braucht einen Empfänger.'
+  if (form.postalCode.trim() === '') complaints.postalCode = 'Die Adresse braucht eine Postleitzahl.'
+  if (form.town.trim() === '') complaints.town = 'Die Adresse braucht einen Ort.'
+  return complaints
 }
 
 /**

@@ -48,10 +48,10 @@ export function PartnerProjects({
     {
       key: 'number',
       header: 'Nummer',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       sortKey: 'projectNumber',
       render: (project) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{project.projectNumber}</span>
+        <span className="font-mono text-small text-text-tertiary">{project.projectNumber}</span>
       ),
     },
     {
@@ -71,7 +71,7 @@ export function PartnerProjects({
     {
       key: 'period',
       header: 'Zeitraum',
-      width: 'w-[200px]',
+      width: 'w-column-xl',
       sortKey: 'startDate',
       render: (project) => (
         <span className="text-text-secondary tabular-nums">
@@ -82,7 +82,7 @@ export function PartnerProjects({
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (project) => (
         <Badge tone={PROJECT_STATUS_TONES[project.status]}>
           {PROJECT_STATUS_LABELS[project.status]}

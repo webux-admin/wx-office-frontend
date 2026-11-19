@@ -4,8 +4,9 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { DataTable, type Column } from '../../components/DataTable'
-import { Dialog } from '../../components/Dialog'
-import { EmptyState, ErrorNotice } from '../../components/Notice'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { IconButton } from '../../components/IconButton'
+import { EmptyState } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { api } from '../../lib/api'
 import type { Partner, PartnerAddress } from '../../lib/types'
@@ -80,7 +81,7 @@ export function PartnerAddresses({
     {
       key: 'label',
       header: 'Bezeichnung',
-      width: 'w-[160px]',
+      width: 'w-column-lg',
       render: (address) => address.label ?? '-',
     },
     {
@@ -118,26 +119,23 @@ export function PartnerAddresses({
     {
       key: 'actions',
       header: '',
-      width: 'w-[92px]',
+      width: 'w-column-xs',
       render: (address) =>
         mayWrite ? (
           <span className="flex justify-end gap-1">
-            <button
-              type="button"
+            <IconButton
+              label={`Adresse ${address.name} bearbeiten`}
               onClick={() => openEditor(address)}
-              aria-label={`Adresse ${address.name} bearbeiten`}
-              className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
             >
-              <Pencil size={14} />
-            </button>
-            <button
-              type="button"
+              <Pencil size={14} aria-hidden />
+            </IconButton>
+            <IconButton
+              label={`Adresse ${address.name} entfernen`}
               onClick={() => openRemoval(address)}
-              aria-label={`Adresse ${address.name} entfernen`}
-              className="grid h-7 w-7 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-danger/12 hover:text-danger"
+              tone="danger"
             >
-              <Trash2 size={14} />
-            </button>
+              <Trash2 size={14} aria-hidden />
+            </IconButton>
           </span>
         ) : null,
     },
@@ -147,7 +145,6 @@ export function PartnerAddresses({
     <>
       <Panel
         title="Adressen"
-        description="Jede Belegart geht an höchstens eine Adresse; ohne eigene gilt die Standardadresse."
         padded={false}
         action={
           mayWrite ? (
@@ -190,35 +187,19 @@ export function PartnerAddresses({
         address={editor?.address}
       />
 
-      <Dialog
+      <ConfirmDialog
         open={removing !== null}
-        onClose={() => setRemoving(null)}
         title="Adresse entfernen"
-        description="Bereits ausgestellte Belege behalten die Adresse, die auf ihnen steht."
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setRemoving(null)}>
-              Abbrechen
-            </Button>
-            <Button
-              onClick={() => removing?.id !== undefined && remove.mutate(removing.id)}
-              busy={remove.isPending}
-            >
-              Entfernen
-            </Button>
-          </>
-        }
+        confirmLabel="Entfernen"
+        tone="danger"
+        onConfirm={() => removing?.id !== undefined && remove.mutate(removing.id)}
+        onCancel={() => setRemoving(null)}
+        busy={remove.isPending}
+        error={remove.error}
       >
-        <p className="text-[13px] text-text-secondary">
-          {removing?.name}, {removing?.postalCode} {removing?.town} wird gelöscht. Das lässt
-          sich nicht rückgängig machen.
-        </p>
-        {remove.error !== null && (
-          <div className="mt-4">
-            <ErrorNotice error={remove.error} />
-          </div>
-        )}
-      </Dialog>
+        {removing?.name}, {removing?.postalCode} {removing?.town} wird entfernt. Bereits
+        ausgestellte Belege behalten die Adresse, die auf ihnen steht.
+      </ConfirmDialog>
     </>
   )
 }

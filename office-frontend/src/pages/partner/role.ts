@@ -38,20 +38,20 @@ export type RoleWording = {
   emptyBody: string
   deactivateTitle: string
   deactivateBody: string
+  reactivateTitle: string
+  reactivateBody: string
   /** Complaint when the name of a company is missing. */
   nameMissing: string
   /** Complaint when the family name of a private person is missing. */
   lastNameMissing: string
   /** Label of the checkbox for this role. */
   ownRoleLabel: string
-  ownRoleHint: string
   /** Label of the checkbox for the other role. */
   otherRoleLabel: string
-  otherRoleHint: string
   /** Badge shown in the list when the record also holds the other role. */
   alsoBadge: string
-  addressPanelTitle: string
-  addressPanelHint: string
+  /** Explains, behind the tooltip of the first address, why it is worth filling in. */
+  addressTooltip: string
 }
 
 const CUSTOMER: RoleWording = {
@@ -64,7 +64,7 @@ const CUSTOMER: RoleWording = {
   numberLabel: 'Kundennummer',
   backLabel: 'Kunden',
   newTitle: 'Neuer Kunde',
-  newSubtitle: 'Die Kundennummer vergibt das Backend beim Speichern.',
+  newSubtitle: 'Die Kundennummer wird beim Speichern vergeben.',
   createAction: 'Kunde erfassen',
   firstAction: 'Ersten Kunden erfassen',
   loadingLabel: 'Kunde wird geladen',
@@ -73,16 +73,16 @@ const CUSTOMER: RoleWording = {
   emptyBody: 'Ohne Kunden gibt es niemanden, an den ein Auftrag gehen könnte.',
   deactivateTitle: 'Kunde deaktivieren',
   deactivateBody:
-    'Nichts wird gelöscht. Der Kunde steht danach nur nicht mehr zur Auswahl. Bestehende Belege bleiben unverändert.',
+    'Nichts wird gelöscht. Der Kunde steht danach nicht mehr zur Auswahl, bestehende Belege bleiben unverändert. Reaktivieren geht jederzeit.',
+  reactivateTitle: 'Kunde reaktivieren',
+  reactivateBody: 'Der Kunde steht danach wieder für neue Belege zur Auswahl.',
   nameMissing: 'Ohne Namen lässt sich der Kunde nicht speichern.',
   lastNameMissing: 'Ohne Nachnamen lässt sich der Kunde nicht speichern.',
   ownRoleLabel: 'Kunde',
-  ownRoleHint: 'Kann Empfänger von Aufträgen sein.',
   otherRoleLabel: 'Auch Lieferant',
-  otherRoleHint: 'Von dieser Firma wird zusätzlich eingekauft.',
   alsoBadge: 'Auch Lieferant',
-  addressPanelTitle: 'Adresse',
-  addressPanelHint: 'Ohne Adresse lässt sich kein Auftrag an diesen Kunden ausstellen.',
+  addressTooltip:
+    'Wird die Standardadresse. Ohne Adresse lässt sich kein Beleg an diesen Kunden ausstellen.',
 }
 
 const SUPPLIER: RoleWording = {
@@ -95,7 +95,7 @@ const SUPPLIER: RoleWording = {
   numberLabel: 'Lieferantennummer',
   backLabel: 'Lieferanten',
   newTitle: 'Neuer Lieferant',
-  newSubtitle: 'Die Lieferantennummer vergibt das Backend beim Speichern.',
+  newSubtitle: 'Die Lieferantennummer wird beim Speichern vergeben.',
   createAction: 'Lieferant erfassen',
   firstAction: 'Ersten Lieferanten erfassen',
   loadingLabel: 'Lieferant wird geladen',
@@ -104,16 +104,15 @@ const SUPPLIER: RoleWording = {
   emptyBody: 'Hier stehen die Firmen, bei denen eingekauft wird.',
   deactivateTitle: 'Lieferant deaktivieren',
   deactivateBody:
-    'Nichts wird gelöscht. Der Lieferant steht danach nur nicht mehr zur Auswahl. Bestehende Belege bleiben unverändert.',
+    'Nichts wird gelöscht. Der Lieferant steht danach nicht mehr zur Auswahl, bestehende Belege bleiben unverändert. Reaktivieren geht jederzeit.',
+  reactivateTitle: 'Lieferant reaktivieren',
+  reactivateBody: 'Der Lieferant steht danach wieder für neue Belege zur Auswahl.',
   nameMissing: 'Ohne Namen lässt sich der Lieferant nicht speichern.',
   lastNameMissing: 'Ohne Nachnamen lässt sich der Lieferant nicht speichern.',
   ownRoleLabel: 'Lieferant',
-  ownRoleHint: 'Von dieser Firma wird eingekauft.',
   otherRoleLabel: 'Auch Kunde',
-  otherRoleHint: 'Diese Firma kauft zusätzlich bei uns ein.',
   alsoBadge: 'Auch Kunde',
-  addressPanelTitle: 'Adresse',
-  addressPanelHint: 'Die Adresse, an die Bestellungen gehen.',
+  addressTooltip: 'Wird die Standardadresse, an sie gehen die Bestellungen.',
 }
 
 /**

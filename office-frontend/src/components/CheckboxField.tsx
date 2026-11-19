@@ -1,11 +1,14 @@
 import { Check, Minus } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react'
+import { Tooltip } from './Tooltip'
 
 type CheckboxFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'type'> & {
   label: string
   /** One line under the label saying what turning it on means. */
   hint?: ReactNode
+  /** Explains the switch behind an icon next to the label. See {@link Tooltip}. */
+  tooltip?: ReactNode
   /**
    * Reads the label out but does not draw it.
    *
@@ -33,6 +36,7 @@ type CheckboxFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'ty
 export function CheckboxField({
   label,
   hint,
+  tooltip,
   labelHidden = false,
   indeterminate = false,
   className = '',
@@ -40,24 +44,29 @@ export function CheckboxField({
 }: CheckboxFieldProps) {
   const id = useId()
   const hintId = `${id}-hint`
+  const tooltipId = `${id}-tooltip`
   const marked = indeterminate || rest.checked === true
 
   return (
     <div className={`flex items-start gap-2.5 ${className}`}>
-      <span className="relative mt-px grid h-[18px] w-[18px] shrink-0 place-items-center">
+      <span className="relative mt-px grid size-checkbox shrink-0 place-items-center">
         <input
           id={id}
           type="checkbox"
           ref={(element) => {
             if (element) element.indeterminate = indeterminate
           }}
-          aria-describedby={hint && !labelHidden ? hintId : undefined}
+          aria-describedby={
+            [hint && !labelHidden ? hintId : '', tooltip !== undefined ? tooltipId : '']
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
           className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
           {...rest}
         />
         <span
           aria-hidden
-          className={`pointer-events-none grid h-[18px] w-[18px] place-items-center rounded-[5px] border bg-surface text-on-accent transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent-text peer-disabled:opacity-50 ${
+          className={`pointer-events-none grid size-checkbox place-items-center rounded-[var(--radius-xs)] border bg-surface text-on-accent transition-colors peer-focus-visible:outline peer-focus-visible:outline-[0.125rem] peer-focus-visible:outline-offset-[0.125rem] peer-focus-visible:outline-accent-text peer-disabled:opacity-50 ${
             marked
               ? 'border-accent bg-accent'
               : 'border-line peer-checked:border-accent peer-checked:bg-accent'
@@ -80,11 +89,16 @@ export function CheckboxField({
         </label>
       ) : (
         <span className="min-w-0">
-          <label htmlFor={id} className="cursor-pointer text-[13px] text-text-primary">
+          <label htmlFor={id} className="cursor-pointer text-body text-text-primary">
             {label}
           </label>
+          {tooltip !== undefined && (
+            <span className="ml-1">
+              <Tooltip text={tooltip} label={`Hinweis zu ${label}`} id={tooltipId} />
+            </span>
+          )}
           {hint && (
-            <span id={hintId} className="mt-0.5 block text-[12px] text-text-secondary">
+            <span id={hintId} className="mt-0.5 block text-small text-text-secondary">
               {hint}
             </span>
           )}

@@ -163,7 +163,7 @@ function AssignmentPanel({
   if (rows.length === 0) {
     return (
       <Panel title={TITLE} description={DESCRIPTION}>
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Dieser Mandant führt noch keine Belegart. Unter Einstellungen → Belegarten wird
           festgelegt, womit ein Vorgang geschrieben wird.
         </p>
@@ -197,7 +197,7 @@ function AssignmentPanel({
               className="rounded-[var(--radius-md)] border border-line-subtle p-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
-                <span className="text-[12px] font-medium text-text-secondary">
+                <span className="text-small font-medium text-text-secondary">
                   {categoryLabel(row.category)}
                 </span>
                 {row.documentTypeId === '' ? (
@@ -262,7 +262,7 @@ function CopiesForCustomer({
 }) {
   if (copies.length === 0) {
     return (
-      <p className="mt-3 border-t border-line-subtle pt-3 text-[12px] text-text-tertiary">
+      <p className="mt-3 border-t border-line-subtle pt-3 text-small text-text-tertiary">
         Diese Belegart wird nicht gedruckt, also gibt es nichts einzustellen.
       </p>
     )
@@ -270,7 +270,7 @@ function CopiesForCustomer({
 
   return (
     <div className="mt-3 border-t border-line-subtle pt-3">
-      <p className="pb-2 text-[12px] font-medium text-text-secondary">Ausfertigungen</p>
+      <p className="pb-2 text-small font-medium text-text-secondary">Ausfertigungen</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {copies.map((copy) => (
           <TextField
@@ -286,7 +286,7 @@ function CopiesForCustomer({
           />
         ))}
       </div>
-      <p className="mt-2 text-[12px] text-text-tertiary">
+      <p className="mt-2 text-small text-text-tertiary">
         0 heisst: dieser Kunde bekommt diese Ausfertigung nicht. Gespeichert wird nur, was von
         der Belegart abweicht.
       </p>

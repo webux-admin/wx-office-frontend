@@ -1,10 +1,26 @@
 import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
+import { DialogCancelButton } from '../../components/DialogCancelButton'
 import { ErrorNotice } from '../../components/Notice'
+import { useFieldErrors } from '../../components/useFieldErrors'
+import { isToldByFields } from '../../lib/fieldErrors'
 import type { PartnerAddress } from '../../lib/types'
 import { AddressFields } from './AddressFields'
-import { addressComplaint, emptyAddress, toAddressForm, toAddressPayload } from './addressForm'
+import { addressComplaints, emptyAddress, toAddressForm, toAddressPayload } from './addressForm'
+
+/** The address fields that can show a message of their own. */
+const SHOWN_FIELDS = [
+  'name',
+  'label',
+  'street',
+  'buildingNumber',
+  'postalCode',
+  'town',
+  'country',
+  'email',
+  'phone',
+] as const
 
 /**
  * Adds an address to a stored record, or changes one it already has.
@@ -43,42 +59,41 @@ export function AddressDialog({
   // does not change under the closing animation once the caller has dropped its selection.
   const [edited, setEdited] = useState(address)
 
+  // The backend names the fields of an address `addresses.town` in its own rules and `town`
+  // in the bean validation of this endpoint; the prefix maps the first onto the second.
+  const { errors, check, reset } = useFieldErrors(
+    () => addressComplaints(form),
+    error,
+    'addresses.',
+  )
+
   // The dialog stays mounted so it can animate away, which means it also keeps the values of
   // the last time it was open. They are thrown away the moment it opens again, or the second
-  // address would start from the first one.
+  // address would start from the first one — and so are the messages of the last attempt.
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
       setEdited(address)
       setForm(address ? toAddressForm(address) : emptyAddress(defaultName))
+      reset()
     }
   }
 
-  const complaint = addressComplaint(form)
+  const submit = () => {
+    if (check()) onSubmit(toAddressPayload(form))
+  }
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
       title={edited ? 'Adresse bearbeiten' : 'Adresse hinzufügen'}
-      onSubmit={busy || complaint !== null ? undefined : () => onSubmit(toAddressPayload(form))}
-      description={
-        edited
-          ? 'Was leer bleibt, wird gelöscht. Die Adresse wird als Ganzes ersetzt.'
-          : 'Empfänger, Postleitzahl und Ort sind Pflicht.'
-      }
+      onSubmit={busy ? undefined : submit}
       wide
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Abbrechen
-          </Button>
-          <Button
-            onClick={() => onSubmit(toAddressPayload(form))}
-            busy={busy}
-            disabled={complaint !== null}
-            shortcut
-          >
+          <DialogCancelButton />
+          <Button onClick={submit} busy={busy} shortcut>
             {edited ? 'Speichern' : 'Hinzufügen'}
           </Button>
         </>
@@ -89,19 +104,16 @@ export function AddressDialog({
         form={form}
         onChange={setForm}
         storedCountryLabel={edited?.countryLabel}
+        errors={errors}
       />
 
-      {complaint !== null && (
-        <p className="mt-4 text-[12px] text-text-secondary" aria-live="polite">
-          {complaint}
-        </p>
-      )}
-
-      {error !== null && error !== undefined && (
-        <div className="mt-4">
-          <ErrorNotice error={error} />
-        </div>
-      )}
+      {error !== null &&
+        error !== undefined &&
+        !isToldByFields(error, SHOWN_FIELDS, 'addresses.') && (
+          <div className="mt-4">
+            <ErrorNotice error={error} />
+          </div>
+        )}
     </Dialog>
   )
 }

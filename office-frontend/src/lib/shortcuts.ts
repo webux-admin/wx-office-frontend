@@ -77,3 +77,17 @@ export function onMac(): boolean {
   const agent = globalThis.navigator?.userAgent ?? ''
   return /Mac|iPhone|iPad/i.test(agent)
 }
+
+/**
+ * Whether a key press means «cancel this window», the same as the cancel button.
+ *
+ * <p>Escape alone. With a modifier it is something else: Shift+Escape opens the task manager in
+ * some browsers, and a cancel that fires on a near miss throws work away.
+ *
+ * @param press the key press
+ * @returns true when the window should be cancelled
+ */
+export function isCancelShortcut(press: KeyPress): boolean {
+  if (press.ctrlKey || press.metaKey || press.shiftKey || press.altKey) return false
+  return press.key === 'Escape'
+}

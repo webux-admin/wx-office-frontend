@@ -1,0 +1,324 @@
+// @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../auth/authContext'
+import type { Partner } from '../lib/types'
+import { PartnerPage } from './PartnerPage'
+
+// React refuses to run act() without this flag; jsdom has no bundler that would set it.
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const TENANT = 1
+const ALL_RIGHTS = ['PARTNER_READ', 'PARTNER_WRITE', 'PARTNER_DEACTIVATE']
+
+const STORED: Partner = {
+  id: 7,
+  partnerNumber: 'K-00007',
+  partnerType: 'ORGANISATION',
+  name: 'Bäckerei Huber AG',
+  legalForm: 'AG',
+  language: 'de',
+  phone: '044 123 45 67',
+  isCustomer: true,
+  isSupplier: false,
+  active: true,
+  addresses: [
+    {
+      id: 1,
+      name: 'Bäckerei Huber AG',
+      street: 'Bahnhofstrasse',
+      buildingNumber: '12',
+      postalCode: '8001',
+      town: 'Zürich',
+      country: 'CH',
+      useAsDefault: true,
+      usages: [],
+    },
+  ],
+  contacts: [{ id: 3, firstName: 'Eva', lastName: 'Huber', isPrimary: true }],
+}
+
+function session(permissions: string[]): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'muster',
+      activeTenantId: TENANT,
+      superuser: false,
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: [] }],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
+let container: HTMLDivElement
+let root: Root
+/** Every write the mask sent: address, method and body per request. */
+let written: { url: string; method: string; body: Record<string, unknown> }[]
+/** What the next write answers, when it is not the plain success. */
+let refusal: { status: number; body: unknown } | null
+
+function json(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+}
+
+function stubFetch(stored: Partner) {
+  written = []
+  refusal = null
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (method !== 'GET') {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      written.push({ url, method, body })
+      if (refusal) return json(refusal.body, refusal.status)
+      return json({ ...stored, ...body }, method === 'POST' ? 201 : 200)
+    }
+    if (url.endsWith('/catalogues')) {
+      return json({
+        'partner-type': [
+          { code: 'ORGANISATION', name: 'Firma' },
+          { code: 'PERSON', name: 'Privatperson' },
+        ],
+        'address-usage': [],
+      })
+    }
+    if (url.includes('/legal-forms')) return json([{ id: 1, code: 'AG', name: 'AG' }])
+    if (url.includes('/languages')) {
+      return json([{ id: 1, code: 'de', name: 'Deutsch', isDefault: true }])
+    }
+    if (url.includes('/countries')) {
+      return json([{ id: 1, code: 'CH', name: 'Schweiz', isDefault: true }])
+    }
+    if (url.endsWith(`/partners/${stored.id}`)) return json(stored)
+    return json([])
+  })
+}
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  container.remove()
+  vi.unstubAllGlobals()
+})
+
+async function settle(ms = 50) {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  })
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+async function render(path: string, stored: Partner = STORED, permissions = ALL_RIGHTS) {
+  stubFetch(stored)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={[path]}>
+        <AuthContext.Provider value={session(permissions)}>
+          <QueryClientProvider client={client}>
+            <Routes>
+              <Route path="/kunden/:id" element={<PartnerPage role="customer" />} />
+              <Route path="/kunden" element={<p>Kundenliste</p>} />
+            </Routes>
+          </QueryClientProvider>
+        </AuthContext.Provider>
+      </MemoryRouter>,
+    )
+  })
+  await settle()
+}
+
+/** The control a label points at. */
+function field(label: string): HTMLInputElement | HTMLSelectElement | undefined {
+  const found = [...container.querySelectorAll('label')].find(
+    (entry) => entry.textContent === label,
+  )
+  const id = found?.getAttribute('for')
+  return id ? (document.getElementById(id) as HTMLInputElement | HTMLSelectElement) : undefined
+}
+
+async function type(label: string, value: string) {
+  const input = field(label) as HTMLInputElement
+  const prototype = Object.getPrototypeOf(input) as object
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function button(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  if (!found) throw new Error(`Kein Knopf mit der Aufschrift "${label}"`)
+  return found
+}
+
+async function click(label: string) {
+  await act(async () => button(label).click())
+  await settle()
+}
+
+/** The message drawn under a field. */
+function messageAt(label: string): string | undefined {
+  const control = field(label)
+  const ids = control?.getAttribute('aria-describedby')?.split(' ') ?? []
+  return ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' ') || undefined
+}
+
+describe('PartnerPage', () => {
+  it('partnerPageCreatesACustomerWithItsAddressTest', async () => {
+    await render('/kunden/neu')
+
+    await type('Firmenname', 'Muster AG')
+    await type('Rechtsform', 'AG')
+    await type('Strasse', 'Bahnhofstrasse')
+    await type('PLZ', '8001')
+    await type('Ort', 'Zürich')
+    await click('Speichern')
+
+    expect(written).toHaveLength(1)
+    const sent = written[0].body
+    expect(sent.name).toBe('Muster AG')
+    // Not asked on the mask, filled in from the tenant's default.
+    expect(sent.language).toBe('de')
+    expect(sent.addresses).toEqual([
+      expect.objectContaining({
+        name: 'Muster AG',
+        postalCode: '8001',
+        town: 'Zürich',
+        country: 'CH',
+        useAsDefault: true,
+      }),
+    ])
+    // Saving closes the mask and goes back to the list (ADR-0003).
+    expect(container.textContent).toContain('Kundenliste')
+  })
+
+  /** Only what the first offer needs: the rest starts from the tenant's defaults. */
+  it('partnerPageAsksOnlyWhatTheFirstOfferNeedsTest', async () => {
+    await render('/kunden/neu')
+
+    expect(field('Firmenname')).toBeDefined()
+    expect(field('PLZ')).toBeDefined()
+    expect(field('Sprache')).toBeUndefined()
+    expect(field('Währung')).toBeUndefined()
+    expect(field('UID')).toBeUndefined()
+    expect(field('Kreditlimite')).toBeUndefined()
+  })
+
+  it('partnerPageNamesWhatIsMissingAtTheFieldTest', async () => {
+    await render('/kunden/neu')
+
+    await click('Speichern')
+
+    expect(written).toHaveLength(0)
+    expect(field('Firmenname')?.getAttribute('aria-invalid')).toBe('true')
+    expect(messageAt('Firmenname')).toMatch(/Namen/)
+    expect(document.activeElement).toBe(field('Firmenname'))
+  })
+
+  /** An address is optional, but once begun it needs its postcode and town. */
+  it('partnerPageAsksForTownOnceTheAddressIsBegunTest', async () => {
+    await render('/kunden/neu')
+    await type('Firmenname', 'Muster AG')
+    await type('Rechtsform', 'AG')
+
+    await type('Strasse', 'Bahnhofstrasse')
+    await click('Speichern')
+
+    expect(written).toHaveLength(0)
+    expect(messageAt('Ort')).toMatch(/Ort/)
+    expect(messageAt('PLZ')).toMatch(/Postleitzahl/)
+  })
+
+  it('partnerPageShowsABackendRefusalAtTheFieldTest', async () => {
+    await render('/kunden/7')
+    refusal = {
+      status: 400,
+      body: {
+        detail: 'Keine gültige Schweizer UID: CHE-1',
+        errors: [{ field: 'uid', message: 'Keine gültige Schweizer UID: CHE-1' }],
+      },
+    }
+
+    await type('UID', 'CHE-1')
+    await click('Speichern')
+
+    expect(messageAt('UID')).toContain('Keine gültige Schweizer UID')
+    expect(container.textContent).not.toContain('Kundenliste')
+  })
+
+  it('partnerPageSummarisesTheRecordTest', async () => {
+    await render('/kunden/7')
+
+    expect(container.textContent).toContain('Bahnhofstrasse 12, 8001 Zürich')
+    expect(container.textContent).toContain('Eva Huber')
+    expect(container.textContent).toContain('044 123 45 67')
+  })
+
+  it('partnerPageLocksWhatIdentifiesTheRecordTest', async () => {
+    await render('/kunden/7')
+
+    expect(field('Firmenname')?.disabled).toBe(true)
+    expect(container.querySelector('button[aria-label="Firmenname: nicht änderbar"]')).not.toBeNull()
+    expect(field('UID')?.disabled).toBe(false)
+  })
+
+  it('partnerPageReactivatesADeactivatedCustomerTest', async () => {
+    await render('/kunden/7', { ...STORED, active: false })
+
+    await click('Reaktivieren')
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement
+    await act(async () => {
+      ;[...dialog.querySelectorAll('button')]
+        .find((candidate) => candidate.textContent?.trim() === 'Reaktivieren')
+        ?.click()
+    })
+    await settle()
+
+    expect(written).toEqual([
+      expect.objectContaining({ method: 'PUT', url: expect.stringMatching(/\/partners\/7\/reactivate$/) }),
+    ])
+  })
+
+  it('partnerPageOffersDeactivationForAnActiveCustomerTest', async () => {
+    await render('/kunden/7')
+
+    expect(button('Deaktivieren')).toBeDefined()
+    expect(() => button('Reaktivieren')).toThrow()
+  })
+
+  it('partnerPageWithoutWriteRightTest', async () => {
+    await render('/kunden/7', STORED, ['PARTNER_READ'])
+
+    expect(() => button('Speichern')).toThrow()
+    expect(() => button('Deaktivieren')).toThrow()
+    expect(field('UID')?.disabled).toBe(true)
+  })
+})

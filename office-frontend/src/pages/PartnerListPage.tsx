@@ -65,10 +65,10 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
     {
       key: 'number',
       header: 'Nummer',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       sortKey: 'partnerNumber',
       render: (partner) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {partner.partnerNumber ?? '-'}
         </span>
       ),
@@ -90,7 +90,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
     {
       key: 'type',
       header: 'Art',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (partner) => (
         <span className="text-text-secondary">{typeLabel(partner.partnerType)}</span>
       ),
@@ -98,7 +98,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
     {
       key: 'place',
       header: 'Ort',
-      width: 'w-[170px]',
+      width: 'w-column-lg',
       render: (partner) => {
         const address = partner.addresses?.find((entry) => entry.useAsDefault) ?? partner.addresses?.[0]
         return (
@@ -118,7 +118,7 @@ function PartnerList({ tenantId, role }: { tenantId: number; role: PartnerRole }
     {
       key: 'state',
       header: '',
-      width: 'w-[160px]',
+      width: 'w-column-lg',
       render: (partner) => (
         <span className="flex flex-wrap justify-end gap-1">
           {holdsRole(partner, wording.other) && <Badge tone="neutral">{wording.alsoBadge}</Badge>}

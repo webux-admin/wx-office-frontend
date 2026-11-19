@@ -115,7 +115,7 @@ export function PartnerDunningPanel({
 
             <div className="grid gap-2 border-t border-line-subtle pt-4">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-[13px] font-medium">Mahnstopp</span>
+                <span className="text-body font-medium">Mahnstopp</span>
                 {mayBlock && standing.length === 0 && (
                   <Button variant="secondary" onClick={() => setBlocking(true)}>
                     Mahnstopp setzen
@@ -123,15 +123,15 @@ export function PartnerDunningPanel({
                 )}
               </div>
               {standing.length === 0 ? (
-                <p className="text-[13px] text-text-secondary">
+                <p className="text-body text-text-secondary">
                   Kein Stopp. Dieser Kunde wird gemahnt.
                 </p>
               ) : (
                 standing.map((block) => (
-                  <div key={block.id} className="text-[13px]">
+                  <div key={block.id} className="text-body">
                     <Badge tone="danger">{blockLabel(block)}</Badge>
                     {block.note !== undefined && (
-                      <div className="text-[12px] text-text-tertiary">{block.note}</div>
+                      <div className="text-small text-text-tertiary">{block.note}</div>
                     )}
                   </div>
                 ))
@@ -150,7 +150,7 @@ export function PartnerDunningPanel({
         )}
 
         {!mayWrite && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Ändern fehlt das Recht «Mahnwesen einrichten».
           </p>
         )}

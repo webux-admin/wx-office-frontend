@@ -1,14 +1,29 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { X } from 'lucide-react'
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { isSubmitShortcut } from '../lib/shortcuts'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+  type SyntheticEvent,
+} from 'react'
+import { isCancelShortcut, isSubmitShortcut } from '../lib/shortcuts'
+import { Button } from './Button'
+import { DialogContext } from './dialogContext'
+import { enterDialog } from './dialogStack'
 
 type DialogProps = {
   open: boolean
   onClose: () => void
   title: string
   description?: string
-  /** Buttons closing the dialog, drawn on a rule at the foot. */
+  /**
+   * Buttons at the foot, on a rule. The cancel button is a {@link DialogCancelButton}, so it
+   * asks before throwing changes away just like Escape does.
+   */
   footer?: ReactNode
   /**
    * The primary action, bound to Ctrl+S and Ctrl+Enter while the box is open — the same
@@ -16,24 +31,44 @@ type DialogProps = {
    * and has nothing to save.
    */
   onSubmit?: () => void
+  /**
+   * Whether closing would throw away changes. Left out, the dialog finds out by itself: once
+   * anything inside it has been typed, ticked or picked, it counts as changed. A caller that
+   * knows better — a search box that holds nothing worth keeping — says so here.
+   */
+  dirty?: boolean
   /** Wider box for a dialog holding a form rather than a question. */
   wide?: boolean
   /**
-   * Where the focus lands when the box opens. Without it the first control in the box takes
-   * it, which is the close button — right for a question, wrong for a form whose first field
-   * is what the whole dialog is about.
+   * Where the focus lands when the box opens. Without it the first field in the box takes it,
+   * and where there is no field, the close button.
    */
   initialFocus?: RefObject<HTMLElement | null>
   children: ReactNode
 }
 
+/** What can take the focus inside the box. */
+const FOCUSABLE =
+  'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href]'
+
+/** What a user types into, the first of which is where a form dialog opens. */
+const FIELD = 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
+
 /**
  * A window over the screen for a question or a short form.
  *
- * <p>Keeps the keyboard inside while it is open: focus moves into the box, Escape and the
- * backdrop close it, Ctrl+S and Ctrl+Enter run its primary action, and the element that
- * opened it gets focus back afterwards, because otherwise the next Tab would start again at
- * the top of the page.
+ * <p>Keeps the keyboard inside while it is open: focus moves into the box, Ctrl+S and
+ * Ctrl+Enter run its primary action, and the element that opened it gets focus back
+ * afterwards, because otherwise the next Tab would start again at the top of the page.
+ *
+ * <p><b>Cancelling asks when there is something to lose.</b> Escape, the close button, a click
+ * on the backdrop and the {@link DialogCancelButton} all go the same way: with nothing changed
+ * the box closes at once, with changes it first asks whether they should be thrown away. This
+ * lives here and not in the masks, so every dialog of the application behaves the same.
+ *
+ * <p>Only the dialog on top hears the keyboard. A key that a control inside has already taken —
+ * Escape closing an open list, for instance — is left alone: the control marks it with
+ * `preventDefault`.
  *
  * <p>A box that is closing takes nothing any more. It stays on screen for the length of its
  * fade, and everything in it — buttons, fields, the backdrop — is locked for that whole time,
@@ -46,6 +81,7 @@ export function Dialog({
   description,
   footer,
   onSubmit,
+  dirty,
   wide = false,
   initialFocus,
   children,
@@ -61,36 +97,60 @@ export function Dialog({
   const [showing, setShowing] = useState(open)
   if (open && !showing) setShowing(true)
 
-  // Held in a ref rather than as a dependency of the effect below. A caller that builds its
-  // handler inline gives it a new identity on every render, and a mask whose form state sits
-  // above the dialog re-renders on every keystroke — the effect would then tear down and run
-  // again after each character, moving the focus out of the field and onto the close button.
+  // Whether something inside was changed since the box opened, and whether the question about
+  // throwing it away is on screen. Both start over each time the box opens.
+  const [touched, setTouched] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setTouched(false)
+      setAsking(false)
+    }
+  }
+
+  const changed = dirty ?? touched
+
+  // Held in refs rather than as dependencies of the effect below. A caller that builds its
+  // handlers inline gives them a new identity on every render, and a mask whose form state
+  // sits above the dialog re-renders on every keystroke — the effect would then tear down and
+  // run again after each character, moving the focus out of the field.
   const close = useRef(onClose)
+  const submit = useRef(onSubmit)
+  const hasChanges = useRef(changed)
   useEffect(() => {
     close.current = onClose
-  }, [onClose])
-
-  // The same reasoning as for onClose: a caller that builds it inline would otherwise
-  // re-bind the listener on every keystroke.
-  const submit = useRef(onSubmit)
-  useEffect(() => {
     submit.current = onSubmit
-  }, [onSubmit])
+    hasChanges.current = changed
+  }, [onClose, onSubmit, changed])
+
+  const context = useMemo(
+    () => ({
+      requestClose: () => {
+        if (hasChanges.current) setAsking(true)
+        else close.current()
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     if (!open) return
 
+    const layer = enterDialog()
     opener.current = document.activeElement as HTMLElement | null
     const first =
       initialFocus?.current ??
-      panel.current?.querySelector<HTMLElement>(
-        'input, select, textarea, button, [href], [tabindex]:not([tabindex="-1"])',
-      )
+      panel.current?.querySelector('[data-dialog-body]')?.querySelector<HTMLElement>(FIELD) ??
+      panel.current?.querySelector<HTMLElement>(FOCUSABLE)
     first?.focus()
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        close.current()
+      if (!layer.isTop() || event.defaultPrevented) return
+      if (isCancelShortcut(event)) {
+        event.preventDefault()
+        context.requestClose()
         return
       }
       // Ctrl+S would otherwise be the browser offering to save the page, so this both takes
@@ -103,34 +163,41 @@ export function Dialog({
       if (event.key !== 'Tab' || !panel.current) return
 
       // Without this the focus walks on into the page behind, which is still rendered.
-      const stops = panel.current.querySelectorAll<HTMLElement>(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href]',
-      )
+      const stops = panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)
       if (stops.length === 0) return
-      const first = stops[0]
-      const last = stops[stops.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
+      const firstStop = stops[0]
+      const lastStop = stops[stops.length - 1]
+      if (event.shiftKey && document.activeElement === firstStop) {
         event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
+        lastStop.focus()
+      } else if (!event.shiftKey && document.activeElement === lastStop) {
         event.preventDefault()
-        first.focus()
+        firstStop.focus()
       }
     }
 
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
+      layer.release()
       opener.current?.focus()
     }
-  }, [open, initialFocus])
+  }, [open, initialFocus, context])
+
+  // Anything typed, ticked or picked inside the box counts as a change. A dialog opened from
+  // inside this one is its own business: its fields say nothing about this box.
+  const noteChange = (event: SyntheticEvent) => {
+    const target = event.target as HTMLElement
+    if (target.closest('[role="dialog"]') !== panel.current) return
+    if (!touched) setTouched(true)
+  }
 
   // Nothing at all once the fade is over: a dialog nobody opened leaves no element behind that
   // could catch a click, take the focus or stand in a layout.
   if (!showing) return null
 
   return (
-    <>
+    <DialogContext.Provider value={context}>
       {/* The lock sits outside AnimatePresence, and that is the whole point. Inside it would
           never be reached: while a box fades out, AnimatePresence keeps drawing the children
           it remembered, with the props of the render before `open` fell. Anything that
@@ -161,7 +228,7 @@ export function Dialog({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.16 }}
-                onClick={onClose}
+                onClick={context.requestClose}
                 className="absolute inset-0 bg-ink/50"
               />
 
@@ -170,34 +237,38 @@ export function Dialog({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
+                onInputCapture={noteChange}
+                onChangeCapture={noteChange}
                 initial={{ opacity: 0, y: 10, scale: 0.985 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.99 }}
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className={`relative z-10 flex max-h-[86vh] w-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface shadow-card ${
-                  wide ? 'max-w-[680px]' : 'max-w-[440px]'
+                  wide ? 'max-w-dialog-wide' : 'max-w-dialog'
                 }`}
               >
                 <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-5 py-3.5">
                   <div className="min-w-0">
-                    <h2 id={titleId} className="text-[15px] font-semibold tracking-[-0.2px]">
+                    <h2 id={titleId} className="text-heading font-semibold tracking-tight">
                       {title}
                     </h2>
                     {description && (
-                      <p className="mt-0.5 text-[12px] text-text-secondary">{description}</p>
+                      <p className="mt-0.5 text-small text-text-secondary">{description}</p>
                     )}
                   </div>
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={context.requestClose}
                     aria-label="Schliessen"
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
+                    className="grid size-icon-button shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
                   >
                     <X size={15} />
                   </button>
                 </header>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+                <div data-dialog-body className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                  {children}
+                </div>
 
                 {footer && (
                   <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3.5">
@@ -217,6 +288,56 @@ export function Dialog({
           of the box, and outside that subtree, or it would be inert itself and let the click
           through exactly like the backdrop it stands in for. */}
       {!open && <div aria-hidden data-dialog-shield="true" className="fixed inset-0 z-50" />}
-    </>
+
+      <DiscardQuestion
+        open={open && asking}
+        onKeep={() => setAsking(false)}
+        onDiscard={() => {
+          setAsking(false)
+          close.current()
+        }}
+      />
+    </DialogContext.Provider>
+  )
+}
+
+/**
+ * The question before changes are thrown away.
+ *
+ * <p>Focus lands on «Weiter bearbeiten»: an Enter pressed out of habit keeps the work. Escape
+ * on this question answers it the same way, it goes back to the form.
+ */
+export function DiscardQuestion({
+  open,
+  onKeep,
+  onDiscard,
+}: {
+  open: boolean
+  onKeep: () => void
+  onDiscard: () => void
+}) {
+  const keep = useRef<HTMLButtonElement>(null)
+  return (
+    <Dialog
+      open={open}
+      onClose={onKeep}
+      dirty={false}
+      title="Änderungen verwerfen?"
+      initialFocus={keep}
+      footer={
+        <>
+          <Button ref={keep} variant="secondary" onClick={onKeep}>
+            Weiter bearbeiten
+          </Button>
+          <Button variant="danger" onClick={onDiscard}>
+            Verwerfen
+          </Button>
+        </>
+      }
+    >
+      <p className="text-body text-text-secondary">
+        Was hier geändert wurde, ist noch nicht gespeichert und geht verloren.
+      </p>
+    </Dialog>
   )
 }

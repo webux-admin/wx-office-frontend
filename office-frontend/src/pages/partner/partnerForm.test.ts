@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { emptyPartner, firstComplaint, toForm, toPayload } from './partnerForm'
+import {
+  displayNameOf,
+  emptyPartner,
+  partnerComplaints,
+  toForm,
+  toPayload,
+} from './partnerForm'
 import { wordingFor } from './role'
 import type { Partner } from '../../lib/types'
 
@@ -147,54 +153,75 @@ describe('toPayload', () => {
   })
 })
 
-describe('firstComplaint', () => {
-  it('firstComplaintTest', () => {
-    expect(firstComplaint(COMPANY, CUSTOMER)).toBeNull()
-    expect(firstComplaint(PERSON, CUSTOMER)).toBeNull()
+describe('partnerComplaints', () => {
+  it('partnerComplaintsTest', () => {
+    expect(partnerComplaints(COMPANY, CUSTOMER)).toEqual({})
+    expect(partnerComplaints(PERSON, CUSTOMER)).toEqual({})
   })
 
-  it('firstComplaintWithoutNameTest', () => {
-    expect(firstComplaint(EMPTY_PARTNER, CUSTOMER)).toMatch(/Namen/)
-    expect(firstComplaint({ ...COMPANY, name: '   ' }, CUSTOMER)).toMatch(/Namen/)
+  it('partnerComplaintsWithoutNameTest', () => {
+    expect(partnerComplaints(EMPTY_PARTNER, CUSTOMER).name).toMatch(/Namen/)
+    expect(partnerComplaints({ ...COMPANY, name: '   ' }, CUSTOMER).name).toMatch(/Namen/)
   })
 
-  it('firstComplaintWithoutLegalFormTest', () => {
-    // The backend refuses a company without one, in English. Asking here keeps the message
-    // German and points at the field.
-    expect(firstComplaint({ ...COMPANY, legalForm: '' }, CUSTOMER)).toMatch(/Rechtsform/)
+  it('partnerComplaintsWithoutLegalFormTest', () => {
+    expect(partnerComplaints({ ...COMPANY, legalForm: '' }, CUSTOMER).legalForm).toMatch(
+      /Rechtsform/,
+    )
   })
 
-  it('firstComplaintAsksNoLegalFormOfAPersonTest', () => {
-    expect(firstComplaint({ ...PERSON, legalForm: '' }, CUSTOMER)).toBeNull()
+  it('partnerComplaintsAsksNoLegalFormOfAPersonTest', () => {
+    expect(partnerComplaints({ ...PERSON, legalForm: '' }, CUSTOMER)).toEqual({})
   })
 
-  it('firstComplaintWithoutLastNameOfAPersonTest', () => {
+  it('partnerComplaintsWithoutLastNameOfAPersonTest', () => {
     // A person is printed as given plus family name, so the family name is what is needed.
-    expect(firstComplaint({ ...PERSON, lastName: '  ' }, CUSTOMER)).toMatch(/Nachnamen/)
+    expect(partnerComplaints({ ...PERSON, lastName: '  ' }, CUSTOMER).lastName).toMatch(
+      /Nachnamen/,
+    )
   })
 
-  it('firstComplaintWithoutLanguageTest', () => {
-    // The backend refuses a partner without one; asking here names the field in German.
-    expect(firstComplaint({ ...COMPANY, language: '' }, CUSTOMER)).toMatch(/Sprache/)
+  it('partnerComplaintsWithoutLanguageTest', () => {
+    expect(partnerComplaints({ ...COMPANY, language: '' }, CUSTOMER).language).toMatch(/Sprache/)
   })
 
-  it('firstComplaintWithoutRoleTest', () => {
-    const complaint = firstComplaint(
+  it('partnerComplaintsWithoutRoleTest', () => {
+    const complaints = partnerComplaints(
       { ...COMPANY, isCustomer: false, isSupplier: false },
       CUSTOMER,
     )
 
-    expect(complaint).toMatch(/Kunde, Lieferant oder beides/)
+    expect(complaints.roles).toMatch(/Kunde, Lieferant oder beides/)
   })
 
-  it('firstComplaintReportsTheMissingNameFirstTest', () => {
-    // Both are wrong; the name is the one the user has to fix first.
-    const complaint = firstComplaint(
+  it('partnerComplaintsReportsEveryFieldTest', () => {
+    // Each wrong field gets its own message, so all of them can be fixed in one go.
+    const complaints = partnerComplaints(
       { ...EMPTY_PARTNER, isCustomer: false, isSupplier: false },
       CUSTOMER,
     )
 
-    expect(complaint).toMatch(/Namen/)
+    expect(Object.keys(complaints).sort()).toEqual(['language', 'legalForm', 'name', 'roles'])
+  })
+})
+
+describe('displayNameOf', () => {
+  it('displayNameOfTest', () => {
+    expect(displayNameOf({ ...COMPANY, name: '  Muster AG ' })).toBe('Muster AG')
+  })
+
+  it('displayNameOfAPersonTest', () => {
+    expect(displayNameOf({ ...PERSON, firstName: 'Claudia', lastName: 'Meier' })).toBe(
+      'Claudia Meier',
+    )
+  })
+
+  it('displayNameOfAPersonWithoutGivenNameTest', () => {
+    expect(displayNameOf({ ...PERSON, firstName: ' ', lastName: 'Meier' })).toBe('Meier')
+  })
+
+  it('displayNameOfAnEmptyFormTest', () => {
+    expect(displayNameOf(EMPTY_PARTNER)).toBe('')
   })
 })
 
@@ -230,16 +257,17 @@ describe('emptyPartner', () => {
   })
 })
 
-describe('firstComplaint wording', () => {
-  it('firstComplaintNamesTheRoleOfTheMaskTest', () => {
-    expect(firstComplaint(emptyPartner('customer'), CUSTOMER)).toMatch(/Kunde/)
-    expect(firstComplaint(emptyPartner('supplier'), SUPPLIER)).toMatch(/Lieferant/)
+describe('partnerComplaints wording', () => {
+  it('partnerComplaintsNamesTheRoleOfTheMaskTest', () => {
+    expect(partnerComplaints(emptyPartner('customer'), CUSTOMER).name).toMatch(/Kunde/)
+    expect(partnerComplaints(emptyPartner('supplier'), SUPPLIER).name).toMatch(/Lieferant/)
   })
 
-  it('firstComplaintNeverSaysPartnerTest', () => {
+  it('partnerComplaintsNeverSaysPartnerTest', () => {
     // The word the backend uses must not reach the screen.
     for (const wording of [CUSTOMER, SUPPLIER]) {
-      expect(firstComplaint(emptyPartner('customer'), wording)).not.toMatch(/Partner/)
+      const messages = Object.values(partnerComplaints(emptyPartner('customer'), wording))
+      for (const message of messages) expect(message).not.toMatch(/Partner/)
     }
   })
 })
