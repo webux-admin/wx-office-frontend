@@ -21,7 +21,7 @@ import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
 import { onlyBarCodeMatched } from '../lib/productSearch'
 import type { Page, Partner, PriceEntryResult, PriceEntryRow, PriceGroup } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
-import { partnerLabel } from './document/partnerSearch'
+import { partnerLabel, partnerCustomerSource } from './document/partnerSearch'
 import { priceOriginText } from './document/productInfo'
 import {
   changeCountText,
@@ -366,7 +366,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
               </SelectField>
             ) : (
               <PartnerQuickSearch
-                tenantId={tenantId}
+                source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
                 onTerm={(term) => {
                   // Typing over a customer that was taken over means «another one»: the

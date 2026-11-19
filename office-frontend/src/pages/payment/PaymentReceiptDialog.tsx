@@ -16,6 +16,7 @@ import {
 } from '../../lib/paymentReceipt'
 import type { Partner, PaymentReceipt } from '../../lib/types'
 import { PartnerQuickSearch } from '../document/PartnerQuickSearch'
+import { partnerCustomerSource } from '../document/partnerSearch'
 import {
   MAX_NOTE_LENGTH,
   MAX_REFERENCE_LENGTH,
@@ -181,7 +182,7 @@ export function PaymentReceiptDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <PartnerQuickSearch
-            tenantId={tenantId}
+            source={partnerCustomerSource(tenantId)}
             term={partnerTerm}
             onTerm={(next) => {
               setPartnerTerm(next)

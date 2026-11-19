@@ -4,20 +4,9 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type Ref } from
 import { Spinner } from '../../components/Spinner'
 import { TextField } from '../../components/TextField'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
-import { api } from '../../lib/api'
 import { matchParts } from '../../lib/highlight'
 import { nextIndex } from '../../lib/keyboardList'
-import { listQuery } from '../../lib/paging'
-import type { Page, Partner } from '../../lib/types'
-import { hitCountText } from './partnerSearch'
-
-/**
- * Hits shown at a time.
- *
- * <p>Twenty, not the whole list of customers: this list is read, not scrolled. Whoever needs
- * more is better served by another word in the field.
- */
-const HITS = 20
+import { hitCountText, type CustomerHit, type CustomerSource } from './partnerSearch'
 
 /** How long the field has to stand still before the search goes out. */
 const DEBOUNCE = 200
@@ -33,28 +22,41 @@ const DEBOUNCE = 200
  * <p>The field is a combobox in the sense of ARIA: the arrow keys move the mark through the
  * list without the focus ever leaving the field, and Enter takes what is marked.
  *
- * @param tenantId the tenant
+ * <p>Where the hits come from is the caller's choice: a document asks the partner module
+ * (`partnerCustomerSource`), a project asks the project module, so maintaining projects needs
+ * no partner right (backend ADR-0130).
+ *
+ * @param source where the hits come from
  * @param term what is in the field, held by the mask
  * @param onTerm called on every keystroke
  * @param chosen true while the field names a customer that was taken over, so the list stays
  *               shut
  * @param onChoose takes a hit over
  * @param inputRef lets the mask put the focus here when it opens
+ * @param chosenHint what the field says under a customer that was taken over
+ * @param emptyHint what the list says when the tenant has no active customer at all
+ * @param disabled shows the field without letting anyone change it
  */
-export function PartnerQuickSearch({
-  tenantId,
+export function PartnerQuickSearch<T extends CustomerHit>({
+  source,
   term,
   onTerm,
   chosen,
   onChoose,
   inputRef,
+  chosenHint = 'Belegart, Sprache, Währung und Zahlungskondition kommen von diesem Kunden. Tippen sucht einen anderen.',
+  emptyHint = 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.',
+  disabled = false,
 }: {
-  tenantId: number
+  source: CustomerSource<T>
   term: string
   onTerm: (term: string) => void
   chosen: boolean
-  onChoose: (partner: Partner) => void
+  onChoose: (partner: T) => void
   inputRef?: Ref<HTMLInputElement>
+  chosenHint?: string
+  emptyHint?: string
+  disabled?: boolean
 }) {
   const listId = useId()
   const [open, setOpen] = useState(false)
@@ -70,17 +72,10 @@ export function PartnerQuickSearch({
   const list = useRef<HTMLUListElement>(null)
 
   const settled = useDebouncedValue(term.trim(), DEBOUNCE)
-  const query = listQuery({
-    role: 'customer',
-    search: settled,
-    activeOnly: true,
-    size: HITS,
-    sort: 'name,asc',
-  })
   const hits = useQuery({
-    queryKey: ['partners', tenantId, query],
-    queryFn: () => api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${query}`),
-    enabled: open,
+    queryKey: [...source.key, settled],
+    queryFn: () => source.load(settled),
+    enabled: open && !disabled,
     // What was found last stays on screen while the next answer is on its way. Emptying the
     // list on every keystroke would make it flicker exactly while it is being read.
     placeholderData: keepPreviousData,
@@ -88,7 +83,7 @@ export function PartnerQuickSearch({
 
   // A failed refetch keeps the rows of the last answer in the cache. They must not be offered
   // any more: the box then shows an error, and a hit taken out of it belongs to nothing.
-  const found = hits.isError ? [] : (hits.data?.content ?? [])
+  const found = hits.isError ? [] : (hits.data ?? [])
   // The list can grow shorter between two answers while the mark stays where it was.
   const active = Math.min(marked, found.length - 1)
   const optionId = (index: number) => `${listId}-${index}`
@@ -105,7 +100,7 @@ export function PartnerQuickSearch({
     list.current?.children[active]?.scrollIntoView?.({ block: 'nearest' })
   }, [showsList, active])
 
-  const take = (partner: Partner) => {
+  const take = (partner: T) => {
     setOpen(false)
     onChoose(partner)
   }
@@ -150,7 +145,8 @@ export function PartnerQuickSearch({
           setMarked(0)
           setOpen(true)
         }}
-        onFocus={() => setOpen(!chosen)}
+        onFocus={() => setOpen(!chosen && !disabled)}
+        disabled={disabled}
         onKeyDown={onKeyDown}
         placeholder="Nummer oder Name"
         // The column searched over is 200 characters wide, so nothing longer can ever match.
@@ -163,14 +159,10 @@ export function PartnerQuickSearch({
         aria-controls={showsList ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={showsList && active >= 0 ? optionId(active) : undefined}
-        hint={
-          chosen
-            ? 'Belegart, Sprache, Währung und Zahlungskondition kommen von diesem Kunden. Tippen sucht einen anderen.'
-            : 'Pfeiltasten wählen, Enter übernimmt.'
-        }
+        hint={disabled ? undefined : chosen ? chosenHint : 'Pfeiltasten wählen, Enter übernimmt.'}
       />
 
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface shadow-card">
           {/* Mounted for as long as the box is open, with changing text. A region that is
               inserted together with its text is not a change a screen reader announces. */}
@@ -189,9 +181,7 @@ export function PartnerQuickSearch({
             </p>
           ) : found.length === 0 ? (
             <p className="px-3 py-3 text-[13px] text-text-secondary">
-              {settled === ''
-                ? 'Es gibt noch keinen aktiven Kunden. Der Beleg braucht einen.'
-                : `Für «${settled}» gibt es keinen Treffer.`}
+              {settled === '' ? emptyHint : `Für «${settled}» gibt es keinen Treffer.`}
             </p>
           ) : (
             <ul

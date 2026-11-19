@@ -21,7 +21,7 @@ import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../../masterdata/PaymentTermSelect'
 import { useCatalogueLabel, usePaymentTerms } from '../../masterdata/useMasterData'
 import { PartnerQuickSearch } from './PartnerQuickSearch'
-import { partnerLabel } from './partnerSearch'
+import { partnerCustomerSource, partnerLabel } from './partnerSearch'
 
 /**
  * Starts a sales document of one kind.
@@ -205,7 +205,7 @@ export function NewDocumentMask({
                   than a dropdown, because a tenant may have fifty thousand of them. */}
               <div className="sm:col-span-2">
                 <PartnerQuickSearch
-                  tenantId={tenantId}
+                  source={partnerCustomerSource(tenantId)}
                   term={partnerTerm}
                   onTerm={(term) => {
                     setPartnerTerm(term)

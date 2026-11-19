@@ -24,6 +24,7 @@ import { openState } from '../lib/receivable'
 import { receivableKey, salesDocumentListKey, salesDocumentFor } from '../lib/salesDocument'
 import type { OpenItem, Partner } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
+import { partnerCustomerSource } from './document/partnerSearch'
 import { WriteOffDialog } from './openitem/WriteOffDialog'
 
 /**
@@ -197,7 +198,7 @@ function OpenItems({ tenantId }: { tenantId: number }) {
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
             <span className="w-full max-w-[260px]">
               <PartnerQuickSearch
-                tenantId={tenantId}
+                source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
                 onTerm={(next) => {
                   setPartnerTerm(next)

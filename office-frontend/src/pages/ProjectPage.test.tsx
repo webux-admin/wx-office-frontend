@@ -193,6 +193,22 @@ async function press(label: string) {
   await settle()
 }
 
+/** Types into the customer field and takes the hit that names this customer. */
+async function pickCustomer(term: string, name: string) {
+  await type('Kunde', term)
+  const hit = [...container.querySelectorAll('[role="option"]')].find((entry) =>
+    entry.textContent?.includes(name),
+  )
+  if (hit === undefined) throw new Error(`no hit ${name}`)
+  await act(async () => {
+    ;(hit as HTMLElement).click()
+  })
+  await settle()
+}
+
+const hits = () =>
+  [...container.querySelectorAll('[role="option"]')].map((entry) => entry.textContent)
+
 const options = (label: string) =>
   [...(control(label) as HTMLSelectElement).options].map((option) => option.textContent)
 
@@ -201,7 +217,7 @@ describe('ProjectPage', () => {
     await render('/projekte/neu')
 
     await type('Name', 'Umbau Showroom')
-    await choose('Kunde', '11')
+    await pickCustomer('huber', 'Bäckerei Huber AG')
     await choose('Kontaktperson', '21')
     await choose('Verantwortlich', '31')
     await type('Start', '2026-03-02')
@@ -239,7 +255,7 @@ describe('ProjectPage', () => {
     await render('/projekte/neu')
 
     await type('Name', 'Umbau')
-    await choose('Kunde', '11')
+    await pickCustomer('huber', 'Bäckerei Huber AG')
     await type('Start', '2026-06-30')
     await type('Ende', '2026-03-02')
     await save()
@@ -251,9 +267,9 @@ describe('ProjectPage', () => {
   it('projectPageClearsTheContactWithAnotherCustomerTest', async () => {
     await render('/projekte/neu')
 
-    await choose('Kunde', '11')
+    await pickCustomer('huber', 'Bäckerei Huber AG')
     await choose('Kontaktperson', '21')
-    await choose('Kunde', '12')
+    await pickCustomer('keller', 'Keller GmbH')
 
     expect((control('Kontaktperson') as HTMLSelectElement).value).toBe('')
     expect(text()).toContain('Bei diesem Kunden ist keine Kontaktperson erfasst.')
@@ -262,10 +278,24 @@ describe('ProjectPage', () => {
   it('projectPageSearchesCustomersTest', async () => {
     await render('/projekte/neu')
 
-    await type('Kunde suchen', 'keller')
+    await type('Kunde', 'keller')
 
     expect(searched.at(-1)).toBe('/api/tenants/1/projects/customers?search=keller')
-    expect(options('Kunde')).toEqual(['Bitte wählen', 'K-00012 · Keller GmbH'])
+    expect(hits()).toEqual(['K-00012Keller GmbH'])
+  })
+
+  it('projectPageForgetsTheCustomerWhenTypingAgainTest', async () => {
+    await render('/projekte/neu')
+
+    await type('Name', 'Umbau')
+    await pickCustomer('huber', 'Bäckerei Huber AG')
+    expect((control('Kunde') as HTMLInputElement).value).toBe('K-00011 · Bäckerei Huber AG')
+
+    await type('Kunde', 'kel')
+    await save()
+
+    expect(written).toHaveLength(0)
+    expect(text()).toContain('Ein Projekt braucht einen Kunden.')
   })
 
   it('projectPageShowsAStoredProjectTest', async () => {
@@ -274,7 +304,7 @@ describe('ProjectPage', () => {
     expect(text()).toContain('P-00005')
     expect(text()).toContain('Offen')
     expect((control('Name') as HTMLInputElement).value).toBe('Umbau Showroom')
-    expect((control('Kunde') as HTMLSelectElement).value).toBe('11')
+    expect((control('Kunde') as HTMLInputElement).value).toBe('Bäckerei Huber AG')
     expect((control('Kontaktperson') as HTMLSelectElement).value).toBe('21')
   })
 
@@ -314,8 +344,7 @@ describe('ProjectPage', () => {
     expect(text()).not.toContain('Speichern')
     expect((control('Name') as HTMLInputElement).disabled).toBe(true)
     expect(container.querySelectorAll('label')).not.toHaveLength(0)
-    expect([...container.querySelectorAll('label')].some((entry) => entry.textContent === 'Kunde suchen'))
-      .toBe(false)
+    expect((control('Kunde') as HTMLInputElement).disabled).toBe(true)
   })
 
   it('projectPageStartsAnOpenProjectTest', async () => {

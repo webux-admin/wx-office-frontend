@@ -12,6 +12,7 @@ import { useRunsModule } from '../../lib/modules'
 import { useAuth } from '../../auth/useAuth'
 import { AccountSelect } from '../accounting/AccountSelect'
 import { PartnerQuickSearch } from '../document/PartnerQuickSearch'
+import { partnerCustomerSource } from '../document/partnerSearch'
 import {
   MAX_IBAN_LENGTH,
   MAX_NOTE_LENGTH,
@@ -108,7 +109,7 @@ export function AdvanceDialog({
     >
       <div className="grid gap-4">
         <PartnerQuickSearch
-          tenantId={tenantId}
+          source={partnerCustomerSource(tenantId)}
           term={partnerTerm}
           onTerm={(next) => {
             setPartnerTerm(next)

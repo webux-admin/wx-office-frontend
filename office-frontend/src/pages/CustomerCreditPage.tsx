@@ -26,6 +26,7 @@ import { openItemsKey } from '../lib/openItem'
 import { receivableKey, salesDocumentListKey, salesDocumentFor } from '../lib/salesDocument'
 import type { CustomerCredit, CustomerCreditBalance, Partner, ReceiptKind } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
+import { partnerCustomerSource } from './document/partnerSearch'
 import { AdvanceDialog } from './payment/AdvanceDialog'
 import { ApplyCreditDialog } from './payment/ApplyCreditDialog'
 import { CreditUseDialog } from './payment/CreditUseDialog'
@@ -269,7 +270,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
             <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
               <span className="w-full max-w-[260px]">
                 <PartnerQuickSearch
-                  tenantId={tenantId}
+                  source={partnerCustomerSource(tenantId)}
                   term={partnerTerm}
                   onTerm={(next) => {
                     setPartnerTerm(next)

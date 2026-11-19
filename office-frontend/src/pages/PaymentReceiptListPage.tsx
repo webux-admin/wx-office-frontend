@@ -27,6 +27,7 @@ import {
 import { receivableKey, salesDocumentListKey, salesDocumentFor } from '../lib/salesDocument'
 import type { Partner, PaymentReceipt, ReceiptState } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
+import { partnerCustomerSource } from './document/partnerSearch'
 import { PaymentReceiptDialog } from './payment/PaymentReceiptDialog'
 
 /**
@@ -181,7 +182,7 @@ function PaymentReceipts({ tenantId }: { tenantId: number }) {
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
             <span className="w-full max-w-[260px]">
               <PartnerQuickSearch
-                tenantId={tenantId}
+                source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
                 onTerm={(next) => {
                   setPartnerTerm(next)

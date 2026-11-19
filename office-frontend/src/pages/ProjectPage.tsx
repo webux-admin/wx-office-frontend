@@ -10,7 +10,6 @@ import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
-import { useDebouncedValue } from '../components/useDebouncedValue'
 import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -31,7 +30,6 @@ import {
   isProjectEditable,
   projectComplaint,
   projectContactsUrl,
-  projectCustomerUrl,
   projectCustomersUrl,
   projectResponsiblesUrl,
   projectStepUrl,
@@ -45,6 +43,8 @@ import {
   type ProjectStep,
 } from '../lib/project'
 import type { Project, ProjectContact, ProjectCustomer, ProjectResponsible } from '../lib/types'
+import { PartnerQuickSearch } from './document/PartnerQuickSearch'
+import { partnerLabel, type CustomerHit, type CustomerSource } from './document/partnerSearch'
 
 /** One project, new or stored: its customer, the people on it, its period. */
 export function ProjectPage() {
@@ -300,11 +300,33 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
 }
 
 /**
- * The customer of the project: a search, and the customers it finds.
+ * The customers the project form may choose from: the lookup of the project module, so
+ * maintaining projects needs no partner right (backend ADR-0130).
  *
- * <p>A search in front of the list rather than one long list: a tenant with a few thousand
- * customers would otherwise scroll. The chosen customer always stays among the options, also
- * when the current search does not find it — or when it was deactivated since.
+ * @param tenantId the tenant
+ * @returns at most twenty active customers per term, by name
+ */
+function projectCustomerSource(tenantId: number): CustomerSource<CustomerHit> {
+  return {
+    key: [...projectsKey(tenantId), 'customers'],
+    load: async (term) => {
+      const found = await api.get<ProjectCustomer[]>(projectCustomersUrl(tenantId, term))
+      return found.map((customer) => ({
+        id: customer.partnerId,
+        partnerNumber: customer.partnerNumber,
+        name: customer.name,
+      }))
+    },
+  }
+}
+
+/**
+ * The customer of the project: one field that searches as it is typed into and takes a hit
+ * over, the same type-ahead the documents use.
+ *
+ * <p>Typing gives the chosen customer up, so the field never shows one name while the
+ * project holds another. A customer deactivated since stays on the project until somebody
+ * types another.
  */
 function CustomerChoice({
   tenantId,
@@ -319,63 +341,27 @@ function CustomerChoice({
   disabled: boolean
   onChange: (partnerId: string) => void
 }) {
-  const [search, setSearch] = useState('')
-  const term = useDebouncedValue(search.trim())
-
-  const found = useQuery({
-    queryKey: [...projectsKey(tenantId), 'customers', term],
-    queryFn: () => api.get<ProjectCustomer[]>(projectCustomersUrl(tenantId, term)),
-    enabled: !disabled,
-  })
-  const chosenId = partnerId === '' ? null : Number(partnerId)
-  const listed = found.data ?? []
-  const chosenListed = chosenId !== null && listed.some((entry) => entry.partnerId === chosenId)
-  const chosen = useQuery({
-    queryKey: [...projectsKey(tenantId), 'customer', chosenId],
-    queryFn: () => api.get<ProjectCustomer>(projectCustomerUrl(tenantId, chosenId ?? 0)),
-    enabled: chosenId !== null && !chosenListed && knownName === null,
-  })
-
-  const options: ProjectCustomer[] = [...listed]
-  if (chosenId !== null && !chosenListed) {
-    options.unshift(chosen.data ?? { partnerId: chosenId, name: knownName ?? `Kunde ${chosenId}` })
-  }
+  const [term, setTerm] = useState(
+    partnerId === '' ? '' : (knownName ?? `Kunde ${partnerId}`),
+  )
 
   return (
-    <div className="grid gap-2">
-      {!disabled && (
-        <TextField
-          label="Kunde suchen"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Name oder Nummer"
-          maxLength={70}
-        />
-      )}
-      <SelectField
-        label="Kunde"
-        value={partnerId}
-        onChange={(event) => onChange(event.target.value)}
-        disabled={disabled}
-        required
-        hint={
-          found.isSuccess && listed.length === 0
-            ? term === ''
-              ? 'Es gibt noch keinen aktiven Kunden.'
-              : `Kein aktiver Kunde passt zu «${term}».`
-            : undefined
-        }
-      >
-        <option value="">Bitte wählen</option>
-        {options.map((customer) => (
-          <option key={customer.partnerId} value={customer.partnerId}>
-            {customer.partnerNumber ? `${customer.partnerNumber} · ` : ''}
-            {customer.name}
-          </option>
-        ))}
-      </SelectField>
-      {found.error !== null && <ErrorNotice error={found.error} />}
-    </div>
+    <PartnerQuickSearch
+      source={projectCustomerSource(tenantId)}
+      term={term}
+      onTerm={(next) => {
+        setTerm(next)
+        if (partnerId !== '') onChange('')
+      }}
+      chosen={partnerId !== ''}
+      onChoose={(customer) => {
+        setTerm(partnerLabel(customer))
+        onChange(String(customer.id))
+      }}
+      chosenHint="Tippen sucht einen anderen Kunden."
+      emptyHint="Es gibt noch keinen aktiven Kunden. Ein Projekt braucht einen."
+      disabled={disabled}
+    />
   )
 }
 

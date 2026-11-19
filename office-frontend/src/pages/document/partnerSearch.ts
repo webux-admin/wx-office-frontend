@@ -1,4 +1,52 @@
-import type { Partner } from '../../lib/types'
+import { api } from '../../lib/api'
+import { listQuery } from '../../lib/paging'
+import type { Page, Partner } from '../../lib/types'
+
+/** What the customer type-ahead needs of a hit: whom it names, and how. */
+export type CustomerHit = { id: number; partnerNumber?: string | null; name: string }
+
+/**
+ * Where the customer type-ahead gets its hits.
+ *
+ * @property key cache key the search term is appended to
+ * @property load asks for the hits of one term, at most twenty
+ */
+export type CustomerSource<T extends CustomerHit> = {
+  key: readonly unknown[]
+  load: (term: string) => Promise<T[]>
+}
+
+/**
+ * Hits shown at a time.
+ *
+ * <p>Twenty, not the whole list of customers: this list is read, not scrolled. Whoever needs
+ * more is better served by another word in the field.
+ */
+export const CUSTOMER_HITS = 20
+
+/**
+ * The active customers of the partner module, by name, for the masks of documents.
+ *
+ * @param tenantId the tenant
+ * @returns the source; its key starts with `['partners', tenantId]`, so a change to a partner
+ *          refreshes it
+ */
+export function partnerCustomerSource(tenantId: number): CustomerSource<Partner> {
+  return {
+    key: ['partners', tenantId, 'customer-search'],
+    load: async (term) => {
+      const query = listQuery({
+        role: 'customer',
+        search: term,
+        activeOnly: true,
+        size: CUSTOMER_HITS,
+        sort: 'name,asc',
+      })
+      const page = await api.get<Page<Partner>>(`/api/tenants/${tenantId}/partners?${query}`)
+      return page.content
+    },
+  }
+}
 
 /**
  * How a customer is written in the search field once they were taken over.
@@ -9,7 +57,7 @@ import type { Partner } from '../../lib/types'
  * @param partner the customer, absent while none is chosen
  * @returns for example «K-1001 · Druckerei Meier AG», empty where none is chosen
  */
-export function partnerLabel(partner: Partner | undefined): string {
+export function partnerLabel(partner: CustomerHit | undefined): string {
   if (partner === undefined) return ''
   return partner.partnerNumber ? `${partner.partnerNumber} · ${partner.name}` : partner.name
 }

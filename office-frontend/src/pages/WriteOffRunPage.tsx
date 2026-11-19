@@ -25,6 +25,7 @@ import {
 import { receivableKey, salesDocumentFor, salesDocumentListKey } from '../lib/salesDocument'
 import type { Partner, WriteOffCandidate, WriteOffReason, WriteOffRunResult } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
+import { partnerCustomerSource } from './document/partnerSearch'
 import {
   defaultSettings,
   proposalSignature,
@@ -303,7 +304,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
 
             <span className="grid gap-1">
               <PartnerQuickSearch
-                tenantId={tenantId}
+                source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
                 onTerm={(next) => {
                   setPartnerTerm(next)
