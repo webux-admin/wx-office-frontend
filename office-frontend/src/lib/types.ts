@@ -1547,6 +1547,10 @@ export type DocumentParty = {
   country?: string
   uid?: string
   email?: string
+  /** The customer's stored address the lines were copied from; a hint, not a reference. */
+  addressId?: number
+  /** Whether that address was picked by hand rather than taken for the kind of document. */
+  addressChosen?: boolean
 }
 
 /**
@@ -1864,6 +1868,8 @@ export type DocumentDefaults = {
   paymentTermName?: string
   /** Which of the partner addresses the kind of document asks for. */
   addressUsage?: AddressUsage
+  /** The stored address the draft would take, the one preselected in the mask. */
+  addressId?: number
   /**
    * The kind of document this answer is about: the one that was asked for, or the one this
    * customer gets for this step of a sale when none was named (ADR-0054 of the backend).

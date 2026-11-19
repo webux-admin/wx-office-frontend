@@ -20,6 +20,8 @@ import type { DocumentDefaults, DocumentType, SalesDocument } from '../../lib/ty
 import { MasterDataSelect } from '../../masterdata/MasterDataSelect'
 import { PaymentTermSelect } from '../../masterdata/PaymentTermSelect'
 import { useCatalogueLabel, usePaymentTerms } from '../../masterdata/useMasterData'
+import { AddressChoice } from './AddressChoice'
+import { usePartnerAddresses } from './usePartnerAddresses'
 import { PartnerQuickSearch } from './PartnerQuickSearch'
 import { partnerCustomerSource, partnerLabel } from './partnerSearch'
 
@@ -60,6 +62,11 @@ export function NewDocumentMask({
   const [partnerTerm, setPartnerTerm] = useState('')
   const [documentDate, setDocumentDate] = useState(toIsoDate())
   const [exchangeRate, setExchangeRate] = useState('')
+  // An address picked by hand, for the customer it was picked for; another customer starts
+  // from the address the backend proposes again.
+  const [pickedAddress, setPickedAddress] = useState<{ partnerId: string; id: number } | null>(
+    null,
+  )
 
   const queryClient = useQueryClient()
 
@@ -136,6 +143,10 @@ export function NewDocumentMask({
           documentDate,
           currency: currency || undefined,
           exchangeRate: parseDecimal(exchangeRate) ?? undefined,
+          addressId:
+            addressId !== undefined && addressId !== defaults.data?.addressId
+              ? addressId
+              : undefined,
         })
         draftId.current = draft.id
       }
@@ -168,6 +179,9 @@ export function NewDocumentMask({
   )
   const incomplete = !chosen || documentTypeId === '' || documentDate === ''
   const recipient = defaults.data?.recipient
+  const addresses = usePartnerAddresses(tenantId, chosen ? Number(partnerId) : null)
+  const addressId =
+    pickedAddress?.partnerId === partnerId ? pickedAddress.id : defaults.data?.addressId
 
   // Ctrl+S and Ctrl+Enter do what the primary button does, so the draft can be started
   // without reaching for the mouse.
@@ -338,6 +352,17 @@ export function NewDocumentMask({
                         </span>
                       )}
                     </h3>
+                    {addresses.length > 1 ? (
+                      <div className="mt-2">
+                        <AddressChoice
+                          tenantId={tenantId}
+                          addresses={addresses}
+                          value={addressId}
+                          onChange={(id) => setPickedAddress({ partnerId, id })}
+                          name="new-document-address"
+                        />
+                      </div>
+                    ) : (
                     <address className="mt-1.5 not-italic text-[13px] leading-6">
                       <span className="block font-medium">{recipient.name}</span>
                       {recipient.addressLine && (
@@ -351,6 +376,7 @@ export function NewDocumentMask({
                         {recipient.town}
                       </span>
                     </address>
+                    )}
                   </div>
                 )}
               </>

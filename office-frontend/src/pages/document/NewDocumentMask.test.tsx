@@ -41,16 +41,34 @@ const PARTNERS: Page<Partner> = {
 /** What the backend answers once the customer stands: the kind it gets, and the rest. */
 let defaults: DocumentDefaults
 
+/** The customer as `GET /partners/77` answers; without addresses unless a test gives some. */
+let customer: Partner
+
 let container: HTMLDivElement
 let root: Root
 let asked: string[]
+/** The body of every write, by method and address. */
+let written: { request: string; body: Record<string, unknown> }[]
 
 function stubFetch() {
   asked = []
+  written = []
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
     asked.push(`${options?.method ?? 'GET'} ${url}`)
+    if (options?.method !== undefined && options.method !== 'GET') {
+      written.push({
+        request: `${options.method} ${url}`,
+        body: JSON.parse(String(options.body ?? '{}')) as Record<string, unknown>,
+      })
+    }
     const body = url.includes('/defaults')
       ? defaults
+      : url.endsWith('/partners/77')
+        ? customer
+      : url.includes('/catalogues')
+        ? {}
+      : options?.method === 'POST'
+        ? { id: 501 }
       : url.includes('/partners')
         ? PARTNERS
         : TYPES
@@ -79,6 +97,7 @@ function auth(): AuthState {
 }
 
 beforeEach(() => {
+  customer = { id: 77, name: 'Druckerei Meier AG', partnerNumber: 'K-1001' } as Partner
   defaults = {
     recipient: { name: 'Druckerei Meier AG' },
     partnerNumber: 'K-1001',
@@ -261,7 +280,8 @@ describe('NewDocumentMask', () => {
 
     // The first call goes out on focus with an empty field; the one that carries the term
     // is the one this test is about.
-    const search = asked.findLast((request) => request.includes('/partners'))
+    // Once a customer stands, the mask also reads their addresses; that is not the search.
+    const search = asked.findLast((request) => request.includes('/partners?'))
     expect(search).toContain('search=Meier')
     expect(search).toContain('role=customer')
     expect(search).toContain('activeOnly=true')
@@ -276,5 +296,93 @@ describe('NewDocumentMask', () => {
     await settle()
 
     expect(selectNamed('Belegart').disabled).toBe(true)
+  })
+})
+
+describe('NewDocumentMask with several addresses', () => {
+  const HEAD_OFFICE = {
+    id: 10,
+    name: 'Druckerei Meier AG',
+    street: 'Bahnhofstrasse',
+    postalCode: '8001',
+    town: 'Zürich',
+    useAsDefault: true,
+    usages: [],
+  }
+  const BRANCH = {
+    id: 11,
+    name: 'Druckerei Meier AG, Filiale Bern',
+    street: 'Marktgasse',
+    postalCode: '3000',
+    town: 'Bern',
+    useAsDefault: false,
+    usages: [],
+  }
+
+  /** The card of the address in a town, by its radio button. */
+  function card(town: string): HTMLInputElement {
+    const label = [...container.querySelectorAll('label')].find((candidate) =>
+      candidate.textContent?.includes(town),
+    )
+    const radio = label?.querySelector('input[type="radio"]')
+    if (!radio) throw new Error(`no address in ${town}`)
+    return radio as HTMLInputElement
+  }
+
+  async function start() {
+    const button = [...container.querySelectorAll('button')].find((candidate) =>
+      candidate.textContent?.includes('anlegen'),
+    )
+    if (!button) throw new Error('no create button')
+    await act(async () => button.click())
+    await settle()
+  }
+
+  /** The address the backend proposes is the one selected; the others stand beside it. */
+  it('newDocumentMaskOffersTheAddressesOfTheCustomerTest', async () => {
+    customer = { ...customer, addresses: [BRANCH, HEAD_OFFICE] }
+    defaults = { ...defaults, addressId: 10 }
+    await render()
+    await pickCustomer()
+
+    expect(card('Zürich').checked).toBe(true)
+    expect(card('Bern').checked).toBe(false)
+  })
+
+  it('newDocumentMaskStartsTheDraftAtThePickedAddressTest', async () => {
+    customer = { ...customer, addresses: [BRANCH, HEAD_OFFICE] }
+    defaults = { ...defaults, addressId: 10 }
+    await render()
+    await pickCustomer()
+
+    await act(async () => card('Bern').click())
+    await start()
+
+    const created = written.find((entry) => entry.request.startsWith('POST'))
+    expect(created?.body.addressId).toBe(11)
+  })
+
+  /** Leaving the proposal as it is sends no address: the backend takes its own. */
+  it('newDocumentMaskWithTheProposedAddressSendsNoneTest', async () => {
+    customer = { ...customer, addresses: [BRANCH, HEAD_OFFICE] }
+    defaults = { ...defaults, addressId: 10 }
+    await render()
+    await pickCustomer()
+
+    await start()
+
+    const created = written.find((entry) => entry.request.startsWith('POST'))
+    expect(created).toBeDefined()
+    expect(created?.body).not.toHaveProperty('addressId')
+  })
+
+  it('newDocumentMaskWithOneAddressShowsNoChoiceTest', async () => {
+    customer = { ...customer, addresses: [HEAD_OFFICE] }
+    defaults = { ...defaults, addressId: 10 }
+    await render()
+    await pickCustomer()
+
+    expect(container.querySelector('input[type="radio"]')).toBeNull()
+    expect(text()).toContain('Druckerei Meier AG')
   })
 })

@@ -61,6 +61,7 @@ import type {
 } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+import { ChangeAddressDialog } from './document/ChangeAddressDialog'
 import { ChangePartnerDialog } from './document/ChangePartnerDialog'
 import { SendDocumentDialog } from './document/SendDocumentDialog'
 import { NewDocumentMask } from './document/NewDocumentMask'
@@ -198,6 +199,7 @@ function DocumentMask({
   const [reopening, setReopening] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [changingPartner, setChangingPartner] = useState(false)
+  const [changingAddress, setChangingAddress] = useState(false)
   const [reason, setReason] = useState('')
   // Its own field and not the one above: the reason for a reversal has nothing to do with
   // the reason for taking a document back, and a leftover text in the other box invites
@@ -898,9 +900,14 @@ function DocumentMask({
               status={document.status}
               action={
                 editable ? (
-                  <Button variant="secondary" onClick={() => setChangingPartner(true)}>
-                    Kunde wechseln
-                  </Button>
+                  <span className="flex gap-2">
+                    <Button variant="secondary" onClick={() => setChangingAddress(true)}>
+                      Adresse wählen
+                    </Button>
+                    <Button variant="secondary" onClick={() => setChangingPartner(true)}>
+                      Kunde wechseln
+                    </Button>
+                  </span>
                 ) : undefined
               }
             />
@@ -1003,6 +1010,15 @@ function DocumentMask({
           documentId={document.id}
         />
       )}
+
+      <ChangeAddressDialog
+        tenantId={tenantId}
+        base={base}
+        open={changingAddress}
+        onClose={() => setChangingAddress(false)}
+        document={document}
+        onChanged={refresh}
+      />
 
       <ChangePartnerDialog
         tenantId={tenantId}

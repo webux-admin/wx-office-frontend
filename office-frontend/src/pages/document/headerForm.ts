@@ -53,6 +53,8 @@ export type UpdateHeaderRequest = {
   exchangeRateDate?: string
   /** What happens to the catalogue lines; `RECALCULATE` prices them anew. */
   priceMode?: CopyPriceMode
+  /** Another of the customer's addresses to copy onto the draft. */
+  addressId?: number
 }
 
 /**
