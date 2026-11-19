@@ -16,10 +16,10 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **auth** — Anmeldung, Sitzung, Mandantenwechsel, geschützte Routen. ✅ umgesetzt
 - **shell** — Seitenleiste, Kopfzeile, Navigation. ✅ umgesetzt
 - **dashboard** — Übersicht mit Modulkacheln. ✅ umgesetzt
-- **partner** — Kunden und Lieferanten. Pilot der Überarbeitung: Erfassen fragt nur Art, Name,
-  Rechtsform, Postanschrift (PLZ und Ort Pflicht), Kontakt und Kontaktpersonen (ADR-0051); die
-  Bearbeitungsmaske zeigt eine Faktenzeile über den Registern, Reaktivieren steht im Kopf
-  (ADR-0050)
+- **partner** — Kunden und Lieferanten. Pilot der Überarbeitung: Erfassen in vier Registern —
+  Stammdaten mit Pflichtadresse, Kontaktpersonen, Konditionen und Weitere Angaben, mit den
+  Vorgaben des Mandanten ausgefüllt (ADR-0051, ADR-0052); die Bearbeitungsmaske zeigt eine
+  Faktenzeile über den Registern, Reaktivieren steht im Kopf (ADR-0050)
 - **product** — Produkte, Preisgruppen, Kundenpreise
 - **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je
   Belegart, aus `lib/salesDocument.ts` erzeugt

@@ -103,6 +103,12 @@ function stubFetch(stored: Partner) {
     if (url.includes('/languages')) {
       return json([{ id: 1, code: 'de', name: 'Deutsch', isDefault: true }])
     }
+    if (url.includes('/currencies')) {
+      return json([{ id: 1, code: 'CHF', name: 'Schweizer Franken', isDefault: true }])
+    }
+    if (url.includes('/payment-terms')) {
+      return json([{ id: 1, code: 'NET30', name: '30 Tage netto', netDays: 30, isDefault: true }])
+    }
     if (url.includes('/countries')) {
       return json([{ id: 1, code: 'CH', name: 'Schweiz', isDefault: true }])
     }
@@ -171,6 +177,21 @@ async function type(label: string, value: string) {
   })
 }
 
+/** Opens a register of the mask by its name. */
+async function openTab(label: string) {
+  const found = [...container.querySelectorAll('[role="tab"]')].find((tab) =>
+    tab.textContent?.startsWith(label),
+  ) as HTMLButtonElement | undefined
+  if (!found) throw new Error(`Kein Register "${label}"`)
+  await act(async () => found.click())
+  await settle()
+}
+
+/** The name of the register that is open. */
+function openedTab(): string | undefined {
+  return container.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? undefined
+}
+
 function button(label: string): HTMLButtonElement {
   const found = [...document.querySelectorAll('button')].find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -220,16 +241,71 @@ describe('PartnerPage', () => {
     expect(container.textContent).toContain('Kundenliste')
   })
 
-  /** Only what the first offer needs: the rest starts from the tenant's defaults. */
-  it('partnerPageAsksOnlyWhatTheFirstOfferNeedsTest', async () => {
+  /** The first register asks what the first offer needs; the rest waits in its own register. */
+  it('partnerPageKeepsTheRestInRegistersOfTheirOwnTest', async () => {
     await render('/kunden/neu')
 
-    expect(field('Firmenname')).toBeDefined()
-    expect(field('PLZ')).toBeDefined()
-    expect(field('Sprache')).toBeUndefined()
-    expect(field('Währung')).toBeUndefined()
-    expect(field('UID')).toBeUndefined()
-    expect(field('Kreditlimite')).toBeUndefined()
+    expect(openedTab()).toBe('Stammdaten')
+    expect(field('Firmenname')?.closest('[hidden]')).toBeNull()
+    expect(field('Sprache')?.closest('[hidden]')).not.toBeNull()
+    expect(field('UID')?.closest('[hidden]')).not.toBeNull()
+
+    await openTab('Konditionen')
+
+    expect(field('Sprache')?.closest('[hidden]')).toBeNull()
+    expect(field('Firmenname')?.closest('[hidden]')).not.toBeNull()
+  })
+
+  /** The defaults are filled in and shown, not added out of sight on save. */
+  it('partnerPageFillsInTheTenantDefaultsTest', async () => {
+    await render('/kunden/neu')
+    await openTab('Konditionen')
+
+    expect(field('Sprache')?.value).toBe('de')
+    expect(field('Währung')?.value).toBe('CHF')
+    const term = field('Zahlungskondition') as HTMLSelectElement
+    expect(term.value).toBe('')
+    expect(term.selectedOptions[0]?.textContent).toBe('Vorgabe des Mandanten: 30 Tage netto')
+
+    await openTab('Stammdaten')
+    await type('Firmenname', 'Muster AG')
+    await type('Rechtsform', 'AG')
+    await type('PLZ', '8001')
+    await type('Ort', 'Zürich')
+    await click('Speichern')
+
+    expect(written[0].body).toEqual(expect.objectContaining({ language: 'de', currency: 'CHF' }))
+  })
+
+  it('partnerPageOpensTheRegisterOfTheRefusedFieldTest', async () => {
+    await render('/kunden/neu')
+    refusal = {
+      status: 400,
+      body: {
+        detail: 'Keine gültige Schweizer UID: CHE-1',
+        errors: [{ field: 'uid', message: 'Keine gültige Schweizer UID: CHE-1' }],
+      },
+    }
+    await type('Firmenname', 'Muster AG')
+    await type('Rechtsform', 'AG')
+    await type('PLZ', '8001')
+    await type('Ort', 'Zürich')
+    await type('UID', 'CHE-1')
+
+    await click('Speichern')
+
+    expect(openedTab()).toBe('Weitere Angaben')
+    expect(messageAt('UID')).toContain('Keine gültige Schweizer UID')
+  })
+
+  it('partnerPageOpensTheRegisterOfAMissingFieldTest', async () => {
+    await render('/kunden/neu')
+    await openTab('Konditionen')
+
+    await click('Speichern')
+
+    expect(openedTab()).toBe('Stammdaten')
+    expect(document.activeElement).toBe(field('Firmenname'))
   })
 
   it('partnerPageNamesWhatIsMissingAtTheFieldTest', async () => {
@@ -265,6 +341,7 @@ describe('PartnerPage', () => {
     await type('PLZ', '8001')
     await type('Ort', 'Zürich')
 
+    await openTab('Kontaktpersonen')
     await click('Kontaktperson hinzufügen')
     await type('Vorname', 'Eva')
     await type('Nachname', 'Huber')
@@ -275,6 +352,7 @@ describe('PartnerPage', () => {
 
     expect(written).toHaveLength(0)
     expect(container.textContent).toContain('Eva Huber')
+    expect(openedTab()).toBe('Kontaktpersonen2')
     await click('Speichern')
 
     expect(written).toHaveLength(1)
