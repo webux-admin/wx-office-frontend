@@ -177,19 +177,9 @@ async function type(label: string, value: string) {
   })
 }
 
-/** Opens a register of the mask by its name. */
-async function openTab(label: string) {
-  const found = [...container.querySelectorAll('[role="tab"]')].find((tab) =>
-    tab.textContent?.startsWith(label),
-  ) as HTMLButtonElement | undefined
-  if (!found) throw new Error(`Kein Register "${label}"`)
-  await act(async () => found.click())
-  await settle()
-}
-
-/** The name of the register that is open. */
-function openedTab(): string | undefined {
-  return container.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? undefined
+/** Whether a field sits in the left column, where the record itself is typed. */
+function inMainPanel(label: string): boolean {
+  return field(label)?.closest('section')?.querySelector('h2')?.textContent === 'Stammdaten'
 }
 
 function button(label: string): HTMLButtonElement {
@@ -241,25 +231,21 @@ describe('PartnerPage', () => {
     expect(container.textContent).toContain('Kundenliste')
   })
 
-  /** The first register asks what the first offer needs; the rest waits in its own register. */
-  it('partnerPageKeepsTheRestInRegistersOfTheirOwnTest', async () => {
+  /** One page: what one types on the left, the defaults beside it, no registers. */
+  it('partnerPageShowsEverythingOnOnePageTest', async () => {
     await render('/kunden/neu')
 
-    expect(openedTab()).toBe('Stammdaten')
-    expect(field('Firmenname')?.closest('[hidden]')).toBeNull()
-    expect(field('Sprache')?.closest('[hidden]')).not.toBeNull()
-    expect(field('UID')?.closest('[hidden]')).not.toBeNull()
-
-    await openTab('Konditionen')
-
-    expect(field('Sprache')?.closest('[hidden]')).toBeNull()
-    expect(field('Firmenname')?.closest('[hidden]')).not.toBeNull()
+    expect(container.querySelector('[role="tablist"]')).toBeNull()
+    expect(inMainPanel('Firmenname')).toBe(true)
+    expect(inMainPanel('Rechtsform')).toBe(true)
+    expect(inMainPanel('UID')).toBe(true)
+    expect(inMainPanel('Sprache')).toBe(false)
+    expect(button('Kontaktperson hinzufügen')).toBeDefined()
   })
 
   /** The defaults are filled in and shown, not added out of sight on save. */
   it('partnerPageFillsInTheTenantDefaultsTest', async () => {
     await render('/kunden/neu')
-    await openTab('Konditionen')
 
     expect(field('Sprache')?.value).toBe('de')
     expect(field('Währung')?.value).toBe('CHF')
@@ -267,7 +253,6 @@ describe('PartnerPage', () => {
     expect(term.value).toBe('')
     expect(term.selectedOptions[0]?.textContent).toBe('Vorgabe des Mandanten: 30 Tage netto')
 
-    await openTab('Stammdaten')
     await type('Firmenname', 'Muster AG')
     await type('Rechtsform', 'AG')
     await type('PLZ', '8001')
@@ -277,7 +262,7 @@ describe('PartnerPage', () => {
     expect(written[0].body).toEqual(expect.objectContaining({ language: 'de', currency: 'CHF' }))
   })
 
-  it('partnerPageOpensTheRegisterOfTheRefusedFieldTest', async () => {
+  it('partnerPageShowsARefusedUidOnTheCreateMaskTest', async () => {
     await render('/kunden/neu')
     refusal = {
       status: 400,
@@ -294,18 +279,8 @@ describe('PartnerPage', () => {
 
     await click('Speichern')
 
-    expect(openedTab()).toBe('Weitere Angaben')
     expect(messageAt('UID')).toContain('Keine gültige Schweizer UID')
-  })
-
-  it('partnerPageOpensTheRegisterOfAMissingFieldTest', async () => {
-    await render('/kunden/neu')
-    await openTab('Konditionen')
-
-    await click('Speichern')
-
-    expect(openedTab()).toBe('Stammdaten')
-    expect(document.activeElement).toBe(field('Firmenname'))
+    expect(container.textContent).not.toContain('Kundenliste')
   })
 
   it('partnerPageNamesWhatIsMissingAtTheFieldTest', async () => {
@@ -341,7 +316,6 @@ describe('PartnerPage', () => {
     await type('PLZ', '8001')
     await type('Ort', 'Zürich')
 
-    await openTab('Kontaktpersonen')
     await click('Kontaktperson hinzufügen')
     await type('Vorname', 'Eva')
     await type('Nachname', 'Huber')
@@ -352,7 +326,6 @@ describe('PartnerPage', () => {
 
     expect(written).toHaveLength(0)
     expect(container.textContent).toContain('Eva Huber')
-    expect(openedTab()).toBe('Kontaktpersonen2')
     await click('Speichern')
 
     expect(written).toHaveLength(1)

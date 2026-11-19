@@ -16,9 +16,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **auth** — Anmeldung, Sitzung, Mandantenwechsel, geschützte Routen. ✅ umgesetzt
 - **shell** — Seitenleiste, Kopfzeile, Navigation. ✅ umgesetzt
 - **dashboard** — Übersicht mit Modulkacheln. ✅ umgesetzt
-- **partner** — Kunden und Lieferanten. Pilot der Überarbeitung: Erfassen in vier Registern —
-  Stammdaten mit Pflichtadresse, Kontaktpersonen, Konditionen und Weitere Angaben, mit den
-  Vorgaben des Mandanten ausgefüllt (ADR-0051, ADR-0052); die Bearbeitungsmaske zeigt eine
+- **partner** — Kunden und Lieferanten. Pilot der Überarbeitung: Erfassen auf einer Seite —
+  Stammdaten mit UID und Pflichtadresse links, die Vorgaben des Mandanten ausgefüllt rechts,
+  Kontaktpersonen darunter (ADR-0051, ADR-0053); die Bearbeitungsmaske zeigt eine
   Faktenzeile über den Registern, Reaktivieren steht im Kopf (ADR-0050)
 - **product** — Produkte, Preisgruppen, Kundenpreise
 - **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je

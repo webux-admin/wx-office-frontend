@@ -18,7 +18,6 @@ import { useAuth } from '../auth/useAuth'
 import { CUSTOMER_CREDIT_PATH, CUSTOMER_CREDIT_RIGHTS } from '../lib/customerCredit'
 import { DUNNING_MODULE, DUNNING_RIGHTS } from '../lib/dunning'
 import {
-  fieldErrorsOf,
   isToldByFields,
   nestedErrors,
   prefixedErrors,
@@ -77,45 +76,31 @@ type Tab =
 /** Why the fields that identify a record no longer take input once it is stored. */
 const LOCKED = 'Steht mit dem Anlegen fest und lässt sich nicht mehr ändern.'
 
-/** The registers of the create mask. */
-type CreateTab = 'stammdaten' | 'kontakte' | 'konditionen' | 'weitere'
-
-/** The fields of the create mask that can show a message of their own, by register. */
-const CREATE_TABS: Record<CreateTab, readonly string[]> = {
-  stammdaten: [
-    'name',
-    'legalForm',
-    'salutation',
-    'firstName',
-    'lastName',
-    'email',
-    'phone',
-    'website',
-    'addresses.street',
-    'addresses.buildingNumber',
-    'addresses.postalCode',
-    'addresses.town',
-    'addresses.country',
-  ],
-  kontakte: [],
-  konditionen: ['paymentTerm', 'currency', 'language', 'creditLimit', 'creditorReference'],
-  weitere: ['uid', 'commercialRegisterName', 'roles', 'notes'],
-}
-
-/** Every field of the create mask that can show a message of its own. */
-const CREATE_FIELDS = Object.values(CREATE_TABS).flat()
-
-/**
- * The first register, in the order of the tabs, that holds one of the named fields.
- *
- * @param fields the fields with a message
- * @returns the register to open, or undefined when no field of the mask is named
- */
-function createTabOf(fields: string[]): CreateTab | undefined {
-  return (Object.keys(CREATE_TABS) as CreateTab[]).find((tab) =>
-    CREATE_TABS[tab].some((field) => fields.includes(field)),
-  )
-}
+/** The fields of the create mask that can show a message of their own. */
+const CREATE_FIELDS = [
+  'name',
+  'legalForm',
+  'uid',
+  'salutation',
+  'firstName',
+  'lastName',
+  'email',
+  'phone',
+  'website',
+  'addresses.street',
+  'addresses.buildingNumber',
+  'addresses.postalCode',
+  'addresses.town',
+  'addresses.country',
+  'paymentTerm',
+  'currency',
+  'language',
+  'creditLimit',
+  'creditorReference',
+  'commercialRegisterName',
+  'roles',
+  'notes',
+] as const
 
 /** The fields of the register «Stammdaten» that can show a message of their own. */
 const EDIT_FIELDS = [
@@ -212,19 +197,14 @@ function FormNotice({
 }
 
 /**
- * Creating a customer or supplier.
+ * Creating a customer or supplier, on one page.
  *
- * <p>The register «Stammdaten» holds what the first offer or order needs: kind, name, the
- * postal address (postcode and town required) and how to reach them. The other registers hold
- * the rest of the record, already filled in with the tenant's defaults, so they only need a
- * look when something differs: the contact persons, the terms and the further details. The
- * recipient of the address is the name of the record, and the address becomes the default one.
- * Contacts go with the record in the same request. Saving closes the mask and goes back to the
- * list (ADR-0003).
- *
- * <p>All registers stay mounted and only the open one is shown. A hidden dropdown still fills
- * in the tenant's default, and a message on a hidden field still counts: saving then opens the
- * first register with a message.
+ * <p>Left, what one types: kind, name, legal form and UID, the postal address (postcode and
+ * town required) and how to reach them. Right, what starts from the tenant's defaults and only
+ * needs a look when something differs: the terms, then the further details. Below, the contact
+ * persons. The recipient of the address is the name of the record, and the address becomes the
+ * default one. Contacts go with the record in the same request. Saving closes the mask and goes
+ * back to the list (ADR-0003).
  */
 function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: RoleWording }) {
   const { can } = useAuth()
@@ -236,7 +216,6 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
   const [form, setForm] = useState<PartnerForm>(() => emptyPartner(wording.role))
   const [address, setAddress] = useState<AddressForm>(() => emptyAddress('', true))
   const [contacts, setContacts] = useState<PartnerContact[]>([])
-  const [tab, setTab] = useState<CreateTab>('stammdaten')
   const set = <K extends keyof PartnerForm>(field: K, value: PartnerForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
@@ -264,38 +243,21 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
       invalidateAfterPartnerChange(queryClient, tenantId)
       void navigate(origin.from, { replace: true })
     },
-    // The refused field may sit in a register that is not open.
-    onError: (error) => {
-      const refused = createTabOf(Object.keys(fieldErrorsOf(error)))
-      if (refused) setTab(refused)
-    },
   })
 
-  const validate = () => {
+  const { errors, own, check } = useFieldErrors(() => {
     // The recipient is the name of the record, which has a message of its own.
     const postal = Object.fromEntries(
       Object.entries(addressComplaints(fullAddress)).filter(([field]) => field !== 'name'),
     )
     return { ...partnerComplaints(complete, wording), ...prefixedErrors(postal, 'addresses.') }
-  }
-  const { errors, own, check } = useFieldErrors(validate, save.error)
+  }, save.error)
 
   const submit = () => {
-    if (check()) {
-      save.mutate()
-      return
-    }
-    const wrong = createTabOf(Object.keys(validate()))
-    if (wrong) setTab(wrong)
+    if (check()) save.mutate()
   }
 
   const person = form.partnerType === 'PERSON'
-  const tabs: { id: CreateTab; label: string; count?: number }[] = [
-    { id: 'stammdaten', label: 'Stammdaten' },
-    { id: 'kontakte', label: 'Kontaktpersonen', count: contacts.length },
-    { id: 'konditionen', label: 'Konditionen' },
-    { id: 'weitere', label: 'Weitere Angaben' },
-  ]
 
   return (
     <FormMask
@@ -312,13 +274,12 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
           </Button>
         )
       }
-      tabs={{ items: tabs, active: tab, onChange: setTab }}
     >
       <FormNotice error={save.error} own={own} shown={CREATE_FIELDS} />
 
-      <div {...track} className="max-w-dialog-wide">
-        <div hidden={tab !== 'stammdaten'}>
-          <Panel>
+      <div {...track} className="grid gap-6">
+        <div className="grid gap-6 lg:grid-cols-5">
+          <Panel title="Stammdaten" className="lg:col-span-3">
             <div className="grid gap-5">
               {kinds.length > 0 && (
                 <SegmentedControl
@@ -333,66 +294,73 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
                 />
               )}
 
-              <div className="grid gap-4 sm:grid-cols-4">
-                {person ? (
-                  <>
-                    <MasterDataSelect
-                      label="Anrede"
-                      tenantId={tenantId}
-                      list="salutations"
-                      value={form.salutation}
-                      onChange={(code) => set('salutation', code)}
-                      disabled={!mayWrite}
-                      emptyLabel="Ohne Anrede"
-                      error={errors.salutation}
-                    />
-                    <TextField
-                      label="Vorname"
-                      value={form.firstName}
-                      onChange={(event) => set('firstName', event.target.value)}
-                      disabled={!mayWrite}
-                      maxLength={60}
-                      autoFocus
-                      error={errors.firstName}
-                    />
-                    <TextField
-                      label="Nachname"
-                      value={form.lastName}
-                      onChange={(event) => set('lastName', event.target.value)}
-                      disabled={!mayWrite}
-                      maxLength={60}
-                      required
-                      error={errors.lastName}
-                      className="sm:col-span-2"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <TextField
-                      label="Firmenname"
-                      value={form.name}
-                      onChange={(event) => set('name', event.target.value)}
-                      disabled={!mayWrite}
-                      maxLength={70}
-                      required
-                      autoFocus
-                      error={errors.name}
-                      className="sm:col-span-3"
-                    />
-                    <MasterDataSelect
-                      label="Rechtsform"
-                      tenantId={tenantId}
-                      list="legal-forms"
-                      value={form.legalForm}
-                      onChange={(code) => set('legalForm', code)}
-                      disabled={!mayWrite}
-                      emptyLabel="Bitte wählen"
-                      required
-                      error={errors.legalForm}
-                    />
-                  </>
-                )}
-              </div>
+              {person ? (
+                <div className="grid gap-4 sm:grid-cols-4">
+                  <MasterDataSelect
+                    label="Anrede"
+                    tenantId={tenantId}
+                    list="salutations"
+                    value={form.salutation}
+                    onChange={(code) => set('salutation', code)}
+                    disabled={!mayWrite}
+                    emptyLabel="Ohne Anrede"
+                    error={errors.salutation}
+                  />
+                  <TextField
+                    label="Vorname"
+                    value={form.firstName}
+                    onChange={(event) => set('firstName', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={60}
+                    autoFocus
+                    error={errors.firstName}
+                  />
+                  <TextField
+                    label="Nachname"
+                    value={form.lastName}
+                    onChange={(event) => set('lastName', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={60}
+                    required
+                    error={errors.lastName}
+                    className="sm:col-span-2"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Firmenname"
+                    value={form.name}
+                    onChange={(event) => set('name', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={70}
+                    required
+                    autoFocus
+                    error={errors.name}
+                    className="sm:col-span-2"
+                  />
+                  <MasterDataSelect
+                    label="Rechtsform"
+                    tenantId={tenantId}
+                    list="legal-forms"
+                    value={form.legalForm}
+                    onChange={(code) => set('legalForm', code)}
+                    disabled={!mayWrite}
+                    emptyLabel="Bitte wählen"
+                    required
+                    error={errors.legalForm}
+                  />
+                  <TextField
+                    label="UID"
+                    value={form.uid}
+                    onChange={(event) => set('uid', event.target.value)}
+                    disabled={!mayWrite}
+                    maxLength={20}
+                    placeholder="CHE-123.456.789"
+                    error={errors.uid}
+                  />
+                </div>
+              )}
 
               <fieldset className="border-t border-line-subtle pt-4">
                 <legend className="mb-3 flex items-center gap-1 text-small font-medium text-text-secondary">
@@ -441,45 +409,21 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
               </div>
             </div>
           </Panel>
-        </div>
 
-        <div hidden={tab !== 'kontakte'}>
-          <Panel>
-            <NewContacts
-              tenantId={tenantId}
-              contacts={contacts}
-              onChange={setContacts}
-              disabled={!mayWrite}
-            />
-          </Panel>
-        </div>
+          <div className="grid gap-6 self-start lg:col-span-2">
+            <Panel title="Konditionen">
+              <PartnerConditionFields
+                tenantId={tenantId}
+                form={form}
+                set={set}
+                disabled={!mayWrite}
+                errors={errors}
+              />
+            </Panel>
 
-        <div hidden={tab !== 'konditionen'}>
-          <Panel>
-            <PartnerConditionFields
-              tenantId={tenantId}
-              form={form}
-              set={set}
-              disabled={!mayWrite}
-              errors={errors}
-            />
-          </Panel>
-        </div>
-
-        <div hidden={tab !== 'weitere'}>
-          <Panel>
-            <div className="grid gap-5">
-              {!person && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <TextField
-                    label="UID"
-                    value={form.uid}
-                    onChange={(event) => set('uid', event.target.value)}
-                    disabled={!mayWrite}
-                    maxLength={20}
-                    placeholder="CHE-123.456.789"
-                    error={errors.uid}
-                  />
+            <Panel title="Weitere Angaben">
+              <div className="grid gap-5">
+                {!person && (
                   <TextField
                     label="Handelsregistername"
                     value={form.commercialRegisterName}
@@ -489,27 +433,36 @@ function PartnerCreateMask({ tenantId, wording }: { tenantId: number; wording: R
                     error={errors.commercialRegisterName}
                     tooltip="Nur ausfüllen, wenn der Eintrag im Handelsregister anders lautet als der Firmenname."
                   />
-                </div>
-              )}
-              <PartnerRoleFields
-                form={form}
-                set={set}
-                disabled={!mayWrite}
-                wording={wording}
-                errors={errors}
-              />
-              <TextAreaField
-                label="Interne Notiz"
-                value={form.notes}
-                onChange={(event) => set('notes', event.target.value)}
-                disabled={!mayWrite}
-                rows={4}
-                error={errors.notes}
-                tooltip="Nur für das Backoffice, erscheint auf keinem Beleg."
-              />
-            </div>
-          </Panel>
+                )}
+                <PartnerRoleFields
+                  form={form}
+                  set={set}
+                  disabled={!mayWrite}
+                  wording={wording}
+                  errors={errors}
+                />
+                <TextAreaField
+                  label="Interne Notiz"
+                  value={form.notes}
+                  onChange={(event) => set('notes', event.target.value)}
+                  disabled={!mayWrite}
+                  rows={3}
+                  error={errors.notes}
+                  tooltip="Nur für das Backoffice, erscheint auf keinem Beleg."
+                />
+              </div>
+            </Panel>
+          </div>
         </div>
+
+        <Panel title="Kontaktpersonen">
+          <NewContacts
+            tenantId={tenantId}
+            contacts={contacts}
+            onChange={setContacts}
+            disabled={!mayWrite}
+          />
+        </Panel>
       </div>
     </FormMask>
   )

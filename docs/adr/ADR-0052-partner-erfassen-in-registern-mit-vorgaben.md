@@ -1,6 +1,6 @@
 # ADR-0052 — Beim Erfassen eines Partners stehen alle Felder in Registern, mit den Vorgaben ausgefüllt
 
-- **Status:** Angenommen
+- **Status:** Abgelöst durch [ADR-0053](ADR-0053-partner-erfassen-auf-einer-seite.md)
 - **Datum:** 2026-11-19
 - **Verhältnis:** Ändert Abschnitt 3 von
   [ADR-0050](ADR-0050-hinweise-als-tooltip-fehler-am-feld.md) («Erfassen fragt nur das Nötige»)
