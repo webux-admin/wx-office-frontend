@@ -17,9 +17,9 @@ import { invalidateAfterPartnerChange } from './partnerRefresh'
 /**
  * The addresses of one record, with everything the API can do to them: add, replace, remove.
  *
- * <p>Each kind of document goes to at most one address and there is at most one default
- * address. Both rules belong to the backend; its answer is what the dialog shows when a
- * second invoice address is set.
+ * <p>Several addresses may share a usage, three delivery addresses for instance; the document
+ * picks one of them. There is one default address: ticking it on another address moves the
+ * mark there (backend ADR-0135).
  */
 export function PartnerAddresses({
   tenantId,

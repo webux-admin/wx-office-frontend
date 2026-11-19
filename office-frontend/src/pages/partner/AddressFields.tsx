@@ -180,7 +180,7 @@ export function AddressFields({
 
           <CheckboxField
             label="Standardadresse"
-            tooltip="Gilt für jede Belegart, für die oben keine eigene Adresse angekreuzt ist."
+            tooltip="Gilt für jede Belegart, für die keine eigene Adresse angekreuzt ist. Es gibt nur eine: ein Häkchen hier nimmt es der bisherigen weg."
             checked={form.useAsDefault}
             onChange={(event) => onChange({ ...form, useAsDefault: event.target.checked })}
             disabled={disabled}
