@@ -29,6 +29,8 @@ export type AssignmentRow = {
   documentTypeId: string
   /** One row per copy of that kind, in printing order. */
   copies: CopyRow[]
+  /** How many sheets labelled «Kopie» on top, as typed. `0` means none. */
+  extraCopies: string
 }
 
 /** How many sheets one copy may ask for; the backend agrees. */
@@ -55,7 +57,28 @@ export function toAssignmentRows(
       defaultCopies: copy.defaultCopies,
       copies: `${copy.copies}`,
     })),
+    extraCopies: `${entry.extraCopies ?? 0}`,
   }))
+}
+
+/**
+ * The copies a kind of document prints, as rows that follow it.
+ *
+ * <p>Used when another kind is picked: its copies come from the catalogue, so the fields
+ * stay on screen instead of waiting for the next answer of the server.
+ *
+ * @param type the kind that was picked, `undefined` when none is known
+ * @returns one row per copy, each at the count the kind asks for
+ */
+export function copyRowsOf(type: DocumentType | undefined): CopyRow[] {
+  return [...(type?.copies ?? [])]
+    .sort((left, right) => left.position - right.position)
+    .map((copy) => ({
+      position: copy.position,
+      label: copy.label,
+      defaultCopies: copy.copies ?? 1,
+      copies: `${copy.copies ?? 1}`,
+    }))
 }
 
 /**
@@ -73,8 +96,7 @@ export function defaultNameOf(
   category: DocumentCategory,
 ): string | null {
   return (
-    types.find((type) => type.category === category && type.categoryDefault === true)?.name ??
-    null
+    types.find((type) => type.category === category && type.categoryDefault === true)?.name ?? null
   )
 }
 
@@ -84,6 +106,7 @@ export type AssignmentPayload = {
     category: DocumentCategory
     documentTypeId?: number
     copies: { position: number; copies: number }[]
+    extraCopies?: number
   }[]
 }
 
@@ -102,17 +125,29 @@ export type AssignmentPayload = {
  */
 export function assignmentPayload(rows: readonly AssignmentRow[]): AssignmentPayload {
   const assignments = rows
-    .map((row) => ({
-      category: row.category,
-      documentTypeId: row.documentTypeId === '' ? undefined : Number(row.documentTypeId),
-      copies: row.copies
-        .filter((copy) => (parseDecimal(copy.copies) ?? copy.defaultCopies) !== copy.defaultCopies)
-        .map((copy) => ({
-          position: copy.position,
-          copies: parseDecimal(copy.copies) ?? copy.defaultCopies,
-        })),
-    }))
-    .filter((entry) => entry.documentTypeId !== undefined || entry.copies.length > 0)
+    .map((row) => {
+      const extra = parseDecimal(row.extraCopies) ?? 0
+      return {
+        category: row.category,
+        documentTypeId: row.documentTypeId === '' ? undefined : Number(row.documentTypeId),
+        copies: row.copies
+          .filter(
+            (copy) => (parseDecimal(copy.copies) ?? copy.defaultCopies) !== copy.defaultCopies,
+          )
+          .map((copy) => ({
+            position: copy.position,
+            copies: parseDecimal(copy.copies) ?? copy.defaultCopies,
+          })),
+        // Left out at zero: the whole set is replaced, so a missing count means none.
+        ...(extra > 0 ? { extraCopies: extra } : {}),
+      }
+    })
+    .filter(
+      (entry) =>
+        entry.documentTypeId !== undefined ||
+        entry.copies.length > 0 ||
+        entry.extraCopies !== undefined,
+    )
   return { assignments }
 }
 
@@ -125,6 +160,10 @@ export function assignmentPayload(rows: readonly AssignmentRow[]): AssignmentPay
  */
 export function assignmentComplaint(rows: readonly AssignmentRow[]): string | null {
   for (const row of rows) {
+    const extra = parseDecimal(row.extraCopies.trim() === '' ? '0' : row.extraCopies)
+    if (extra === null || !Number.isInteger(extra) || extra < 0 || extra > MAX_SHEETS) {
+      return `Die Anzahl Kopien liegt zwischen 0 und ${MAX_SHEETS}.`
+    }
     for (const copy of row.copies) {
       const sheets = parseDecimal(copy.copies)
       if (sheets === null) return `Die Anzahl bei «${copy.label}» ist keine Zahl.`

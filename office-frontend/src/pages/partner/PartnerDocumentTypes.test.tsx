@@ -201,7 +201,7 @@ describe('PartnerDocumentTypes', () => {
 
     await render()
 
-    expect(text()).toContain('Eigene Abmachung')
+    expect(text()).toContain('Fest für diesen Kunden.')
     expect(selects()[0].value).toBe('9')
   })
 
@@ -305,6 +305,22 @@ describe('PartnerDocumentTypes', () => {
 
     expect(text()).toContain('Die Anzahl bei «Ablage» ist keine Zahl.')
     expect(sent.some((request) => request.method === 'PUT')).toBe(false)
+  })
+
+  /** Original and Kopie stand side by side, and the copies travel on their own. */
+  it('partnerDocumentTypesSendsTheExtraCopiesTest', async () => {
+    assigned = WITH_COPIES
+
+    await render()
+    type(fieldNamed('Kopie'), '2')
+    click(buttonNamed('Übernehmen'))
+    await settle()
+
+    expect(sent.find((request) => request.method === 'PUT')?.body).toEqual({
+      assignments: [
+        { category: 'INVOICE', documentTypeId: undefined, copies: [], extraCopies: 2 },
+      ],
+    })
   })
 
   it('partnerDocumentTypesWithAKindThatIsNotPrintedTest', async () => {

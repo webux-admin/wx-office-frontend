@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { ErrorNotice, LoadingBlock } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
@@ -9,15 +8,14 @@ import { api } from '../../lib/api'
 import type { DocumentType, PartnerDocumentType } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { TextField } from '../../components/TextField'
-import { Tooltip } from '../../components/Tooltip'
 import {
   assignmentComplaint,
   assignmentPayload,
+  copyRowsOf,
   defaultNameOf,
   describeCopyRow,
   toAssignmentRows,
   type AssignmentRow,
-  type CopyRow,
 } from './partnerTypeForm'
 
 const TITLE = 'Dokumente'
@@ -129,14 +127,23 @@ function AssignmentPanel({
   }
 
   const replace = (category: string, documentTypeId: string) => {
-    // The copies belong to the kind that was picked, so the rows for the old one go. What
-    // the new kind prints comes back with the next answer.
+    // The copies belong to the kind that was picked, so they are read from it. An empty id
+    // stands for the default of the step, whose copies the catalogue knows as well.
+    const picked =
+      documentTypeId === ''
+        ? types.find((type) => type.category === category && type.categoryDefault === true)
+        : types.find((type) => `${type.id}` === documentTypeId)
     change(
       rows.map((row) =>
-        row.category === category ? { ...row, documentTypeId, copies: [] } : row,
+        row.category === category
+          ? { ...row, documentTypeId, copies: copyRowsOf(picked) }
+          : row,
       ),
     )
   }
+
+  const setExtraCopies = (category: string, value: string) =>
+    change(rows.map((row) => (row.category === category ? { ...row, extraCopies: value } : row)))
 
   const setCopies = (category: string, position: number, value: string) =>
     change(
@@ -194,21 +201,10 @@ function AssignmentPanel({
           return (
             <div
               key={row.category}
-              className="rounded-[var(--radius-md)] border border-line-subtle p-3"
+              className="grid items-start gap-3 border-b border-line-subtle pb-3 last:border-b-0 last:pb-0 sm:grid-cols-[minmax(0,2fr)_repeat(auto-fit,minmax(6rem,1fr))]"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
-                <span className="text-small font-medium text-text-secondary">
-                  {categoryLabel(row.category)}
-                </span>
-                {row.documentTypeId === '' ? (
-                  <Badge tone="neutral">Standardbelegart</Badge>
-                ) : (
-                  <Badge tone="accent">Eigene Abmachung</Badge>
-                )}
-              </div>
-
               <SelectField
-                label="Belegart"
+                label={categoryLabel(row.category)}
                 value={row.documentTypeId}
                 disabled={!mayWrite}
                 onChange={(event) => replace(row.category, event.target.value)}
@@ -227,11 +223,39 @@ function AssignmentPanel({
                 ))}
               </SelectField>
 
-              <CopiesForCustomer
-                copies={row.copies}
-                disabled={!mayWrite}
-                onChange={(position, value) => setCopies(row.category, position, value)}
-              />
+              {row.copies.length === 0 ? (
+                <p className="self-center text-small text-text-tertiary sm:col-span-2">
+                  Diese Belegart wird nicht gedruckt, also gibt es nichts einzustellen.
+                </p>
+              ) : (
+                <>
+                  {row.copies.map((copy) => (
+                    <TextField
+                      key={copy.position}
+                      label={copy.label}
+                      value={copy.copies}
+                      inputMode="numeric"
+                      numeric
+                      maxLength={2}
+                      disabled={!mayWrite}
+                      onChange={(event) =>
+                        setCopies(row.category, copy.position, event.target.value)
+                      }
+                      tooltip={describeCopyRow(copy)}
+                    />
+                  ))}
+                  <TextField
+                    label="Kopie"
+                    value={row.extraCopies}
+                    inputMode="numeric"
+                    numeric
+                    maxLength={2}
+                    disabled={!mayWrite}
+                    onChange={(event) => setExtraCopies(row.category, event.target.value)}
+                    tooltip="Zusätzliche Exemplare mit der Aufschrift «Kopie», gedruckt wie das Original. 0 heisst: keine Kopie."
+                  />
+                </>
+              )}
             </div>
           )
         })}
@@ -239,59 +263,5 @@ function AssignmentPanel({
         {failure !== null && failure !== undefined && <ErrorNotice error={failure} />}
       </div>
     </Panel>
-  )
-}
-
-/**
- * How many sheets of each copy this customer gets.
- *
- * <p>Shows what the kind of document says next to what was agreed, because that is the whole
- * question here: only a difference is stored, and a field that shows «2» without saying what
- * it deviates from would leave the reader guessing.
- *
- * <p>Zero is a value, not an empty field: this customer does not get that copy at all.
- */
-function CopiesForCustomer({
-  copies,
-  disabled,
-  onChange,
-}: {
-  copies: CopyRow[]
-  disabled: boolean
-  onChange: (position: number, value: string) => void
-}) {
-  if (copies.length === 0) {
-    return (
-      <p className="mt-3 border-t border-line-subtle pt-3 text-small text-text-tertiary">
-        Diese Belegart wird nicht gedruckt, also gibt es nichts einzustellen.
-      </p>
-    )
-  }
-
-  return (
-    <div className="mt-3 border-t border-line-subtle pt-3">
-      <p className="flex items-center gap-1.5 pb-2 text-small font-medium text-text-secondary">
-        Ausfertigungen
-        <Tooltip
-          text="0 heisst: dieser Kunde bekommt diese Ausfertigung nicht. Gespeichert wird nur, was von der Belegart abweicht."
-          label="Hinweis zu Ausfertigungen"
-        />
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {copies.map((copy) => (
-          <TextField
-            key={copy.position}
-            label={copy.label}
-            value={copy.copies}
-            inputMode="numeric"
-            numeric
-            maxLength={2}
-            disabled={disabled}
-            onChange={(event) => onChange(copy.position, event.target.value)}
-            tooltip={describeCopyRow(copy)}
-          />
-        ))}
-      </div>
-    </div>
   )
 }

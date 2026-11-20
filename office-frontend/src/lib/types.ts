@@ -1896,6 +1896,8 @@ export type PartnerDocumentType = {
   active: boolean
   /** What comes out of the printer for this customer, copy by copy. */
   copies?: PartnerDocumentCopy[]
+  /** How many sheets labelled «Kopie» this customer gets on top of the original (backend ADR-0137). */
+  extraCopies?: number
 }
 
 /**

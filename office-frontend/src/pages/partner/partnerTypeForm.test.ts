@@ -3,6 +3,7 @@ import type { DocumentType, PartnerDocumentType } from '../../lib/types'
 import {
   assignmentComplaint,
   assignmentPayload,
+  copyRowsOf,
   defaultNameOf,
   describeCopyRow,
   toAssignmentRows,
@@ -30,7 +31,7 @@ function copyRow(fields: Partial<CopyRow> = {}): CopyRow {
 
 /** One row of the mask, with only what the test cares about spelled out. */
 function row(fields: Partial<AssignmentRow> = {}): AssignmentRow {
-  return { category: 'INVOICE', documentTypeId: '', copies: [], ...fields }
+  return { category: 'INVOICE', documentTypeId: '', copies: [], extraCopies: '0', ...fields }
 }
 
 /** One kind of the catalogue, with only what the test cares about spelled out. */
@@ -229,5 +230,52 @@ describe('describeCopyRow', () => {
     expect(describeCopyRow(copyRow({ defaultCopies: 1, copies: '3' }))).toBe(
       'Abweichend. Die Belegart sagt 1.',
     )
+  })
+})
+
+describe('extra copies', () => {
+  it('toAssignmentRowsWithExtraCopiesTest', () => {
+    expect(toAssignmentRows([assigned({ extraCopies: 2 })])[0].extraCopies).toBe('2')
+    expect(toAssignmentRows([assigned()])[0].extraCopies).toBe('0')
+  })
+
+  it('assignmentPayloadWithExtraCopiesTest', () => {
+    expect(assignmentPayload([row({ extraCopies: '2' })])).toEqual({
+      assignments: [
+        { category: 'INVOICE', documentTypeId: undefined, copies: [], extraCopies: 2 },
+      ],
+    })
+  })
+
+  /** Zero copies say nothing: the step is left out, which clears them in the backend. */
+  it('assignmentPayloadWithZeroExtraCopiesTest', () => {
+    expect(assignmentPayload([row({ extraCopies: '0' })])).toEqual({ assignments: [] })
+  })
+
+  it('assignmentComplaintWithTooManyExtraCopiesTest', () => {
+    expect(assignmentComplaint([row({ extraCopies: '100' })])).toBe(
+      'Die Anzahl Kopien liegt zwischen 0 und 99.',
+    )
+    expect(assignmentComplaint([row({ extraCopies: 'zwei' })])).toBe(
+      'Die Anzahl Kopien liegt zwischen 0 und 99.',
+    )
+    expect(assignmentComplaint([row({ extraCopies: '' })])).toBeNull()
+  })
+
+  it('copyRowsOfTest', () => {
+    const rows = copyRowsOf(
+      type({
+        copies: [
+          { position: 2, label: 'Ablage', copies: 2 },
+          { position: 1, label: 'Original' },
+        ],
+      }),
+    )
+
+    expect(rows).toEqual([
+      { position: 1, label: 'Original', defaultCopies: 1, copies: '1' },
+      { position: 2, label: 'Ablage', defaultCopies: 2, copies: '2' },
+    ])
+    expect(copyRowsOf(undefined)).toEqual([])
   })
 })
