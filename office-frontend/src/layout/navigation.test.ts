@@ -294,8 +294,6 @@ describe('flattenNav', () => {
       OUTBOX_PATH,
       MAIL_TEMPLATE_PATH,
       '/basisdaten/verrechnungsarten',
-      '/basisdaten/mahnarten',
-      '/basisdaten/mahnstopp-gruende',
     ])
   })
 
@@ -458,7 +456,7 @@ describe('folderFor', () => {
    */
   it('folderForOnAListEntryTest', () => {
     expect(folderFor('/basisdaten/einheiten', all, runsAll)?.label).toBe('Werte')
-    expect(folderFor('/basisdaten/mahnarten', all, runsAll)?.label).toBe('Belege')
+    expect(folderFor('/basisdaten/mahnarten', all, runsAll)?.label).toBe('Mahnwesen')
     expect(folderFor('/basisdaten/anreden', all, runsAll)?.label).toBe('Werte')
     expect(labels('/basisdaten/sprachen')).toContain('/basisdaten/laender')
   })
