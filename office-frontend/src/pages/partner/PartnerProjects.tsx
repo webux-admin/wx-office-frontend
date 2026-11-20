@@ -92,7 +92,7 @@ export function PartnerProjects({
   ]
 
   return (
-    <Panel padded={false}>
+    <Panel title="Projekte" padded={false}>
       <DataTable
         columns={columns}
         rows={result.content}

@@ -78,7 +78,13 @@ export function PartnerDunningPanel({
   return (
     <Panel
       title="Mahnwesen"
-      description="Wie dieser Kunde gemahnt wird, wenn er von der Vorgabe des Mandanten abweichen soll."
+      action={
+        current === undefined ? undefined : current.deviation ? (
+          <Badge tone="accent">Eigene Einstellung</Badge>
+        ) : (
+          <Badge tone="neutral">Folgt dem Mandanten</Badge>
+        )
+      }
     >
       <div className="grid gap-4">
         {grouping.error !== null && <ErrorNotice error={grouping.error} />}
@@ -97,7 +103,7 @@ export function PartnerDunningPanel({
                 )
               }
               disabled={!mayWrite || save.isPending}
-              hint={
+              tooltip={
                 selected === FOLLOWS_TENANT
                   ? 'Folgt der Vorgabe des Mandanten — auch wenn diese später geändert wird.'
                   : DUNNING_GROUPING_HINTS[current.grouping]
@@ -139,13 +145,6 @@ export function PartnerDunningPanel({
               {/* Aufgehoben wird auf dem eigenen Bildschirm: dort steht der Verlauf. */}
             </div>
 
-            <div>
-              {current.deviation ? (
-                <Badge tone="accent">Eigene Einstellung</Badge>
-              ) : (
-                <Badge tone="neutral">Folgt dem Mandanten</Badge>
-              )}
-            </div>
           </>
         )}
 

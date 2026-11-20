@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
-import { Button } from '../../components/Button'
-import { ErrorNotice } from '../../components/Notice'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { DataTable, type Column } from '../../components/DataTable'
+import { IconButton } from '../../components/IconButton'
 import { Panel } from '../../components/Panel'
 import { useAuth } from '../../auth/useAuth'
 import { formatDate } from '../../lib/format'
@@ -13,6 +15,7 @@ import {
   forgetPayerAccount,
   payerAccountsKey,
 } from '../../lib/matching'
+import type { LearnedAccount } from '../../lib/types'
 
 /**
  * The bank accounts this customer has been seen to pay from.
@@ -41,6 +44,7 @@ export function PartnerPayerAccounts({
   const runs = useRunsModule()
   const queryClient = useQueryClient()
   const mayForget = can(MATCHING_RIGHTS.forgetAccount)
+  const [forgetting, setForgetting] = useState<LearnedAccount | null>(null)
 
   const accounts = useQuery({
     queryKey: payerAccountsKey(tenantId, partnerId),
@@ -52,6 +56,7 @@ export function PartnerPayerAccounts({
     mutationFn: (accountId: number) => forgetPayerAccount(tenantId, partnerId, accountId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: payerAccountsKey(tenantId, partnerId) })
+      setForgetting(null)
     },
   })
 
@@ -63,44 +68,78 @@ export function PartnerPayerAccounts({
     return null
   }
 
+  const columns: Column<LearnedAccount>[] = [
+    {
+      key: 'iban',
+      header: 'IBAN',
+      render: (account) => <span className="font-mono">{account.debtorIban}</span>,
+    },
+    {
+      key: 'learnedAt',
+      header: 'Gelernt am',
+      width: 'w-column-sm',
+      render: (account) => formatDate(account.learnedAt),
+    },
+    {
+      key: 'hits',
+      header: 'Bestätigungen',
+      align: 'right',
+      width: 'w-column-sm',
+      render: (account) => account.hitCount,
+    },
+    {
+      key: 'learnedBy',
+      header: 'Von',
+      width: 'w-column-md',
+      render: (account) => <span className="text-text-secondary">{account.learnedBy}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: 'w-column-xs',
+      render: (account) =>
+        mayForget ? (
+          <span className="flex justify-end">
+            <IconButton
+              label={`Zahlungskonto ${account.debtorIban} vergessen`}
+              onClick={() => {
+                forget.reset()
+                setForgetting(account)
+              }}
+              tone="danger"
+            >
+              <Trash2 size={14} aria-hidden />
+            </IconButton>
+          </span>
+        ) : null,
+    },
+  ]
+
   return (
-    <Panel title="Gelernte Zahlungskonten">
-      <p className="mb-3 text-body text-text-secondary">
-        Von diesen Konten hat dieser Kunde bezahlt. Gelernt wird nur aus bestätigten
-        Zuordnungen; die Angabe hilft, eine Zahlung ohne Referenz zuzuordnen.
-      </p>
-      <ul className="grid gap-2">
-        {rows.map((account) => (
-          <li
-            key={account.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-line px-3 py-2"
-          >
-            <span className="grid">
-              <span className="font-mono text-body">{account.debtorIban}</span>
-              <span className="text-small text-text-tertiary">
-                seit {formatDate(account.learnedAt)} · {account.hitCount}
-                {account.hitCount === 1 ? ' Bestätigung' : ' Bestätigungen'} · {account.learnedBy}
-              </span>
-            </span>
-            {mayForget && (
-              <Button
-                variant="secondary"
-                onClick={() => forget.mutate(account.id)}
-                busy={forget.isPending}
-                title="Dieses Zahlungskonto vergessen"
-              >
-                <Trash2 size={15} aria-hidden />
-                Vergessen
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {forget.error !== null && (
-        <div className="mt-3">
-          <ErrorNotice error={forget.error} />
-        </div>
-      )}
-    </Panel>
+    <>
+      <Panel title="Gelernte Zahlungskonten" padded={false}>
+        <DataTable
+          columns={columns}
+          rows={rows}
+          keyOf={(account) => account.id}
+          empty={null}
+        />
+      </Panel>
+
+      <ConfirmDialog
+        open={forgetting !== null}
+        title="Zahlungskonto vergessen"
+        confirmLabel="Vergessen"
+        tone="danger"
+        onConfirm={() => forgetting !== null && forget.mutate(forgetting.id)}
+        onCancel={() => setForgetting(null)}
+        busy={forget.isPending}
+        error={forget.error}
+      >
+        {forgetting?.debtorIban} wird beim Kunden vergessen. Eine Zahlung von diesem Konto ohne
+        Referenz wird danach nicht mehr diesem Kunden vorgeschlagen. Eingelesene Bankauszüge
+        behalten die IBAN.
+      </ConfirmDialog>
+    </>
   )
 }

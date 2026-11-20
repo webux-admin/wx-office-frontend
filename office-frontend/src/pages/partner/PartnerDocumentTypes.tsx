@@ -9,6 +9,7 @@ import { api } from '../../lib/api'
 import type { DocumentType, PartnerDocumentType } from '../../lib/types'
 import { useCatalogueLabel } from '../../masterdata/useMasterData'
 import { TextField } from '../../components/TextField'
+import { Tooltip } from '../../components/Tooltip'
 import {
   assignmentComplaint,
   assignmentPayload,
@@ -21,8 +22,7 @@ import {
 
 const TITLE = 'Dokumente'
 
-const DESCRIPTION =
-  'Welche Belegart dieser Kunde je Vorgang bekommt und wie viele Exemplare davon gedruckt werden. Ohne eigene Abmachung gilt die Belegart des Mandanten — sie steht hier und ändert sich mit ihr.'
+const DESCRIPTION = 'Belegart und Ausfertigungen je Vorgang, wo dieser Kunde abweicht.'
 
 /**
  * Which kind of document this customer gets, step of a sale by step of a sale.
@@ -212,7 +212,7 @@ function AssignmentPanel({
                 value={row.documentTypeId}
                 disabled={!mayWrite}
                 onChange={(event) => replace(row.category, event.target.value)}
-                hint={
+                tooltip={
                   row.documentTypeId === ''
                     ? `Es gilt die Standardbelegart: ${fallback}. Wird sie verschoben, folgt dieser Kunde mit.`
                     : 'Fest für diesen Kunden. Eine spätere Änderung der Standardbelegart lässt ihn unberührt.'
@@ -270,7 +270,13 @@ function CopiesForCustomer({
 
   return (
     <div className="mt-3 border-t border-line-subtle pt-3">
-      <p className="pb-2 text-small font-medium text-text-secondary">Ausfertigungen</p>
+      <p className="flex items-center gap-1.5 pb-2 text-small font-medium text-text-secondary">
+        Ausfertigungen
+        <Tooltip
+          text="0 heisst: dieser Kunde bekommt diese Ausfertigung nicht. Gespeichert wird nur, was von der Belegart abweicht."
+          label="Hinweis zu Ausfertigungen"
+        />
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {copies.map((copy) => (
           <TextField
@@ -282,14 +288,10 @@ function CopiesForCustomer({
             maxLength={2}
             disabled={disabled}
             onChange={(event) => onChange(copy.position, event.target.value)}
-            hint={describeCopyRow(copy)}
+            tooltip={describeCopyRow(copy)}
           />
         ))}
       </div>
-      <p className="mt-2 text-small text-text-tertiary">
-        0 heisst: dieser Kunde bekommt diese Ausfertigung nicht. Gespeichert wird nur, was von
-        der Belegart abweicht.
-      </p>
     </div>
   )
 }

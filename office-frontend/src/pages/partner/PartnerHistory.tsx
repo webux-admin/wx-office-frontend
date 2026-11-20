@@ -181,7 +181,6 @@ export function PartnerHistory({
   return (
     <Panel
       title="Verlauf"
-      description="Alle Belege zu diesem Partner. Belegarten ohne Leserecht erscheinen nicht."
       padded={false}
     >
       <div className="flex flex-wrap items-end gap-4 border-b border-line-subtle px-5 py-4">
