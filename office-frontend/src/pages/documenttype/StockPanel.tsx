@@ -61,22 +61,23 @@ export function StockPanel({
   return (
     <Panel
       title="Lager"
-      description="Was das Ausstellen eines solchen Belegs mit dem Bestand macht."
+      description="Was mit dem Bestand passiert, wenn ein Beleg dieser Art ausgestellt wird."
     >
       {active.length === 0 ? (
-        <p className="text-[13px] text-text-secondary">
-          Es gibt noch keinen Lagerort. Diese Einstellung bewegt darum vorerst nichts.
+        <p className="text-body text-text-secondary">
+          Es gibt noch keinen Lagerort. Legen Sie zuerst einen an, dann lässt sich das hier
+          einstellen.
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField
-            label="Lagerwirkung"
+            label="Wirkung"
             value={form.stockEffect}
             disabled={!mayWrite}
             onChange={(event) =>
               onChange({ stockEffect: event.target.value as DocumentTypeForm['stockEffect'] })
             }
-            hint={effect?.hint}
+            tooltip={effect?.hint}
           >
             {STOCK_EFFECTS.map((entry) => (
               <option key={entry.value} value={entry.value}>
@@ -91,9 +92,9 @@ export function StockPanel({
               value={form.stockLocationId}
               disabled={!mayWrite || form.stockEffect === 'NONE'}
               onChange={(event) => onChange({ stockLocationId: event.target.value })}
-              hint="Ohne Wahl wirkt der Beleg im Vorgabe-Lagerort des Mandanten."
+              tooltip="Leer: der Standard-Lagerort."
             >
-              <option value="">Vorgabe-Lagerort</option>
+              <option value="">Standard-Lagerort</option>
               {active.map((location) => (
                 <option key={location.id} value={`${location.id}`}>
                   {stockLocationLabel(location)}
@@ -101,8 +102,8 @@ export function StockPanel({
               ))}
             </SelectField>
           ) : (
-            <div className="grid gap-0.5 text-[13px]">
-              <span className="text-[12px] text-text-tertiary">Lagerort</span>
+            <div className="grid gap-0.5 text-body">
+              <span className="text-small text-text-tertiary">Lagerort</span>
               <span>{stockLocationLabel(active[0])}</span>
             </div>
           )}
@@ -110,13 +111,13 @@ export function StockPanel({
       )}
 
       {nothingFollowed && active.length > 0 && (
-        <p className="mt-3 text-[12px] text-text-tertiary">
-          Es ist noch kein Produkt lagergeführt. Diese Einstellung bewegt darum vorerst nichts.
+        <p className="mt-3 text-small text-text-tertiary">
+          Noch kein Produkt wird im Lager geführt. Die Einstellung wirkt erst, wenn es eines gibt.
         </p>
       )}
       {form.stockEffect !== 'NONE' && (
-        <p className="mt-3 text-[12px] text-text-tertiary">
-          Die Änderung gilt für künftige Belege. Bereits gebuchte Bestände bleiben, wie sie sind.
+        <p className="mt-3 text-small text-text-tertiary">
+          Gilt für künftige Belege. Bereits gebuchte Bestände bleiben unverändert.
         </p>
       )}
     </Panel>

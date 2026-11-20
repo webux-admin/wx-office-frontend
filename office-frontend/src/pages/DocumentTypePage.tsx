@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { FactList, type Fact } from '../components/FactList'
+import { FormMask } from '../components/FormMask'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
-import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -24,6 +24,7 @@ import { PrintPanel } from './documenttype/PrintPanel'
 import { StockPanel } from './documenttype/StockPanel'
 import {
   COPY_PRICE_MODES,
+  describeCopies,
   emptyDocumentType,
   firstComplaint,
   toForm,
@@ -34,20 +35,23 @@ import {
 /** Where the mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/belegarten', label: 'Belegarten' }
 
-type Register = 'hauptdaten' | 'druck' | 'uebernahme'
+type Register = 'allgemein' | 'druck' | 'uebernahme'
 
 const REGISTERS: { id: Register; label: string }[] = [
-  { id: 'hauptdaten', label: 'Hauptdaten' },
+  { id: 'allgemein', label: 'Allgemein' },
   { id: 'druck', label: 'Druck' },
   { id: 'uebernahme', label: 'Übernahme' },
 ]
+
+/** Said by the lock icon on the two fields that are fixed once the kind exists. */
+const FIXED = 'Steht nach dem Anlegen fest, weil Nummernkreis und bestehende Belege daran hängen.'
 
 /**
  * One kind of document: what it is called, how its number looks, what it prints on, how
  * often, and out of which other kind it may be written.
  *
- * <p>A full screen rather than a dialog. Eight groups of settings with two hand-sorted lists
- * do not fit a window that has to stay small enough to see the page behind it.
+ * <p>A full screen rather than a dialog. Built on {@link FormMask} like the partner, so
+ * Escape, Ctrl+S and the question before throwing changes away behave the same (ADR-0050).
  */
 export function DocumentTypePage() {
   return (
@@ -79,6 +83,18 @@ function DocumentTypeLoader({ tenantId }: { tenantId: number }) {
   return <DocumentTypeMask key={type.data.id} tenantId={tenantId} type={type.data} />
 }
 
+/**
+ * Whether the mask holds something the user would lose by leaving.
+ *
+ * <p>A new mask ignores the form: the dropdown fills it with the standard form by itself, and
+ * that is not a change anybody made.
+ */
+function changedFrom(form: DocumentTypeForm, start: DocumentTypeForm, creating: boolean) {
+  const comparable = (value: DocumentTypeForm) =>
+    JSON.stringify(creating ? { ...value, documentLayoutId: '' } : value)
+  return comparable(form) !== comparable(start)
+}
+
 function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: DocumentType | null }) {
   const { can } = useAuth()
   const navigate = useNavigate()
@@ -86,13 +102,15 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
   const origin = originOf(useLocation().state, LIST)
   const mayWrite = can('DOCUMENT_TYPE_WRITE')
   const categoryLabel = useCatalogueLabel(tenantId, 'document-category')
-  const usageLabel = useCatalogueLabel(tenantId, 'address-usage')
+  const creating = type === null
 
-  const [form, setForm] = useState<DocumentTypeForm>(
+  const [start] = useState<DocumentTypeForm>(() =>
     type === null ? emptyDocumentType() : toForm(type),
   )
-  const [tab, setTab] = useState<Register>('hauptdaten')
+  const [form, setForm] = useState<DocumentTypeForm>(start)
+  const [tab, setTab] = useState<Register>('allgemein')
   const [complaint, setComplaint] = useState<string | null>(null)
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false)
 
   // Every kind of the tenant, for the predecessors and for the names in their list.
   const types = useQuery({
@@ -103,6 +121,11 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
   const change = (patch: Partial<DocumentTypeForm>) =>
     setForm((current) => ({ ...current, ...patch }))
 
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
+    void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+  }
+
   const save = useMutation({
     mutationFn: () => {
       const payload = toPayload(form)
@@ -111,8 +134,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
         : api.put<DocumentType>(`/api/tenants/${tenantId}/document-types/${type.id}`, payload)
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
-      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+      refresh()
       // The forms carry which kinds print on them, so that list is stale now too.
       void queryClient.invalidateQueries({ queryKey: ['print-layouts', tenantId] })
       void navigate(origin.from, { replace: true })
@@ -123,8 +145,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
     mutationFn: () =>
       api.delete<DocumentType>(`/api/tenants/${tenantId}/document-types/${type?.id}`),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
-      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
+      refresh()
       void navigate(origin.from, { replace: true })
     },
   })
@@ -137,67 +158,64 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
         `/api/tenants/${tenantId}/document-types/${type?.id}/default`,
         {},
       ),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['document-type', tenantId] })
-      void queryClient.invalidateQueries({ queryKey: ['document-types', tenantId] })
-    },
+    onSuccess: refresh,
   })
 
   const submit = () => {
-    const problem = firstComplaint(form, type === null)
+    const problem = firstComplaint(form, creating)
     setComplaint(problem)
     if (problem === null) save.mutate()
   }
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
-  // filled in and finished without reaching for the mouse.
-  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
+  const isDefault = type?.categoryDefault === true
+  // The default of a category cannot be switched off while another kind could take over;
+  // the backend refuses it, so the mask does not offer it.
+  const mayDeactivate = mayWrite && type !== null && type.active && !isDefault
 
   return (
     <>
-      <PageHeader
+      <FormMask
         title={type === null ? 'Neue Belegart' : type.name}
         back={{ to: origin.from, label: origin.label }}
+        dirty={changedFrom(form, start, creating)}
+        onSubmit={mayWrite && !save.isPending ? submit : undefined}
         subtitle={
-          <span className="flex flex-wrap items-center gap-2">
-            {type !== null && (
-              <span className="font-mono text-[12px] text-text-secondary">{type.code}</span>
-            )}
-            <span>{categoryLabel(form.category)}</span>
-            {type?.categoryDefault === true && <Badge tone="accent">Standard</Badge>}
-            {type !== null && !type.active && <Badge tone="muted">Deaktiviert</Badge>}
-          </span>
+          type === null ? (
+            'Kategorie und Code stehen nach dem Speichern fest.'
+          ) : (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-small">{type.code}</span>
+              {isDefault && <Badge tone="accent">Standard</Badge>}
+              {!type.active && <Badge tone="muted">Deaktiviert</Badge>}
+            </span>
+          )
         }
+        actions={
+          <>
+            {mayDeactivate && (
+              <Button variant="secondary" onClick={() => setConfirmingDeactivate(true)}>
+                Deaktivieren
+              </Button>
+            )}
+            {mayWrite && (
+              <Button onClick={submit} busy={save.isPending} shortcut>
+                Speichern
+              </Button>
+            )}
+          </>
+        }
+        summary={type === null ? undefined : <Summary tenantId={tenantId} type={type} />}
+        tabs={{ items: REGISTERS, active: tab, onChange: setTab }}
       >
-        {mayWrite && type !== null && type.active && (
-          <Button
-            variant="secondary"
-            busy={deactivate.isPending}
-            onClick={() => deactivate.mutate()}
-          >
-            Deaktivieren
-          </Button>
-        )}
-        {mayWrite && (
-          <Button onClick={submit} busy={save.isPending} shortcut>
-            Speichern
-          </Button>
-        )}
-      </PageHeader>
-
-      <div className="px-8 pb-12">
-        <Tabs tabs={REGISTERS} active={tab} onChange={setTab} label="Register der Belegart" />
-
         <div className="grid gap-4">
           {(complaint !== null || save.error !== null) && (
             <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
           )}
-          {deactivate.error !== null && <ErrorNotice error={deactivate.error} />}
           {markDefault.error !== null && <ErrorNotice error={markDefault.error} />}
 
-          {tab === 'hauptdaten' && (
+          {tab === 'allgemein' && (
             <>
-              <Panel title="Stammdaten">
+              <Panel title="Allgemein">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <CatalogueSelect
                     label="Kategorie"
@@ -205,30 +223,37 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     catalogue="document-category"
                     value={form.category}
                     onChange={(code) => change({ category: code as DocumentCategory })}
-                    disabled={!mayWrite || type !== null}
-                    // Only the Gutschrift has no mask; it is written from the invoice it
-                    // corrects. Saying so before saving is cheaper than finding out after.
-                    hint={
-                      salesDocumentFor(form.category) === undefined
-                        ? 'Für diese Kategorie gibt es im Frontend noch keine Maske.'
-                        : 'Steht fest, sobald die Belegart existiert.'
+                    disabled={!mayWrite || !creating}
+                    locked={creating ? undefined : FIXED}
+                    tooltip={
+                      creating
+                        ? 'Legt fest, was für ein Beleg das ist: Offerte, Auftrag, Lieferschein, Rechnung oder Gutschrift.'
+                        : undefined
                     }
                   />
                   <TextField
                     label="Code"
                     value={form.code}
                     onChange={(event) => change({ code: event.target.value })}
-                    disabled={!mayWrite || type !== null}
+                    disabled={!mayWrite || !creating}
+                    required={creating}
                     maxLength={20}
-                    hint="Pflicht und danach unveränderlich. Steht im Nummernkreis und auf dem Beleg."
+                    locked={creating ? undefined : FIXED}
+                    tooltip={
+                      creating
+                        ? 'Kurzes Kennzeichen, zum Beispiel RE. Es steht im Nummernkreis.'
+                        : undefined
+                    }
                   />
                   <TextField
                     label="Bezeichnung"
                     value={form.name}
                     onChange={(event) => change({ name: event.target.value })}
                     disabled={!mayWrite}
+                    required
                     maxLength={60}
                     className="sm:col-span-2"
+                    tooltip="So heisst die Belegart in Listen und Menüs."
                   />
                   <TextField
                     label="Nummernpräfix"
@@ -236,40 +261,22 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     onChange={(event) => change({ numberPrefix: event.target.value })}
                     disabled={!mayWrite}
                     maxLength={10}
-                    hint="Steht vor der laufenden Nummer, zum Beispiel AU. Leer heisst: der Code."
+                    tooltip="Steht vor der Belegnummer, zum Beispiel AU-2026-0001. Leer: der Code."
                   />
                   {/* Only the offer promises something with an expiry, so only its kinds
                       carry the preset. */}
                   {form.category === 'OFFER' && (
                     <TextField
-                      label="Gültigkeit in Tagen"
+                      label="Gültig für Tage"
                       value={form.offerValidityDays}
                       onChange={(event) => change({ offerValidityDays: event.target.value })}
                       disabled={!mayWrite}
                       inputMode="numeric"
                       numeric
-                      hint="Vorbelegt ‹Gültig bis› beim Anlegen: Belegdatum + Tage."
+                      tooltip="Füllt «Gültig bis» einer neuen Offerte: Belegdatum plus diese Tage. Leer: kein Vorschlag."
                     />
                   )}
                 </div>
-              </Panel>
-
-              <Panel
-                title="Aus der Kategorie"
-                description="Diese Werte folgen aus der Kategorie und lassen sich nicht einstellen."
-              >
-                <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
-                  <div className="grid gap-0.5">
-                    <dt className="text-[12px] text-text-tertiary">Adressverwendung</dt>
-                    <dd>{type === null ? '—' : usageLabel(type.addressUsage)}</dd>
-                  </div>
-                  <div className="grid gap-0.5">
-                    <dt className="text-[12px] text-text-tertiary">Maske im Frontend</dt>
-                    <dd>
-                      {salesDocumentFor(form.category) === undefined ? 'noch keine' : 'vorhanden'}
-                    </dd>
-                  </div>
-                </dl>
               </Panel>
 
               <StockPanel
@@ -281,35 +288,27 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
 
               {type !== null && (
                 <Panel
-                  title="Standardbelegart"
-                  description={`Die Belegart, mit der ${categoryLabel(form.category)} normalerweise geschrieben wird. Sie wird beim Anlegen eines Belegs vorgeschlagen und gilt für jeden Kunden ohne eigene Abmachung.`}
+                  title="Standard"
+                  description={`Neue ${categoryLabel(form.category)}-Belege starten mit der Standard-Belegart.`}
                   action={
-                    mayWrite && type.active && type.categoryDefault !== true ? (
+                    mayWrite && type.active && !isDefault ? (
                       <Button
                         variant="secondary"
                         busy={markDefault.isPending}
                         onClick={() => markDefault.mutate()}
                       >
-                        Zur Standardbelegart machen
+                        Als Standard festlegen
                       </Button>
                     ) : undefined
                   }
                 >
-                  <p className="text-[13px] text-text-secondary">
-                    {type.categoryDefault === true
-                      ? 'Diese Belegart ist der Standard ihrer Kategorie. Der Standard wird verschoben, nicht abgeschaltet: eine andere Belegart derselben Kategorie übernimmt ihn.'
-                      : `Der Standard liegt bei einer anderen Belegart. ${
-                          type.active
-                            ? 'Übernehmen heisst: die bisherige verliert ihn.'
-                            : 'Eine deaktivierte Belegart kann ihn nicht übernehmen.'
-                        }`}
+                  <p className="text-body text-text-secondary">
+                    {isDefault
+                      ? 'Diese Belegart ist der Standard. Um das zu ändern, legen Sie eine andere Belegart derselben Kategorie als Standard fest.'
+                      : type.active
+                        ? 'Eine andere Belegart ist der Standard. Legen Sie diese fest, verliert die andere den Standard.'
+                        : 'Eine deaktivierte Belegart kann nicht Standard werden.'}
                   </p>
-                  {type.categoryDefault === true && (
-                    <p className="mt-2 text-[12px] text-text-tertiary">
-                      Solange es eine andere aktive Belegart dieser Kategorie gibt, lässt sich
-                      diese hier nicht deaktivieren — erst den Standard umhängen.
-                    </p>
-                  )}
                 </Panel>
               )}
             </>
@@ -343,12 +342,9 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                 onChange={(predecessorTypeIds) => change({ predecessorTypeIds })}
                 disabled={!mayWrite}
               />
-              <Panel
-                title="Kopie eines Belegs"
-                description="Gilt für die Kopie eines Belegs dieser Art. Im Kopierdialog übersteuerbar."
-              >
+              <Panel title="Kopieren" description="Wenn jemand einen Beleg dieser Art kopiert.">
                 <SelectField
-                  label="Preise beim Kopieren"
+                  label="Preise"
                   value={form.copyPriceMode}
                   disabled={!mayWrite}
                   onChange={(event) =>
@@ -356,7 +352,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                       copyPriceMode: event.target.value as DocumentTypeForm['copyPriceMode'],
                     })
                   }
-                  hint={COPY_PRICE_MODES.find((mode) => mode.value === form.copyPriceMode)?.hint}
+                  tooltip={`${COPY_PRICE_MODES.find((mode) => mode.value === form.copyPriceMode)?.hint ?? ''} Beim Kopieren lässt sich das noch ändern.`}
                 >
                   {COPY_PRICE_MODES.map((mode) => (
                     <option key={mode.value} value={mode.value}>
@@ -368,7 +364,45 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
             </>
           )}
         </div>
-      </div>
+      </FormMask>
+
+      <ConfirmDialog
+        open={confirmingDeactivate}
+        title="Belegart deaktivieren?"
+        confirmLabel="Deaktivieren"
+        onConfirm={() => deactivate.mutate()}
+        onCancel={() => setConfirmingDeactivate(false)}
+        busy={deactivate.isPending}
+        error={deactivate.error}
+      >
+        Mit dieser Belegart lassen sich keine neuen Belege mehr anlegen. Bestehende Belege
+        bleiben, wie sie sind.
+      </ConfirmDialog>
     </>
   )
+}
+
+/** The facts above the registers: what kind of document it is and how it prints. */
+function Summary({ tenantId, type }: { tenantId: number; type: DocumentType }) {
+  const categoryLabel = useCatalogueLabel(tenantId, 'document-category')
+  const usageLabel = useCatalogueLabel(tenantId, 'address-usage')
+
+  const facts: Fact[] = [
+    {
+      label: 'Kategorie',
+      value:
+        salesDocumentFor(type.category) === undefined ? (
+          <span className="flex items-center gap-2">
+            {categoryLabel(type.category)}
+            <Badge tone="neutral">Entsteht aus der Rechnung</Badge>
+          </span>
+        ) : (
+          categoryLabel(type.category)
+        ),
+    },
+    { label: 'Adresse', value: usageLabel(type.addressUsage) },
+    { label: 'Druckvorlage', value: type.documentLayoutName },
+    { label: 'Ausdruck', value: describeCopies(type.copies) },
+  ]
+  return <FactList facts={facts} />
 }

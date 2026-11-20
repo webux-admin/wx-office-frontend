@@ -1,5 +1,5 @@
 import { parseDecimal } from '../../lib/format'
-import type { DocumentPrintout, Printer, PrinterTray } from '../../lib/types'
+import type { DocumentPrintout } from '../../lib/types'
 
 /**
  * The copies of one document while they are being edited.
@@ -12,10 +12,6 @@ export type PrintoutRow = {
   id?: number
   label: string
   copies: string
-  /** Id of the printer, as a string; empty means none is stored. */
-  printerId: string
-  /** Id of the tray, as a string; empty means none is stored. */
-  trayId: string
   /**
    * Id of the form this copy prints on, as a string. Empty means the copy is made from the
    * document itself, which is what every copy did before forms could differ per copy.
@@ -48,8 +44,6 @@ export function toPrintoutRows(printouts: readonly DocumentPrintout[] | undefine
     id: printout.id,
     label: printout.label ?? '',
     copies: `${printout.copies ?? 1}`,
-    printerId: printout.printerId === undefined ? '' : `${printout.printerId}`,
-    trayId: printout.trayId === undefined ? '' : `${printout.trayId}`,
     documentLayoutId:
       printout.documentLayoutId === undefined ? '' : `${printout.documentLayoutId}`,
     internal: printout.internal === true,
@@ -60,8 +54,6 @@ export function toPrintoutRows(printouts: readonly DocumentPrintout[] | undefine
 export type PrintoutPayload = {
   label: string
   copies: number
-  printerId?: number
-  trayId?: number
   documentLayoutId?: number
   internal: boolean
 }
@@ -85,8 +77,6 @@ export function toPrintoutPayload(rows: readonly PrintoutRow[]): {
     printouts: rows.map((row) => ({
       label: row.label.trim(),
       copies: parseDecimal(row.copies) ?? 1,
-      printerId: row.printerId === '' ? undefined : Number(row.printerId),
-      trayId: row.trayId === '' ? undefined : Number(row.trayId),
       documentLayoutId:
         row.documentLayoutId === '' ? undefined : Number(row.documentLayoutId),
       internal: row.internal,
@@ -117,11 +107,6 @@ export function printoutComplaint(rows: readonly PrintoutRow[]): string | null {
     if (!Number.isInteger(sheets)) return 'Die Anzahl ist eine ganze Zahl.'
     if (sheets < 1 || sheets > MAX_SHEETS) {
       return `Die Anzahl liegt zwischen 1 und ${MAX_SHEETS}.`
-    }
-    // A tray belongs to a printer. Without one there is nothing it could belong to, and the
-    // backend would refuse the pair rather than quietly dropping half of it.
-    if (row.trayId !== '' && row.printerId === '') {
-      return 'Ein Schacht gehört zu einem Drucker. Bitte zuerst den Drucker wählen.'
     }
   }
   return null
@@ -154,108 +139,15 @@ export function withMovedPrintout(
  * A fresh row for a copy somebody adds.
  *
  * @param count how many copies there are already
- * @returns a usual name and one sheet, on no printer in particular
+ * @returns a usual name and one sheet
  */
 export function nextPrintoutRow(count: number): PrintoutRow {
   return {
     label: PRINTOUT_LABELS[count] ?? `Exemplar ${count + 1}`,
     copies: '1',
-    printerId: '',
-    trayId: '',
     documentLayoutId: '',
     internal: false,
   }
-}
-
-/**
- * What the printer of one copy is called.
- *
- * <p>The name the document froze wins: whoever prints may hold `ORDER_READ` without
- * `PRINTER_READ`, and then there is no list of printers to look the id up in.
- *
- * @param printout the copy
- * @param printers the printers of the tenant, empty when they may not be read
- * @returns the name, or `null` when no printer is stored or none of that id is known
- */
-export function printerNameOf(
-  printout: Pick<DocumentPrintout, 'printerId' | 'printerName'>,
-  printers: readonly Printer[] = [],
-): string | null {
-  if (printout.printerName !== undefined && printout.printerName !== '') {
-    return printout.printerName
-  }
-  if (printout.printerId === undefined) return null
-  return printers.find((printer) => printer.id === printout.printerId)?.name ?? null
-}
-
-/**
- * What the tray of one copy is called.
- *
- * @param printout the copy
- * @param printers the printers of the tenant, empty when they may not be read
- * @returns the name, or `null` when no tray is stored or none of that id is known
- */
-export function trayNameOf(
-  printout: Pick<DocumentPrintout, 'printerId' | 'trayId' | 'trayName'>,
-  printers: readonly Printer[] = [],
-): string | null {
-  if (printout.trayName !== undefined && printout.trayName !== '') return printout.trayName
-  if (printout.trayId === undefined) return null
-  return traysOf(printers, printout.printerId)
-    .find((tray) => tray.id === printout.trayId)?.name ?? null
-}
-
-/**
- * The trays one printer offers.
- *
- * @param printers the printers of the tenant
- * @param printerId the printer, `undefined` while none is chosen
- * @returns its trays in the order they are kept, empty for a printer with a single tray
- */
-export function traysOf(
-  printers: readonly Printer[],
-  printerId: number | undefined,
-): PrinterTray[] {
-  if (printerId === undefined) return []
-  return printers.find((printer) => printer.id === printerId)?.trays ?? []
-}
-
-/**
- * The printers a copy may be set to.
- *
- * <p>Deactivated ones are left out, except the one this copy already carries: dropping it
- * would silently change the copy the moment somebody opens the mask.
- *
- * @param printers every printer of the tenant
- * @param chosenId the printer the copy carries, `undefined` when it carries none
- * @returns the printers to offer, in the order they came
- */
-export function selectablePrinters(
-  printers: readonly Printer[],
-  chosenId: number | undefined,
-): Printer[] {
-  return printers.filter((printer) => printer.active !== false || printer.id === chosenId)
-}
-
-/**
- * Says in one line where a copy goes, for the box that stands next to the print dialog.
- *
- * <p>The wording says outright that nothing is set where nothing is set. "Standarddrucker"
- * would be an answer this application cannot give: it does not know what the browser will
- * offer.
- *
- * @param printout the copy
- * @param printers the printers of the tenant, empty when they may not be read
- * @returns for example "Empfang · Schacht 1" or "Kein Drucker hinterlegt"
- */
-export function describeTarget(
-  printout: DocumentPrintout,
-  printers: readonly Printer[] = [],
-): string {
-  const printer = printerNameOf(printout, printers)
-  if (printer === null) return 'Kein Drucker hinterlegt'
-  const tray = trayNameOf(printout, printers)
-  return tray === null ? printer : `${printer} · ${tray}`
 }
 
 /**
@@ -263,25 +155,23 @@ export function describeTarget(
  *
  * <p>The queue changes only text inside a box that stays on screen, so without a spoken
  * line nothing tells a reader that the step moved on. It repeats what the box shows: the
- * label, how many sheets and where they are meant to go.
+ * label and how many sheets.
  *
  * @param step     which copy is due, counted from 1
  * @param total    how many copies are printed in all
  * @param printout the copy, absent for a document that names none and is printed once
- * @param printers the printers of the tenant, empty when they may not be read
- * @returns for example "Ausfertigung 2 von 3: Buchhaltung, 2 Exemplare, Empfang · Schacht 1"
+ * @returns for example "Ausfertigung 2 von 3: Buchhaltung, 2 Exemplare"
  */
 export function describePrintStep(
   step: number,
   total: number,
   printout: DocumentPrintout | undefined,
-  printers: readonly Printer[] = [],
 ): string {
   const where = `Ausfertigung ${step} von ${total}`
   if (printout === undefined) {
-    return `${where}: Beleg ohne Beschriftung, 1 Exemplar, Kein Drucker hinterlegt`
+    return `${where}: Beleg ohne Beschriftung, 1 Exemplar`
   }
-  return `${where}: ${printout.label}, ${describeSheets(printout.copies)}, ${describeTarget(printout, printers)}`
+  return `${where}: ${printout.label}, ${describeSheets(printout.copies)}`
 }
 
 /**
@@ -314,8 +204,6 @@ export function printoutsKey(printouts: readonly DocumentPrintout[] | undefined)
         printout.position,
         printout.label,
         printout.copies,
-        printout.printerId ?? '',
-        printout.trayId ?? '',
         printout.documentLayoutId ?? '',
         printout.internal === true ? 'i' : '',
       ].join(':'),

@@ -6,31 +6,23 @@ import { ErrorNotice } from '../../components/Notice'
 import { api, type ApiFile } from '../../lib/api'
 import { showFile } from '../../lib/files'
 import { printFile } from '../../lib/print'
-import type { DocumentPrintout, Printer } from '../../lib/types'
-import {
-  describePrintStep,
-  describeSheets,
-  pdfPathOf,
-  printerNameOf,
-  trayNameOf,
-} from './printoutForm'
+import type { DocumentPrintout } from '../../lib/types'
+import { describePrintStep, describeSheets, pdfPathOf } from './printoutForm'
 
 /**
  * Prints the copies of a document, one after another.
  *
  * <p>Every copy is a step of its own, and each step is started by hand. The print dialog of
- * the browser covers the whole page while it is open, so where the sheet is meant to go has
- * to be read **before** it opens — chaining the dialogs automatically would hide exactly the
- * information this screen exists for (ADR-0009).
+ * the browser covers the whole page while it is open, so the label and the number of sheets
+ * have to be read **before** it opens.
  *
- * <p>Nothing here steers a printer. The browser decides which device and how many sheets;
- * this box only says what the tenant stored for that copy.
+ * <p>Nothing here steers a printer. The browser decides which device and how many sheets
+ * (ADR-0138 of the backend).
  *
  * @param open whether the box is on screen
  * @param onClose called when it is dismissed
  * @param base the document, for example `/api/tenants/1/orders/42`
  * @param printouts the copies to print, in printing order; empty prints the document once
- * @param printers the printers of the tenant, empty when they may not be read
  * @param draft whether the document is still a draft, which prints a preview
  */
 export function PrintQueueDialog({
@@ -38,14 +30,12 @@ export function PrintQueueDialog({
   onClose,
   base,
   printouts,
-  printers,
   draft,
 }: {
   open: boolean
   onClose: () => void
   base: string
   printouts: DocumentPrintout[]
-  printers: Printer[]
   draft: boolean
 }) {
   const [index, setIndex] = useState(0)
@@ -105,7 +95,7 @@ export function PrintQueueDialog({
       description={
         done
           ? undefined
-          : `Ausfertigung ${index + 1} von ${total}. Drucker und Schacht wählen Sie im Dialog des Browsers.`
+          : `Ausfertigung ${index + 1} von ${total}. Den Drucker wählen Sie im Druckdialog.`
       }
       footer={
         /* One footer for both states rather than one per state: the button that closes the
@@ -138,31 +128,29 @@ export function PrintQueueDialog({
       <p aria-live="polite" className="sr-only">
         {done
           ? `Druck abgeschlossen. ${total === 1 ? 'Die Ausfertigung wurde' : `Alle ${total} Ausfertigungen wurden`} an den Druckdialog übergeben.`
-          : describePrintStep(index + 1, total, current, printers)}
+          : describePrintStep(index + 1, total, current)}
       </p>
 
       {done ? (
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {total === 1
             ? 'Die Ausfertigung wurde an den Druckdialog übergeben.'
             : `Alle ${total} Ausfertigungen wurden an den Druckdialog übergeben.`}{' '}
-          Was tatsächlich aus dem Gerät kommt, entscheidet der Druckdialog.
+          Was gedruckt wird, legen Sie dort fest.
         </p>
       ) : (
         <div className="grid gap-4">
-          <PrintTarget printout={current} printers={printers} />
+          <PrintTarget printout={current} />
 
           {draft && (
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               Der Beleg ist ein Entwurf. Gedruckt wird eine Vorschau mit Wasserzeichen und ohne
               Belegnummer.
             </p>
           )}
 
-          <p className="text-[12px] text-text-tertiary">
-            Zielgerät, Schacht und Exemplarzahl kann keine Webseite setzen. Die Angaben oben sind
-            das, was für diese Ausfertigung hinterlegt ist — wählen müssen Sie sie im Dialog des
-            Browsers.
+          <p className="text-small text-text-tertiary">
+            Stellen Sie im Druckdialog die Anzahl Exemplare von oben ein.
           </p>
 
           {failure !== null && (
@@ -182,22 +170,17 @@ export function PrintQueueDialog({
 }
 
 /**
- * What the sheet being printed is called and where it is meant to go.
+ * What the sheet being printed is called and how many sheets it asks for.
  *
- * <p>Set large on purpose: it is the one thing the user has to carry over into the dialog of
+ * <p>Set large on purpose: the number is what the user has to carry over into the dialog of
  * the browser, and they have a moment to read it before that dialog covers the page.
  */
 function PrintTarget({
   printout,
-  printers,
 }: {
   /** The copy, absent for a document that names none and is printed once. */
   printout?: DocumentPrintout
-  printers: Printer[]
 }) {
-  const printer = printout === undefined ? null : printerNameOf(printout, printers)
-  const tray = printout === undefined ? null : trayNameOf(printout, printers)
-
   return (
     <div className="rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3.5">
       <p className="text-[11px] font-medium uppercase tracking-[0.6px] text-text-tertiary">
@@ -206,24 +189,9 @@ function PrintTarget({
       <p className="mt-0.5 text-[17px] font-semibold leading-6">
         {printout?.label ?? 'Beleg ohne Beschriftung'}
       </p>
-      <p className="mt-0.5 text-[13px] text-text-secondary">
+      <p className="mt-0.5 text-body text-text-secondary">
         {describeSheets(printout?.copies)}
       </p>
-
-      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
-          <dt className="text-[11px] font-medium uppercase tracking-[0.6px] text-text-tertiary">
-            Drucker
-          </dt>
-          <dd className="mt-0.5 text-[15px] font-medium">{printer ?? 'nicht hinterlegt'}</dd>
-        </div>
-        <div>
-          <dt className="text-[11px] font-medium uppercase tracking-[0.6px] text-text-tertiary">
-            Schacht
-          </dt>
-          <dd className="mt-0.5 text-[15px] font-medium">{tray ?? 'nicht hinterlegt'}</dd>
-        </div>
-      </dl>
     </div>
   )
 }

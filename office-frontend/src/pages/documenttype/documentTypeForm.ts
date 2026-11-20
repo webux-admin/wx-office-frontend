@@ -12,18 +12,11 @@ import type {
  *
  * <p>No position: it is the place in the list, and keeping it in two places invites the two to
  * disagree. The numbers are strings, because that is what an input and a `<select>` hold.
- *
- * <p>Printer and tray are the default a document of this kind starts with. They are a note for
- * whoever prints, never a command — no web API lets a page choose a device.
  */
 export type CopyRow = {
   label: string
   /** How many sheets of this copy, as typed. */
   copies: string
-  /** Id of the printer, as a string; empty means none. */
-  printerId: string
-  /** Id of the tray, as a string; empty means none. */
-  trayId: string
   /**
    * Id of the form this copy prints on, as a string. Empty means the copy is made from the
    * document itself — which is what every copy did before forms could differ per copy.
@@ -118,8 +111,6 @@ export function toForm(type: DocumentType): DocumentTypeForm {
     copies: (type.copies ?? []).map((copy) => ({
       label: copy.label,
       copies: `${copy.copies ?? 1}`,
-      printerId: copy.printerId === undefined ? '' : `${copy.printerId}`,
-      trayId: copy.trayId === undefined ? '' : `${copy.trayId}`,
       documentLayoutId:
         copy.documentLayoutId === undefined ? '' : `${copy.documentLayoutId}`,
       internal: copy.internal === true,
@@ -275,44 +266,42 @@ export function togglePredecessor(ids: readonly number[], id: number, on: boolea
  * A fresh row for the next copy someone adds.
  *
  * @param count how many copies there are already
- * @returns a usual name and one sheet, on no printer in particular
+ * @returns a usual name and one sheet
  */
 export function nextCopyRow(count: number): CopyRow {
   return {
     label: COPY_LABELS[count] ?? `Exemplar ${count + 1}`,
     copies: '1',
-    printerId: '',
-    trayId: '',
     documentLayoutId: '',
     internal: false,
   }
 }
 
 /**
- * Says in words how many sheets one document of this kind produces, for a table cell.
+ * Says in words how many sheets one document of this kind produces.
  *
- * <p>Sheets, not rows: a copy may ask for more than one, and "2 ×" beside three rows would
- * be a number nobody can place.
+ * <p>Sheets, not rows: a copy may ask for more than one.
  *
  * @param copies the copies as the API returned them
- * @returns for example "3 ×", and "kein Druck" for a kind that names no copy at all
+ * @returns for example "3 Blätter", and "Kein Druck" for a kind that names no copy at all
  */
 export function describeCopies(copies: DocumentTypeCopy[] | undefined): string {
   const sheets = (copies ?? []).reduce((total, copy) => total + (copy.copies ?? 1), 0)
-  return sheets === 0 ? 'kein Druck' : `${sheets} ×`
+  if (sheets === 0) return 'Kein Druck'
+  return sheets === 1 ? '1 Blatt' : `${sheets} Blätter`
 }
 
 /** The two things a copy of a document can do with its amounts, in German. */
 export const COPY_PRICE_MODES: { value: CopyPriceMode; label: string; hint: string }[] = [
   {
     value: 'RECALCULATE',
-    label: 'Neu aus dem Katalog holen',
+    label: 'Aktuelle Preise holen',
     hint: 'Die Kopie rechnet mit den Preisen von heute.',
   },
   {
     value: 'COPY',
-    label: 'Beträge des Originals behalten',
-    hint: 'Die Kopie trägt dieselben Beträge wie der Beleg, aus dem sie stammt.',
+    label: 'Preise des Originals behalten',
+    hint: 'Die Kopie übernimmt die Preise des kopierten Belegs.',
   },
 ]
 
@@ -325,23 +314,23 @@ export const COPY_PRICE_MODES: { value: CopyPriceMode; label: string; hint: stri
 export const STOCK_EFFECTS: { value: StockEffect; label: string; hint: string }[] = [
   {
     value: 'NONE',
-    label: 'Keine Wirkung',
-    hint: 'Das Ausstellen bewegt keinen Bestand.',
+    label: 'Keine',
+    hint: 'Der Bestand bleibt unverändert.',
   },
   {
     value: 'RESERVE',
-    label: 'Reserviert beim Ausstellen',
-    hint: 'Für den Auftrag: der Bestand bleibt liegen, die verfügbare Menge sinkt. Der Lieferschein verbraucht die Reservierung.',
+    label: 'Reservieren',
+    hint: 'Typisch für Aufträge. Die Ware bleibt im Lager, ist aber nicht mehr verfügbar. Der Lieferschein bucht sie dann ab.',
   },
   {
     value: 'ISSUE',
-    label: 'Bucht beim Ausstellen ab',
-    hint: 'Beim Ausstellen verlässt die Ware das Lager. Der Storno bucht sie zurück.',
+    label: 'Abbuchen',
+    hint: 'Typisch für Lieferscheine. Die Ware verlässt das Lager. Ein Storno bucht sie zurück.',
   },
   {
     value: 'ISSUE_IF_NOT_BOOKED',
-    label: 'Bucht ab, wenn der Vorgang es noch nicht getan hat',
-    hint: 'Für die Rechnung: sie bucht ab, wenn kein Lieferschein des Vorgangs es schon tat.',
+    label: 'Abbuchen, falls noch nicht geschehen',
+    hint: 'Typisch für Rechnungen. Bucht nur ab, wenn kein Lieferschein desselben Vorgangs es schon getan hat.',
   },
 ]
 
@@ -354,8 +343,6 @@ function enteredCopies(rows: readonly CopyRow[]): DocumentTypeCopy[] {
       position: entered.length + 1,
       label: row.label.trim(),
       copies: parseDecimal(row.copies) ?? 1,
-      printerId: row.printerId === '' ? undefined : Number(row.printerId),
-      trayId: row.trayId === '' ? undefined : Number(row.trayId),
       documentLayoutId:
         row.documentLayoutId === '' ? undefined : Number(row.documentLayoutId),
       internal: row.internal,
@@ -382,10 +369,6 @@ function copyComplaint(rows: readonly CopyRow[]): string | null {
     if (sheets === null) return 'Die Anzahl ist keine Zahl.'
     if (!Number.isInteger(sheets)) return 'Die Anzahl ist eine ganze Zahl.'
     if (sheets < 1 || sheets > MAX_SHEETS) return `Die Anzahl liegt zwischen 1 und ${MAX_SHEETS}.`
-    // A tray belongs to a printer, so without one there is nothing it could belong to.
-    if (row.trayId !== '' && row.printerId === '') {
-      return 'Ein Schacht gehört zu einem Drucker. Bitte zuerst den Drucker wählen.'
-    }
   }
   return null
 }

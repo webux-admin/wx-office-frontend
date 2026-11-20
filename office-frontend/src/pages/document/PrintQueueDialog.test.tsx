@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentPrintout, Printer } from '../../lib/types'
+import type { DocumentPrintout } from '../../lib/types'
 import { PrintQueueDialog } from './PrintQueueDialog'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -22,27 +22,8 @@ vi.mock('../../lib/files', () => ({ showFile }))
 
 const BASE = '/api/tenants/1/orders/42'
 
-const PRINTERS: Printer[] = [
-  {
-    id: 7,
-    code: 'EMPFANG',
-    name: 'Empfang',
-    active: true,
-    trays: [{ id: 71, code: 'S1', name: 'Schacht 1', position: 1 }],
-  },
-]
-
 const PRINTOUTS: DocumentPrintout[] = [
-  {
-    id: 101,
-    position: 1,
-    label: 'Original',
-    copies: 1,
-    printerId: 7,
-    printerName: 'Empfang',
-    trayId: 71,
-    trayName: 'Schacht 1',
-  },
+  { id: 101, position: 1, label: 'Original', copies: 1 },
   { id: 102, position: 2, label: 'Buchhaltung', copies: 2 },
 ]
 
@@ -104,7 +85,6 @@ async function render(printouts: DocumentPrintout[] = PRINTOUTS): Promise<void> 
         onClose={() => (closed += 1)}
         base={BASE}
         printouts={printouts}
-        printers={PRINTERS}
         draft={false}
       />,
     )
@@ -231,13 +211,11 @@ describe('PrintQueueDialog', () => {
 
   it('printQueueDialogAnnouncesTheStepTest', async () => {
     await render()
-    expect(spoken()).toBe('Ausfertigung 1 von 2: Original, 1 Exemplar, Empfang · Schacht 1')
+    expect(spoken()).toBe('Ausfertigung 1 von 2: Original, 1 Exemplar')
 
     await press('Drucken')
 
-    expect(spoken()).toBe(
-      'Ausfertigung 2 von 2: Buchhaltung, 2 Exemplare, Kein Drucker hinterlegt',
-    )
+    expect(spoken()).toBe('Ausfertigung 2 von 2: Buchhaltung, 2 Exemplare')
 
     await press('Drucken')
 

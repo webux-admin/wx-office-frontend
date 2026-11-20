@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
-import type { DocumentPrintout, Printer } from '../../lib/types'
+import type { DocumentPrintout } from '../../lib/types'
 import { DocumentPrintouts } from './DocumentPrintouts'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -13,32 +13,9 @@ import { DocumentPrintouts } from './DocumentPrintouts'
 const TENANT = 1
 const BASE = `/api/tenants/${TENANT}/orders/42`
 
-const PRINTERS: Printer[] = [
-  {
-    id: 7,
-    code: 'EMPFANG',
-    name: 'Empfang',
-    active: true,
-    trays: [
-      { id: 71, code: 'S1', name: 'Schacht 1', position: 1 },
-      { id: 72, code: 'S2', name: 'Schacht 2', position: 2 },
-    ],
-  },
-  { id: 8, code: 'BUCHHALTUNG', name: 'Buchhaltung', active: true },
-]
-
 const STORED: DocumentPrintout[] = [
-  {
-    id: 101,
-    position: 1,
-    label: 'Original',
-    copies: 1,
-    printerId: 7,
-    printerName: 'Empfang',
-    trayId: 71,
-    trayName: 'Schacht 1',
-  },
-  { id: 102, position: 2, label: 'Buchhaltung', copies: 2, printerId: 8, printerName: 'Buchhaltung' },
+  { id: 101, position: 1, label: 'Original', copies: 1 },
+  { id: 102, position: 2, label: 'Buchhaltung', copies: 2 },
 ]
 
 let container: HTMLDivElement
@@ -46,7 +23,7 @@ let root: Root
 let sent: { url: string; method: string; body: unknown }[]
 let printouts: DocumentPrintout[]
 
-/** Answers the copies and the printers, and records what the section writes. */
+/** Answers the copies, and records what the section writes. */
 function stubFetch() {
   sent = []
   vi.stubGlobal('fetch', (url: string, options?: RequestInit) => {
@@ -55,7 +32,7 @@ function stubFetch() {
       method: options?.method ?? 'GET',
       body: options?.body === undefined ? undefined : JSON.parse(String(options.body)),
     })
-    const body = url.includes('/printers') ? PRINTERS : printouts
+    const body = url.includes('/print-layouts') ? [] : printouts
     return Promise.resolve(
       new Response(JSON.stringify(body), {
         status: 200,
@@ -113,7 +90,7 @@ async function render(options: {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <AuthContext.Provider value={auth(options.permissions ?? ['PRINTER_READ'])}>
+        <AuthContext.Provider value={auth(options.permissions ?? ['PRINT_LAYOUT_READ'])}>
           <DocumentPrintouts
             tenantId={TENANT}
             base={BASE}
@@ -171,8 +148,6 @@ describe('DocumentPrintouts', () => {
 
     expect(text()).toContain('Original')
     expect(text()).toContain('1 Exemplar')
-    expect(text()).toContain('Empfang')
-    expect(text()).toContain('Schacht 1')
     expect(text()).toContain('2 Exemplare')
   })
 
@@ -182,15 +157,6 @@ describe('DocumentPrintouts', () => {
     await render()
 
     expect(text()).toContain('keine Ausfertigung hinterlegt')
-  })
-
-  /** A copy on no printer says so rather than showing an empty cell. */
-  it('orderPrintoutsWithoutAPrinterTest', async () => {
-    printouts = [{ id: 103, position: 1, label: 'Original', copies: 1 }]
-
-    await render()
-
-    expect(text()).toContain('kein Drucker hinterlegt')
   })
 
   it('orderPrintoutsSaysWhyItCannotBeChangedTest', async () => {
@@ -214,16 +180,12 @@ describe('DocumentPrintouts', () => {
         {
           label: 'Kundenexemplar',
           copies: 1,
-          printerId: 7,
-          trayId: 71,
           documentLayoutId: undefined,
           internal: false,
         },
         {
           label: 'Buchhaltung',
           copies: 2,
-          printerId: 8,
-          trayId: undefined,
           documentLayoutId: undefined,
           internal: false,
         },
@@ -274,11 +236,19 @@ describe('DocumentPrintouts', () => {
     expect(container.querySelectorAll('[aria-label$="entfernen"]')).toHaveLength(2)
   })
 
-  /** Without PRINTER_READ there is no list to choose from, and the mask says so. */
-  it('orderPrintoutsWithoutThePrinterRightTest', async () => {
+  /** Without PRINT_LAYOUT_READ there is no list of forms to choose from, and the mask says so. */
+  it('orderPrintoutsWithoutTheLayoutRightTest', async () => {
     await render({ editable: true, permissions: [] })
 
-    expect(text()).toContain('Zum Ändern fehlt das Recht PRINTER_READ.')
-    expect(sent.some((request) => request.url.includes('/printers'))).toBe(false)
+    expect(text()).toContain('Zum Ändern brauchen Sie das Recht, Druckvorlagen zu sehen.')
+    expect(sent.some((request) => request.url.includes('/print-layouts'))).toBe(false)
+  })
+
+  /** No printer or tray anywhere: the browser's dialog chooses the device (backend ADR-0138). */
+  it('orderPrintoutsNamesNoPrinterTest', async () => {
+    await render({ editable: true })
+
+    expect(text()).not.toContain('Drucker')
+    expect(text()).not.toContain('Schacht')
   })
 })

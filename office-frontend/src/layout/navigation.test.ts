@@ -290,7 +290,6 @@ describe('flattenNav', () => {
     expect(flattenNav(belege === undefined ? [] : [belege]).map((entry) => entry.href)).toEqual([
       '/belegarten',
       '/druckvorlagen',
-      '/drucker',
       '/nummernkreise',
       OUTBOX_PATH,
       MAIL_TEMPLATE_PATH,

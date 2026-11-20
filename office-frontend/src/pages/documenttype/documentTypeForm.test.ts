@@ -21,8 +21,6 @@ function copy(fields: Partial<CopyRow> = {}): CopyRow {
   return {
     label: 'Original',
     copies: '1',
-    printerId: '',
-    trayId: '',
     documentLayoutId: '',
     internal: false,
     ...fields,
@@ -40,7 +38,7 @@ const STORED: DocumentType = {
   documentLayout: 'AUFTRAG-A4',
   documentLayoutName: 'Auftrag A4 mit Logo',
   copies: [
-    { position: 1, label: 'Original', copies: 1, printerId: 7, printerName: 'Empfang', trayId: 71 },
+    { position: 1, label: 'Original', copies: 1 },
     { position: 2, label: 'Buchhaltung', copies: 2 },
   ],
   predecessorTypeIds: [3, 5],
@@ -136,8 +134,8 @@ describe('toForm', () => {
     expect(form.numberPrefix).toBe('AU')
     expect(form.documentLayoutId).toBe('12')
     expect(form.copies).toEqual([
-      copy({ label: 'Original', copies: '1', printerId: '7', trayId: '71' }),
-      copy({ label: 'Buchhaltung', copies: '2', printerId: '', trayId: '' }),
+      copy({ label: 'Original', copies: '1' }),
+      copy({ label: 'Buchhaltung', copies: '2' }),
     ])
     expect(form.predecessorTypeIds).toEqual([3, 5])
     expect(form.copyPriceMode).toBe('COPY')
@@ -198,8 +196,6 @@ describe('toPayload', () => {
           position: 1,
           label: 'Original',
           copies: 1,
-          printerId: 7,
-          trayId: 71,
           documentLayoutId: undefined,
           internal: false,
         },
@@ -207,8 +203,6 @@ describe('toPayload', () => {
           position: 2,
           label: 'Buchhaltung',
           copies: 2,
-          printerId: undefined,
-          trayId: undefined,
           documentLayoutId: undefined,
           internal: false,
         },
@@ -380,11 +374,6 @@ describe('firstComplaint', () => {
       .toBe('Die Anzahl liegt zwischen 1 und 99.')
   })
 
-  it('firstComplaintWithATrayButNoPrinterTest', () => {
-    expect(firstComplaint({ ...COMPLETE, copies: [copy({ trayId: '71' })] }, true))
-      .toBe('Ein Schacht gehört zu einem Drucker. Bitte zuerst den Drucker wählen.')
-  })
-
   it('firstComplaintWithTooLongCopyLabelTest', () => {
     expect(firstComplaint({ ...COMPLETE, copies: [copy({ label: 'x'.repeat(61) })] }, true))
       .toBe('Eine Beschriftung darf höchstens 60 Zeichen lang sein.')
@@ -522,8 +511,6 @@ describe('nextCopyRow', () => {
     expect(nextCopyRow(2)).toEqual({
       label: 'Buchhaltung',
       copies: '1',
-      printerId: '',
-      trayId: '',
       documentLayoutId: '',
       internal: false,
     })
@@ -541,16 +528,20 @@ describe('nextCopyRow', () => {
 describe('describeCopies', () => {
   it('describeCopiesTest', () => {
     // Three sheets from two rows: the second copy asks for two of itself.
-    expect(describeCopies(STORED.copies)).toBe('3 ×')
+    expect(describeCopies(STORED.copies)).toBe('3 Blätter')
+  })
+
+  it('describeCopiesWithOneSheetTest', () => {
+    expect(describeCopies([{ position: 1, label: 'Original' }])).toBe('1 Blatt')
   })
 
   it('describeCopiesWithoutEntriesTest', () => {
     // No entry means this kind of document is not printed at all (ADR-0053 of the backend).
-    expect(describeCopies([])).toBe('kein Druck')
+    expect(describeCopies([])).toBe('Kein Druck')
   })
 
   it('describeCopiesWithoutTheFieldTest', () => {
-    expect(describeCopies(undefined)).toBe('kein Druck')
+    expect(describeCopies(undefined)).toBe('Kein Druck')
   })
 })
 

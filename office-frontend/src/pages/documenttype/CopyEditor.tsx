@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { CheckboxField } from '../../components/CheckboxField'
 import { Panel } from '../../components/Panel'
@@ -6,10 +5,7 @@ import { RowOrderButtons } from '../../components/RowOrderButtons'
 import { SelectField } from '../../components/SelectField'
 import { TextField } from '../../components/TextField'
 import { useAuth } from '../../auth/useAuth'
-import { api } from '../../lib/api'
-import type { Printer } from '../../lib/types'
 import { usePrintLayouts } from '../../printlayout/usePrintLayouts'
-import { selectablePrinters, traysOf } from '../document/printoutForm'
 import {
   MAX_COPIES,
   MAX_SHEETS,
@@ -19,17 +15,15 @@ import {
 } from './documentTypeForm'
 
 /**
- * How often a kind of document is printed, what each copy is called and where it is meant to
- * go.
+ * How often a kind of document is printed, what each copy is called and which form it uses.
  *
- * <p>The order of the rows is the order in the PDF, so the first row is the original. Moving a
- * row is the way to reorder the print, because the position follows from the row.
+ * <p>The order of the rows is the order in the PDF, so the first row is the original.
  *
  * <p>What is set here is the default a document of this kind starts with. A draft may change
  * it afterwards, and issuing the document freezes it — a later change here leaves documents
  * that already exist alone.
  *
- * @param tenantId the tenant, for the printers to choose from
+ * @param tenantId the tenant, for the forms to choose from
  * @param copies the rows in printing order
  * @param onChange called with the new order or the new values
  * @param disabled true where the user may look but not write
@@ -46,16 +40,8 @@ export function CopyEditor({
   disabled?: boolean
 }) {
   const { can } = useAuth()
-  const mayReadPrinters = can('PRINTER_READ')
-
-  const printers = useQuery({
-    queryKey: ['printers', tenantId],
-    queryFn: () => api.get<Printer[]>(`/api/tenants/${tenantId}/printers`),
-    enabled: mayReadPrinters,
-  })
-  const devices = printers.data ?? []
-  // For the per-copy form. Asked only where the right is there: a user without
-  // PRINT_LAYOUT_READ keeps what is stored, and asking anyway would be a 403.
+  // Asked only where the right is there: a user without PRINT_LAYOUT_READ keeps what is
+  // stored, and asking anyway would be a 403.
   const mayReadLayouts = can('PRINT_LAYOUT_READ')
   const layouts = usePrintLayouts(mayReadLayouts ? tenantId : null)
   const forms = layouts.data ?? []
@@ -66,23 +52,24 @@ export function CopyEditor({
   return (
     <Panel
       title="Ausfertigungen"
-      description="Wie viele Exemplare beim Drucken herauskommen, wie sie beschriftet sind, auf welcher Vorlage und auf welchem Drucker sie gedacht sind. Das Archiv behält immer genau ein Original."
+      description="Was beim Drucken herauskommt, in dieser Reihenfolge. Die erste ist das Original. Ein Beleg kann jede Ausfertigung noch anpassen."
     >
       <div className="grid gap-3">
         {copies.length === 0 && (
-          <p className="text-[13px] text-text-secondary">
-            Ohne Ausfertigung wird nichts gedruckt. Der Beleg lässt sich weiterhin ansehen und
-            als PDF öffnen — aus dem Drucker kommt er nicht.
+          <p className="text-body text-text-secondary">
+            Keine Ausfertigung: Belege dieser Art werden nicht gedruckt. Als PDF ansehen lassen
+            sie sich trotzdem.
           </p>
         )}
 
         {copies.map((row, index) => {
           const name = `${index + 1}. Ausfertigung`
-          const trays = traysOf(devices, row.printerId === '' ? undefined : Number(row.printerId))
           return (
             <div key={index} className="rounded-[var(--radius-md)] border border-line-subtle p-3">
               <div className="flex items-center justify-between gap-3 pb-2.5">
-                <span className="text-[12px] font-medium text-text-secondary">{name}</span>
+                <span className="text-small font-medium text-text-secondary">
+                  {index === 0 ? `${name} · Original` : name}
+                </span>
                 <span className="flex items-center gap-1">
                   <RowOrderButtons
                     name={name}
@@ -103,13 +90,14 @@ export function CopyEditor({
                 </span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_90px_2fr_2fr]">
+              <div className="grid gap-3 sm:grid-cols-[2fr_90px] lg:grid-cols-[2fr_90px_2fr]">
                 <TextField
                   label="Beschriftung"
                   value={row.label}
                   maxLength={60}
                   disabled={disabled}
                   onChange={(event) => replace(index, { label: event.target.value })}
+                  tooltip="Steht auf dem Blatt, zum Beispiel Original, Kopie oder Buchhaltung."
                 />
                 <TextField
                   label="Anzahl"
@@ -119,59 +107,8 @@ export function CopyEditor({
                   maxLength={2}
                   disabled={disabled}
                   onChange={(event) => replace(index, { copies: event.target.value })}
+                  tooltip={`Wie viele Blätter dieser Ausfertigung, 1 bis ${MAX_SHEETS}.`}
                 />
-
-                {mayReadPrinters ? (
-                  <>
-                    <SelectField
-                      label="Drucker"
-                      value={row.printerId}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        // A tray belongs to one printer and cannot survive a change of it.
-                        replace(index, { printerId: event.target.value, trayId: '' })
-                      }
-                    >
-                      <option value="">Kein Drucker</option>
-                      {selectablePrinters(
-                        devices,
-                        row.printerId === '' ? undefined : Number(row.printerId),
-                      ).map((printer) => (
-                        <option key={printer.id} value={printer.id}>
-                          {printer.name}
-                        </option>
-                      ))}
-                    </SelectField>
-                    <SelectField
-                      label="Schacht"
-                      value={row.trayId}
-                      disabled={disabled || trays.length === 0}
-                      onChange={(event) => replace(index, { trayId: event.target.value })}
-                      hint={
-                        row.printerId === ''
-                          ? 'Erst den Drucker wählen.'
-                          : trays.length === 0
-                            ? 'Dieser Drucker hat nur einen Schacht.'
-                            : undefined
-                      }
-                    >
-                      <option value="">Kein Schacht</option>
-                      {trays.map((tray) => (
-                        <option key={tray.id} value={tray.id}>
-                          {tray.name}
-                        </option>
-                      ))}
-                    </SelectField>
-                  </>
-                ) : (
-                  <p className="text-[12px] text-text-tertiary sm:col-span-2">
-                    Drucker und Schacht bleiben, wie sie hinterlegt sind. Zum Ändern fehlt das
-                    Recht PRINTER_READ.
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-3 grid gap-3 border-t border-line-subtle pt-3 sm:grid-cols-2">
                 {mayReadLayouts ? (
                   <SelectField
                     label="Druckvorlage"
@@ -180,13 +117,12 @@ export function CopyEditor({
                     onChange={(event) =>
                       replace(index, { documentLayoutId: event.target.value })
                     }
-                    hint="Leer: wie der Beleg selbst. Sonst wird dieses Exemplar auf der gewählten Vorlage gezeichnet — etwa eine Lagerkopie ohne Preise."
+                    className="sm:col-span-2 lg:col-span-1"
+                    tooltip="Eine eigene Vorlage nur für diese Ausfertigung, zum Beispiel eine Lagerkopie ohne Preise. «Wie der Beleg» nimmt die Vorlage oben."
                   >
                     <option value="">Wie der Beleg</option>
                     {forms
-                      .filter(
-                        (form) => form.active || `${form.id}` === row.documentLayoutId,
-                      )
+                      .filter((form) => form.active || `${form.id}` === row.documentLayoutId)
                       .map((form) => (
                         <option key={form.id} value={form.id}>
                           {form.active ? form.name : `${form.name} (deaktiviert)`}
@@ -194,18 +130,20 @@ export function CopyEditor({
                       ))}
                   </SelectField>
                 ) : (
-                  <p className="text-[12px] text-text-tertiary">
-                    Die Druckvorlage bleibt, wie sie hinterlegt ist. Zum Ändern fehlt das Recht
-                    PRINT_LAYOUT_READ.
+                  <p className="text-small text-text-tertiary sm:col-span-2 lg:col-span-1">
+                    Die Vorlage bleibt, wie sie ist. Zum Ändern brauchen Sie das Recht,
+                    Druckvorlagen zu sehen.
                   </p>
                 )}
+              </div>
 
+              <div className="mt-3">
                 <CheckboxField
-                  label="Internes Dokument"
+                  label="Nur intern"
                   checked={row.internal}
                   disabled={disabled}
                   onChange={(event) => replace(index, { internal: event.target.checked })}
-                  hint="Bleibt im Haus: wird dem Kunden später nicht per Mail mitgeschickt. Gedruckt wird es normal."
+                  tooltip="Wird gedruckt, geht aber nie per Mail an den Kunden."
                 />
               </div>
             </div>
@@ -218,24 +156,19 @@ export function CopyEditor({
               type="button"
               disabled={disabled}
               onClick={() => onChange([...copies, nextCopyRow(copies.length)])}
-              className="text-[12px] text-text-secondary transition-colors hover:text-accent-text disabled:opacity-40"
+              className="text-small text-text-secondary transition-colors hover:text-accent-text disabled:opacity-40"
             >
               + Ausfertigung
             </button>
           ) : (
-            <span className="text-[12px] text-text-tertiary">
-              Mehr als {MAX_COPIES} Ausfertigungen sind nicht möglich.
+            <span className="text-small text-text-tertiary">
+              Mehr als {MAX_COPIES} Ausfertigungen gehen nicht.
             </span>
           )}
-          <span className="text-[12px] text-text-tertiary">
+          <span className="text-small text-text-tertiary">
             {copies.length} von {MAX_COPIES}
           </span>
         </div>
-
-        <p className="text-[12px] text-text-tertiary">
-          Höchstens {MAX_SHEETS} Exemplare je Ausfertigung. Gedruckt wird über den Druckdialog des
-          Browsers: Drucker und Schacht werden dort angezeigt, gewählt werden sie von Hand.
-        </p>
       </div>
     </Panel>
   )

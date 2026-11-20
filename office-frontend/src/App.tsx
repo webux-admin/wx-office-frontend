@@ -87,7 +87,6 @@ const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({
 const ProjectListPage = lazy(() => import('./pages/ProjectListPage').then((module) => ({ default: module.ProjectListPage })))
 const ProjectPage = lazy(() => import('./pages/ProjectPage').then((module) => ({ default: module.ProjectPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
-const PrinterListPage = lazy(() => import('./pages/PrinterListPage').then((module) => ({ default: module.PrinterListPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const PriceEntryPage = lazy(() => import('./pages/PriceEntryPage').then((module) => ({ default: module.PriceEntryPage })))
 const ProductListPage = lazy(() => import('./pages/ProductListPage').then((module) => ({ default: module.ProductListPage })))
@@ -285,7 +284,6 @@ export default function App() {
 
                   <Route path="/belegarten" element={<DocumentTypeListPage />} />
                   <Route path="/druckvorlagen" element={<PrintLayoutListPage />} />
-                  <Route path="/drucker" element={<PrinterListPage />} />
                   <Route path="/nummernkreise" element={<NumberRangePage />} />
                   <Route path={OUTBOX_PATH} element={<OutboxListPage />} />
                   <Route path={MAIL_TEMPLATE_PATH} element={<OutboxTemplatePage />} />

@@ -49,7 +49,7 @@ export function PrintPanel({
   return (
     <Panel
       title="Druckvorlage"
-      description="Wie ein Beleg dieser Art aussieht. Jede Belegart druckt auf genau einer Vorlage."
+      description="Bestimmt, wie Belege dieser Art aussehen."
     >
       <div className="grid gap-4">
         <PrintLayoutSelect
@@ -71,7 +71,7 @@ export function PrintPanel({
             onClick={() => preview.mutate(Number(value))}
           >
             <FileText size={15} aria-hidden />
-            Musterbeleg als PDF
+            Vorschau als PDF
           </Button>
           {/* Only a form the tenant drew can be opened in the designer. A shipped one has no
               drawing: the designer would show an empty page under its name, and saving that
@@ -83,7 +83,7 @@ export function PrintPanel({
                 documentTypeId === undefined ? '/belegarten' : `/belegarten/${documentTypeId}`,
                 documentTypeId === undefined ? 'Belegarten' : documentTypeName,
               )}
-              className="inline-flex items-center gap-1 text-[12px] text-text-secondary transition-colors hover:text-accent-text"
+              className="inline-flex items-center gap-1 text-small text-text-secondary transition-colors hover:text-accent-text"
             >
               Vorlage öffnen
               <ExternalLink size={13} aria-hidden />
@@ -92,9 +92,9 @@ export function PrintPanel({
           {can('PRINT_LAYOUT_WRITE') && chosen !== undefined && !chosen.designed && (
             <Link
               to="/druckvorlagen"
-              className="inline-flex items-center gap-1 text-[12px] text-text-secondary transition-colors hover:text-accent-text"
+              className="inline-flex items-center gap-1 text-small text-text-secondary transition-colors hover:text-accent-text"
             >
-              Zum Gestalten kopieren
+              Kopieren und anpassen
               <ExternalLink size={13} aria-hidden />
             </Link>
           )}
@@ -125,7 +125,7 @@ function LayoutFacts({
   return (
     <span className="grid gap-1.5">
       <span className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[12px] text-text-secondary">{form.code}</span>
+        <span className="font-mono text-small text-text-secondary">{form.code}</span>
         {form.system ? (
           <Badge tone="neutral">Mitgeliefert</Badge>
         ) : (
@@ -134,15 +134,14 @@ function LayoutFacts({
         {!form.active && <Badge tone="muted">Deaktiviert</Badge>}
       </span>
       {!form.active && (
-        <span className="text-[12px] text-text-tertiary">
-          Diese Vorlage ist deaktiviert. Gedruckt wird weiterhin darauf, neu wählen lässt sie
-          sich aber nicht mehr.
+        <span className="text-small text-text-tertiary">
+          Deaktiviert: Belege drucken weiter darauf, neu wählen lässt sie sich aber nicht.
         </span>
       )}
-      <span className="text-[12px] text-text-tertiary">
+      <span className="text-small text-text-tertiary">
         {others.length === 0
-          ? 'Keine andere Belegart druckt auf dieser Vorlage.'
-          : `Wird ausserdem benutzt von: ${others.map((type) => type.name).join(', ')}.`}
+          ? 'Nur diese Belegart druckt auf dieser Vorlage.'
+          : `Auch benutzt von: ${others.map((type) => type.name).join(', ')}. Wer die Vorlage ändert, ändert sie dort mit.`}
       </span>
     </span>
   )

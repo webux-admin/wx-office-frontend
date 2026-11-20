@@ -1,37 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import type { DocumentPrintout, Printer } from '../../lib/types'
+import type { DocumentPrintout } from '../../lib/types'
 import {
   MAX_PRINTOUTS,
   MAX_SHEETS,
   describePrintStep,
   describeSheets,
-  describeTarget,
   nextPrintoutRow,
   pdfPathOf,
-  printerNameOf,
   printoutComplaint,
   toPrintoutPayload,
   toPrintoutRows,
   printoutsKey,
-  selectablePrinters,
-  trayNameOf,
-  traysOf,
   withMovedPrintout,
   type PrintoutRow,
 } from './printoutForm'
-
-const PRINTERS: Printer[] = [
-  {
-    id: 7,
-    code: 'EMPFANG',
-    name: 'Empfang',
-    trays: [
-      { id: 71, code: 'S1', name: 'Schacht 1', position: 1 },
-      { id: 72, code: 'S2', name: 'Schacht 2', position: 2 },
-    ],
-  },
-  { id: 8, code: 'BUCHHALTUNG', name: 'Buchhaltung' },
-]
 
 /** One copy, with only what the test cares about spelled out. */
 function printout(fields: Partial<DocumentPrintout> = {}): DocumentPrintout {
@@ -43,8 +25,6 @@ function row(fields: Partial<PrintoutRow> = {}): PrintoutRow {
   return {
     label: 'Original',
     copies: '1',
-    printerId: '',
-    trayId: '',
     documentLayoutId: '',
     internal: false,
     ...fields,
@@ -54,13 +34,13 @@ function row(fields: Partial<PrintoutRow> = {}): PrintoutRow {
 describe('toPrintoutRows', () => {
   it('toPrintoutRowsTest', () => {
     const rows = toPrintoutRows([
-      printout({ id: 1, position: 1, label: 'Original', copies: 1, printerId: 7, trayId: 71 }),
-      printout({ id: 2, position: 2, label: 'Buchhaltung', copies: 2, printerId: 8 }),
+      printout({ id: 1, position: 1, label: 'Original', copies: 1 }),
+      printout({ id: 2, position: 2, label: 'Buchhaltung', copies: 2 }),
     ])
 
     expect(rows).toEqual([
-      row({ id: 1, label: 'Original', copies: '1', printerId: '7', trayId: '71' }),
-      row({ id: 2, label: 'Buchhaltung', copies: '2', printerId: '8', trayId: '' }),
+      row({ id: 1, label: 'Original', copies: '1' }),
+      row({ id: 2, label: 'Buchhaltung', copies: '2' }),
     ])
   })
 
@@ -93,8 +73,8 @@ describe('toPrintoutRows', () => {
 describe('toPrintoutPayload', () => {
   it('toPrintoutPayloadTest', () => {
     const payload = toPrintoutPayload([
-      row({ id: 3, label: '  Original  ', copies: '1', printerId: '7', trayId: '71' }),
-      row({ label: 'Buchhaltung', copies: '2', printerId: '8' }),
+      row({ id: 3, label: '  Original  ', copies: '1' }),
+      row({ label: 'Buchhaltung', copies: '2' }),
     ])
 
     expect(payload).toEqual({
@@ -102,16 +82,12 @@ describe('toPrintoutPayload', () => {
         {
           label: 'Original',
           copies: 1,
-          printerId: 7,
-          trayId: 71,
           documentLayoutId: undefined,
           internal: false,
         },
         {
           label: 'Buchhaltung',
           copies: 2,
-          printerId: 8,
-          trayId: undefined,
           documentLayoutId: undefined,
           internal: false,
         },
@@ -204,11 +180,6 @@ describe('printoutComplaint', () => {
     )
   })
 
-  it('printoutComplaintWithATrayButNoPrinterTest', () => {
-    expect(printoutComplaint([row({ trayId: '71' })])).toBe(
-      'Ein Schacht gehört zu einem Drucker. Bitte zuerst den Drucker wählen.',
-    )
-  })
 })
 
 describe('withMovedPrintout', () => {
@@ -246,8 +217,6 @@ describe('nextPrintoutRow', () => {
     expect(nextPrintoutRow(2)).toEqual({
       label: 'Buchhaltung',
       copies: '1',
-      printerId: '',
-      trayId: '',
       documentLayoutId: '',
       internal: false,
     })
@@ -262,107 +231,28 @@ describe('nextPrintoutRow', () => {
   })
 })
 
-describe('printerNameOf', () => {
-  it('printerNameOfTest', () => {
-    expect(printerNameOf(printout({ printerId: 7 }), PRINTERS)).toBe('Empfang')
-  })
-
-  /** The frozen name wins: whoever prints may not be allowed to read the printers. */
-  it('printerNameOfPrefersTheFrozenNameTest', () => {
-    expect(printerNameOf({ printerId: 7, printerName: 'Empfang (alt)' }, [])).toBe('Empfang (alt)')
-  })
-
-  it('printerNameOfWithoutAPrinterTest', () => {
-    expect(printerNameOf(printout(), PRINTERS)).toBeNull()
-  })
-
-  it('printerNameOfWithAnUnknownPrinterTest', () => {
-    expect(printerNameOf(printout({ printerId: 99 }), PRINTERS)).toBeNull()
-  })
-
-  it('printerNameOfWithoutAnyPrintersTest', () => {
-    expect(printerNameOf(printout({ printerId: 7 }))).toBeNull()
-  })
-})
-
-describe('trayNameOf', () => {
-  it('trayNameOfTest', () => {
-    expect(trayNameOf(printout({ printerId: 7, trayId: 72 }), PRINTERS)).toBe('Schacht 2')
-  })
-
-  it('trayNameOfPrefersTheFrozenNameTest', () => {
-    expect(trayNameOf({ printerId: 7, trayId: 72, trayName: 'Schacht zwei' }, [])).toBe(
-      'Schacht zwei',
-    )
-  })
-
-  it('trayNameOfWithoutATrayTest', () => {
-    expect(trayNameOf(printout({ printerId: 7 }), PRINTERS)).toBeNull()
-  })
-
-  it('trayNameOfOnAPrinterWithoutTraysTest', () => {
-    expect(trayNameOf(printout({ printerId: 8, trayId: 71 }), PRINTERS)).toBeNull()
-  })
-})
-
-describe('traysOf', () => {
-  it('traysOfTest', () => {
-    expect(traysOf(PRINTERS, 7).map((tray) => tray.code)).toEqual(['S1', 'S2'])
-  })
-
-  it('traysOfAPrinterWithASingleTrayTest', () => {
-    expect(traysOf(PRINTERS, 8)).toEqual([])
-  })
-
-  it('traysOfWithoutAPrinterTest', () => {
-    expect(traysOf(PRINTERS, undefined)).toEqual([])
-  })
-
-  it('traysOfAnUnknownPrinterTest', () => {
-    expect(traysOf(PRINTERS, 99)).toEqual([])
-  })
-})
-
-describe('describeTarget', () => {
-  it('describeTargetTest', () => {
-    expect(describeTarget(printout({ printerId: 7, trayId: 71 }), PRINTERS)).toBe(
-      'Empfang · Schacht 1',
-    )
-  })
-
-  it('describeTargetWithoutATrayTest', () => {
-    expect(describeTarget(printout({ printerId: 8 }), PRINTERS)).toBe('Buchhaltung')
-  })
-
-  it('describeTargetWithoutAPrinterTest', () => {
-    expect(describeTarget(printout(), PRINTERS)).toBe('Kein Drucker hinterlegt')
-  })
-})
-
 describe('describePrintStep', () => {
   it('describePrintStepTest', () => {
     expect(
-      describePrintStep(2, 3, printout({ label: 'Buchhaltung', copies: 2, printerId: 7, trayId: 71 }), PRINTERS),
-    ).toBe('Ausfertigung 2 von 3: Buchhaltung, 2 Exemplare, Empfang · Schacht 1')
+      describePrintStep(2, 3, printout({ label: 'Buchhaltung', copies: 2 })),
+    ).toBe('Ausfertigung 2 von 3: Buchhaltung, 2 Exemplare')
   })
 
   it('describePrintStepOfASingleCopyTest', () => {
-    expect(describePrintStep(1, 1, printout({ printerId: 8 }), PRINTERS)).toBe(
-      'Ausfertigung 1 von 1: Original, 1 Exemplar, Buchhaltung',
+    expect(describePrintStep(1, 1, printout())).toBe(
+      'Ausfertigung 1 von 1: Original, 1 Exemplar',
     )
   })
 
   /** A document that names no copies at all is printed once, and says so. */
   it('describePrintStepWithoutACopyTest', () => {
-    expect(describePrintStep(1, 1, undefined, PRINTERS)).toBe(
-      'Ausfertigung 1 von 1: Beleg ohne Beschriftung, 1 Exemplar, Kein Drucker hinterlegt',
+    expect(describePrintStep(1, 1, undefined)).toBe(
+      'Ausfertigung 1 von 1: Beleg ohne Beschriftung, 1 Exemplar',
     )
   })
 
-  it('describePrintStepWithoutPrintersTest', () => {
-    expect(describePrintStep(1, 2, printout({ printerId: 7 }))).toBe(
-      'Ausfertigung 1 von 2: Original, 1 Exemplar, Kein Drucker hinterlegt',
-    )
+  it('describePrintStepOfTheFirstOfTwoTest', () => {
+    expect(describePrintStep(1, 2, printout())).toBe('Ausfertigung 1 von 2: Original, 1 Exemplar')
   })
 })
 
@@ -387,10 +277,10 @@ describe('describeSheets', () => {
 describe('printoutsKey', () => {
   it('printoutsKeyTest', () => {
     const key = printoutsKey([
-      printout({ id: 1, position: 1, label: 'Original', copies: 1, printerId: 7, trayId: 71 }),
+      printout({ id: 1, position: 1, label: 'Original', copies: 1 }),
     ])
 
-    expect(key).toBe('1:1:Original:1:7:71::')
+    expect(key).toBe('1:1:Original:1::')
   })
 
   it('printoutsKeyChangesWithTheFormTest', () => {
@@ -443,27 +333,3 @@ describe('pdfPathOf', () => {
   })
 })
 
-describe('selectablePrinters', () => {
-  const RETIRED: Printer[] = [
-    { id: 7, code: 'EMPFANG', name: 'Empfang', active: true },
-    { id: 8, code: 'ALT', name: 'Altes Gerät', active: false },
-  ]
-
-  it('selectablePrintersTest', () => {
-    expect(selectablePrinters(RETIRED, undefined).map((entry) => entry.id)).toEqual([7])
-  })
-
-  /** A copy that already points at a retired printer must keep showing it. */
-  it('selectablePrintersKeepsTheChosenOneTest', () => {
-    expect(selectablePrinters(RETIRED, 8).map((entry) => entry.id)).toEqual([7, 8])
-  })
-
-  it('selectablePrintersWithoutPrintersTest', () => {
-    expect(selectablePrinters([], 8)).toEqual([])
-  })
-
-  /** A printer whose payload omits `active` counts as active, as everywhere else. */
-  it('selectablePrintersWithoutAnActiveFlagTest', () => {
-    expect(selectablePrinters(PRINTERS, undefined).map((entry) => entry.id)).toEqual([7, 8])
-  })
-})

@@ -22,9 +22,8 @@ const ORIGIN = originState('/belegarten', 'Belegarten')
 /**
  * The kinds of document the tenant writes.
  *
- * <p>Shows what ties a kind to the rest of the system: which form it prints on, what comes
- * out of the printer, and which kinds it may be taken over from. Those three used to be
- * visible only after opening a row, which made the catalogue look narrower than it is.
+ * <p>Shows what ties a kind to the rest of the system: which form it prints on, how many
+ * sheets it prints, and which kinds it may be taken over from.
  */
 export function DocumentTypeListPage() {
   return (
@@ -51,7 +50,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       key: 'code',
       header: 'Code',
       width: 'w-[90px]',
-      render: (type) => <span className="font-mono text-[12px]">{type.code}</span>,
+      render: (type) => <span className="font-mono text-small">{type.code}</span>,
     },
     {
       key: 'name',
@@ -78,11 +77,10 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
           {/* Which of several kinds of a category a new document starts with. Shown here
               rather than in a column of its own: it is a statement about the category. */}
           {type.categoryDefault === true && <Badge tone="accent">Standard</Badge>}
-          {/* The Gutschrift is the only category left without a mask: it corrects an invoice
-              and is written from it, not from a list of its own. A kind of that category can
-              be set up here and will simply sit unused until that way exists. */}
+          {/* The Gutschrift is the only category without a list of its own: it is written
+              from the invoice it corrects. */}
           {salesDocumentFor(type.category) === undefined && (
-            <Badge tone="neutral">Ohne Maske</Badge>
+            <Badge tone="neutral">Aus Rechnung</Badge>
           )}
         </span>
       ),
@@ -92,7 +90,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
       header: 'Präfix',
       width: 'w-[90px]',
       render: (type) => (
-        <span className="font-mono text-[12px] text-text-secondary">
+        <span className="font-mono text-small text-text-secondary">
           {type.numberPrefix ?? '-'}
         </span>
       ),
@@ -105,17 +103,14 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
         type.documentLayoutName === undefined ? (
           <span className="text-text-tertiary">—</span>
         ) : (
-          <span className="grid">
-            <span className="truncate text-text-secondary">{type.documentLayoutName}</span>
-            <span className="font-mono text-[11px] text-text-tertiary">
-              {type.documentLayout}
-            </span>
+          <span className="block truncate text-text-secondary" title={type.documentLayout}>
+            {type.documentLayoutName}
           </span>
         ),
     },
     {
       key: 'copies',
-      header: 'Ausfertigungen',
+      header: 'Ausdruck',
       width: 'w-[150px]',
       render: (type) => (
         <span className="grid">
@@ -127,7 +122,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
             {describeCopies(type.copies)}
           </span>
           {(type.copies ?? []).length > 0 && (
-            <span className="truncate text-[11px] text-text-tertiary">
+            <span className="truncate text-small text-text-tertiary">
               {(type.copies ?? [])
                 .map((copy) => (copy.internal === true ? `${copy.label} (intern)` : copy.label))
                 .join(', ')}
@@ -170,12 +165,12 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Belegarten"
-        subtitle="Was der Mandant schreibt: Nummernkreis, Druckvorlage, Ausfertigungen und aus welcher Belegart übernommen werden darf."
+        subtitle="Die Arten von Belegen, die Sie schreiben: Nummer, Druck und woraus sie entstehen."
       >
         {mayWrite && (
           <LinkButton to="/belegarten/neu" state={ORIGIN}>
             <Plus size={15} aria-hidden />
-            Belegart
+            Neue Belegart
           </LinkButton>
         )}
       </PageHeader>
@@ -193,7 +188,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
             empty={
               <EmptyState
                 title="Keine Belegarten"
-                description="Ohne Belegart lässt sich kein Beleg anlegen. Sie bestimmt Nummernkreis, Adresse und Druckvorlage."
+                description="Ohne Belegart lässt sich kein Beleg anlegen."
               />
             }
           />
