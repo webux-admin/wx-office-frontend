@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
@@ -154,7 +155,9 @@ async function render(auth: AuthState = WITH_CHART) {
     root.render(
       <AuthContext.Provider value={auth}>
         <QueryClientProvider client={client}>
-          <DunningSettingsPage />
+          <MemoryRouter>
+            <DunningSettingsPage />
+          </MemoryRouter>
         </QueryClientProvider>
       </AuthContext.Provider>,
     )
@@ -204,6 +207,18 @@ async function choose(label: string, value: string) {
   await settle()
 }
 
+/** Opens a register of the mask the way a person would. */
+async function openRegister(name: string) {
+  const tab = [...container.querySelectorAll('[role="tab"]')].find(
+    (entry) => entry.textContent === name,
+  ) as HTMLButtonElement | undefined
+  expect(tab).toBeDefined()
+  await act(async () => {
+    tab?.click()
+  })
+  await settle()
+}
+
 async function save() {
   await act(async () => {
     button('Speichern')?.click()
@@ -223,6 +238,7 @@ describe('DunningSettingsPage', () => {
    */
   it('saveDunningSettingsKeepsTheStoredFeeAccountTest', async () => {
     await render()
+    await openRegister('Gebühr')
 
     await save()
 
@@ -235,6 +251,7 @@ describe('DunningSettingsPage', () => {
   /** The account travels as a chart number; an id would be the old bug in a new spelling. */
   it('saveDunningSettingsSendsTheChosenAccountTest', async () => {
     await render()
+    await openRegister('Gebühr')
 
     await choose(ACCOUNT, '3000')
     await save()
@@ -246,6 +263,7 @@ describe('DunningSettingsPage', () => {
   it('saveDunningSettingsWithoutAnAccountTest', async () => {
     settings = { ...STORED, feeRevenueAccountNo: undefined }
     await render()
+    await openRegister('Gebühr')
 
     await save()
 
@@ -255,6 +273,7 @@ describe('DunningSettingsPage', () => {
   /** The picker offers the chart of accounts, by number and name. */
   it('dunningSettingsPicksTheAccountFromTheChartTest', async () => {
     await render()
+    await openRegister('Gebühr')
 
     const options = [...container.querySelectorAll('option')].map((entry) => entry.textContent)
     expect(options).toContain('3200 · Mahngebührenertrag')
@@ -272,6 +291,7 @@ describe('DunningSettingsPage', () => {
    */
   it('dunningSettingsTypesTheAccountWithoutTheChartRightTest', async () => {
     await render(WITHOUT_CHART)
+    await openRegister('Gebühr')
 
     expect(control(ACCOUNT)?.tagName).toBe('INPUT')
     expect((control(ACCOUNT) as HTMLInputElement).value).toBe('3200')
@@ -281,6 +301,7 @@ describe('DunningSettingsPage', () => {
   /** And the value round-trips untouched: the typed field saves what it was handed. */
   it('dunningSettingsKeepsTheAccountWithoutTheChartRightTest', async () => {
     await render(WITHOUT_CHART)
+    await openRegister('Gebühr')
 
     await save()
 
@@ -294,16 +315,18 @@ describe('DunningSettingsPage', () => {
    */
   it('dunningSettingsRefusesAMalformedAccountTest', async () => {
     await render(WITHOUT_CHART)
+    await openRegister('Gebühr')
 
     await type(ACCOUNT, 'Ertrag')
 
-    expect(container.textContent).toContain('Eine Kontonummer besteht aus Ziffern und Punkten')
+    expect(container.textContent).toContain('Nur Ziffern und Punkte, mit einer Ziffer am Anfang')
     expect(button('Speichern')?.disabled).toBe(true)
   })
 
   /** A number that passes the check leaves the button alone. */
   it('dunningSettingsAcceptsATypedAccountTest', async () => {
     await render(WITHOUT_CHART)
+    await openRegister('Gebühr')
 
     await type(ACCOUNT, '3000.10')
     await save()

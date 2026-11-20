@@ -305,7 +305,7 @@ function LanguagePanel({
           value={form.title}
           onChange={(event) => setForm({ ...form, title: event.target.value })}
           disabled={!mayWrite}
-          hint="Was oben auf der Mahnung steht. Die Bezeichnung in der Verwaltung kommt aus der Liste «Mahnarten»."
+          tooltip="Was oben auf der Mahnung steht. Die Bezeichnung in der Verwaltung kommt aus der Liste «Mahnarten»."
         />
 
         <TextArea
@@ -332,7 +332,7 @@ function LanguagePanel({
           value={form.mailSubject}
           onChange={(event) => setForm({ ...form, mailSubject: event.target.value })}
           disabled={!mayWrite}
-          hint="Steht in der Inbox des Kunden und muss allein verständlich sein."
+          tooltip="Steht in der Inbox des Kunden und muss allein verständlich sein."
         />
 
         <TextArea

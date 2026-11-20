@@ -327,7 +327,7 @@ function Levels({ tenantId }: { tenantId: number }) {
             label="Bezeichnung"
             value={form.dunningTypeId}
             onChange={(event) => setForm({ ...form, dunningTypeId: event.target.value })}
-            hint="Aus der Liste «Mahnarten». Der gedruckte Titel je Sprache steht bei den Mahntexten."
+            tooltip="Aus der Liste «Mahnarten». Der gedruckte Titel je Sprache steht bei den Mahntexten."
           >
             {(types.data ?? []).map((entry) => (
               <option key={entry.id} value={entry.id}>
@@ -343,7 +343,7 @@ function Levels({ tenantId }: { tenantId: number }) {
               onChange={(event) => setForm({ ...form, daysAfterDue: event.target.value })}
               inputMode="numeric"
               numeric
-              hint="Tage"
+              tooltip="Tage nach der Fälligkeit der Rechnung."
             />
             <TextField
               label="Zahlfrist"
@@ -351,7 +351,7 @@ function Levels({ tenantId }: { tenantId: number }) {
               onChange={(event) => setForm({ ...form, paymentDays: event.target.value })}
               inputMode="numeric"
               numeric
-              hint="Tage"
+              tooltip="Tage, die der Kunde für die Zahlung hat."
             />
             <TextField
               label="Sperrfrist"
@@ -361,7 +361,7 @@ function Levels({ tenantId }: { tenantId: number }) {
               }
               inputMode="numeric"
               numeric
-              hint="Tage seit der vorigen Mahnung"
+              tooltip="Tage seit der vorigen Mahnung, damit zwei Stufen nicht am selben Tag fallen."
             />
           </div>
 
