@@ -26,24 +26,17 @@ import {
  * @param tenantId the tenant, for the forms to choose from
  * @param copies the rows in printing order
  * @param onChange called with the new order or the new values
- * @param extraCopies the sheets labelled «Kopie» that go on top of the rows, as typed
- * @param onExtraCopiesChange called with the new count of those sheets
  * @param disabled true where the user may look but not write
  */
 export function CopyEditor({
   tenantId,
   copies,
   onChange,
-  extraCopies,
-  onExtraCopiesChange,
   disabled = false,
 }: {
   tenantId: number
   copies: CopyRow[]
   onChange: (copies: CopyRow[]) => void
-  /** The sheets labelled «Kopie» on top, as typed. */
-  extraCopies: string
-  onExtraCopiesChange: (extraCopies: string) => void
   disabled?: boolean
 }) {
   const { can } = useAuth()
@@ -59,13 +52,12 @@ export function CopyEditor({
   return (
     <Panel
       title="Ausfertigungen"
-      description="Was beim Drucken herauskommt, in dieser Reihenfolge. Die erste ist das Original. Ein Beleg kann jede Ausfertigung noch anpassen."
+      description="Was gedruckt wird, in dieser Reihenfolge. Die erste ist das Original. Jeder Beleg kann sie noch anpassen."
     >
       <div className="grid gap-3">
         {copies.length === 0 && (
           <p className="text-body text-text-secondary">
-            Keine Ausfertigung: Belege dieser Art werden nicht gedruckt. Als PDF ansehen lassen
-            sie sich trotzdem.
+            Ohne Ausfertigung wird nichts gedruckt. Die PDF-Vorschau geht trotzdem.
           </p>
         )}
 
@@ -114,7 +106,7 @@ export function CopyEditor({
                   maxLength={2}
                   disabled={disabled}
                   onChange={(event) => replace(index, { copies: event.target.value })}
-                  tooltip={`Wie viele Blätter dieser Ausfertigung, 1 bis ${MAX_SHEETS}.`}
+                  tooltip={`Wie viele Blätter, 1 bis ${MAX_SHEETS}.`}
                 />
                 {mayReadLayouts ? (
                   <SelectField
@@ -125,7 +117,7 @@ export function CopyEditor({
                       replace(index, { documentLayoutId: event.target.value })
                     }
                     className="sm:col-span-2 lg:col-span-1"
-                    tooltip="Eine eigene Vorlage nur für diese Ausfertigung, zum Beispiel eine Lagerkopie ohne Preise. «Wie der Beleg» nimmt die Vorlage oben."
+                    tooltip="Nur für diese Ausfertigung, zum Beispiel ohne Preise. «Wie der Beleg» nimmt die Vorlage oben."
                   >
                     <option value="">Wie der Beleg</option>
                     {forms
@@ -138,8 +130,7 @@ export function CopyEditor({
                   </SelectField>
                 ) : (
                   <p className="text-small text-text-tertiary sm:col-span-2 lg:col-span-1">
-                    Die Vorlage bleibt, wie sie ist. Zum Ändern brauchen Sie das Recht,
-                    Druckvorlagen zu sehen.
+                    Ohne Recht für Druckvorlagen bleibt die Vorlage unverändert.
                   </p>
                 )}
               </div>
@@ -157,17 +148,6 @@ export function CopyEditor({
           )
         })}
 
-        <TextField
-          label="Kopie"
-          value={extraCopies}
-          inputMode="numeric"
-          numeric
-          maxLength={2}
-          disabled={disabled}
-          onChange={(event) => onExtraCopiesChange(event.target.value)}
-          tooltip="Zusätzliche Exemplare mit der Aufschrift «Kopie», gedruckt wie das Original, bei jedem Beleg dieser Art. Ein Kunde bekommt eigene dazu. 0 heisst: keine Kopie."
-        />
-
         <div className="flex items-center justify-between">
           {copies.length < MAX_COPIES ? (
             <button
@@ -180,7 +160,7 @@ export function CopyEditor({
             </button>
           ) : (
             <span className="text-small text-text-tertiary">
-              Mehr als {MAX_COPIES} Ausfertigungen gehen nicht.
+              Höchstens {MAX_COPIES} Ausfertigungen.
             </span>
           )}
           <span className="text-small text-text-tertiary">

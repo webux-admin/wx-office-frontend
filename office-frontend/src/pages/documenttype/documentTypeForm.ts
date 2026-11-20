@@ -41,8 +41,6 @@ export type DocumentTypeForm = {
   copyPriceMode: CopyPriceMode
   /** How many days a new offer of this kind is valid, as typed; empty means no preset. */
   offerValidityDays: string
-  /** Sheets labelled «Kopie» every document of this kind gets on top, as typed; 0 means none. */
-  extraCopies: string
   /** What issuing such a document does to the stock. */
   stockEffect: StockEffect
   /** Id of the location it books at, as a string; empty means the tenant's default one. */
@@ -92,7 +90,6 @@ export function emptyDocumentType(): DocumentTypeForm {
     predecessorTypeIds: [],
     copyPriceMode: 'RECALCULATE',
     offerValidityDays: '',
-    extraCopies: '0',
     stockEffect: 'NONE',
     stockLocationId: '',
   }
@@ -121,7 +118,6 @@ export function toForm(type: DocumentType): DocumentTypeForm {
     predecessorTypeIds: type.predecessorTypeIds ?? [],
     copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
     offerValidityDays: type.offerValidityDays === undefined ? '' : `${type.offerValidityDays}`,
-    extraCopies: `${type.extraCopies ?? 0}`,
     stockEffect: type.stockEffect ?? 'NONE',
     stockLocationId: type.stockLocationId === undefined ? '' : `${type.stockLocationId}`,
   }
@@ -151,7 +147,6 @@ export function toPayload(form: DocumentTypeForm): Record<string, unknown> {
     copies: enteredCopies(form.copies),
     predecessorTypeIds: form.predecessorTypeIds,
     copyPriceMode: form.copyPriceMode,
-    extraCopies: extraCopiesOf(form.extraCopies),
     // Read only on the offer: while a new kind is being entered the category can still move
     // away from OFFER, and days typed before that switch must not land on an order kind.
     offerValidityDays:
@@ -179,12 +174,12 @@ export function toPayload(form: DocumentTypeForm): Record<string, unknown> {
  */
 export function firstComplaint(form: DocumentTypeForm, creating: boolean): string | null {
   if (creating && form.code.trim() === '') {
-    return 'Eine Belegart braucht einen Code. Er steht danach fest.'
+    return 'Ein Code fehlt. Er ist danach fest.'
   }
   if (form.code.trim().length > MAX_CODE_LENGTH) {
     return `Der Code darf höchstens ${MAX_CODE_LENGTH} Zeichen lang sein.`
   }
-  if (form.name.trim() === '') return 'Eine Belegart braucht eine Bezeichnung.'
+  if (form.name.trim() === '') return 'Die Bezeichnung fehlt.'
   if (form.name.trim().length > MAX_NAME_LENGTH) {
     return `Die Bezeichnung darf höchstens ${MAX_NAME_LENGTH} Zeichen lang sein.`
   }
@@ -194,33 +189,11 @@ export function firstComplaint(form: DocumentTypeForm, creating: boolean): strin
   // The prefix falls back to the code, and the code may be twice as long as a prefix. The
   // backend refuses that rather than cutting the code in half, so the mask says so first.
   if (form.numberPrefix.trim() === '' && form.code.trim().length > MAX_PREFIX_LENGTH) {
-    return `Ein Code über ${MAX_PREFIX_LENGTH} Zeichen taugt nicht als Nummernpräfix. `
-      + 'Bitte ein eigenes angeben.'
+    return `Der Code ist zu lang für ein Präfix. Bitte ein eigenes Präfix angeben.`
   }
   const validity = validityComplaint(form)
   if (validity !== null) return validity
-  const extra = extraCopiesComplaint(form.extraCopies)
-  if (extra !== null) return extra
   return copyComplaint(form.copies)
-}
-
-/**
- * The sheets labelled «Kopie» that go on top of the copies. Empty means none.
- *
- * <p>Read as a number here so the save and the check agree on what was typed.
- */
-function extraCopiesOf(value: string): number {
-  return value.trim() === '' ? 0 : (parseDecimal(value) ?? 0)
-}
-
-/** The rules the extra copies have to keep: a whole number from 0 to the sheet maximum. */
-function extraCopiesComplaint(value: string): string | null {
-  if (value.trim() === '') return null
-  const count = parseDecimal(value)
-  if (count === null) return 'Die Kopien sind keine Zahl.'
-  if (!Number.isInteger(count)) return 'Die Kopien sind eine ganze Zahl.'
-  if (count < 0 || count > MAX_SHEETS) return `Die Kopien liegen zwischen 0 und ${MAX_SHEETS}.`
-  return null
 }
 
 /**
@@ -233,7 +206,7 @@ function validityComplaint(form: DocumentTypeForm): string | null {
   if (form.category !== 'OFFER' || form.offerValidityDays.trim() === '') return null
   const days = parseDecimal(form.offerValidityDays)
   if (days === null) return 'Die Gültigkeit ist keine Zahl.'
-  if (!Number.isInteger(days)) return 'Die Gültigkeit ist eine ganze Zahl von Tagen.'
+  if (!Number.isInteger(days)) return 'Die Gültigkeit ist eine ganze Zahl.'
   if (days < 1 || days > MAX_OFFER_VALIDITY_DAYS) {
     return `Die Gültigkeit liegt zwischen 1 und ${MAX_OFFER_VALIDITY_DAYS} Tagen.`
   }
@@ -257,7 +230,7 @@ export function withMovedCopy(
 }
 
 /**
- * Moves one predecessor up or down, which is the order of the «Übernehmen aus» menu.
+ * Moves one predecessor up or down, which is the order a new document offers them in.
  *
  * @param ids the ids in the order they are offered
  * @param index the entry being moved
@@ -346,17 +319,17 @@ export const STOCK_EFFECTS: { value: StockEffect; label: string; hint: string }[
   {
     value: 'RESERVE',
     label: 'Reservieren',
-    hint: 'Typisch für Aufträge. Die Ware bleibt im Lager, ist aber nicht mehr verfügbar. Der Lieferschein bucht sie dann ab.',
+    hint: 'Üblich bei Aufträgen. Die Ware ist reserviert und bleibt im Lager. Der Lieferschein bucht sie ab.',
   },
   {
     value: 'ISSUE',
     label: 'Abbuchen',
-    hint: 'Typisch für Lieferscheine. Die Ware verlässt das Lager. Ein Storno bucht sie zurück.',
+    hint: 'Üblich bei Lieferscheinen. Die Ware verlässt das Lager. Ein Storno bucht sie zurück.',
   },
   {
     value: 'ISSUE_IF_NOT_BOOKED',
-    label: 'Abbuchen, falls noch nicht geschehen',
-    hint: 'Typisch für Rechnungen. Bucht nur ab, wenn kein Lieferschein desselben Vorgangs es schon getan hat.',
+    label: 'Abbuchen, wenn noch nicht geschehen',
+    hint: 'Üblich bei Rechnungen. Bucht nur ab, wenn kein Lieferschein desselben Vorgangs schon abgebucht hat.',
   },
 ]
 
@@ -382,13 +355,13 @@ function copyComplaint(rows: readonly CopyRow[]): string | null {
   // A row without a label is dropped on the way out. Saying so is the difference between a
   // copy somebody decided against and one that quietly disappeared.
   if (rows.some((row) => row.label.trim() === '')) {
-    return 'Eine Ausfertigung braucht eine Beschriftung. Sonst die Zeile entfernen.'
+    return 'Eine Ausfertigung braucht eine Beschriftung. Sonst entfernen.'
   }
   if (rows.some((row) => row.label.trim().length > MAX_COPY_LABEL_LENGTH)) {
     return `Eine Beschriftung darf höchstens ${MAX_COPY_LABEL_LENGTH} Zeichen lang sein.`
   }
   if (rows.length > MAX_COPIES) {
-    return `Ein Beleg wird höchstens ${MAX_COPIES} Mal gedruckt.`
+    return `Höchstens ${MAX_COPIES} Ausfertigungen.`
   }
   for (const row of rows) {
     const sheets = parseDecimal(row.copies)

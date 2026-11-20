@@ -183,14 +183,14 @@ describe('DocumentTypePage', () => {
     await render('/belegarten/7')
 
     expect(() => buttonNamed('Deaktivieren')).toThrow()
-    expect(text()).toContain('Diese Belegart ist der Standard.')
+    expect(text()).toContain('Das ist der Standard.')
   })
 
   it('documentTypePageForANewKindTest', async () => {
     await render('/belegarten/neu')
 
     expect(text()).toContain('Neue Belegart')
-    expect(text()).toContain('Kategorie und Code stehen nach dem Speichern fest.')
+    expect(text()).toContain('Kategorie und Code sind nach dem Speichern fest.')
     expect(document.body.querySelector('[aria-label="Code: nicht änderbar"]')).toBeNull()
   })
 })

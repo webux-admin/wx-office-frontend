@@ -61,12 +61,11 @@ export function StockPanel({
   return (
     <Panel
       title="Lager"
-      description="Was mit dem Bestand passiert, wenn ein Beleg dieser Art ausgestellt wird."
+      description="Was ein ausgestellter Beleg dieser Art mit dem Bestand macht."
     >
       {active.length === 0 ? (
         <p className="text-body text-text-secondary">
-          Es gibt noch keinen Lagerort. Legen Sie zuerst einen an, dann lässt sich das hier
-          einstellen.
+          Es gibt noch keinen Lagerort. Ohne einen lässt sich die Wirkung nicht einstellen.
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -112,7 +111,7 @@ export function StockPanel({
 
       {nothingFollowed && active.length > 0 && (
         <p className="mt-3 text-small text-text-tertiary">
-          Noch kein Produkt wird im Lager geführt. Die Einstellung wirkt erst, wenn es eines gibt.
+          Noch kein Produkt wird im Lager geführt. Die Wirkung greift, sobald eines geführt wird.
         </p>
       )}
       {form.stockEffect !== 'NONE' && (

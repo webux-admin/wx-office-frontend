@@ -210,7 +210,6 @@ describe('toPayload', () => {
       predecessorTypeIds: [3, 5],
       copyPriceMode: 'COPY',
       offerValidityDays: undefined,
-      extraCopies: 0,
       stockEffect: 'NONE',
       stockLocationId: undefined,
     })
@@ -238,7 +237,6 @@ describe('toPayload', () => {
       'copies',
       'copyPriceMode',
       'documentLayoutId',
-      'extraCopies',
       'name',
       'numberPrefix',
       'offerValidityDays',
@@ -312,7 +310,7 @@ describe('firstComplaint', () => {
 
   it('firstComplaintWithoutCodeWhileCreatingTest', () => {
     expect(firstComplaint({ ...COMPLETE, code: '  ' }, true))
-      .toBe('Eine Belegart braucht einen Code. Er steht danach fest.')
+      .toBe('Ein Code fehlt. Er ist danach fest.')
   })
 
   it('firstComplaintWithoutCodeWhileEditingTest', () => {
@@ -332,7 +330,7 @@ describe('firstComplaint', () => {
 
   it('firstComplaintWithoutNameTest', () => {
     expect(firstComplaint({ ...COMPLETE, name: '' }, true))
-      .toBe('Eine Belegart braucht eine Bezeichnung.')
+      .toBe('Die Bezeichnung fehlt.')
   })
 
   it('firstComplaintWithTooLongNameTest', () => {
@@ -348,7 +346,7 @@ describe('firstComplaint', () => {
   it('firstComplaintWithLongCodeAndNoPrefixTest', () => {
     // The prefix falls back to the code, and a code may be twice as long as a prefix.
     expect(firstComplaint({ ...COMPLETE, code: 'A'.repeat(11), numberPrefix: '' }, true))
-      .toBe('Ein Code über 10 Zeichen taugt nicht als Nummernpräfix. Bitte ein eigenes angeben.')
+      .toBe('Der Code ist zu lang für ein Präfix. Bitte ein eigenes Präfix angeben.')
   })
 
   it('firstComplaintWithLongCodeAndOwnPrefixTest', () => {
@@ -358,7 +356,7 @@ describe('firstComplaint', () => {
 
   it('firstComplaintWithBlankCopyLabelTest', () => {
     expect(firstComplaint({ ...COMPLETE, copies: [copy(), copy({ label: ' ' })] }, true))
-      .toBe('Eine Ausfertigung braucht eine Beschriftung. Sonst die Zeile entfernen.')
+      .toBe('Eine Ausfertigung braucht eine Beschriftung. Sonst entfernen.')
   })
 
   it('firstComplaintWithAnUnreadableSheetCountTest', () => {
@@ -387,7 +385,7 @@ describe('firstComplaint', () => {
     )
 
     expect(firstComplaint({ ...COMPLETE, copies }, true))
-      .toBe('Ein Beleg wird höchstens 9 Mal gedruckt.')
+      .toBe('Höchstens 9 Ausfertigungen.')
   })
 
   it('firstComplaintWithExactlyNineCopiesTest', () => {
@@ -419,7 +417,7 @@ describe('firstComplaint', () => {
 
   it('firstComplaintWithBrokenValidityDaysTest', () => {
     expect(firstComplaint({ ...OFFER_FORM, offerValidityDays: '1.5' }, true))
-      .toBe('Die Gültigkeit ist eine ganze Zahl von Tagen.')
+      .toBe('Die Gültigkeit ist eine ganze Zahl.')
   })
 
   it('firstComplaintWithUnreadableValidityDaysTest', () => {
@@ -563,63 +561,5 @@ describe('COPY_PRICE_MODES', () => {
   it('copyPriceModesTest', () => {
     // The stored default comes first, so the ordinary case is the first radio row.
     expect(COPY_PRICE_MODES.map((mode) => mode.value)).toEqual(['RECALCULATE', 'COPY'])
-  })
-})
-
-describe('extra copies', () => {
-  /** A valid mask that only differs in the extra copies. */
-  function withExtra(extraCopies: string): DocumentTypeForm {
-    return { ...emptyDocumentType(), code: 'RE', name: 'Rechnung', extraCopies }
-  }
-
-  it('emptyDocumentTypeHasNoExtraCopiesTest', () => {
-    expect(emptyDocumentType().extraCopies).toBe('0')
-  })
-
-  it('toFormReadsTheExtraCopiesTest', () => {
-    const form = toForm({
-      id: 1,
-      code: 'RE',
-      category: 'INVOICE',
-      name: 'Rechnung',
-      extraCopies: 2,
-    } as DocumentType)
-
-    expect(form.extraCopies).toBe('2')
-  })
-
-  it('toFormWithoutExtraCopiesMeansNoneTest', () => {
-    const form = toForm({ id: 1, code: 'RE', category: 'INVOICE', name: 'Rechnung' } as DocumentType)
-
-    expect(form.extraCopies).toBe('0')
-  })
-
-  it('toPayloadSendsTheExtraCopiesAsNumberTest', () => {
-    expect(toPayload(withExtra('3')).extraCopies).toBe(3)
-  })
-
-  it('toPayloadWithBlankExtraCopiesSendsZeroTest', () => {
-    expect(toPayload(withExtra('')).extraCopies).toBe(0)
-  })
-
-  it('firstComplaintWithTheOutermostExtraCopiesTest', () => {
-    expect(firstComplaint(withExtra('0'), false)).toBeNull()
-    expect(firstComplaint(withExtra('99'), false)).toBeNull()
-  })
-
-  it('firstComplaintWithTooManyExtraCopiesTest', () => {
-    expect(firstComplaint(withExtra('100'), false)).toMatch(/0 und 99/)
-  })
-
-  it('firstComplaintWithNegativeExtraCopiesTest', () => {
-    expect(firstComplaint(withExtra('-1'), false)).toMatch(/0 und 99/)
-  })
-
-  it('firstComplaintWithUnreadableExtraCopiesTest', () => {
-    expect(firstComplaint(withExtra('viele'), false)).toMatch(/keine Zahl/)
-  })
-
-  it('firstComplaintWithFractionalExtraCopiesTest', () => {
-    expect(firstComplaint(withExtra('1.5'), false)).toMatch(/ganze Zahl/)
   })
 })

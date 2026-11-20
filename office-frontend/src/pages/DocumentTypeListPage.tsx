@@ -165,7 +165,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Belegarten"
-        subtitle="Die Arten von Belegen, die Sie schreiben: Nummer, Druck und woraus sie entstehen."
+        subtitle="Welche Belege Sie schreiben: Nummer, Druck und Vorgänger."
       >
         {mayWrite && (
           <LinkButton to="/belegarten/neu" state={ORIGIN}>

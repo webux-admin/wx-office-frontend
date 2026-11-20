@@ -1265,11 +1265,6 @@ export type DocumentType = {
    * date. Absent when a new offer starts without a valid-until date.
    */
   offerValidityDays?: number
-  /**
-   * Sheets labelled «Kopie» that every document of this kind gets on top of its copies. Absent
-   * means none.
-   */
-  extraCopies?: number
   /** What issuing a document of this kind does to the stock (ADR-0064 of the backend). */
   stockEffect?: StockEffect
   /** The location it books at; absent means the tenant's default one. */

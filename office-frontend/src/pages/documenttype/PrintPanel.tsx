@@ -135,13 +135,13 @@ function LayoutFacts({
       </span>
       {!form.active && (
         <span className="text-small text-text-tertiary">
-          Deaktiviert: Belege drucken weiter darauf, neu wählen lässt sie sich aber nicht.
+          Deaktiviert. Bestehende Belege drucken weiter damit, neu wählen lässt sie sich nicht.
         </span>
       )}
       <span className="text-small text-text-tertiary">
         {others.length === 0
-          ? 'Nur diese Belegart druckt auf dieser Vorlage.'
-          : `Auch benutzt von: ${others.map((type) => type.name).join(', ')}. Wer die Vorlage ändert, ändert sie dort mit.`}
+          ? 'Nur diese Belegart nutzt die Vorlage.'
+          : `Auch genutzt von: ${others.map((type) => type.name).join(', ')}. Änderungen wirken dort ebenfalls.`}
       </span>
     </span>
   )

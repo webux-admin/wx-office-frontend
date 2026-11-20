@@ -35,16 +35,16 @@ import {
 /** Where the mask goes when it was opened without naming a screen to return to. */
 const LIST: Origin = { from: '/belegarten', label: 'Belegarten' }
 
-type Register = 'allgemein' | 'druck' | 'uebernahme'
+type Register = 'allgemein' | 'druck' | 'vorgaenger'
 
 const REGISTERS: { id: Register; label: string }[] = [
   { id: 'allgemein', label: 'Allgemein' },
   { id: 'druck', label: 'Druck' },
-  { id: 'uebernahme', label: 'Übernahme' },
+  { id: 'vorgaenger', label: 'Vorgänger' },
 ]
 
 /** Said by the lock icon on the two fields that are fixed once the kind exists. */
-const FIXED = 'Steht nach dem Anlegen fest, weil Nummernkreis und bestehende Belege daran hängen.'
+const FIXED = 'Nach dem Anlegen fest: Nummern und bestehende Belege hängen daran.'
 
 /**
  * One kind of document: what it is called, how its number looks, what it prints on, how
@@ -181,7 +181,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
         onSubmit={mayWrite && !save.isPending ? submit : undefined}
         subtitle={
           type === null ? (
-            'Kategorie und Code stehen nach dem Speichern fest.'
+            'Kategorie und Code sind nach dem Speichern fest.'
           ) : (
             <span className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-small">{type.code}</span>
@@ -227,7 +227,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     locked={creating ? undefined : FIXED}
                     tooltip={
                       creating
-                        ? 'Legt fest, was für ein Beleg das ist: Offerte, Auftrag, Lieferschein, Rechnung oder Gutschrift.'
+                        ? 'Offerte, Auftrag, Lieferschein, Rechnung oder Gutschrift.'
                         : undefined
                     }
                   />
@@ -241,7 +241,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     locked={creating ? undefined : FIXED}
                     tooltip={
                       creating
-                        ? 'Kurzes Kennzeichen, zum Beispiel RE. Es steht im Nummernkreis.'
+                        ? 'Kurzes Kürzel, zum Beispiel RE. Es bestimmt die Nummernreihe.'
                         : undefined
                     }
                   />
@@ -253,7 +253,6 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     required
                     maxLength={60}
                     className="sm:col-span-2"
-                    tooltip="So heisst die Belegart in Listen und Menüs."
                   />
                   <TextField
                     label="Nummernpräfix"
@@ -261,7 +260,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                     onChange={(event) => change({ numberPrefix: event.target.value })}
                     disabled={!mayWrite}
                     maxLength={10}
-                    tooltip="Steht vor der Belegnummer, zum Beispiel AU-2026-0001. Leer: der Code."
+                    tooltip="Steht vor der Nummer, zum Beispiel AU-2026-0001. Leer: der Code."
                   />
                   {/* Only the offer promises something with an expiry, so only its kinds
                       carry the preset. */}
@@ -273,7 +272,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                       disabled={!mayWrite}
                       inputMode="numeric"
                       numeric
-                      tooltip="Füllt «Gültig bis» einer neuen Offerte: Belegdatum plus diese Tage. Leer: kein Vorschlag."
+                      tooltip="Setzt «Gültig bis» einer neuen Offerte: Belegdatum plus diese Tage. Leer: kein Vorschlag."
                     />
                   )}
                 </div>
@@ -289,7 +288,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
               {type !== null && (
                 <Panel
                   title="Standard"
-                  description={`Neue ${categoryLabel(form.category)}-Belege starten mit der Standard-Belegart.`}
+                  description={`Neue ${categoryLabel(form.category)}-Belege nehmen standardmässig diese Belegart.`}
                   action={
                     mayWrite && type.active && !isDefault ? (
                       <Button
@@ -304,9 +303,9 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                 >
                   <p className="text-body text-text-secondary">
                     {isDefault
-                      ? 'Diese Belegart ist der Standard. Um das zu ändern, legen Sie eine andere Belegart derselben Kategorie als Standard fest.'
+                      ? 'Das ist der Standard. Um das zu ändern, eine andere Belegart derselben Kategorie als Standard festlegen.'
                       : type.active
-                        ? 'Eine andere Belegart ist der Standard. Legen Sie diese fest, verliert die andere den Standard.'
+                        ? 'Standard ist eine andere Belegart. Diese festlegen, ersetzt sie.'
                         : 'Eine deaktivierte Belegart kann nicht Standard werden.'}
                   </p>
                 </Panel>
@@ -328,14 +327,12 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                 tenantId={tenantId}
                 copies={form.copies}
                 onChange={(copies) => change({ copies })}
-                extraCopies={form.extraCopies}
-                onExtraCopiesChange={(extraCopies) => change({ extraCopies })}
                 disabled={!mayWrite}
               />
             </>
           )}
 
-          {tab === 'uebernahme' && (
+          {tab === 'vorgaenger' && (
             <>
               <PredecessorEditor
                 all={types.data ?? []}
@@ -377,8 +374,7 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
         busy={deactivate.isPending}
         error={deactivate.error}
       >
-        Mit dieser Belegart lassen sich keine neuen Belege mehr anlegen. Bestehende Belege
-        bleiben, wie sie sind.
+        Es lassen sich keine neuen Belege dieser Art mehr anlegen. Bestehende Belege bleiben unverändert.
       </ConfirmDialog>
     </>
   )

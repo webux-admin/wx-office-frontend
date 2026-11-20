@@ -12,7 +12,7 @@ import {
  * Which kinds of document this one may be taken over from, and in which order.
  *
  * <p>The chosen ones stand at the top in their stored order, because that order is the order
- * of the «Übernehmen aus» menu. What may still be added stands below.
+ * of a new document. What may still be added stands below.
  *
  * <p>Only kinds the backend would accept are offered: never this kind itself, never a retired
  * one, and never one that already takes this kind over — a ring would let two kinds feed each
@@ -44,13 +44,13 @@ export function PredecessorEditor({
 
   return (
     <Panel
-      title="Übernehmen aus"
-      description="Aus diesen Belegarten lässt sich ein Beleg dieser Art erstellen, zum Beispiel eine Rechnung aus einem Lieferschein. Die Reihenfolge gilt im Menü «Übernehmen aus»."
+      title="Vorgängerbelege"
+      description="Ein Beleg dieser Art entsteht aus diesen Vorgängern, zum Beispiel eine Rechnung aus dem Lieferschein. Die Reihenfolge gilt beim Übernehmen."
     >
       <div className="grid gap-3">
         {chosenTypes.length === 0 ? (
           <p className="text-body text-text-secondary">
-            Noch keine. Belege dieser Art werden immer neu erfasst.
+            Keine. Belege dieser Art werden immer neu erfasst.
           </p>
         ) : (
           chosenTypes.map((type, index) => (
