@@ -26,17 +26,24 @@ import {
  * @param tenantId the tenant, for the forms to choose from
  * @param copies the rows in printing order
  * @param onChange called with the new order or the new values
+ * @param extraCopies the sheets labelled «Kopie» that go on top of the rows, as typed
+ * @param onExtraCopiesChange called with the new count of those sheets
  * @param disabled true where the user may look but not write
  */
 export function CopyEditor({
   tenantId,
   copies,
   onChange,
+  extraCopies,
+  onExtraCopiesChange,
   disabled = false,
 }: {
   tenantId: number
   copies: CopyRow[]
   onChange: (copies: CopyRow[]) => void
+  /** The sheets labelled «Kopie» on top, as typed. */
+  extraCopies: string
+  onExtraCopiesChange: (extraCopies: string) => void
   disabled?: boolean
 }) {
   const { can } = useAuth()
@@ -149,6 +156,17 @@ export function CopyEditor({
             </div>
           )
         })}
+
+        <TextField
+          label="Kopie"
+          value={extraCopies}
+          inputMode="numeric"
+          numeric
+          maxLength={2}
+          disabled={disabled}
+          onChange={(event) => onExtraCopiesChange(event.target.value)}
+          tooltip="Zusätzliche Exemplare mit der Aufschrift «Kopie», gedruckt wie das Original, bei jedem Beleg dieser Art. Ein Kunde bekommt eigene dazu. 0 heisst: keine Kopie."
+        />
 
         <div className="flex items-center justify-between">
           {copies.length < MAX_COPIES ? (

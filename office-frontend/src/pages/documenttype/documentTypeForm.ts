@@ -41,6 +41,8 @@ export type DocumentTypeForm = {
   copyPriceMode: CopyPriceMode
   /** How many days a new offer of this kind is valid, as typed; empty means no preset. */
   offerValidityDays: string
+  /** Sheets labelled «Kopie» every document of this kind gets on top, as typed; 0 means none. */
+  extraCopies: string
   /** What issuing such a document does to the stock. */
   stockEffect: StockEffect
   /** Id of the location it books at, as a string; empty means the tenant's default one. */
@@ -90,6 +92,7 @@ export function emptyDocumentType(): DocumentTypeForm {
     predecessorTypeIds: [],
     copyPriceMode: 'RECALCULATE',
     offerValidityDays: '',
+    extraCopies: '0',
     stockEffect: 'NONE',
     stockLocationId: '',
   }
@@ -118,6 +121,7 @@ export function toForm(type: DocumentType): DocumentTypeForm {
     predecessorTypeIds: type.predecessorTypeIds ?? [],
     copyPriceMode: type.copyPriceMode ?? 'RECALCULATE',
     offerValidityDays: type.offerValidityDays === undefined ? '' : `${type.offerValidityDays}`,
+    extraCopies: `${type.extraCopies ?? 0}`,
     stockEffect: type.stockEffect ?? 'NONE',
     stockLocationId: type.stockLocationId === undefined ? '' : `${type.stockLocationId}`,
   }
@@ -147,6 +151,7 @@ export function toPayload(form: DocumentTypeForm): Record<string, unknown> {
     copies: enteredCopies(form.copies),
     predecessorTypeIds: form.predecessorTypeIds,
     copyPriceMode: form.copyPriceMode,
+    extraCopies: extraCopiesOf(form.extraCopies),
     // Read only on the offer: while a new kind is being entered the category can still move
     // away from OFFER, and days typed before that switch must not land on an order kind.
     offerValidityDays:
@@ -194,7 +199,28 @@ export function firstComplaint(form: DocumentTypeForm, creating: boolean): strin
   }
   const validity = validityComplaint(form)
   if (validity !== null) return validity
+  const extra = extraCopiesComplaint(form.extraCopies)
+  if (extra !== null) return extra
   return copyComplaint(form.copies)
+}
+
+/**
+ * The sheets labelled «Kopie» that go on top of the copies. Empty means none.
+ *
+ * <p>Read as a number here so the save and the check agree on what was typed.
+ */
+function extraCopiesOf(value: string): number {
+  return value.trim() === '' ? 0 : (parseDecimal(value) ?? 0)
+}
+
+/** The rules the extra copies have to keep: a whole number from 0 to the sheet maximum. */
+function extraCopiesComplaint(value: string): string | null {
+  if (value.trim() === '') return null
+  const count = parseDecimal(value)
+  if (count === null) return 'Die Kopien sind keine Zahl.'
+  if (!Number.isInteger(count)) return 'Die Kopien sind eine ganze Zahl.'
+  if (count < 0 || count > MAX_SHEETS) return `Die Kopien liegen zwischen 0 und ${MAX_SHEETS}.`
+  return null
 }
 
 /**

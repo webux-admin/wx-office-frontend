@@ -133,7 +133,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     },
     {
       key: 'predecessors',
-      header: 'Übernahme aus',
+      header: 'Vorgängerbeleg',
       width: 'w-[180px]',
       render: (type) => {
         const names = (type.predecessorTypeIds ?? [])

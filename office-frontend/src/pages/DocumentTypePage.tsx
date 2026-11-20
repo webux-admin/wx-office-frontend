@@ -328,6 +328,8 @@ function DocumentTypeMask({ tenantId, type }: { tenantId: number; type: Document
                 tenantId={tenantId}
                 copies={form.copies}
                 onChange={(copies) => change({ copies })}
+                extraCopies={form.extraCopies}
+                onExtraCopiesChange={(extraCopies) => change({ extraCopies })}
                 disabled={!mayWrite}
               />
             </>
