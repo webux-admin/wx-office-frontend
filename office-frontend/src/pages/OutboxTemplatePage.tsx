@@ -132,7 +132,7 @@ function Templates({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Mailvorlagen"
-        subtitle="Betreff und Begleittext, mit denen Belege hinausgehen"
+        subtitle="Betreff und Begleittext der Belege-Mails"
       />
 
       <div className="px-8 pb-12">

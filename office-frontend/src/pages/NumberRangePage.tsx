@@ -181,7 +181,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Nummernkreise"
-        subtitle="Je Belegart und Geschäftsjahr ein Zähler. Der Stand selbst lässt sich nicht ändern."
+        subtitle="Ein Zähler je Belegart und Geschäftsjahr. Der Stand lässt sich nicht ändern."
       >
         {mayWrite && (
           <Button onClick={openNew}>

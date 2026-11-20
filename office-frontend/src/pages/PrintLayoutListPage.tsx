@@ -160,7 +160,7 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Druckvorlagen"
-        subtitle="Wie ein Beleg aussieht. Die mitgelieferte Vorlage lässt sich kopieren und dann frei gestalten."
+        subtitle="Wie ein Beleg aussieht. Die mitgelieferte Vorlage kopieren und dann anpassen."
       >
         {mayWrite && (
           <Button onClick={() => setAdding({ source: undefined })}>

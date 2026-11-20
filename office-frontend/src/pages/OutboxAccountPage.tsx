@@ -145,7 +145,7 @@ function Account({ tenantId }: { tenantId: number }) {
     <>
       <PageHeader
         title="Postausgang"
-        subtitle="Über welches Konto dieser Mandant E-Mails versendet"
+        subtitle="Das Konto, über das E-Mails versendet werden"
       >
         {mayConfigure && (
           <Button onClick={submit} busy={save.isPending} disabled={!changed} shortcut>

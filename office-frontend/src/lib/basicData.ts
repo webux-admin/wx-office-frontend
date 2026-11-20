@@ -37,7 +37,7 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
     list: 'dunning-types',
     label: 'Mahnarten',
     description:
-      'Die Bezeichnungen der Mahnstufen, von der Erinnerung bis zur Betreibungsandrohung. ' +
+      'Die Namen der Mahnstufen, von der Erinnerung bis zur Betreibungsandrohung. ' +
       'Fristen, Gebühren und Texte stehen im Mahnwesen.',
   },
   {
@@ -45,8 +45,8 @@ export const BASIC_DATA_LISTS: BasicDataList[] = [
     list: 'dunning-block-reasons',
     label: 'Mahnstopp-Gründe',
     description:
-      'Warum ein Kunde oder ein Beleg nicht gemahnt wird. Ein Katalog und kein Freitext: ' +
-      '«zahlt nie» wäre ein Bonitätsurteil über eine Person.',
+      'Warum ein Kunde oder Beleg nicht gemahnt wird. Feste Gründe statt Freitext: ' +
+      '«zahlt nie» wäre ein Urteil über eine Person.',
   },
   {
     slug: 'einheiten',
