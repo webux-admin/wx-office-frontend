@@ -796,8 +796,8 @@ export const NAV_GROUPS: NavGroup[] = [
             module: OUTBOX_MODULE,
           },
           listEntry('verrechnungsarten', Receipt),
-          listEntry('mahnarten', BellRing),
-          listEntry('mahnstopp-gruende', Ban),
+          { ...listEntry('mahnarten', BellRing), module: DUNNING_MODULE },
+          { ...listEntry('mahnstopp-gruende', Ban), module: DUNNING_MODULE },
         ],
       },
       {
