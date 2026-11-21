@@ -148,6 +148,7 @@ async function render(path: string, stored: Partner = STORED, permissions = ALL_
           <QueryClientProvider client={client}>
             <Routes>
               <Route path="/kunden/:id" element={<PartnerPage role="customer" />} />
+              <Route path="/lieferanten/:id" element={<PartnerPage role="supplier" />} />
               <Route path="/kunden" element={<p>Kundenliste</p>} />
             </Routes>
           </QueryClientProvider>
@@ -358,6 +359,29 @@ describe('PartnerPage', () => {
     expect(container.textContent).toContain('Bahnhofstrasse 12, 8001 Zürich')
     expect(container.textContent).toContain('Eva Huber')
     expect(container.textContent).toContain('044 123 45 67')
+  })
+
+  /** A supplier gets no sales history and no sales document types, only its record. */
+  it('partnerPageHidesTheSalesRegistersForASupplierTest', async () => {
+    const supplier: Partner = { ...STORED, isCustomer: false, isSupplier: true }
+    await render('/lieferanten/7', supplier, [...ALL_RIGHTS, 'DOCUMENT_TYPE_READ'])
+
+    const tabLabels = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)
+    expect(tabLabels).not.toContain('Verlauf')
+
+    await click('Einstellungen')
+    expect(container.textContent).not.toContain('Dokumente')
+  })
+
+  /** A customer keeps the history and the sales document types. */
+  it('partnerPageShowsTheSalesRegistersForACustomerTest', async () => {
+    await render('/kunden/7', STORED, [...ALL_RIGHTS, 'DOCUMENT_TYPE_READ'])
+
+    const tabLabels = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)
+    expect(tabLabels).toContain('Verlauf')
+
+    await click('Einstellungen')
+    expect(container.textContent).toContain('Dokumente')
   })
 
   /** A typo in the name or the wrong kind is corrected on the stored record. */

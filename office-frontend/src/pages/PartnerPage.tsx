@@ -544,6 +544,10 @@ function PartnerEditMask({
     setConfirming(step)
   }
 
+  // Sales documents belong to a customer. A supplier gets purchase documents, which do not
+  // exist yet, so the sales registers stay away from it.
+  const sellsToPartner = partner.isCustomer === true
+
   const showsProjects =
     wording.role === 'customer' &&
     can(PROJECT_RIGHTS.read) &&
@@ -563,8 +567,8 @@ function PartnerEditMask({
     // register needs the module switched on: without it there is no project list to read.
     ...(showsProjects ? [{ id: 'projekte' as Tab, label: 'Projekte' }] : []),
     // Last on purpose: the history is what happened, and one looks it up rather than works
-    // in it. For both roles — a supplier has a record with us just as a customer does.
-    { id: 'verlauf', label: 'Verlauf' },
+    // in it. Only for a partner we sell to: it lists sales documents, and a supplier has none.
+    ...(sellsToPartner ? [{ id: 'verlauf' as Tab, label: 'Verlauf' }] : []),
   ]
 
   return (
@@ -642,7 +646,7 @@ function PartnerEditMask({
         {tab === 'preise' && <PartnerPrices tenantId={tenantId} partnerId={partner.id} />}
 
         {tab === 'einstellungen' && (
-          <PartnerSettings tenantId={tenantId} partner={partner} />
+          <PartnerSettings tenantId={tenantId} partner={partner} sellsToPartner={sellsToPartner} />
         )}
 
         {tab === 'projekte' && showsProjects && (
@@ -651,7 +655,7 @@ function PartnerEditMask({
 
         {/* No permission check: the server narrows the rows to what the reader may see and
             answers with an empty page when that is nothing. */}
-        {tab === 'verlauf' && (
+        {tab === 'verlauf' && sellsToPartner && (
           <PartnerHistory tenantId={tenantId} partnerId={partner.id} role={wording.role} />
         )}
       </FormMask>
@@ -754,18 +758,27 @@ function PartnerSummary({
 
 /**
  * What this one partner does differently from the rest: its own document types, its dunning
- * settings and the payer accounts learned from its payments.
+ * settings and the payer accounts learned from its payments. The sales parts (document types,
+ * dunning) are left out for a partner we do not sell to.
  */
-function PartnerSettings({ tenantId, partner }: { tenantId: number; partner: Partner }) {
+function PartnerSettings({
+  tenantId,
+  partner,
+  sellsToPartner,
+}: {
+  tenantId: number
+  partner: Partner
+  sellsToPartner: boolean
+}) {
   const { can, user } = useAuth()
   const showsDunning =
-    can(DUNNING_RIGHTS.read) && runsModule(user?.tenants, tenantId, DUNNING_MODULE)
+    sellsToPartner && can(DUNNING_RIGHTS.read) && runsModule(user?.tenants, tenantId, DUNNING_MODULE)
 
   return (
     <div className="grid gap-6">
       {/* Needs the right on the catalogue: the data are kinds of document, not partner data
           (ADR-0054 of the backend). */}
-      {can('DOCUMENT_TYPE_READ') && (
+      {sellsToPartner && can('DOCUMENT_TYPE_READ') && (
         <PartnerDocumentTypes
           tenantId={tenantId}
           partnerId={partner.id}
