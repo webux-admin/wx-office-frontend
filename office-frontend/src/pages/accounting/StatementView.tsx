@@ -150,7 +150,7 @@ export function StatementView({
             onChange={(event) =>
               setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
             }
-            className="w-[170px]"
+            className="w-[10.625rem]"
           >
             {available.map((year) => (
               <option key={year.id} value={year.id}>
@@ -163,7 +163,7 @@ export function StatementView({
             type="date"
             value={asOf}
             onChange={(event) => setAsOf(event.target.value)}
-            className="w-[160px]"
+            className="w-[10rem]"
           />
           <CheckboxField
             label="Positionen ohne Werte ausblenden (auch im Vorjahr)"
@@ -216,7 +216,7 @@ export function StatementView({
 
         {/* The two standing notes belong under the figures rather than over them: they are about
             what the reader is holding, not about what is missing from it. */}
-        <div className="grid gap-1 text-[12px] text-text-secondary">
+        <div className="grid gap-1 text-small text-text-secondary">
           <p>«Als CSV» lädt das Archiv-ZIP dieses Geschäftsjahres mit allen fünf Dateien.</p>
           {data?.notes
             .filter((note) => !WARNING_KINDS.includes(note.kind))
@@ -272,7 +272,7 @@ function statementColumns(statement: Statement | undefined): Column<StatementRow
       key: 'amount',
       header: current,
       align: 'right',
-      width: 'w-[160px]',
+      width: 'w-[10rem]',
       render: (row) => (
         <AmountCell row={row} amount={row.amount} balanced={statement?.control?.balanced} />
       ),
@@ -281,7 +281,7 @@ function statementColumns(statement: Statement | undefined): Column<StatementRow
       key: 'priorAmount',
       header: prior,
       align: 'right',
-      width: 'w-[160px]',
+      width: 'w-[10rem]',
       render: (row) => <AmountCell row={row} amount={row.priorAmount} />,
     },
   ]

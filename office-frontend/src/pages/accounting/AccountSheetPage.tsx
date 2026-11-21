@@ -61,22 +61,22 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
     {
       key: 'bookingDate',
       header: 'Datum',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (line) => <span className="tabular-nums">{formatDate(line.bookingDate)}</span>,
     },
     {
       key: 'entryNumber',
       header: 'Journal-Nr.',
-      width: 'w-[150px]',
-      render: (line) => <span className="font-mono text-[12px]">{line.entryNumber}</span>,
+      width: 'w-[9.375rem]',
+      render: (line) => <span className="font-mono text-small">{line.entryNumber}</span>,
     },
     {
       key: 'documentReference',
       header: 'Beleg',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       hideBelow: 'sm',
       render: (line) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {line.documentReference ?? ''}
         </span>
       ),
@@ -85,17 +85,17 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
     {
       key: 'contraAccount',
       header: 'Gegenkonto',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       hideBelow: 'sm',
       // «(mehrere)» where the entry has more than two lines — a booking with a generated tax
       // line really has no single other side, and naming a «main» one would be a claim.
-      render: (line) => <span className="font-mono text-[12px]">{line.contraAccount}</span>,
+      render: (line) => <span className="font-mono text-small">{line.contraAccount}</span>,
     },
     {
       key: 'debit',
       header: 'Soll',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (line) => (
         <span className="tabular-nums">
           {line.debit === 0 ? '' : formatAmount(line.debit)}
@@ -106,7 +106,7 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
       key: 'credit',
       header: 'Haben',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (line) => (
         <span className="tabular-nums">
           {line.credit === 0 ? '' : formatAmount(line.credit)}
@@ -117,7 +117,7 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
       key: 'runningBalance',
       header: 'Saldo',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (line) => (
         <span className="tabular-nums">{formatAmount(line.runningBalance)}</span>
       ),
@@ -167,16 +167,16 @@ function Sheet({ tenantId, accountId }: { tenantId: number; accountId: number })
           empty="Auf diesem Konto steht in diesem Geschäftsjahr nichts."
           footer={
             <tr>
-              <td className="px-3 py-2 text-[13px] font-medium" colSpan={5}>
+              <td className="px-3 py-2 text-body font-medium" colSpan={5}>
                 Saldovortrag {formatAmount(head.openingBalance)}
               </td>
-              <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums">
+              <td className="px-3 py-2 text-right text-body font-medium tabular-nums">
                 {formatAmount(head.debitTotal)}
               </td>
-              <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums">
+              <td className="px-3 py-2 text-right text-body font-medium tabular-nums">
                 {formatAmount(head.creditTotal)}
               </td>
-              <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums">
+              <td className="px-3 py-2 text-right text-body font-medium tabular-nums">
                 {formatAmount(head.closingBalance)}
               </td>
             </tr>

@@ -177,7 +177,7 @@ export function SaveTemplateDialog({
           label="Beschreibung"
           value={description}
           maxLength={200}
-          hint="Steht als Hinweiszeile unter dem Namen im Menü."
+          tooltip="Steht als Hinweiszeile unter dem Namen im Menü."
           onChange={(event) => setDescription(event.target.value)}
         />
 
@@ -193,7 +193,7 @@ export function SaveTemplateDialog({
           }
         />
 
-        <div className="grid gap-1 text-[13px] text-text-secondary">
+        <div className="grid gap-1 text-body text-text-secondary">
           <p>{summaryOf(payload.lines)}</p>
           <p>Das Datum gehört nicht zur Vorlage.</p>
           {/* The sentence follows the button, because on «Überschreiben» the opposite is true:
@@ -208,12 +208,12 @@ export function SaveTemplateDialog({
         </div>
 
         {overwriting !== null && (
-          <p className="text-[13px] text-text-primary">
+          <p className="text-body text-text-primary">
             Eine Vorlage «{overwriting.name}» gibt es schon. Überschreiben?
           </p>
         )}
         {complaint !== null && (
-          <p aria-live="polite" className="text-[13px] text-danger">
+          <p aria-live="polite" className="text-body text-danger">
             {complaint}
           </p>
         )}

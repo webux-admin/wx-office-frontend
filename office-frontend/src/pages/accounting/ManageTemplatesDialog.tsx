@@ -142,7 +142,7 @@ export function ManageTemplatesDialog({
                 key={template.id}
                 className="grid gap-2 rounded-[var(--radius-md)] border border-line-subtle px-2 py-2"
               >
-                <div className="flex items-center gap-3 text-[13px]">
+                <div className="flex items-center gap-3 text-body">
                   <RowOrderButtons
                     name={template.name}
                     upDisabled={!mayWrite || index === 0 || reorder.isPending}
@@ -154,7 +154,7 @@ export function ManageTemplatesDialog({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-text-primary">{template.name}</span>
-                    <span className="block truncate text-[12px] text-text-secondary">
+                    <span className="block truncate text-small text-text-secondary">
                       {template.problems.length > 0 ? (
                         <span className="inline-flex items-center gap-1 text-warning">
                           <TriangleAlert size={12} aria-hidden />
@@ -165,10 +165,10 @@ export function ManageTemplatesDialog({
                       )}
                     </span>
                   </span>
-                  <span className="w-[70px] shrink-0 text-right tabular-nums text-text-secondary">
+                  <span className="w-[4.375rem] shrink-0 text-right tabular-nums text-text-secondary">
                     {template.lines.length} Zeilen
                   </span>
-                  <span className="w-[70px] shrink-0 text-text-secondary">
+                  <span className="w-[4.375rem] shrink-0 text-text-secondary">
                     Beträge {template.carriesAmounts ? 'ja' : 'nein'}
                   </span>
                   {mayWrite && (
@@ -223,7 +223,7 @@ export function ManageTemplatesDialog({
 
                 {removing?.id === template.id && (
                   <div className="grid gap-2 border-t border-line-subtle pt-2">
-                    <p className="text-[13px]">
+                    <p className="text-body">
                       Die Vorlage «{template.name}» wird gelöscht. {DELETE_SENTENCE}
                     </p>
                     <span className="flex gap-2">
@@ -245,7 +245,7 @@ export function ManageTemplatesDialog({
           </ul>
         )}
 
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Zeilen und Beträge ändern Sie, indem Sie die Vorlage anwenden, das Raster korrigieren
           und unter demselben Namen wieder speichern.
         </p>

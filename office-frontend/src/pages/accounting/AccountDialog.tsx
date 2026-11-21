@@ -271,7 +271,7 @@ export function AccountDialog({
         />
 
         {systemNote !== undefined && (
-          <p className="text-[12px] text-text-secondary">{systemNote}</p>
+          <p className="text-small text-text-secondary">{systemNote}</p>
         )}
 
         {save.error !== null && <ErrorNotice error={save.error} />}

@@ -114,7 +114,7 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
       key: 'bookingDate',
       header: 'Datum',
       sortKey: 'bookingDate',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (entry) => <span className="tabular-nums">{formatDate(entry.bookingDate)}</span>,
     },
     {
@@ -127,16 +127,16 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
       key: 'documentReference',
       header: 'Beleg',
       sortKey: 'documentReference',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       hideBelow: 'sm',
       render: (entry) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{entry.documentReference}</span>
+        <span className="font-mono text-small text-text-tertiary">{entry.documentReference}</span>
       ),
     },
     {
       key: 'lines',
       header: 'Zeilen',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       align: 'right',
       hideBelow: 'sm',
       render: (entry) => <span className="tabular-nums">{entry.lines.length}</span>,
@@ -144,7 +144,7 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
     {
       key: 'amount',
       header: 'Betrag',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       align: 'right',
       render: (entry) => <span className="tabular-nums">{formatAmount(entry.amount)}</span>,
     },
@@ -172,11 +172,11 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
         {/* The one sentence this list is about, and it stands whether or not anything is
             ticked — not a warning that appears once something is wrong. */}
         <Panel>
-          <p className="text-[13px]">
+          <p className="text-body">
             <strong>{NOT_IN_THE_BOOKS}</strong>
           </p>
           {summary !== undefined && summary.drafts > 0 && (
-            <p className="mt-1 text-[13px] text-text-secondary">
+            <p className="mt-1 text-body text-text-secondary">
               {summary.drafts} Entwürfe über {formatAmount(summary.draftTotal)}{' '}
               {summary.currencyCode ?? ''}, ältestes Buchungsdatum{' '}
               {formatDate(summary.oldestBookingDate)}.
@@ -237,7 +237,7 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
         </Panel>
 
         {!mayPost && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Verbuchen fehlt das Recht «Verbuchen».
           </p>
         )}
@@ -276,7 +276,7 @@ function EntryDrafts({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Zuerst verbuchen behält alles: die Liste lässt sich danach weiter durchsuchen.
         </p>
       </Dialog>
@@ -345,7 +345,7 @@ function PostRunDialog({
         </>
       }
     >
-      <div className="grid gap-3 text-[13px]">
+      <div className="grid gap-3 text-body">
         <p>{entryIds.length} Buchungen sind ausgewählt.</p>
         {preview.isLoading && <p className="text-text-secondary">Wird geprüft …</p>}
         {preview.error !== null && <ErrorNotice error={preview.error} />}
@@ -378,12 +378,12 @@ function RunResult({ result, onClose }: { result: PostRunResult; onClose: () => 
   const rest = [...result.skipped, ...result.failed]
   return (
     <Panel title="Ergebnis des Laufs">
-      <p aria-live="polite" className="text-[13px]">
+      <p aria-live="polite" className="text-body">
         {result.posted.length} verbucht, {result.skipped.length} übersprungen,{' '}
         {result.failed.length} fehlgeschlagen.
       </p>
       {result.posted.length > 0 && (
-        <ul className="mt-3 grid gap-1 text-[13px]">
+        <ul className="mt-3 grid gap-1 text-body">
           {result.posted.map((line) => (
             <li key={line.entryId}>
               Verbucht als <strong>{line.entryNumber}</strong>.
@@ -392,7 +392,7 @@ function RunResult({ result, onClose }: { result: PostRunResult; onClose: () => 
         </ul>
       )}
       {rest.length > 0 && (
-        <ul className="mt-3 grid gap-1 text-[13px] text-text-secondary">
+        <ul className="mt-3 grid gap-1 text-body text-text-secondary">
           {rest.map((line) => (
             <li key={`${line.outcome}-${line.entryId}`}>
               <strong>{OUTCOME_NAMES[line.outcome]}:</strong> {line.message}

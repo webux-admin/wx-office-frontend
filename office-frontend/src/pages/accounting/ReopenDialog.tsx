@@ -146,7 +146,7 @@ export function ReopenDialog({
               journal number and the Buchungstext say what happens, and they are what somebody
               looks for in the journal afterwards. */}
           {entries.length > 0 && (
-            <ul className="grid gap-1 text-[13px]">
+            <ul className="grid gap-1 text-body">
               {entries.map((entry) => (
                 <li key={entry.entryId} className="flex flex-wrap items-baseline gap-x-3">
                   <span className="font-mono tabular-nums">{entry.entryNumber}</span>

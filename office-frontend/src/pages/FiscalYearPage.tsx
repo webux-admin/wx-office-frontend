@@ -186,13 +186,13 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
     {
       key: 'label',
       header: 'Bezeichnung',
-      width: 'w-[180px]',
+      width: 'w-[11.25rem]',
       render: (year) => <span className="font-medium">{year.label}</span>,
     },
     {
       key: 'start',
       header: 'Beginn',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (year) => (
         <span className="font-mono tabular-nums">{formatDate(year.startDate)}</span>
       ),
@@ -200,7 +200,7 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
     {
       key: 'end',
       header: 'Ende',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (year) => (
         <span className="font-mono tabular-nums">{formatDate(year.endDate)}</span>
       ),
@@ -209,14 +209,14 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
       key: 'series',
       header: 'Serie',
       align: 'right',
-      width: 'w-[100px]',
+      width: 'w-[6.25rem]',
       hideBelow: 'sm',
       render: (year) => <span className="font-mono tabular-nums">{year.numberYear}</span>,
     },
     {
       key: 'status',
       header: 'Zustand',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (year) => (
         <Badge tone={year.status === 'OPEN' ? 'success' : 'muted'}>
           {FISCAL_YEAR_STATUS[year.status]}
@@ -322,7 +322,7 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
 
         {boundary !== undefined && (
           <Panel title="Buchungsgrenze">
-            <div className="grid gap-4 text-[13px]">
+            <div className="grid gap-4 text-body">
               <div>
                 <p className="font-medium">
                   {boundary.postableFrom
@@ -384,7 +384,7 @@ function FiscalYears({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p>
             Das Geschäftsjahr {removing?.label} und sein Protokoll werden gelöscht. Es ist keine
             Journalnummer vergeben worden.
@@ -435,7 +435,7 @@ function ReadOnlyDate({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <dt className="w-[190px] shrink-0 text-text-secondary">{term}</dt>
+      <dt className="w-[11.875rem] shrink-0 text-text-secondary">{term}</dt>
       <dd className="flex flex-wrap items-center gap-3">
         <span className="font-mono tabular-nums">{value ? formatDate(value) : 'nicht gesetzt'}</span>
         {to !== undefined && (
@@ -558,7 +558,7 @@ function RowMenu({ label, entries }: { label: string; entries: RowMenuEntry[] })
           role="menu"
           aria-label={label}
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 top-full z-20 mt-1 grid min-w-[160px] rounded-[var(--radius-md)] border border-line bg-surface py-1 shadow-card"
+          className="absolute right-0 top-full z-20 mt-1 grid min-w-[10rem] rounded-[var(--radius-md)] border border-line bg-surface py-1 shadow-card"
         >
           {entries.map((entry, index) => (
             <button
@@ -570,7 +570,7 @@ function RowMenu({ label, entries }: { label: string; entries: RowMenuEntry[] })
               role="menuitem"
               onClick={() => pick(entry)}
               onMouseEnter={() => setActive(index)}
-              className={`px-4 py-2 text-left text-[13px] transition-colors hover:bg-sunken ${
+              className={`px-4 py-2 text-left text-body transition-colors hover:bg-sunken ${
                 index === active ? 'bg-sunken' : ''
               }`}
             >

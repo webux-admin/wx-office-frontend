@@ -126,7 +126,7 @@ export function EntryTextField({
           aria-label="Textvorschläge"
           // 62px is the height of a labelled field: the list hangs under the input, not under
           // the label above it.
-          className="absolute left-0 top-[62px] z-10 max-h-64 w-full min-w-[280px] overflow-y-auto rounded-[var(--radius-md)] border border-line bg-surface py-1 shadow-lg"
+          className="absolute left-0 top-[3.875rem] z-10 max-h-64 w-full min-w-[17.5rem] overflow-y-auto rounded-[var(--radius-md)] border border-line bg-surface py-1 shadow-lg"
         >
           {matches.map((suggestion, index) => (
             <li
@@ -137,12 +137,12 @@ export function EntryTextField({
               // The field keeps the focus, so the click lands as a pick and not as a blur.
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => pick(suggestion)}
-              className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-[13px] ${
+              className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-body ${
                 index === active ? 'bg-accent/12' : 'hover:bg-sunken'
               }`}
             >
               <span className="min-w-0 flex-1 truncate">{suggestion.text}</span>
-              <span className="shrink-0 text-[12px] tabular-nums text-text-tertiary">
+              <span className="shrink-0 text-small tabular-nums text-text-tertiary">
                 {suggestion.useCount}× · {formatDate(suggestion.lastBookedOn)}
               </span>
             </li>

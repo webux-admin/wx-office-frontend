@@ -116,7 +116,7 @@ export function ChartTemplateDialog({
     >
       <div className="grid gap-5">
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">
+          <legend className="mb-1 text-body font-medium">
             Wie ist Ihr Eigenkapital gegliedert?
           </legend>
           {LAYOUTS.map((option) => (
@@ -129,7 +129,7 @@ export function ChartTemplateDialog({
               hint={option.hint}
             />
           ))}
-          <p className="mt-1 text-[12px] text-text-secondary">
+          <p className="mt-1 text-small text-text-secondary">
             {suggestedLayout === undefined
               ? 'Bitte wählen: aus der Rechtsform im Mandantenstamm lässt sich das nicht '
                 + 'ableiten. Die Wahl steuert nur den Eigenkapitalblock.'
@@ -140,7 +140,7 @@ export function ChartTemplateDialog({
         </fieldset>
 
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">Vorlage</legend>
+          <legend className="mb-1 text-body font-medium">Vorlage</legend>
           {ordered.map((template) => (
             <Choice
               key={template.code}
@@ -153,7 +153,7 @@ export function ChartTemplateDialog({
           ))}
         </fieldset>
 
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Der Kontenplan lässt sich danach jederzeit ändern und ergänzen.
         </p>
 
@@ -203,9 +203,9 @@ function Choice({
         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent-text)]"
       />
       <span className="min-w-0">
-        <span className="block text-[13px]">{title}</span>
+        <span className="block text-body">{title}</span>
         {hint !== undefined && (
-          <span className="block text-[12px] text-text-secondary">{hint}</span>
+          <span className="block text-small text-text-secondary">{hint}</span>
         )}
       </span>
     </label>

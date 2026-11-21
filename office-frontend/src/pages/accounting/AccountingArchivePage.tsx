@@ -99,7 +99,7 @@ function Archive({ tenantId }: { tenantId: number }) {
 
       <div className="grid gap-4 px-8 pb-12">
         <Panel>
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Diese Seite bleibt erreichbar, auch wenn die Buchhaltung abgeschaltet ist.
             Geschäftsbücher und Buchungsbelege sind zehn Jahre aufzubewahren (OR Art. 958f).
           </p>
@@ -122,7 +122,7 @@ function Archive({ tenantId }: { tenantId: number }) {
         )}
 
         {posted > 0 && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Das ZIP enthält Journal, Kontoblätter und Saldenliste als CSV, je Geschäftsjahr. Es
             erfüllt OR Art. 958f Abs. 3. Die Anforderung von GeBüV Art. 6 Abs. 3 — «auch ohne
             Hilfsmittel lesbar» — erfüllt erst der Ausdruck auf Papier.
@@ -147,10 +147,10 @@ function Year({ tenantId, year }: { tenantId: number; year: FiscalYear }) {
       <div className="grid gap-3">
         <div className="flex flex-wrap items-baseline gap-3">
           <span className="font-medium">Geschäftsjahr {year.label}</span>
-          <span className="text-[13px] text-text-secondary">
+          <span className="text-body text-text-secondary">
             {formatDate(year.startDate)} – {formatDate(year.endDate)}
           </span>
-          <span className="text-[13px] text-text-tertiary">
+          <span className="text-body text-text-tertiary">
             {year.postedEntries} {year.postedEntries === 1 ? 'Buchung' : 'Buchungen'}
           </span>
         </div>
@@ -162,7 +162,7 @@ function Year({ tenantId, year }: { tenantId: number; year: FiscalYear }) {
           >
             Alles herunterladen (ZIP)
           </Button>
-          <span className="text-[13px] text-text-secondary">Drucken:</span>
+          <span className="text-body text-text-secondary">Drucken:</span>
           {REPORTS.map((report) => (
             <Button
               key={report.key}

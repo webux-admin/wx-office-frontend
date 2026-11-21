@@ -139,7 +139,7 @@ function WriteOffAccounts({ tenantId }: { tenantId: number }) {
                 <div className="self-center">
                   <span className="font-medium">{row.label}</span>
                   {row.hint && (
-                    <span className="block text-[12px] text-text-secondary">{row.hint}</span>
+                    <span className="block text-small text-text-secondary">{row.hint}</span>
                   )}
                 </div>
                 <AccountSelect

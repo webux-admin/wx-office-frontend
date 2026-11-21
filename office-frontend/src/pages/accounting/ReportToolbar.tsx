@@ -230,12 +230,12 @@ function ArchiveDialog({
       }
     >
       {filed !== undefined ? (
-        <p className="text-[13px] text-text-primary">
+        <p className="text-body text-text-primary">
           «{filed.title}» per {formatDate(filed.asOfDate)} liegt jetzt im Archiv.{' '}
           <ArchiveLink />
         </p>
       ) : (
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p className="text-text-primary">{filingSentence(report, asOf, yearLabel)}</p>
           <p className="text-text-secondary">
             Ein archiviertes Papier lässt sich nicht mehr ändern und nicht mehr löschen. Es zeigt

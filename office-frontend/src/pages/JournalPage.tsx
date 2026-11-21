@@ -183,13 +183,13 @@ function Journal({ tenantId }: { tenantId: number }) {
       key: 'entryNumber',
       header: 'Nummer',
       sortKey: 'entryNumber',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (row) => (
         <button
           type="button"
           aria-expanded={opened === row.id}
           onClick={() => setOpened(opened === row.id ? null : row.id)}
-          className="inline-flex items-center gap-1 font-mono text-[12px] text-text-secondary transition-colors hover:text-text-primary"
+          className="inline-flex items-center gap-1 font-mono text-small text-text-secondary transition-colors hover:text-text-primary"
         >
           {opened === row.id ? (
             <ChevronDown size={13} aria-hidden />
@@ -204,7 +204,7 @@ function Journal({ tenantId }: { tenantId: number }) {
       key: 'bookingDate',
       header: 'Datum',
       sortKey: 'bookingDate',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => <span className="tabular-nums">{formatDate(row.bookingDate)}</span>,
     },
     {
@@ -221,7 +221,7 @@ function Journal({ tenantId }: { tenantId: number }) {
             {counterOf(rows, row) !== undefined && <Badge tone="muted">storniert</Badge>}
           </span>
           {row.reversalReason && (
-            <span className="mt-0.5 block text-[12px] text-text-secondary">
+            <span className="mt-0.5 block text-small text-text-secondary">
               {row.reversalReason}
             </span>
           )}
@@ -233,31 +233,31 @@ function Journal({ tenantId }: { tenantId: number }) {
     {
       key: 'documentReference',
       header: 'Beleg',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       sortKey: 'documentReference',
       hideBelow: 'sm',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{row.documentReference}</span>
+        <span className="font-mono text-small text-text-tertiary">{row.documentReference}</span>
       ),
     },
     {
       key: 'debit',
       header: 'Soll',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       align: 'right',
       render: (row) => <span className="tabular-nums">{formatAmount(row.amount)}</span>,
     },
     {
       key: 'credit',
       header: 'Haben',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       align: 'right',
       render: (row) => <span className="tabular-nums">{formatAmount(row.amount)}</span>,
     },
     {
       key: 'reverse',
       header: '',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       align: 'right',
       render: (row) =>
         mayPost && !row.reversesEntryId && counterOf(rows, row) === undefined ? (
@@ -311,7 +311,7 @@ function Journal({ tenantId }: { tenantId: number }) {
               setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
               setPage(0)
             }}
-            className="w-[170px]"
+            className="w-[10.625rem]"
           >
             {available.map((year) => (
               <option key={year.id} value={year.id}>
@@ -333,8 +333,8 @@ function Journal({ tenantId }: { tenantId: number }) {
             min={chosenYear?.startDate}
             max={chosenYear?.endDate}
             onChange={(event) => setAsOf(event.target.value)}
-            className="w-[160px]"
-            hint="Nur fürs Papier. Für die Liste unten gelten «Von» und «Bis»."
+            className="w-[10rem]"
+            tooltip="Nur fürs Papier. Für die Liste unten gelten «Von» und «Bis»."
           />
           <TextField
             label="Von"
@@ -344,7 +344,7 @@ function Journal({ tenantId }: { tenantId: number }) {
               setFrom(event.target.value)
               setPage(0)
             }}
-            className="w-[160px]"
+            className="w-[10rem]"
           />
           <TextField
             label="Bis"
@@ -354,7 +354,7 @@ function Journal({ tenantId }: { tenantId: number }) {
               setTo(event.target.value)
               setPage(0)
             }}
-            className="w-[160px]"
+            className="w-[10rem]"
           />
           <SelectField
             label="Buchungsart"
@@ -363,7 +363,7 @@ function Journal({ tenantId }: { tenantId: number }) {
               setEntryKind(event.target.value)
               setPage(0)
             }}
-            className="w-[170px]"
+            className="w-[10.625rem]"
           >
             <option value="">Alle</option>
             {kinds.map((kind) => (
@@ -379,7 +379,7 @@ function Journal({ tenantId }: { tenantId: number }) {
               setSource(event.target.value)
               setPage(0)
             }}
-            className="w-[170px]"
+            className="w-[10.625rem]"
           >
             <option value="">Alle</option>
             {sources.map((entry) => (
@@ -447,13 +447,13 @@ function Journal({ tenantId }: { tenantId: number }) {
 function Lines({ lines }: { lines: readonly EntryLine[] }) {
   return (
     <span className="mt-2 block overflow-x-auto">
-      <span className="block min-w-[420px]">
+      <span className="block min-w-[26.25rem]">
         {lines.map((line) => (
           <span
             key={line.lineNumber}
-            className="flex items-baseline gap-3 border-t border-line-subtle py-1 text-[12px]"
+            className="flex items-baseline gap-3 border-t border-line-subtle py-1 text-small"
           >
-            <span className="w-[64px] shrink-0 font-mono text-text-tertiary">
+            <span className="w-[4rem] shrink-0 font-mono text-text-tertiary">
               {line.accountNumber}
             </span>
             <span className="min-w-0 flex-1 truncate text-text-secondary">
@@ -461,10 +461,10 @@ function Lines({ lines }: { lines: readonly EntryLine[] }) {
               {line.text ? ` · ${line.text}` : ''}
               {line.taxCode ? ` · ${line.taxCode}` : ''}
             </span>
-            <span className="w-[110px] shrink-0 text-right tabular-nums">
+            <span className="w-[6.875rem] shrink-0 text-right tabular-nums">
               {line.debit ? formatAmount(line.debit) : ''}
             </span>
-            <span className="w-[110px] shrink-0 text-right tabular-nums">
+            <span className="w-[6.875rem] shrink-0 text-right tabular-nums">
               {line.credit ? formatAmount(line.credit) : ''}
             </span>
           </span>
@@ -498,7 +498,7 @@ function LinkedEntry({
     <button
       type="button"
       onClick={() => onJump(target)}
-      className="mt-0.5 block text-[12px] text-accent-text underline-offset-2 hover:underline"
+      className="mt-0.5 block text-small text-accent-text underline-offset-2 hover:underline"
     >
       {reversed === undefined ? 'Storniert durch ' : 'Storno zu '}
       {target.entryNumber}
@@ -573,7 +573,7 @@ function ReverseDialog({
       }
     >
       <div className="grid gap-3">
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Storniert wird durch eine <strong>Gegenbuchung</strong> mit vertauschten Seiten, die
           sofort verbucht ist. {row?.entryNumber} bleibt im Journal stehen — genau das ist der
           Nachweis, dass nachträglich nichts verändert wurde.
@@ -596,7 +596,7 @@ function ReverseDialog({
           hint={`Leer gelassen bucht sie auf den ${formatDate(row?.bookingDate)}.`}
         />
         {row !== null && (
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Verbucht am {formatDateTime(row.postedAt)} von {row.postedBy}.
           </p>
         )}

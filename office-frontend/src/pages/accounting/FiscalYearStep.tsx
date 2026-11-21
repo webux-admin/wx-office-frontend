@@ -65,8 +65,8 @@ export function FiscalYearStep({
     <Panel>
       <div className="grid gap-5">
         <div>
-          <h2 className="text-[14px] font-semibold">Ihr erstes Geschäftsjahr</h2>
-          <p className="mt-1 text-[13px] text-text-secondary">
+          <h2 className="text-control font-semibold">Ihr erstes Geschäftsjahr</h2>
+          <p className="mt-1 text-body text-text-secondary">
             Beginn und Ende bestimmen, in welche Periode ein Beleg fällt. Vorbelegt aus dem
             Geschäftsjahresbeginn im Mandantenstamm; jedes Feld lässt sich überschreiben.
           </p>

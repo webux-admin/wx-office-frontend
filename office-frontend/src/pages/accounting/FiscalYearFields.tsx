@@ -29,7 +29,7 @@ export function FiscalYearFields({
         value={label}
         onChange={(event) => set('label', event.target.value)}
         maxLength={20}
-        hint="Steht auf jeder Auswertung, zum Beispiel 2027 oder 2026/27."
+        tooltip="Steht auf jeder Auswertung, zum Beispiel 2027 oder 2026/27."
       />
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -21,22 +21,22 @@ export function EntryLinesView({
   currency: string
 }) {
   if (lines.length === 0) {
-    return <p className="text-[12px] text-text-secondary">Diese Buchung trägt keine Zeilen.</p>
+    return <p className="text-small text-text-secondary">Diese Buchung trägt keine Zeilen.</p>
   }
   return (
-    <table className="w-full border-collapse text-[12px]">
+    <table className="w-full border-collapse text-small">
       <thead>
         <tr className="text-text-tertiary">
-          <th scope="col" className="w-[110px] py-1 text-left font-medium">
+          <th scope="col" className="w-[6.875rem] py-1 text-left font-medium">
             Konto
           </th>
           <th scope="col" className="py-1 text-left font-medium">
             Text
           </th>
-          <th scope="col" className="w-[120px] py-1 text-right font-medium">
+          <th scope="col" className="w-[7.5rem] py-1 text-right font-medium">
             Soll {currency}
           </th>
-          <th scope="col" className="w-[120px] py-1 text-right font-medium">
+          <th scope="col" className="w-[7.5rem] py-1 text-right font-medium">
             Haben {currency}
           </th>
         </tr>

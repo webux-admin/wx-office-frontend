@@ -155,7 +155,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
       <PostingStartPanel key={stored.postingStartsOn ?? ''} tenantId={tenantId} stored={stored} />
 
       <Panel title="Zustand">
-        <dl className="grid gap-3 text-[13px]">
+        <dl className="grid gap-3 text-body">
           {/* Can only ever read «eingeschaltet»: folder and entry carry the module switch, and
               a typed address is caught by `RequireTenant`. The row stays all the same — it
               answers the first question of every enquiry, and it carries the way out. */}
@@ -187,7 +187,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
         {mayConfigure ? (
           <div className="grid gap-3">
             <div className="flex flex-wrap items-end gap-3">
-              <span className="w-full max-w-[200px]">
+              <span className="w-full max-w-[12.5rem]">
                 <TextField
                   label="Gesperrt bis"
                   type="date"
@@ -207,7 +207,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
             {save.error !== null && <ErrorNotice error={save.error} />}
           </div>
         ) : (
-          <div className="grid gap-3 text-[13px]">
+          <div className="grid gap-3 text-body">
             <p>
               Gesperrt bis{' '}
               <span className="font-mono tabular-nums">
@@ -216,9 +216,9 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
                   : 'nicht gesetzt'}
               </span>
             </p>
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               Ändern lässt sich das Datum mit dem Recht{' '}
-              <span className="font-mono text-[12px]">{ACCOUNTING_RIGHTS.configure}</span>.
+              <span className="font-mono text-small">{ACCOUNTING_RIGHTS.configure}</span>.
             </p>
           </div>
         )}
@@ -230,7 +230,7 @@ function State({ tenantId, stored }: { tenantId: number; stored: AccountingSetti
 
       {/* The honest sentence of this stage: the chart is there, the postings are not. */}
       <Panel title="Als Nächstes">
-        <p className="text-[13px] leading-[20px] text-text-secondary">
+        <p className="text-body leading-[1.25rem] text-text-secondary">
           Einen{' '}
           <Link
             to={CHART_OF_ACCOUNTS_PATH}
@@ -298,7 +298,7 @@ function PostingStartPanel({ tenantId, stored }: { tenantId: number; stored: Acc
   if (confirmed !== null && !changing) {
     return (
       <Panel title="Ab wann buchen Ihre Belege selbst?">
-        <div className="flex flex-wrap items-center gap-3 text-[13px]">
+        <div className="flex flex-wrap items-center gap-3 text-body">
           <span>
             Ab dem <span className="font-mono tabular-nums">{formatDate(confirmed)}</span>{' '}
             erzeugt jede ausgestellte Rechnung ihre Buchung selbst.
@@ -315,7 +315,7 @@ function PostingStartPanel({ tenantId, stored }: { tenantId: number; stored: Acc
 
   return (
     <Panel title="Ab wann buchen Ihre Belege selbst?">
-      <div className="grid gap-3 text-[13px]">
+      <div className="grid gap-3 text-body">
         {confirmed === null && (
           <WarningNotice>
             Noch nicht bestätigt. Solange kein Stichtag bestätigt ist, wird nichts gebucht —
@@ -330,13 +330,13 @@ function PostingStartPanel({ tenantId, stored }: { tenantId: number; stored: Acc
         {mayConfigure ? (
           <div className="grid gap-3">
             <div className="flex flex-wrap items-end gap-3">
-              <span className="w-full max-w-[200px]">
+              <span className="w-full max-w-[12.5rem]">
                 <TextField
                   label={confirmed === null ? 'Vorschlag' : 'Stichtag'}
                   type="date"
                   value={shown}
                   onChange={(event) => setTyped(event.target.value)}
-                  hint="Der erste Tag, an dem die Belege selbst buchen."
+                  tooltip="Der erste Tag, an dem die Belege selbst buchen."
                 />
               </span>
               <Button onClick={() => save.mutate(shown)} busy={save.isPending} disabled={!complete}>
@@ -351,9 +351,9 @@ function PostingStartPanel({ tenantId, stored }: { tenantId: number; stored: Acc
             {save.error !== null && <ErrorNotice error={save.error} />}
           </div>
         ) : (
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Bestätigen lässt sich der Stichtag mit dem Recht{' '}
-            <span className="font-mono text-[12px]">{ACCOUNTING_RIGHTS.configure}</span>.
+            <span className="font-mono text-small">{ACCOUNTING_RIGHTS.configure}</span>.
           </p>
         )}
       </div>
@@ -411,14 +411,14 @@ function DefaultRevenueAccountPanel({
       {mayConfigure ? (
         <div className="grid gap-3">
           <div className="flex flex-wrap items-end gap-3">
-            <span className="w-full max-w-[320px]">
+            <span className="w-full max-w-[20rem]">
               <AccountSelect
                 label="Vorgabe"
                 tenantId={tenantId}
                 value={account}
                 onChange={setAccount}
                 emptyLabel="Ohne Vorgabe"
-                hint="Ohne Vorgabe gilt das Systemkonto, sofern der Kontenplan eines führt."
+                tooltip="Ohne Vorgabe gilt das Systemkonto, sofern der Kontenplan eines führt."
               />
             </span>
             <Button
@@ -432,16 +432,16 @@ function DefaultRevenueAccountPanel({
           {save.error !== null && <ErrorNotice error={save.error} />}
         </div>
       ) : (
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p>
             Vorgabe{' '}
             <span className="font-mono tabular-nums">
               {stored.defaultRevenueAccountNo ?? 'nicht gesetzt'}
             </span>
           </p>
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Ändern lässt sich das Konto mit dem Recht{' '}
-            <span className="font-mono text-[12px]">{ACCOUNTING_RIGHTS.configure}</span>.
+            <span className="font-mono text-small">{ACCOUNTING_RIGHTS.configure}</span>.
           </p>
         </div>
       )}
@@ -474,7 +474,7 @@ function FiscalYearSection({ tenantId }: { tenantId: number }) {
       ) : years.data === undefined ? (
         <LoadingBlock />
       ) : (
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           {years.data.expiry.warn && (
             <WarningNotice>
               {(years.data.expiry.daysLeft ?? 0) < 0 ? (
@@ -523,7 +523,7 @@ function FiscalYearSection({ tenantId }: { tenantId: number }) {
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <dt className="w-[170px] shrink-0 text-text-secondary">{term}</dt>
+      <dt className="w-[10.625rem] shrink-0 text-text-secondary">{term}</dt>
       <dd className="flex flex-wrap items-center gap-3">{children}</dd>
     </div>
   )

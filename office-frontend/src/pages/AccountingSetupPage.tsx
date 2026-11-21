@@ -190,11 +190,11 @@ function StepBar({ at, state }: { at: SetupStep; state: SetupState }) {
     DONE: false,
   }
   return (
-    <ol className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
+    <ol className="flex flex-wrap items-center gap-x-6 gap-y-2 text-body">
       {STEPS.map((entry) => (
         <li key={entry.step} className="flex items-center gap-1.5">
           <span
-            className={`grid h-4 w-4 place-items-center rounded-[var(--radius-full)] text-[10px] ${
+            className={`grid h-4 w-4 place-items-center rounded-[var(--radius-full)] text-caption ${
               done[entry.step]
                 ? 'bg-accent text-white'
                 : entry.step === at

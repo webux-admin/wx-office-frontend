@@ -173,7 +173,7 @@ function ReconciliationRegister({
           <div>
             {row.accountNumber ?? '—'} {row.accountName ?? ''}
           </div>
-          <div className="text-[12px] text-text-tertiary">{row.systemKey}</div>
+          <div className="text-small text-text-tertiary">{row.systemKey}</div>
         </div>
       ),
     },
@@ -200,7 +200,7 @@ function ReconciliationRegister({
       header: '',
       render: (row) => {
         if (row.reason !== undefined) {
-          return <span className="text-[12px] text-text-tertiary">{row.reason}</span>
+          return <span className="text-small text-text-tertiary">{row.reason}</span>
         }
         return row.balanced ? (
           <Badge tone="success">stimmt überein</Badge>
@@ -220,7 +220,7 @@ function ReconciliationRegister({
           onChange={(event) =>
             setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
           }
-          className="w-[170px]"
+          className="w-[10.625rem]"
         >
           {available.map((year) => (
             <option key={year.id} value={year.id}>
@@ -233,7 +233,7 @@ function ReconciliationRegister({
           type="date"
           value={asOf}
           onChange={(event) => setAsOf(event.target.value)}
-          hint="Beide Seiten werden auf diesen Tag gelesen. Leer heisst: das ganze Jahr."
+          tooltip="Beide Seiten werden auf diesen Tag gelesen. Leer heisst: das ganze Jahr."
         />
       </div>
 
@@ -274,7 +274,7 @@ function ReconciliationRegister({
         <WarningNotice key={`${period.from}-${period.to}`}>{switchedOffSentence(period)}</WarningNotice>
       ))}
 
-      <p className="text-[12px] text-text-secondary">
+      <p className="text-small text-text-secondary">
         Eine Differenz ist kein Fehler des Programms, sondern eine Frage an einen Menschen:
         Belege von vor dem Umstellungstag werden bewusst nicht gebucht, eine Handbuchung
         bewegt nur das Hauptbuch, und ein Kundenguthaben ohne genanntes Geldkonto erreicht das
@@ -409,7 +409,7 @@ function UnpostedRegister({
       header: '',
       render: (source) =>
         source.reason ? (
-          <span className="text-[12px] text-text-tertiary">{source.reason}</span>
+          <span className="text-small text-text-tertiary">{source.reason}</span>
         ) : null,
     },
   ]
@@ -437,7 +437,7 @@ function UnpostedRegister({
         }
       >
         {total > rows.length && (
-          <p className="px-5 pb-3 text-[12px] text-text-secondary">
+          <p className="px-5 pb-3 text-small text-text-secondary">
             Angezeigt werden die neuesten {rows.length} von {total} Rechnungen. Nach dem Lauf rücken
             die übrigen nach.
           </p>
@@ -460,7 +460,7 @@ function UnpostedRegister({
           selectionLabel={(source) => `Rechnung ${source.reference} markieren`}
         />
       </Panel>
-      <p className="text-[12px] text-text-secondary">
+      <p className="text-small text-text-secondary">
         Rechnungen vor dem Stichtag stehen hier nicht: diese Zeit wurde von Hand gebucht, dort wird
         nichts nachgetragen. Gebucht wird jede Rechnung auf ihr Belegdatum; liegt es in einem
         abgeschlossenen Jahr, steht der Grund in der Zeile, und die Buchung gehört als
@@ -487,7 +487,7 @@ function UnpostedRegister({
           </>
         }
       >
-        <div className="grid gap-2 text-[13px] text-text-secondary">
+        <div className="grid gap-2 text-body text-text-secondary">
           <p>
             <strong className="text-text-primary">{invoiceCountText(chosen.length)}</strong>,
             zusammen {formatAmount(chosenTotal(chosen))}.
@@ -497,7 +497,7 @@ function UnpostedRegister({
             oder deren Periode gesperrt ist, wird übersprungen und mit dem Grund aufgeführt — die
             übrigen laufen trotzdem durch.
           </p>
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Eine gebuchte Rechnung lässt sich danach nicht mehr zurückstellen; korrigiert wird über
             Storno oder Gutschrift.
           </p>
@@ -516,11 +516,11 @@ function CatchUpResult({ result, onClose }: { result: CatchUpRunResult; onClose:
   const rest = [...result.skipped, ...result.failed]
   return (
     <Panel title="Ergebnis des Laufs">
-      <p aria-live="polite" className="text-[13px]">
+      <p aria-live="polite" className="text-body">
         {catchUpResultText(result)}
       </p>
       {result.posted.length > 0 && (
-        <ul className="mt-3 grid gap-1 text-[13px]">
+        <ul className="mt-3 grid gap-1 text-body">
           {result.posted.map((line) => (
             <li key={pendingSourceKey(line)}>
               {line.reference ?? `Beleg ${line.sourceId}`} gebucht als{' '}
@@ -530,7 +530,7 @@ function CatchUpResult({ result, onClose }: { result: CatchUpRunResult; onClose:
         </ul>
       )}
       {rest.length > 0 && (
-        <ul className="mt-3 grid gap-1 text-[13px] text-text-secondary">
+        <ul className="mt-3 grid gap-1 text-body text-text-secondary">
           {rest.map((line) => (
             <li key={`${line.outcome}-${pendingSourceKey(line)}`}>
               <strong>
@@ -631,10 +631,10 @@ function Expansions({
             onOpen(event.currentTarget.open ? manualKey : opened === manualKey ? null : opened)
           }
         >
-          <summary className="cursor-pointer text-[13px]">
+          <summary className="cursor-pointer text-body">
             Handbuchungen auf dem Sammelkonto
           </summary>
-          <div className="pt-2 text-[13px]">
+          <div className="pt-2 text-body">
             {manual.error !== null && <ErrorNotice error={manual.error} />}
             {(manual.data?.content ?? []).length === 0 && !manual.isLoading && (
               <p className="text-text-tertiary">Keine Handbuchungen auf diesem Konto.</p>
@@ -655,8 +655,8 @@ function Expansions({
             onOpen(event.currentTarget.open ? waitingKey : opened === waitingKey ? null : opened)
           }
         >
-          <summary className="cursor-pointer text-[13px]">Belege ohne Buchung</summary>
-          <div className="pt-2 text-[13px]">
+          <summary className="cursor-pointer text-body">Belege ohne Buchung</summary>
+          <div className="pt-2 text-body">
             {/* Only the receivables list documents; the customer credits never do, so the
                 sentence would claim something about them that is not so. */}
             {startConfirmed === false && row.systemKey === 'DEBITOR_SAMMEL' && (
@@ -690,8 +690,8 @@ function Expansions({
             onOpen(event.currentTarget.open ? orphanKey : opened === orphanKey ? null : opened)
           }
         >
-          <summary className="cursor-pointer text-[13px]">Buchungen ohne Beleg</summary>
-          <div className="pt-2 text-[13px]">
+          <summary className="cursor-pointer text-body">Buchungen ohne Beleg</summary>
+          <div className="pt-2 text-body">
             {orphans.error !== null && <ErrorNotice error={orphans.error} />}
             {(orphans.data ?? []).length === 0 && !orphans.isLoading && (
               <p className="text-text-tertiary">

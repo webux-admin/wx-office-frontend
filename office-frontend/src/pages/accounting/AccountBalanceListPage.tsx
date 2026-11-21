@@ -85,8 +85,8 @@ function Balances({ tenantId }: { tenantId: number }) {
       key: 'accountNumber',
       header: 'Konto',
       sortKey: 'accountNumber',
-      width: 'w-[110px]',
-      render: (row) => <span className="font-mono text-[12px]">{row.accountNumber}</span>,
+      width: 'w-[6.875rem]',
+      render: (row) => <span className="font-mono text-small">{row.accountNumber}</span>,
     },
     {
       key: 'accountName',
@@ -99,7 +99,7 @@ function Balances({ tenantId }: { tenantId: number }) {
       header: 'Soll',
       sortKey: 'debitTotal',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (row) => <span className="tabular-nums">{formatAmount(row.debitTotal)}</span>,
     },
     {
@@ -107,7 +107,7 @@ function Balances({ tenantId }: { tenantId: number }) {
       header: 'Haben',
       sortKey: 'creditTotal',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (row) => <span className="tabular-nums">{formatAmount(row.creditTotal)}</span>,
     },
     {
@@ -115,7 +115,7 @@ function Balances({ tenantId }: { tenantId: number }) {
       header: 'Saldo',
       sortKey: 'balance',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       // Debit minus credit, never turned round by account type: a liability account stands
       // negative here, and the account sheet behind the row works out the same difference.
       render: (row) => <span className="tabular-nums">{formatAmount(row.balance)}</span>,
@@ -153,7 +153,7 @@ function Balances({ tenantId }: { tenantId: number }) {
               setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
               setPage(0)
             }}
-            className="w-[170px]"
+            className="w-[10.625rem]"
           >
             {available.map((year) => (
               <option key={year.id} value={year.id}>
@@ -169,7 +169,7 @@ function Balances({ tenantId }: { tenantId: number }) {
               setAsOf(event.target.value)
               setPage(0)
             }}
-            className="w-[160px]"
+            className="w-[10rem]"
           />
           <QuickSearchField
             label="Suchen"
@@ -218,17 +218,17 @@ function Balances({ tenantId }: { tenantId: number }) {
             footer={
               control && (
                 <tr>
-                  <td className="px-3 py-2 text-[13px] font-medium" colSpan={2}>
+                  <td className="px-3 py-2 text-body font-medium" colSpan={2}>
                     Total über {control.accountCount} Konten
                   </td>
-                  <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums">
+                  <td className="px-3 py-2 text-right text-body font-medium tabular-nums">
                     {formatAmount(control.debitTotal)}
                   </td>
-                  <td className="px-3 py-2 text-right text-[13px] font-medium tabular-nums">
+                  <td className="px-3 py-2 text-right text-body font-medium tabular-nums">
                     {formatAmount(control.creditTotal)}
                   </td>
                   <td
-                    className={`px-3 py-2 text-right text-[13px] font-medium tabular-nums${
+                    className={`px-3 py-2 text-right text-body font-medium tabular-nums${
                       notBalanced ? ' text-danger' : ''
                     }`}
                   >
@@ -244,7 +244,7 @@ function Balances({ tenantId }: { tenantId: number }) {
             cannot have been caused by a posting of this application. It means somebody wrote
             past it — which is a sentence about the installation and not about the bookkeeping. */}
         {notBalanced && (
-          <p className="text-[13px] text-danger">
+          <p className="text-body text-danger">
             Soll und Haben stimmen nicht überein. Das kann keine Buchung dieser Anwendung
             verursacht haben — melden Sie die Zahl Ihrer Systembetreuung und prüfen Sie unter
             Buchhaltung → Archiv die Integrität.

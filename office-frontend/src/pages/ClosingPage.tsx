@@ -141,7 +141,7 @@ function Closing({ tenantId }: { tenantId: number }) {
           onChange={(event) =>
             setFiscalYearId(event.target.value === '' ? null : Number(event.target.value))
           }
-          className="w-[220px]"
+          className="w-[13.75rem]"
         >
           {available.map((entry) => (
             <option key={entry.id} value={entry.id}>
@@ -337,7 +337,7 @@ function ClosingWizard({
               failure carry a sentence and nothing else, and the person is owed the one fact
               that sentence leaves out: the run is one transaction, and nothing of it stands. */}
           {refused.length === 0 && (
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               Es wurde nichts gebucht und kein Geschäftsjahr angelegt: der Abschluss läuft als
               eine Transaktion, und ein Fehler nimmt alles mit — auch ein Papier, das nicht
               gezeichnet werden konnte.
@@ -384,11 +384,11 @@ function ClosingWizard({
 function StepBar({ step }: { step: ClosingStep }) {
   const index = CLOSING_STEPS.findIndex((entry) => entry.step === step)
   return (
-    <ol className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
+    <ol className="flex flex-wrap items-center gap-x-6 gap-y-2 text-body">
       {CLOSING_STEPS.map((entry, position) => (
         <li key={entry.step} className="flex items-center gap-1.5">
           <span
-            className={`grid h-4 w-4 place-items-center rounded-[var(--radius-full)] text-[10px] ${
+            className={`grid h-4 w-4 place-items-center rounded-[var(--radius-full)] text-caption ${
               position < index
                 ? 'bg-accent text-white'
                 : entry.step === step
@@ -436,11 +436,11 @@ function ChecksStep({
             <li key={check.step} className="flex items-start gap-2.5">
               <CheckMark check={check} />
               <div className="grid gap-0.5">
-                <p className="text-[13px]">
+                <p className="text-body">
                   <span className="text-text-tertiary">{check.step}</span> {check.message}
                 </p>
                 {check.detail !== '' && (
-                  <p className="whitespace-pre-line text-[12px] text-text-secondary">
+                  <p className="whitespace-pre-line text-small text-text-secondary">
                     {check.detail}
                   </p>
                 )}
@@ -458,7 +458,7 @@ function ChecksStep({
         </WarningNotice>
       )}
 
-      <p className="text-[12px] text-text-secondary">
+      <p className="text-small text-text-secondary">
         {`Das Jahresergebnis steht bei ${formatAmount(preview.expectedResult)}; die beiden`}
         {` Abschlussbuchungen bekämen zusammen ${preview.closingLineCount} Zeilen.`}
       </p>
@@ -515,12 +515,12 @@ function AccrualsStep({
       >
         <div className="grid gap-4">
           {preview.accruals.length === 0 ? (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Auf den Abgrenzungskonten steht in diesem Geschäftsjahr nichts. Das heisst nicht,
               dass nichts abzugrenzen wäre — es heisst, dass noch nichts abgegrenzt wurde.
             </p>
           ) : (
-            <ul className="grid gap-1 text-[13px]">
+            <ul className="grid gap-1 text-body">
               {preview.accruals.map((accrual) => (
                 <li key={accrual.accountNumber} className="flex justify-between gap-4">
                   <span>
@@ -540,7 +540,7 @@ function AccrualsStep({
               carries in their head. No switch is built out of the rule: whether a business may
               keep its books on receipts and payments is a judgement about that business
               (ADR-0117). */}
-          <dl className="grid gap-1 text-[13px]">
+          <dl className="grid gap-1 text-body">
             <div className="flex justify-between gap-4">
               <dt>Nettoerlöse aus Lieferungen und Leistungen</dt>
               <dd className="font-mono tabular-nums">{formatAmount(preview.netRevenue)}</dd>
@@ -551,7 +551,7 @@ function AccrualsStep({
             </div>
           </dl>
 
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Übersteigen die Nettoerlöse aus Lieferungen und Leistungen oder die Finanzerträge
             100’000 Franken nicht, darf nach OR Art. 958b Abs. 2 auf die zeitliche Abgrenzung
             verzichtet und stattdessen auf Ausgaben und Einnahmen abgestellt werden. Ob das für
@@ -560,7 +560,7 @@ function AccrualsStep({
 
           <CheckboxField
             label="Die zeitlichen Abgrenzungen sind geprüft (OR Art. 958b Abs. 1)."
-            hint="Wird mit Ihrem Namen im Protokoll des Geschäftsjahres festgehalten."
+            tooltip="Wird mit Ihrem Namen im Protokoll des Geschäftsjahres festgehalten."
             checked={accrualsConfirmed}
             onChange={(event) => onAccrualsChange(event.target.checked)}
           />
@@ -578,7 +578,7 @@ function AccrualsStep({
           ) : (
             <CheckboxField
               label="Debitoren und Kreditoren sind gegen die offenen Posten abgestimmt."
-              hint="Freiwillig: die Abstimmung gegen die Nebenbücher stimmt bereits überein."
+              tooltip="Freiwillig: die Abstimmung gegen die Nebenbücher stimmt bereits überein."
               checked={reconciliationConfirmed}
               onChange={(event) => onReconciliationChange(event.target.checked)}
             />
@@ -626,8 +626,8 @@ function CarryForwardStep({
               onChange={(event) =>
                 onChosenChange(event.target.value === '' ? null : event.target.value)
               }
-              className="w-[320px]"
-              hint="Das Kapital- oder das Privatkonto. Ihr Treuhänder weiss, welches bei Ihnen üblich ist; die Antwort wird gemerkt und beim nächsten Abschluss nur noch angezeigt."
+              className="w-[20rem]"
+              tooltip="Das Kapital- oder das Privatkonto. Ihr Treuhänder weiss, welches bei Ihnen üblich ist; die Antwort wird gemerkt und beim nächsten Abschluss nur noch angezeigt."
             >
               <option value="">— bitte wählen —</option>
               {preview.carryForwardOptions.map((option) => (
@@ -638,7 +638,7 @@ function CarryForwardStep({
             </SelectField>
           ) : (
             <div className="grid gap-1">
-              <p className="text-[12px] text-text-secondary">Vortragskonto</p>
+              <p className="text-small text-text-secondary">Vortragskonto</p>
               {/* «Keines» rather than a dash, and in prose rather than in figures: a year that
                   comes out at nil needs no carry forward account, and the backend leaves the
                   field empty for exactly that reason. A dash there let a dormant company read
@@ -646,23 +646,23 @@ function CarryForwardStep({
                   stays for the one case that is a gap — a blocking finding, which step 1
                   names. */}
               {carriesNoResult(preview) ? (
-                <p className="text-[13px]">Keines — es ist nichts vorzutragen</p>
+                <p className="text-body">Keines — es ist nichts vorzutragen</p>
               ) : (
-                <p className="font-mono text-[13px] tabular-nums">
+                <p className="font-mono text-body tabular-nums">
                   {preview.carryForwardAccount ?? '—'}
                 </p>
               )}
-              <p className="text-[12px] text-text-secondary">{carryForwardHint(preview)}</p>
+              <p className="text-small text-text-secondary">{carryForwardHint(preview)}</p>
             </div>
           )}
 
-          <p className="text-[13px]">{closingSummarySentence(preview, chosen)}</p>
+          <p className="text-body">{closingSummarySentence(preview, chosen)}</p>
 
           {/* Said before the click and not after it: the run files five papers as its
               thirteenth step and fails as a whole where one cannot be laid out (backend
               ADR-0125). A close that stops over a printing fault is inexplicable to somebody who
               was never told that printing is part of it. */}
-          <p className="text-[13px]">{filedPapersSentence()}</p>
+          <p className="text-body">{filedPapersSentence()}</p>
 
           {preview.replacesOpeningEntry && (
             <WarningNotice>
@@ -672,7 +672,7 @@ function CarryForwardStep({
             </WarningNotice>
           )}
 
-          <p className="text-[12px] text-text-secondary">{appropriationSentence(preview)}</p>
+          <p className="text-small text-text-secondary">{appropriationSentence(preview)}</p>
         </div>
       </Panel>
     </div>
@@ -758,12 +758,12 @@ function ClosedYear({
         }
       >
         {accrual ? (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             {`${accrual.changedBy} hat am ${formatDateTime(accrual.changedAt)} bestätigt: `}
             {accrual.note}
           </p>
         ) : (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zu diesem Abschluss steht keine Abgrenzungsbestätigung im Protokoll.
           </p>
         )}
@@ -886,7 +886,7 @@ function FiledPapers({ tenantId, year }: { tenantId: number; year: FiscalYear })
               aria-label={`Abschluss Nr. ${run.closingNumber}`}
               className="grid gap-1.5"
             >
-              <h3 className="text-[12px] font-medium text-text-secondary">
+              <h3 className="text-small font-medium text-text-secondary">
                 Abschluss Nr. {run.closingNumber}
               </h3>
               <ul className="grid gap-1">
@@ -904,7 +904,7 @@ function FiledPapers({ tenantId, year }: { tenantId: number; year: FiscalYear })
                       <FileText size={15} aria-hidden />
                       {REPORT_NAMES[paper.report]}
                     </Button>
-                    <span className="text-[12px] text-text-secondary">
+                    <span className="text-small text-text-secondary">
                       {`Stand ${formatDate(paper.asOfDate)} · ${formatByteCount(paper.byteCount)}`}
                       {` · abgelegt am ${formatDateTime(paper.createdAt)} von ${paper.createdBy}`}
                     </span>
@@ -916,7 +916,7 @@ function FiledPapers({ tenantId, year }: { tenantId: number; year: FiscalYear })
 
           {openFailure !== null && <ErrorNotice error={openFailure} />}
 
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Ein Klick öffnet das Papier so, wie es abgelegt wurde. Diese Papiere ändern sich nicht
             mehr; von Hand abgelegte stehen unter Buchhaltung → Archiv.
           </p>
@@ -986,27 +986,27 @@ const ENTRY_COLUMNS: Column<ClosingEntry>[] = [
   {
     key: 'entryNumber',
     header: 'Journalnummer',
-    width: 'w-[150px]',
+    width: 'w-[9.375rem]',
     render: (entry) => <span className="font-mono tabular-nums">{entry.entryNumber}</span>,
   },
   {
     key: 'bookingDate',
     header: 'Datum',
-    width: 'w-[110px]',
+    width: 'w-[6.875rem]',
     render: (entry) => formatDate(entry.bookingDate),
   },
   { key: 'description', header: 'Text', render: (entry) => entry.description },
   {
     key: 'documentReference',
     header: 'Beleg',
-    width: 'w-[120px]',
+    width: 'w-[7.5rem]',
     hideBelow: 'sm',
     render: (entry) => <span className="font-mono tabular-nums">{entry.documentReference}</span>,
   },
   {
     key: 'reversed',
     header: 'Zustand',
-    width: 'w-[130px]',
+    width: 'w-[8.125rem]',
     render: (entry) => (entry.reversed ? 'Storniert' : 'Steht'),
   },
 ]
@@ -1016,11 +1016,11 @@ const LOG_COLUMNS: Column<YearLogLine>[] = [
   {
     key: 'changedAt',
     header: 'Wann',
-    width: 'w-[170px]',
+    width: 'w-[10.625rem]',
     render: (line) => formatDateTime(line.changedAt),
   },
-  { key: 'event', header: 'Was', width: 'w-[210px]', render: (line) => yearLogLabel(line) },
-  { key: 'changedBy', header: 'Wer', width: 'w-[150px]', render: (line) => line.changedBy },
+  { key: 'event', header: 'Was', width: 'w-[13.125rem]', render: (line) => yearLogLabel(line) },
+  { key: 'changedBy', header: 'Wer', width: 'w-[9.375rem]', render: (line) => line.changedBy },
   { key: 'note', header: 'Grund', render: (line) => line.note ?? '' },
 ]
 

@@ -182,7 +182,7 @@ export function OpeningEntryStep({
         )}
 
         {mayClose && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Brauchen Sie Vergleichszahlen nach OR Art. 958d Abs. 2, erfassen Sie zuerst das
             Vorjahr —{' '}
             <Link to={PRIOR_YEAR_PATH} className="text-accent-text underline underline-offset-2">
@@ -193,7 +193,7 @@ export function OpeningEntryStep({
         )}
 
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">Ab wann führen Sie hier Buch?</legend>
+          <legend className="mb-1 text-body font-medium">Ab wann führen Sie hier Buch?</legend>
           <StepChoice
             group="opening-start"
             checked={fromStart}
@@ -219,7 +219,7 @@ export function OpeningEntryStep({
               min={fiscalYear.startDate}
               max={fiscalYear.endDate}
               onChange={(event) => setStartsOn(event.target.value)}
-              className="w-[180px]"
+              className="w-[11.25rem]"
             />
           )}
         </fieldset>
@@ -243,12 +243,12 @@ export function OpeningEntryStep({
 
         {carriesBalances && (
           <>
-            <table className="w-full text-[13px]">
+            <table className="w-full text-body">
               <thead>
                 <tr className="border-b border-line text-left text-text-secondary">
                   <th className="py-1.5 pr-3 font-medium">Konto</th>
-                  <th className="w-[150px] py-1.5 pr-3 text-right font-medium">Soll</th>
-                  <th className="w-[150px] py-1.5 text-right font-medium">Haben</th>
+                  <th className="w-[9.375rem] py-1.5 pr-3 text-right font-medium">Soll</th>
+                  <th className="w-[9.375rem] py-1.5 text-right font-medium">Haben</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,7 +272,7 @@ export function OpeningEntryStep({
                             setForm((current) => ({ rows: [...current.rows, emptyRow()] }))
                           }
                         }}
-                        className="h-8 w-full rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-[13px] text-text-primary outline-none focus:border-accent"
+                        className="h-8 w-full rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-body text-text-primary outline-none focus:border-accent"
                       >
                         <option value="">Konto wählen …</option>
                         {(accounts.data?.content ?? []).map((account) => (
@@ -304,7 +304,7 @@ export function OpeningEntryStep({
 
             {/* Always there, even at 0.00: a difference that only appears when it is wrong is
                 one nobody looks for. */}
-            <p className={`text-[13px] tabular-nums${balance.difference === 0 ? '' : ' text-danger'}`}>
+            <p className={`text-body tabular-nums${balance.difference === 0 ? '' : ' text-danger'}`}>
               Soll {formatAmount(balance.debit)} = Haben {formatAmount(balance.credit)} · Differenz{' '}
               {formatAmount(balance.difference)}
             </p>
@@ -375,7 +375,7 @@ function OpenItemLine({
 }) {
   if (!mayRead) {
     return (
-      <p className="text-[12px] text-text-secondary">
+      <p className="text-small text-text-secondary">
         Ihr Debitorensaldo lässt sich hier nicht anzeigen: dafür fehlt Ihnen das Recht{' '}
         <em>Rechnungen lesen</em> (<code>INVOICE_READ</code>). Die Zahl steht unter Verkauf →
         Offene Posten.
@@ -387,7 +387,7 @@ function OpenItemLine({
     .map((row) => `${formatAmount(row.openTotal)} ${row.currencyCode} aus ${row.count} Rechnungen`)
     .join(', ')
   return (
-    <p className="text-[12px] text-text-secondary">
+    <p className="text-small text-text-secondary">
       Offene Posten heute: {said}.
       {hasProposal
         ? ' Der Vorschlag auf dem Debitorenkonto stammt aus dieser Zahl.'
@@ -414,7 +414,7 @@ function AmountInput({
   return (
     <div className="flex items-center justify-end gap-1.5">
       {proposed === true && (
-        <span className="shrink-0 text-[11px] text-text-tertiary" title="Aus den offenen Posten von heute">
+        <span className="shrink-0 text-caption text-text-tertiary" title="Aus den offenen Posten von heute">
           Vorschlag
         </span>
       )}
@@ -423,7 +423,7 @@ function AmountInput({
         inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-[120px] rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-right font-mono text-[13px] tabular-nums outline-none focus:border-accent"
+        className="h-8 w-[7.5rem] rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-right font-mono text-body tabular-nums outline-none focus:border-accent"
       />
     </div>
   )

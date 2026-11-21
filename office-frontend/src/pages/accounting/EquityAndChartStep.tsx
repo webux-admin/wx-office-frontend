@@ -91,7 +91,7 @@ export function EquityAndChartStep({
     <Panel>
       <div className="grid gap-5">
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">
+          <legend className="mb-1 text-body font-medium">
             Wie ist Ihr Eigenkapital gegliedert?
           </legend>
           {LAYOUTS.map((option) => (
@@ -104,7 +104,7 @@ export function EquityAndChartStep({
               hint={option.hint}
             />
           ))}
-          <p className="mt-1 text-[12px] text-text-secondary">
+          <p className="mt-1 text-small text-text-secondary">
             {suggestedLayout === undefined
               ? 'Bitte wählen: aus der Rechtsform im Mandantenstamm lässt sich das nicht '
                 + 'ableiten. Die Wahl steuert nur den Eigenkapitalblock.'
@@ -115,9 +115,9 @@ export function EquityAndChartStep({
         </fieldset>
 
         <fieldset className="grid gap-2">
-          <legend className="mb-1 text-[13px] font-medium">Kontenplan</legend>
+          <legend className="mb-1 text-body font-medium">Kontenplan</legend>
           {chartStands && (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Ihr Kontenplan steht bereits mit {accountCount} Konten. Er wird hier nicht noch
               einmal angelegt; ändern und ergänzen lässt er sich unter Buchhaltung → Kontenplan.
             </p>

@@ -130,9 +130,9 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
       key: 'number',
       header: 'Nr.',
       sortKey: 'accountNumber',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (account) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{account.accountNumber}</span>
+        <span className="font-mono text-small text-text-tertiary">{account.accountNumber}</span>
       ),
     },
     {
@@ -145,7 +145,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
       key: 'type',
       header: 'Art',
       sortKey: 'accountType',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (account) => (
         <span className="text-text-secondary">{accountTypeLabel(types, account.accountType)}</span>
       ),
@@ -162,7 +162,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: '',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (account) => {
         // The mark on 9200, and on 1100 and 2030 with the day their lock starts. No field:
         // whoever set `direct_posting_allowed` by hand would lose an account from every picker
@@ -172,7 +172,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
           <span className="flex flex-wrap items-center justify-end gap-1">
             {lock !== null && (
               <span
-                className="inline-flex items-center gap-1 text-[11px] text-text-tertiary"
+                className="inline-flex items-center gap-1 text-caption text-text-tertiary"
                 title={lock.title}
               >
                 <Lock size={12} aria-hidden />
@@ -266,7 +266,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
                     setAccountType(event.target.value)
                     setPage(0)
                   }}
-                  className="w-[180px]"
+                  className="w-[11.25rem]"
                 >
                   <option value="">Alle</option>
                   {ACCOUNT_TYPE_ORDER.map((code) => (
@@ -312,7 +312,7 @@ function ChartOfAccounts({ tenantId }: { tenantId: number }) {
                     <tr>
                       <td
                         colSpan={columns.length}
-                        className="px-5 py-3 text-[12px] leading-[18px] text-text-secondary"
+                        className="px-5 py-3 text-small leading-[1.125rem] text-text-secondary"
                       >
                         {settings.data.chartSource}
                       </td>
@@ -447,7 +447,7 @@ function NoChartYet({
           </Button>
         </div>
         {template !== undefined && (
-          <p className="max-w-[52ch] text-[13px] text-text-secondary">
+          <p className="max-w-[52ch] text-body text-text-secondary">
             Die Vorlage «{template.name}»{rows === undefined ? '' : ` bringt ${rows} Konten mit`}.
             Sie lässt sich danach beliebig ändern, ergänzen und kürzen.
           </p>

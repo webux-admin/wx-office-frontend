@@ -230,7 +230,7 @@ function PriorYear({ tenantId }: { tenantId: number }) {
                   setFiscalYearId(Number(event.target.value))
                   setSaved(null)
                 }}
-                className="w-[320px]"
+                className="w-[20rem]"
               >
                 {available.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
@@ -244,7 +244,7 @@ function PriorYear({ tenantId }: { tenantId: number }) {
                   for the fiscal year screen and coming back. */}
               {yearBefore !== undefined && (
                 <div className="grid gap-1">
-                  <span className="text-[12px] text-text-secondary">
+                  <span className="text-small text-text-secondary">
                     Fehlt das Jahr davor noch?
                   </span>
                   <Button
@@ -258,7 +258,7 @@ function PriorYear({ tenantId }: { tenantId: number }) {
               )}
             </div>
 
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Tragen Sie die Saldenliste per {formatDate(year.endDate)} ein, wie sie Ihr
               Treuhänder geliefert hat. Was Sie speichern, ist die Eröffnungsbuchung von{' '}
               {year.label} per {formatDate(year.endDate)} — dieselbe Buchung, die der
@@ -274,7 +274,7 @@ function PriorYear({ tenantId }: { tenantId: number }) {
 
         {saved !== null && (
           <Panel>
-            <p role="status" className="text-[13px]">
+            <p role="status" className="text-body">
               Die Vorjahressaldi {year.label} sind als Eröffnungsbuchung{' '}
               <span className="font-mono tabular-nums">{saved.entryNumber}</span> per{' '}
               {formatDate(saved.bookingDate)} verbucht.
@@ -412,12 +412,12 @@ function Capture({
           </WarningNotice>
         )}
 
-        <table className="w-full text-[13px]">
+        <table className="w-full text-body">
           <thead>
             <tr className="border-b border-line text-left text-text-secondary">
               <th className="py-1.5 pr-3 font-medium">Konto</th>
-              <th className="w-[150px] py-1.5 pr-3 text-right font-medium">Soll</th>
-              <th className="w-[150px] py-1.5 text-right font-medium">Haben</th>
+              <th className="w-[9.375rem] py-1.5 pr-3 text-right font-medium">Soll</th>
+              <th className="w-[9.375rem] py-1.5 text-right font-medium">Haben</th>
             </tr>
           </thead>
           <tbody>
@@ -441,7 +441,7 @@ function Capture({
                         setForm((current) => ({ rows: [...current.rows, emptyPriorYearRow()] }))
                       }
                     }}
-                    className="h-8 w-full rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-[13px] text-text-primary outline-none focus:border-accent"
+                    className="h-8 w-full rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-body text-text-primary outline-none focus:border-accent"
                   >
                     <option value="">Konto wählen …</option>
                     {/* A captured account that is no longer in today's chart keeps its row: the
@@ -479,14 +479,14 @@ function Capture({
 
         {/* Always there, even at 0.00: a difference that only appears when it is wrong is one
             nobody looks for. */}
-        <p className={`text-[13px] tabular-nums${balance.difference === 0 ? '' : ' text-danger'}`}>
+        <p className={`text-body tabular-nums${balance.difference === 0 ? '' : ' text-danger'}`}>
           Soll {formatAmount(balance.debit)} = Haben {formatAmount(balance.credit)} · Differenz{' '}
           {formatAmount(balance.difference)}
         </p>
 
         {/* The control figure somebody holds against the closing of their fiduciary. Worked
             out from the income accounts among the typed rows and never sent. */}
-        <p className="text-[13px] text-text-secondary tabular-nums">
+        <p className="text-body text-text-secondary tabular-nums">
           Jahresergebnis {year.label} (rechnerisch):{' '}
           {result.hasIncomeRows ? resultSentence(result.result) : (
             'noch keine Erfolgskonten erfasst — ohne sie bleibt die Erfolgsrechnung '
@@ -622,7 +622,7 @@ function AmountInput({
         inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 w-[120px] rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-right font-mono text-[13px] tabular-nums outline-none focus:border-accent"
+        className="h-8 w-[7.5rem] rounded-[var(--radius-sm)] border border-line bg-transparent px-2 text-right font-mono text-body tabular-nums outline-none focus:border-accent"
       />
     </div>
   )

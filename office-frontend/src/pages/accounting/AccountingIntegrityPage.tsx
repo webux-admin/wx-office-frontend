@@ -160,14 +160,14 @@ function Integrity({ tenantId }: { tenantId: number }) {
       key: 'accessedAt',
       header: 'Zeitpunkt',
       sortKey: 'accessedAt',
-      width: 'w-[160px]',
+      width: 'w-[10rem]',
       render: (row) => <span className="tabular-nums">{formatDateTime(row.accessedAt)}</span>,
     },
     {
       key: 'accessedBy',
       header: 'Benutzer',
       sortKey: 'accessedBy',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (row) => <span>{row.accessedBy}</span>,
     },
     {
@@ -189,7 +189,7 @@ function Integrity({ tenantId }: { tenantId: number }) {
       key: 'fiscalYearLabel',
       header: 'Jahr',
       sortKey: 'fiscalYearLabel',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       hideBelow: 'sm',
       render: (row) => <span className="tabular-nums">{row.fiscalYearLabel ?? '—'}</span>,
     },
@@ -203,7 +203,7 @@ function Integrity({ tenantId }: { tenantId: number }) {
             {row.outcomeLabel}
           </span>
           {row.detail && (
-            <span className="mt-0.5 block text-[12px] text-text-secondary">{row.detail}</span>
+            <span className="mt-0.5 block text-small text-text-secondary">{row.detail}</span>
           )}
         </span>
       ),
@@ -246,7 +246,7 @@ function Integrity({ tenantId }: { tenantId: number }) {
               label="Vorgang"
               value={action}
               onChange={(event) => narrow(ACCESS_LOG_ACTION_PARAM, event.target.value)}
-              className="w-[220px]"
+              className="w-[13.75rem]"
             >
               <option value="">Alle Vorgänge</option>
               {ACCESS_LOG_ACTIONS.map((entry) => (
@@ -459,7 +459,7 @@ function Intact({
   checkedBy: string
 }) {
   return (
-    <p className="flex items-start gap-2.5 text-[14px]">
+    <p className="flex items-start gap-2.5 text-control">
       <ShieldCheck size={17} className="mt-px shrink-0 text-accent-text" aria-hidden />
       <span>
         {intactSentence(count)}{' '}
@@ -503,7 +503,7 @@ function CheckButton({
 /** What the button does, and what it cost the last time it was pressed. */
 function Explainer({ durationMillis }: { durationMillis: number | null | undefined }) {
   return (
-    <p className="text-[13px] text-text-secondary">
+    <p className="text-body text-text-secondary">
       Die Prüfung rechnet die Sicherungskette über das Journal nach. Sie ändert nichts
       {durationMillis === null || durationMillis === undefined
         ? '.'
@@ -518,7 +518,7 @@ function Explainer({ durationMillis }: { durationMillis: number | null | undefin
  */
 function Reach() {
   return (
-    <p className="max-w-[80ch] text-[13px] text-text-secondary">
+    <p className="max-w-[80ch] text-body text-text-secondary">
       Was die Prüfung nicht leisten kann: sie belegt, dass die gespeicherten Buchungen
       unverändert sind — nicht, wann sie gespeichert wurden. Für den Nachweis des
       Speicherzeitpunkts braucht es ein Verfahren ausserhalb dieses Programms. Siehe
@@ -543,7 +543,7 @@ function BreakNotice({ headline, detail }: { headline: ReactNode; detail?: React
       <AlertTriangle size={17} className="mt-px shrink-0 text-danger" aria-hidden />
       <div className="grid min-w-0 flex-1 gap-2">
         {headline}
-        <p className="max-w-[80ch] text-[13px]">
+        <p className="max-w-[80ch] text-body">
           Ändern Sie nichts, buchen Sie normal weiter, und melden Sie Journalnummer und Datum
           Ihrem Treuhänder und Ihrer Systembetreuung. Die Prüfung sagt, dass Daten ausserhalb
           dieser Anwendung verändert wurden — nicht, dass Sie einen Fehler gemacht haben.
@@ -567,7 +567,7 @@ function BreakFromRun({ found }: { found: ChainIntegrity }) {
     <BreakNotice
       headline={
         first && (
-          <p className="text-[14px] font-medium">
+          <p className="text-control font-medium">
             Ab Buchung {first.entryNumber} vom{' '}
             {formatDate(first.bookingDate)} stimmt die Sicherung nicht mehr.
           </p>
@@ -575,7 +575,7 @@ function BreakFromRun({ found }: { found: ChainIntegrity }) {
       }
       detail={
         <>
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Geprüft: {formatCount(found.postedEntries)} Buchungen
             {first
               && ` · betroffen ab Kettennummer ${formatCount(first.chainNumber)}`
@@ -587,7 +587,7 @@ function BreakFromRun({ found }: { found: ChainIntegrity }) {
           {found.gaps.map((gap) => (
             <p
               key={`${gap.afterChainNumber}-${gap.beforeChainNumber}`}
-              className="text-[13px] text-text-secondary"
+              className="text-body text-text-secondary"
             >
               Zusätzlich: Lücke in der Kettennummer nach {formatCount(gap.afterChainNumber)} —{' '}
               {formatCount(gap.missingCount)} {gap.missingCount === 1 ? 'Nummer fehlt' : 'Nummern fehlen'}.
@@ -608,9 +608,9 @@ function BreakFromRun({ found }: { found: ChainIntegrity }) {
 function BreakFromLog({ line }: { line: AccessLogRow }) {
   return (
     <BreakNotice
-      headline={line.detail && <p className="text-[14px] font-medium">{line.detail}</p>}
+      headline={line.detail && <p className="text-control font-medium">{line.detail}</p>}
       detail={
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {line.checkedCount === null || line.checkedCount === undefined
             ? ''
             : `Geprüft: ${formatCount(line.checkedCount)} Buchungen · `}

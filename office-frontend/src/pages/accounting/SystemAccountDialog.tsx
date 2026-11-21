@@ -81,8 +81,8 @@ export function SystemAccountDialog({
                 onClick={() => setAsking(entry)}
                 className="w-full rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors hover:bg-sunken"
               >
-                <span className="block text-[13px]">{entry.question}</span>
-                <span className="block text-[12px] text-text-secondary">
+                <span className="block text-body">{entry.question}</span>
+                <span className="block text-small text-text-secondary">
                   {entry.account === undefined ? (
                     '— nicht gesetzt —'
                   ) : (
@@ -176,7 +176,7 @@ function OneKey({
       }
     >
       <div className="grid gap-3">
-        <p className="text-[13px] text-text-secondary">{systemKey.hint}</p>
+        <p className="text-body text-text-secondary">{systemKey.hint}</p>
 
         <QuickSearchField
           label="Konto suchen"
@@ -188,7 +188,7 @@ function OneKey({
         />
 
         {accounts.error !== null && <ErrorNotice error={accounts.error} />}
-        <ul className="grid max-h-[280px] gap-1 overflow-y-auto">
+        <ul className="grid max-h-[17.5rem] gap-1 overflow-y-auto">
           {offered.map((account) => (
             <li key={account.id}>
               <button
@@ -198,18 +198,18 @@ function OneKey({
                   chosen?.id === account.id ? 'bg-sunken' : 'hover:bg-sunken'
                 }`}
               >
-                <span className="text-[13px]">
+                <span className="text-body">
                   <span className="font-mono text-text-tertiary">{account.accountNumber}</span>{' '}
                   {account.name}
                 </span>
-                <span className="block text-[12px] text-text-secondary">
+                <span className="block text-small text-text-secondary">
                   {accountTypeLabel(types, account.accountType)}
                 </span>
               </button>
             </li>
           ))}
           {offered.length === 0 && accounts.data !== undefined && (
-            <li className="px-3 py-2 text-[13px] text-text-secondary">
+            <li className="px-3 py-2 text-body text-text-secondary">
               Kein Konto passt zu dieser Frage. Legen Sie eines an, dessen Kontoart hier zugelassen
               ist.
             </li>

@@ -413,7 +413,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
       <div className="grid gap-4 px-8 pb-12">
         {offer !== undefined && (
           <Panel>
-            <div className="grid gap-2 text-[13px]">
+            <div className="grid gap-2 text-body">
               <p>{rescueHeadline(offer.savedAt)}</p>
               <p className="text-text-secondary">
                 {offer.rowCount === 1 ? '1 Zeile' : `${offer.rowCount} Zeilen`}
@@ -444,7 +444,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
 
         {done !== null && (
           <Panel>
-            <p className="text-[13px]">
+            <p className="text-body">
               {done.message}{' '}
               <Link to={done.to} className="text-accent-text underline-offset-2 hover:underline">
                 {done.label}
@@ -469,7 +469,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
                 event.preventDefault()
                 setDraft({ ...draft, bookingDate: today })
               }}
-              hint="«.» setzt das heutige Datum."
+              tooltip="«.» setzt das heutige Datum."
             />
             <TextField
               label="Beleg"
@@ -522,7 +522,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px]">{replaced}</p>
+        <p className="text-body">{replaced}</p>
       </Dialog>
 
       {saving && (
@@ -562,7 +562,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p>{IRREVERSIBLE}</p>
           {saveAndPost.error !== null && <ErrorNotice error={saveAndPost.error} />}
         </div>
@@ -584,7 +584,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p>
             Ein Entwurf ist noch nicht in den Büchern. Gelöscht hinterlässt er nichts — keine
             Journalnummer, keine Lücke.

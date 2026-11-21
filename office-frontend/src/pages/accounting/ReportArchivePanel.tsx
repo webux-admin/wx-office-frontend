@@ -79,7 +79,7 @@ export function ReportArchivePanel({ tenantId, year }: { tenantId: number; year:
       padded={false}
     >
       {archive.isPending && (
-        <p className="px-5 py-3 text-[13px] text-text-secondary">Wird geladen ...</p>
+        <p className="px-5 py-3 text-body text-text-secondary">Wird geladen ...</p>
       )}
       {archive.error !== null && (
         <div className="p-5">
@@ -96,7 +96,7 @@ export function ReportArchivePanel({ tenantId, year }: { tenantId: number; year:
       {archive.isSuccess && groups.length === 0 && <NothingFiled year={year} />}
       {groups.map((group) => (
         <section key={group.key} className="border-b border-line-subtle last:border-b-0">
-          <h3 className="px-5 pt-4 pb-1 text-[12px] font-medium text-text-tertiary">
+          <h3 className="px-5 pt-4 pb-1 text-small font-medium text-text-tertiary">
             {group.heading}
           </h3>
           <ul className="divide-y divide-line-subtle">
@@ -145,8 +145,8 @@ function Paper({
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5">
       <div className="grid min-w-0 gap-0.5">
-        <span className="text-[13px] font-medium">{name}</span>
-        <span className="text-[12px] text-text-tertiary">{facts.join(' · ')}</span>
+        <span className="text-body font-medium">{name}</span>
+        <span className="text-small text-text-tertiary">{facts.join(' · ')}</span>
       </div>
       <Button
         variant="secondary"

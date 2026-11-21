@@ -41,8 +41,8 @@ export function StepChoice({
         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent-text)]"
       />
       <span className="min-w-0">
-        <span className="block text-[13px]">{title}</span>
-        {hint !== undefined && <span className="block text-[12px] text-text-secondary">{hint}</span>}
+        <span className="block text-body">{title}</span>
+        {hint !== undefined && <span className="block text-small text-text-secondary">{hint}</span>}
       </span>
     </label>
   )

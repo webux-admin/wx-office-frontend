@@ -54,9 +54,9 @@ function TaxCodes({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (taxCode) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{taxCode.code}</span>
+        <span className="font-mono text-small text-text-tertiary">{taxCode.code}</span>
       ),
     },
     {
@@ -83,18 +83,18 @@ function TaxCodes({ tenantId }: { tenantId: number }) {
       key: 'rate',
       header: 'Satz',
       align: 'right',
-      width: 'w-[90px]',
-      render: (taxCode) => <span className="font-mono text-[12px]">{rateOf(taxCode)}</span>,
+      width: 'w-[5.625rem]',
+      render: (taxCode) => <span className="font-mono text-small">{rateOf(taxCode)}</span>,
     },
     {
       key: 'account',
       header: 'Konto',
-      width: 'w-[240px]',
+      width: 'w-[15rem]',
       hideBelow: 'sm',
       render: (taxCode) =>
         taxCode.taxAccountNumber ? (
           <span className="flex flex-wrap items-baseline gap-1.5">
-            <span className="font-mono text-[12px] text-text-tertiary">
+            <span className="font-mono text-small text-text-tertiary">
               {taxCode.taxAccountNumber}
             </span>
             <span className="text-text-secondary">{taxCode.taxAccountName}</span>
@@ -106,9 +106,9 @@ function TaxCodes({ tenantId }: { tenantId: number }) {
     {
       key: 'validFrom',
       header: 'Gültig ab',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (taxCode) => (
-        <span className="font-mono text-[12px] text-text-secondary">
+        <span className="font-mono text-small text-text-secondary">
           {formatDate(taxCode.validFrom)}
         </span>
       ),
@@ -129,7 +129,7 @@ function TaxCodes({ tenantId }: { tenantId: number }) {
       <div className="px-8 pb-12">
         <Panel padded={false}>
           {codes.length > 0 && (
-            <p className="border-b border-line-subtle px-5 py-4 text-[13px] text-text-secondary">
+            <p className="border-b border-line-subtle px-5 py-4 text-body text-text-secondary">
               Mit diesen Codes rechnet die Buchung die Mehrwertsteuer. Sie entstehen mit dem
               Kontenplan und werden hier nicht bearbeitet.
             </p>
