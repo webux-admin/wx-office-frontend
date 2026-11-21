@@ -291,6 +291,28 @@ describe('ModulePage', () => {
     expect(container.textContent).not.toContain('nicht mehr per E-Mail versenden')
   })
 
+  it('modulePageWarnsThatContractsStayReadableTest', async () => {
+    modules = [outbox({ code: 'CONTRACT', label: 'Verträge', active: true, usage: '3 Verträge' })]
+    await render()
+
+    await toggle('Verträge verwenden', false)
+
+    expect(container.textContent).toContain('3 Verträge')
+    expect(container.textContent).toContain('Bestehende Verträge bleiben mit allen Versionen lesbar')
+    expect(container.textContent).not.toContain('Abo-Lauf lässt sich danach nicht mehr starten')
+  })
+
+  it('modulePageWarnsThatTheSubscriptionRunStopsTest', async () => {
+    modules = [outbox({ code: 'SUBSCRIPTION', label: 'Abo-Lauf', active: true, usage: '2 Läufe' })]
+    await render()
+
+    await toggle('Abo-Lauf verwenden', false)
+
+    expect(container.textContent).toContain('2 Läufe')
+    expect(container.textContent).toContain('Der Abo-Lauf lässt sich danach nicht mehr starten')
+    expect(container.textContent).not.toContain('Bestehende Verträge')
+  })
+
   it('modulePageWarnsNeutrallyForAModuleWithoutASentenceTest', async () => {
     // A module the screen has never heard of gets the neutral sentence, never the one of
     // whichever module happens to be listed first.

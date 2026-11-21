@@ -52,6 +52,12 @@ describe('MODULE_NAMES', () => {
   it('moduleNamesCoverProjectsTest', () => {
     expect(MODULE_NAMES.PROJECT).toBe('Projekte')
   })
+
+  /** Two modules, two switches, two names: the contract is not the run (backend ADR-0136). */
+  it('moduleNamesCoverContractsAndSubscriptionTest', () => {
+    expect(MODULE_NAMES.CONTRACT).toBe('Verträge')
+    expect(MODULE_NAMES.SUBSCRIPTION).toBe('Abo-Lauf')
+  })
 })
 
 describe('runsModule', () => {

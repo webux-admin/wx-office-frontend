@@ -45,7 +45,9 @@ export const PERMISSION_MODULES: Record<string, string> = {
   BANKING: 'Bankauszug',
   ACCOUNTING: 'Buchhaltung',
   PROJECT: 'Projekte',
-  SUBSCRIPTION: 'Abonnemente',
+  CONTRACT: 'Verträge',
+  // The run, not the contract: what is agreed lives in CONTRACT (backend ADR-0136).
+  SUBSCRIPTION: 'Abo-Lauf',
   USER: 'Benutzer',
   REPORT: 'Auswertungen',
 }

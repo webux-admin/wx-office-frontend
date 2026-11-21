@@ -50,6 +50,13 @@ const CONSEQUENCES: Record<string, string> = {
   PROJECT:
     'Projekte lassen sich danach nicht mehr anlegen, ändern oder im Status weiterschalten. ' +
     'Bestehende Projekte bleiben lesbar — gelöscht wird nichts.',
+  CONTRACT:
+    'Verträge lassen sich danach nicht mehr anlegen, ändern oder beenden. Bestehende ' +
+    'Verträge bleiben mit allen Versionen lesbar — gelöscht wird nichts.',
+  SUBSCRIPTION:
+    'Der Abo-Lauf lässt sich danach nicht mehr starten, und aus Verträgen entstehen keine ' +
+    'Rechnungsentwürfe mehr. Was frühere Läufe erzeugt haben, bleibt erhalten — gelöscht ' +
+    'wird nichts.',
 }
 
 /** The neutral sentence, for a module nobody wrote one for. */

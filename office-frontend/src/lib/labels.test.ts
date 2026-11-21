@@ -6,6 +6,8 @@ describe('labelOf', () => {
     expect(labelOf(PERMISSION_MODULES, 'PARTNER')).toBe('Kunden und Lieferanten')
     expect(labelOf(PERMISSION_MODULES, 'MASTERDATA')).toBe('Stammdaten')
     expect(labelOf(PERMISSION_MODULES, 'PROJECT')).toBe('Projekte')
+    expect(labelOf(PERMISSION_MODULES, 'CONTRACT')).toBe('Verträge')
+    expect(labelOf(PERMISSION_MODULES, 'SUBSCRIPTION')).toBe('Abo-Lauf')
   })
 
   it('labelOfWithoutValueTest', () => {
@@ -48,6 +50,7 @@ describe('PERMISSION_MODULES', () => {
       'BANKING',
       'ACCOUNTING',
       'PROJECT',
+      'CONTRACT',
       'SUBSCRIPTION',
       'USER',
       'REPORT',
@@ -83,6 +86,13 @@ describe('permissionAction', () => {
     expect(permissionAction('DOCUMENT_TYPE_READ')).toBe('Lesen')
     expect(permissionAction('ROLE_MANAGE')).toBe('Verwalten')
     expect(permissionAction('DATA_EXPORT')).toBe('Exportieren')
+  })
+
+  it('permissionActionForContractsAndSubscriptionTest', () => {
+    // The run has no «Bearbeiten»: what it bills is written in the contract (backend ADR-0143).
+    expect(permissionAction('CONTRACT_READ')).toBe('Lesen')
+    expect(permissionAction('CONTRACT_WRITE')).toBe('Bearbeiten')
+    expect(permissionAction('SUBSCRIPTION_RUN')).toBe('Ausführen')
   })
 
   it('permissionActionForVatRateWriteTest', () => {
