@@ -212,7 +212,7 @@ export function BookStockDialog({
       footer={
         <>
           {missingLots !== null && (
-            <p className="mr-auto max-w-[40ch] text-[12px] text-warning">{missingLots}</p>
+            <p className="mr-auto max-w-[40ch] text-small text-warning">{missingLots}</p>
           )}
           <Button variant="secondary" onClick={onClose}>
             Abbrechen
@@ -233,7 +233,7 @@ export function BookStockDialog({
               type="button"
               aria-pressed={form.kind === kind.id}
               onClick={() => chooseKind(kind.id)}
-              className={`flex-1 rounded-[var(--radius-sm)] px-3 py-1.5 text-[13px] transition-colors ${
+              className={`flex-1 rounded-[var(--radius-sm)] px-3 py-1.5 text-body transition-colors ${
                 form.kind === kind.id
                   ? 'bg-surface font-medium text-text-primary shadow-card'
                   : 'text-text-secondary hover:text-text-primary'
@@ -268,7 +268,7 @@ export function BookStockDialog({
           inputRef={productField}
         />
         {scanMessage !== null && (
-          <p role="status" className="-mt-2 text-[12px] text-warning">
+          <p role="status" className="-mt-2 text-small text-warning">
             {scanMessage}
           </p>
         )}
@@ -280,7 +280,7 @@ export function BookStockDialog({
             onChange={(event) => change({ quantity: acceptQuantity(event.target.value) })}
             inputMode="decimal"
             numeric
-            hint="Immer positiv. Ob sie zu- oder abgeht, sagt der Vorgang."
+            tooltip="Immer positiv. Ob sie zu- oder abgeht, sagt der Vorgang."
           />
 
           {withLocations && (
@@ -329,7 +329,7 @@ export function BookStockDialog({
                 onChange={(event) => change({ unitCost: event.target.value })}
                 inputMode="decimal"
                 numeric
-                hint="Für das Inventar. Lässt sich später nicht ergänzen."
+                tooltip="Für das Inventar. Lässt sich später nicht ergänzen."
               />
               <TextField
                 label="Währung"
@@ -348,7 +348,7 @@ export function BookStockDialog({
             value={form.bookedOn}
             max={toIsoDate()}
             onChange={(event) => change({ bookedOn: event.target.value })}
-            hint="Rückdatieren ist erlaubt, in die Zukunft buchen nicht."
+            tooltip="Rückdatieren ist erlaubt, in die Zukunft buchen nicht."
           />
 
           <TextField
@@ -378,9 +378,9 @@ export function BookStockDialog({
             aria-live="polite"
             className="rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3"
           >
-            <p className="text-[11px] uppercase tracking-[0.06em] text-text-tertiary">Vorschau</p>
+            <p className="text-caption uppercase tracking-[0.06em] text-text-tertiary">Vorschau</p>
             {preview.map((line) => (
-              <p key={line} className="mt-0.5 font-mono text-[13px] text-text-primary">
+              <p key={line} className="mt-0.5 font-mono text-body text-text-primary">
                 {line}
               </p>
             ))}

@@ -103,7 +103,7 @@ export function ReverseMovementDialog({
         {message !== null && <ErrorNotice error={new Error(message)} />}
 
         {movement !== null && (
-          <dl className="grid gap-1 rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3 text-[13px]">
+          <dl className="grid gap-1 rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3 text-body">
             <Row label="Datum" value={formatDate(movement.bookedOn)} />
             <Row
               label="Produkt"
@@ -124,7 +124,7 @@ export function ReverseMovementDialog({
           onChange={(event) => setNote(event.target.value)}
           maxLength={200}
           rows={3}
-          hint="Steht auf der Gegenbuchung und ist Pflicht."
+          tooltip="Steht auf der Gegenbuchung und ist Pflicht."
         />
       </div>
     </Dialog>
@@ -134,7 +134,7 @@ export function ReverseMovementDialog({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-[80px] shrink-0 text-text-tertiary">{label}</dt>
+      <dt className="w-[5rem] shrink-0 text-text-tertiary">{label}</dt>
       <dd className="min-w-0 flex-1 text-text-primary">{value}</dd>
     </div>
   )

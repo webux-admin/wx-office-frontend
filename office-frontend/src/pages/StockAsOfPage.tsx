@@ -219,9 +219,9 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
       key: 'productNumber',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {row.productNumber ?? '-'}
         </span>
       ),
@@ -238,7 +238,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
             key: 'locationName',
             header: 'Lagerort',
             sortKey: 'locationName',
-            width: 'w-[150px]',
+            width: 'w-[9.375rem]',
             render: (row: StockAsOfEntry) => (
               <span className="text-text-secondary">{row.locationName}</span>
             ),
@@ -250,7 +250,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
       header: 'Menge',
       align: 'right',
       sortKey: 'quantity',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => (
         <Link
           to={journalOf(row)}
@@ -269,7 +269,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
     {
       key: 'unitShortName',
       header: 'Einheit',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       hideBelow: 'sm',
       render: (row) => <span className="text-text-secondary">{row.unitShortName ?? '-'}</span>,
     },
@@ -282,7 +282,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
             header: 'Einstandspreis',
             align: 'right' as const,
             sortKey: 'unitCost',
-            width: 'w-[130px]',
+            width: 'w-[8.125rem]',
             hideBelow: 'sm' as const,
             render: (row: StockAsOfEntry) => (
               <span className="text-text-secondary">
@@ -294,7 +294,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
             key: 'lineValue',
             header: 'Wert',
             align: 'right' as const,
-            width: 'w-[130px]',
+            width: 'w-[8.125rem]',
             render: (row: StockAsOfEntry) => (
               <span className="font-medium">
                 {row.lineValue === undefined ? '-' : formatAmount(row.lineValue)}
@@ -340,7 +340,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
               value={typedDate}
               autoFocus
               onChange={(event) => acceptDate(event.target.value)}
-              className="w-[170px]"
+              className="w-[10.625rem]"
               invalid={dateProblem !== undefined}
               hint={dateProblem}
             />
@@ -352,7 +352,7 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
                   setLocationId(event.target.value)
                   setPage(0)
                 }}
-                className="w-[190px]"
+                className="w-[11.875rem]"
               >
                 <option value="">Alle</option>
                 {active.map((location) => (
@@ -383,9 +383,9 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
           </div>
 
           <div className="grid gap-2 border-b border-line-subtle px-5 py-3">
-            {stand !== '' && <p className="text-[12px] text-text-tertiary">{stand}</p>}
+            {stand !== '' && <p className="text-small text-text-tertiary">{stand}</p>}
             {backdated !== '' && (
-              <p role="status" className="text-[12px] text-text-secondary">
+              <p role="status" className="text-small text-text-secondary">
                 {backdated}{' '}
                 <Link
                   to={`${STOCK_MOVEMENT_PATH}?bis=${shownDate}`}
@@ -396,10 +396,10 @@ function StockAsOf({ tenantId }: { tenantId: number }) {
                 </Link>
               </p>
             )}
-            {note !== '' && <p className="text-[12px] text-text-secondary">{note}</p>}
+            {note !== '' && <p className="text-small text-text-secondary">{note}</p>}
             {factsProblem !== null && (
               <ErrorNotice error={factsProblem}>
-                <p className="text-[13px] text-text-secondary">
+                <p className="text-body text-text-secondary">
                   Ohne diese Zahlen nennt der Bericht keinen Stand und führt keine Wertspalten.
                   Das heisst <strong className="font-semibold">nicht</strong>, dass die
                   Einstandspreise fehlen — die Mengen unten stimmen, nur die Bewertung ist

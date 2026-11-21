@@ -73,24 +73,24 @@ export function StocktakeLineCards({
               }`}
             >
               <div className="flex items-baseline justify-between gap-3">
-                <span className="font-mono text-[12px] text-text-tertiary">
+                <span className="font-mono text-small text-text-tertiary">
                   {line.productNumber ?? '-'}
                 </span>
                 {line.addedDuringCounting && (
-                  <span className="text-[11px] text-text-tertiary">gefunden</span>
+                  <span className="text-caption text-text-tertiary">gefunden</span>
                 )}
               </div>
 
               {/* Big enough to read at arm's length over a shelf, which is the whole reason this
                   view exists. */}
-              <h3 className="mt-0.5 text-[18px] leading-tight font-semibold">{line.productName}</h3>
+              <h3 className="mt-0.5 text-[1.125rem] leading-tight font-semibold">{line.productName}</h3>
 
               {line.lotNumber !== undefined && (
-                <p className="mt-1 font-mono text-[13px] text-text-secondary">{line.lotNumber}</p>
+                <p className="mt-1 font-mono text-body text-text-secondary">{line.lotNumber}</p>
               )}
 
               {!blind && (
-                <p className="mt-1 text-[13px] text-text-secondary">
+                <p className="mt-1 text-body text-text-secondary">
                   <span>{`Soll ${formatQuantity(line.expectedQuantity ?? 0)}`}</span>
                   {entry.difference !== undefined && entry.difference !== 0 && (
                     <span className="ml-3 text-warning">
@@ -102,7 +102,7 @@ export function StocktakeLineCards({
 
               <label
                 htmlFor={`stocktake-count-${line.id}`}
-                className="mt-3 block text-[12px] font-medium text-text-secondary"
+                className="mt-3 block text-small font-medium text-text-secondary"
               >
                 Gezählt
               </label>
@@ -123,23 +123,23 @@ export function StocktakeLineCards({
                   onKeyDown={(event) => mask.pressKey(event, line, index)}
                   disabled={!editable}
                   inputMode="decimal"
-                  className={`h-14 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-surface px-4 text-right font-mono text-[20px] tabular-nums text-text-primary disabled:text-text-secondary ${
+                  className={`h-14 min-w-0 flex-1 rounded-[var(--radius-md)] border bg-surface px-4 text-right font-mono text-title tabular-nums text-text-primary disabled:text-text-secondary ${
                     entry.invalid ? 'border-danger' : 'border-line'
                   }`}
                 />
-                <span className="w-8 text-[13px] text-text-secondary">
+                <span className="w-8 text-body text-text-secondary">
                   {line.unitShortName ?? ''}
                 </span>
               </div>
 
               {entry.problem !== undefined && (
-                <p id={hintId} className="mt-1.5 text-[12px] text-danger">
+                <p id={hintId} className="mt-1.5 text-small text-danger">
                   {entry.problem}
                 </p>
               )}
 
               {line.countedBy !== undefined && (
-                <p className="mt-2 text-[12px] text-text-secondary">
+                <p className="mt-2 text-small text-text-secondary">
                   {`${line.countedBy}${
                     line.countedAt === undefined ? '' : `, ${formatDateTime(line.countedAt)}`
                   }`}
@@ -148,7 +148,7 @@ export function StocktakeLineCards({
 
               {entry.failed && (
                 <div className="mt-3">
-                  <p className="mb-2 text-[12px] text-danger">
+                  <p className="mb-2 text-small text-danger">
                     Nicht gespeichert. Der Wert steht noch hier.
                   </p>
                   <Button
@@ -168,7 +168,7 @@ export function StocktakeLineCards({
                   aria-label="Zählung überschreiben"
                   className="mt-3 rounded-[var(--radius-md)] border border-line bg-sunken px-4 py-3"
                 >
-                  <p className="text-[13px]">{mask.question}</p>
+                  <p className="text-body">{mask.question}</p>
                   <div className="mt-3 grid gap-2">
                     <Button className="min-h-12" block onClick={mask.overwrite}>
                       Überschreiben

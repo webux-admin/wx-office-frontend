@@ -105,9 +105,9 @@ function ShortageList({ tenantId }: { tenantId: number }) {
       key: 'productNumber',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {row.productNumber ?? '-'}
         </span>
       ),
@@ -124,7 +124,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
             key: 'locationName',
             header: 'Lagerort',
             sortKey: 'locationName',
-            width: 'w-[150px]',
+            width: 'w-[9.375rem]',
             render: (row: ShortageRow) => (
               <span className="text-text-secondary">{row.locationName ?? EVERY_LOCATION}</span>
             ),
@@ -136,7 +136,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
       header: 'Bestand',
       align: 'right',
       sortKey: 'availableQuantity',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
         <Link
           to={journalOf(row)}
@@ -154,7 +154,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
       key: 'minimumQuantity',
       header: 'Mindestbestand',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (row) => (
         <span className="text-text-secondary">
           {row.minimumQuantity === undefined ? '-' : formatQuantity(row.minimumQuantity)}
@@ -166,7 +166,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
       header: 'Fehlmenge',
       align: 'right',
       sortKey: 'missingQuantity',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => (
         <span className="font-medium">
           {formatQuantity(row.missingQuantity)}
@@ -177,7 +177,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
     {
       key: 'cause',
       header: 'Ursache',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (row) => (
         <Badge tone={shortageCauseTone(row.cause)}>{shortageCauseLabel(row.cause)}</Badge>
       ),
@@ -203,7 +203,7 @@ function ShortageList({ tenantId }: { tenantId: number }) {
                   setFilterId(entry.id)
                   setPage(0)
                 }}
-                className={`h-8 rounded-[var(--radius-sm)] px-3 text-[13px] transition-colors ${
+                className={`h-8 rounded-[var(--radius-sm)] px-3 text-body transition-colors ${
                   filter.id === entry.id
                     ? 'bg-sunken text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'

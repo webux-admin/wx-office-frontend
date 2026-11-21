@@ -142,7 +142,7 @@ export function StockProductSearch({
           className="flex-1"
           hint={chosen ? 'Tippen sucht ein anderes Produkt.' : 'Pfeiltasten wählen, Enter übernimmt.'}
         />
-        <div className="pb-[22px]">
+        <div className="pb-[1.375rem]">
           <BarcodeScanner onScan={onScan} onClose={() => field.current?.focus()} />
         </div>
       </div>
@@ -158,16 +158,16 @@ export function StockProductSearch({
           </p>
 
           {hits.isPending ? (
-            <p className="flex items-center gap-2 px-3 py-3 text-[13px] text-text-secondary">
+            <p className="flex items-center gap-2 px-3 py-3 text-body text-text-secondary">
               <Spinner size={14} label="Katalog wird durchsucht" />
               Katalog wird durchsucht ...
             </p>
           ) : hits.isError ? (
-            <p role="alert" className="px-3 py-3 text-[13px] text-danger">
+            <p role="alert" className="px-3 py-3 text-body text-danger">
               Der Produktkatalog konnte nicht gelesen werden.
             </p>
           ) : found.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] text-text-secondary">
+            <p className="px-3 py-3 text-body text-text-secondary">
               {settled === ''
                 ? 'Kein lagergeführtes Produkt im Katalog.'
                 : `Für «${settled}» gibt es kein lagergeführtes Produkt.`}
@@ -178,7 +178,7 @@ export function StockProductSearch({
               role="listbox"
               id={listId}
               aria-label="Lagergeführte Produkte"
-              className="max-h-[240px] overflow-y-auto py-1"
+              className="max-h-[15rem] overflow-y-auto py-1"
             >
               {found.map((product, index) => (
                 <li
@@ -193,10 +193,10 @@ export function StockProductSearch({
                     index === active ? 'bg-sunken' : ''
                   }`}
                 >
-                  <span className="w-[86px] shrink-0 truncate font-mono text-[12px] text-text-tertiary">
+                  <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
                     <Marked text={product.productNumber ?? '-'} term={settled} />
                   </span>
-                  <span className="truncate text-[13px] text-text-primary">
+                  <span className="truncate text-body text-text-primary">
                     <Marked text={product.name} term={settled} />
                   </span>
                 </li>
@@ -232,7 +232,7 @@ function Marked({ text, term }: { text: string; term: string }) {
     <>
       {matchParts(text, term).map((part, index) =>
         part.match ? (
-          <mark key={index} className="rounded-[2px] bg-highlight text-text-primary">
+          <mark key={index} className="rounded-[0.125rem] bg-highlight text-text-primary">
             {part.text}
           </mark>
         ) : (

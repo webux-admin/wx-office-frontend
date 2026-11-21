@@ -109,9 +109,9 @@ function StockList({ tenantId }: { tenantId: number }) {
       key: 'productNumber',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {row.productNumber ?? '-'}
         </span>
       ),
@@ -128,7 +128,7 @@ function StockList({ tenantId }: { tenantId: number }) {
             key: 'locationName',
             header: 'Lagerort',
             sortKey: 'locationName',
-            width: 'w-[150px]',
+            width: 'w-[9.375rem]',
             render: (row: StockRow) => (
               <span className="text-text-secondary">{row.locationName}</span>
             ),
@@ -142,7 +142,7 @@ function StockList({ tenantId }: { tenantId: number }) {
       header: 'Verfügbar',
       align: 'right',
       sortKey: 'availableQuantity',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => (
         <Link
           to={journalOf(row)}
@@ -161,7 +161,7 @@ function StockList({ tenantId }: { tenantId: number }) {
       header: 'Bestand',
       align: 'right',
       sortKey: 'quantity',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => (
         <Link
           to={journalOf(row)}
@@ -180,7 +180,7 @@ function StockList({ tenantId }: { tenantId: number }) {
       header: 'Reserviert',
       align: 'right',
       sortKey: 'reservedQuantity',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       // A link into the reservations, for the same reason every other number links: a figure
       // nobody can check is a figure nobody believes.
       render: (row) =>
@@ -201,7 +201,7 @@ function StockList({ tenantId }: { tenantId: number }) {
       key: 'minimumQuantity',
       header: 'Mindestbestand',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (row) => (
         <span className="text-text-secondary">
           {row.minimumQuantity === undefined ? '-' : formatQuantity(row.minimumQuantity)}
@@ -211,13 +211,13 @@ function StockList({ tenantId }: { tenantId: number }) {
     {
       key: 'unitShortName',
       header: 'Einheit',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       render: (row) => <span className="text-text-secondary">{row.unitShortName ?? '-'}</span>,
     },
     {
       key: 'shortage',
       header: 'Zustand',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (row) =>
         row.shortage === undefined ? null : (
           <Badge tone={shortageCauseTone(row.shortage)}>{shortageCauseLabel(row.shortage)}</Badge>
@@ -256,7 +256,7 @@ function StockList({ tenantId }: { tenantId: number }) {
                   setLocationId(event.target.value)
                   setPage(0)
                 }}
-                className="w-[190px]"
+                className="w-[11.875rem]"
               >
                 <option value="">Alle</option>
                 {active.map((location) => (

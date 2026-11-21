@@ -457,11 +457,11 @@ export function LotAllocationField({
   return (
     <div className="grid gap-3 rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[11px] uppercase tracking-[0.06em] text-text-tertiary">
+        <p className="text-caption uppercase tracking-[0.06em] text-text-tertiary">
           {lotKindLabelPlural(kind)}
         </p>
         <p
-          className={`font-mono text-[12px] tabular-nums ${
+          className={`font-mono text-small tabular-nums ${
             open === 0 ? 'text-text-secondary' : 'text-warning'
           }`}
         >
@@ -504,14 +504,14 @@ export function LotAllocationField({
         />
       )}
 
-      {refused !== null && <p className="text-[12px] text-danger">{refused}</p>}
+      {refused !== null && <p className="text-small text-danger">{refused}</p>}
 
       {/* Lifted over the camera overlay, which is drawn `fixed inset-0` and would leave the
           line above it out of sight. Whoever scans has to learn that the piece did not arrive
           while the camera is still running, not after they put it down (issue #21, Nachtrag).
           Not a live region: the announcement above already speaks it. */}
       {scanning && refused !== null && (
-        <p className="fixed inset-x-4 top-4 z-[70] rounded-[var(--radius-sm)] bg-danger-surface px-3 py-2 text-center text-[13px] text-on-accent">
+        <p className="fixed inset-x-4 top-4 z-[70] rounded-[var(--radius-sm)] bg-danger-surface px-3 py-2 text-center text-body text-on-accent">
           {refused}
         </p>
       )}
@@ -564,7 +564,7 @@ export function LotAllocationField({
       )}
 
       {complaint !== null && (
-        <p className="text-[12px] text-warning">{complaint}</p>
+        <p className="text-small text-warning">{complaint}</p>
       )}
 
       {uncovered !== null && <WarningNotice>{uncovered}</WarningNotice>}
@@ -576,7 +576,7 @@ export function LotAllocationField({
       {alreadyInStock !== null && <WarningNotice>{alreadyInStock}</WarningNotice>}
 
       {issuing && proposalQuery.isError && (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-small text-danger">
           {proposalQuery.error instanceof Error
             ? proposalQuery.error.message
             : `Die ${lotKindLabelPlural(kind)} konnten nicht gelesen werden.`}
@@ -610,7 +610,7 @@ function IssuedLots({
 }) {
   if (failed) {
     return (
-      <p role="alert" className="text-[12px] text-danger">
+      <p role="alert" className="text-small text-danger">
         Die zuletzt ausgelieferten Nummern konnten nicht gelesen werden.
       </p>
     )
@@ -619,32 +619,32 @@ function IssuedLots({
 
   return (
     <div className="grid gap-1.5">
-      <p className="text-[11px] uppercase tracking-[0.06em] text-text-tertiary">
+      <p className="text-caption uppercase tracking-[0.06em] text-text-tertiary">
         Zuletzt ausgeliefert
       </p>
       {issued.length === 0 ? (
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           {`Über einen Beleg ist noch keine ${lotKindLabel(kind)} dieses Produkts abgegangen.`}
         </p>
       ) : (
-        <ul className="max-h-[180px] overflow-y-auto">
+        <ul className="max-h-[11.25rem] overflow-y-auto">
           {issued.map((one) => (
             <li key={one.lotNumber}>
               <button
                 type="button"
                 onClick={() => onTake(one.lotNumber)}
                 aria-label={`${one.lotNumber} übernehmen`}
-                className="flex min-h-11 w-full items-center justify-between gap-3 px-1 text-left text-[13px] hover:bg-surface"
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-1 text-left text-body hover:bg-surface"
               >
                 <span className="font-mono">
                   {one.lotNumber}
                   {kind === 'LOT' && (
-                    <span className="ml-2 text-[12px] text-text-tertiary">
+                    <span className="ml-2 text-small text-text-tertiary">
                       {formatQuantity(one.quantity)}
                     </span>
                   )}
                 </span>
-                <span className="text-[12px] text-text-tertiary">{issuedLabel(one)}</span>
+                <span className="text-small text-text-tertiary">{issuedLabel(one)}</span>
               </button>
             </li>
           ))}
@@ -698,7 +698,7 @@ function BatchRows({
   if (rows.length === 0) {
     if (!issuing) {
       return (
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           Erfassen Sie die Chargennummer der Lieferung.
         </p>
       )
@@ -716,27 +716,27 @@ function BatchRows({
       {rows.map((row) => (
         <div key={row.key} className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
           {row.lotNumber === null ? (
-            <p className="flex-1 basis-full text-[13px] text-text-secondary sm:basis-auto">
+            <p className="flex-1 basis-full text-body text-text-secondary sm:basis-auto">
               Bestand ohne Chargennummer
-              <span className="ml-2 font-mono text-[12px] text-text-tertiary">
+              <span className="ml-2 font-mono text-small text-text-tertiary">
                 {formatQuantity(row.available ?? 0)}
               </span>
             </p>
           ) : issuing ? (
             <p className="flex-1 basis-full sm:basis-auto">
               <span
-                className={`font-mono text-[13px] ${
+                className={`font-mono text-body ${
                   row.expired ? 'text-text-tertiary' : 'text-text-primary'
                 }`}
               >
                 {row.lotNumber}
               </span>
-              <span className="ml-2 text-[12px] text-text-tertiary">
+              <span className="ml-2 text-small text-text-tertiary">
                 verfügbar {formatQuantity(row.available ?? 0)}
               </span>
               {expiryLabel(row) !== '' && (
                 <span
-                  className={`ml-2 text-[12px] ${row.expired ? 'text-danger' : 'text-text-tertiary'}`}
+                  className={`ml-2 text-small ${row.expired ? 'text-danger' : 'text-text-tertiary'}`}
                 >
                   {expiryLabel(row)}
                 </span>
@@ -762,7 +762,7 @@ function BatchRows({
             onChange={(event) => onQuantity(row.key, event.target.value)}
             inputMode="decimal"
             numeric
-            className="basis-full sm:w-[120px] sm:basis-auto"
+            className="basis-full sm:w-[7.5rem] sm:basis-auto"
           />
 
           {!issuing && rows.length > 1 && (
@@ -846,10 +846,10 @@ function SerialNumberChips({
           maxLength={LOT_NUMBER_MAX}
           autoComplete="off"
           placeholder="Scannen oder tippen, Enter übernimmt"
-          hint="Rücktaste im leeren Feld entfernt die letzte Nummer."
+          tooltip="Rücktaste im leeren Feld entfernt die letzte Nummer."
           className="flex-1"
         />
-        <div className="pb-[22px]">
+        <div className="pb-[1.375rem]">
           <BarcodeScanner
             label="Seriennummern mit der Kamera scannen"
             continuous
@@ -873,7 +873,7 @@ function SerialNumberChips({
               <li
                 key={row.key}
                 data-lit={row.key === lit ? 'true' : undefined}
-                className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] py-0.5 pl-2.5 pr-1 text-[12px] transition-colors ${
+                className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] py-0.5 pl-2.5 pr-1 text-small transition-colors ${
                   row.key === lit
                     ? 'bg-warning/20 text-text-primary'
                     : 'bg-surface text-text-primary'
@@ -983,7 +983,7 @@ function SerialGenerator({
         />
       </div>
       {generate.error instanceof Error && (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-small text-danger">
           {generate.error.message}
         </p>
       )}
@@ -1064,25 +1064,25 @@ function SerialPicker({
         autoComplete="off"
       />
       {lots.isError ? (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-small text-danger">
           {lots.error instanceof Error ? lots.error.message : 'Der Bestand konnte nicht gelesen werden.'}
         </p>
       ) : found.length === 0 ? (
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           {lots.isPending ? 'Wird gelesen ...' : 'An diesem Lagerort liegt keine solche Nummer.'}
         </p>
       ) : (
-        <ul className="max-h-[180px] overflow-y-auto">
+        <ul className="max-h-[11.25rem] overflow-y-auto">
           {found.map((lot) => (
             <li key={lot.id}>
               <button
                 type="button"
                 onClick={() => onTake(lot.lotNumber)}
-                className="flex min-h-11 w-full items-center justify-between gap-3 px-1 text-left text-[13px] hover:bg-sunken"
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-1 text-left text-body hover:bg-sunken"
               >
                 <span className="font-mono">{lot.lotNumber}</span>
                 {expiryLabel(lot) !== '' && (
-                  <span className={`text-[12px] ${lot.expired ? 'text-danger' : 'text-text-tertiary'}`}>
+                  <span className={`text-small ${lot.expired ? 'text-danger' : 'text-text-tertiary'}`}>
                     {expiryLabel(lot)}
                   </span>
                 )}
@@ -1118,9 +1118,9 @@ function LotFreeRow({
 
   return (
     <div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
-      <p className="flex-1 basis-full text-[13px] text-text-secondary sm:basis-auto">
+      <p className="flex-1 basis-full text-body text-text-secondary sm:basis-auto">
         Bestand ohne Chargennummer
-        <span className="ml-2 font-mono text-[12px] text-text-tertiary">
+        <span className="ml-2 font-mono text-small text-text-tertiary">
           {formatQuantity(free.available ?? 0)}
         </span>
       </p>
@@ -1130,7 +1130,7 @@ function LotFreeRow({
         onChange={(event) => onQuantity(free.key, event.target.value)}
         inputMode="decimal"
         numeric
-        className="basis-full sm:w-[120px] sm:basis-auto"
+        className="basis-full sm:w-[7.5rem] sm:basis-auto"
       />
     </div>
   )

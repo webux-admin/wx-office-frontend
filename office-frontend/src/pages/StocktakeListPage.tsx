@@ -70,11 +70,11 @@ function StocktakeList({ tenantId }: { tenantId: number }) {
       key: 'stocktakeNumber',
       header: 'Nummer',
       sortKey: 'stocktakeNumber',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       // A draft has none, and «—» says that better than an empty cell: the number is drawn
       // when the count is booked, so its absence is a state and not a gap.
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {row.stocktakeNumber ?? '—'}
         </span>
       ),
@@ -89,7 +89,7 @@ function StocktakeList({ tenantId }: { tenantId: number }) {
       key: 'status',
       header: 'Status',
       sortKey: 'status',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (row) => (
         <Badge tone={row.status === 'POSTED' ? 'success' : 'neutral'}>
           {statusLabel(row.status)}
@@ -100,16 +100,16 @@ function StocktakeList({ tenantId }: { tenantId: number }) {
       key: 'countingDate',
       header: 'Zähldatum',
       sortKey: 'countingDate',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => <span>{formatDate(row.countingDate)}</span>,
     },
     {
       key: 'progress',
       header: 'Fortschritt',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
-        <span className="font-mono tabular-nums text-[12px]">
+        <span className="font-mono tabular-nums text-small">
           {countProgress(row.countedCount, row.lineCount)}
         </span>
       ),
@@ -118,11 +118,11 @@ function StocktakeList({ tenantId }: { tenantId: number }) {
       key: 'differenceSum',
       header: 'Differenz',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       // Only on a booked list: before booking the figure would change with every count, and
       // a number that moves under the reader is worse than none.
       render: (row) => (
-        <span className="font-mono tabular-nums text-[12px]">
+        <span className="font-mono tabular-nums text-small">
           {row.postedAt === undefined ? '—' : formatQuantity(row.differenceSum ?? 0)}
         </span>
       ),
@@ -130,7 +130,7 @@ function StocktakeList({ tenantId }: { tenantId: number }) {
     {
       key: 'changedBy',
       header: 'Gebucht von',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (row) => (
         <span className="text-text-secondary">
           {row.postedAt === undefined ? '—' : (row.changedBy ?? '')}

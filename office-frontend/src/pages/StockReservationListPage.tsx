@@ -157,9 +157,9 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       key: 'productNumber',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {row.productNumber ?? '-'}
         </span>
       ),
@@ -176,7 +176,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
             key: 'locationName',
             header: 'Lagerort',
             sortKey: 'locationName',
-            width: 'w-[150px]',
+            width: 'w-[9.375rem]',
             render: (row: StockReservation) => (
               <span className="text-text-secondary">{row.locationName}</span>
             ),
@@ -186,7 +186,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
     {
       key: 'sourceNumber',
       header: 'Beleg',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       // Only an order reserves, so the link always leads to the order mask.
       render: (row) =>
         row.sourceId === undefined ? (
@@ -195,7 +195,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
           <Link
             to={`${ORDER_KIND.path}/${row.sourceId}`}
             state={ORIGIN}
-            className="font-mono text-[12px] text-accent-text underline-offset-2 hover:underline"
+            className="font-mono text-small text-accent-text underline-offset-2 hover:underline"
             onClick={(event) => event.stopPropagation()}
           >
             {row.sourceNumber ?? `#${row.sourceId}`}
@@ -206,7 +206,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       key: 'reservedOn',
       header: 'Reserviert',
       sortKey: 'reservedOn',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
         <span className="text-text-secondary">{formatDate(row.reservedOn)}</span>
       ),
@@ -216,7 +216,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       header: 'Menge',
       align: 'right',
       sortKey: 'quantity',
-      width: 'w-[100px]',
+      width: 'w-[6.25rem]',
       render: (row) => <span className="font-mono">{formatQuantity(row.quantity)}</span>,
     },
     {
@@ -224,7 +224,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       header: 'Verbraucht',
       align: 'right',
       sortKey: 'quantityReleased',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
         <span className="font-mono text-text-secondary">
           {formatQuantity(row.quantityReleased)}
@@ -236,7 +236,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       header: 'Offen',
       align: 'right',
       sortKey: 'openQuantity',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => (
         <span className="font-mono font-medium">
           {formatQuantity(row.openQuantity)}
@@ -248,7 +248,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
       key: 'status',
       header: 'Status',
       sortKey: 'status',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (row) => (
         <Badge tone={reservationStatusTone(row.status)}>
           {reservationStatusLabel(row.status)}
@@ -260,7 +260,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
           {
             key: 'release',
             header: '',
-            width: 'w-[120px]',
+            width: 'w-[7.5rem]',
             render: (row: StockReservation) =>
               row.status !== 'OPEN' ? null : (
                 <Button
@@ -303,7 +303,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
                   setFilterId(entry.id)
                   setPage(0)
                 }}
-                className={`h-8 rounded-[var(--radius-sm)] px-3 text-[13px] transition-colors ${
+                className={`h-8 rounded-[var(--radius-sm)] px-3 text-body transition-colors ${
                   filter.id === entry.id
                     ? 'bg-sunken text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'
@@ -332,7 +332,7 @@ function ReservationList({ tenantId }: { tenantId: number }) {
                   setLocationId(event.target.value)
                   setPage(0)
                 }}
-                className="w-[190px]"
+                className="w-[11.875rem]"
               >
                 <option value="">Alle</option>
                 {active.map((location) => (

@@ -112,7 +112,7 @@ export function ReleaseReservationDialog({
         {release.error !== null && <ErrorNotice error={release.error} />}
 
         {reservation !== null && (
-          <dl className="grid gap-1 rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3 text-[13px]">
+          <dl className="grid gap-1 rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3 text-body">
             <Row
               label="Produkt"
               value={`${reservation.productNumber ?? '-'} · ${reservation.productName}`}
@@ -136,7 +136,7 @@ export function ReleaseReservationDialog({
           onChange={(event) => setReason(event.target.value)}
           onKeyDown={onKeyDown}
           maxLength={MAX_REASON}
-          hint="Bleibt auf der Reservierung stehen und ist Pflicht."
+          tooltip="Bleibt auf der Reservierung stehen und ist Pflicht."
         />
       </div>
     </Dialog>
@@ -146,7 +146,7 @@ export function ReleaseReservationDialog({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-[80px] shrink-0 text-text-tertiary">{label}</dt>
+      <dt className="w-[5rem] shrink-0 text-text-tertiary">{label}</dt>
       <dd className="min-w-0 flex-1 text-text-primary">{value}</dd>
     </div>
   )

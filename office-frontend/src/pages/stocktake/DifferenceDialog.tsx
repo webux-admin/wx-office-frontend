@@ -179,19 +179,19 @@ export function DifferenceDialog({
       ) : (
         <div className="grid gap-4">
           {rows.length === 0 ? (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Keine Differenz. Das Buchen schreibt keine Bewegung.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13px]">
+              <table className="w-full border-collapse text-body">
                 <thead>
-                  <tr className="border-b border-line text-left text-[12px] text-text-tertiary">
+                  <tr className="border-b border-line text-left text-small text-text-tertiary">
                     <th className="px-3 py-2">Bezeichnung</th>
-                    <th className="px-3 py-2 w-[90px] text-right">Soll</th>
-                    <th className="px-3 py-2 w-[100px] text-right">Bestand jetzt</th>
-                    <th className="px-3 py-2 w-[90px] text-right">Gezählt</th>
-                    <th className="px-3 py-2 w-[90px] text-right">Differenz</th>
+                    <th className="px-3 py-2 w-[5.625rem] text-right">Soll</th>
+                    <th className="px-3 py-2 w-[6.25rem] text-right">Bestand jetzt</th>
+                    <th className="px-3 py-2 w-[5.625rem] text-right">Gezählt</th>
+                    <th className="px-3 py-2 w-[5.625rem] text-right">Differenz</th>
                     <th className="px-3 py-2">Grund</th>
                   </tr>
                 </thead>
@@ -201,7 +201,7 @@ export function DifferenceDialog({
                       <td className="px-3 py-2">
                         <span className="font-medium">{row.productName}</span>
                         {row.lotNumber !== undefined && (
-                          <span className="ml-2 font-mono text-[11px] text-text-tertiary">
+                          <span className="ml-2 font-mono text-caption text-text-tertiary">
                             {row.lotNumber}
                           </span>
                         )}
@@ -210,7 +210,7 @@ export function DifferenceDialog({
                         {row.movedSinceCounting && (
                           <Link
                             to={`${STOCK_MOVEMENT_PATH}?${listQuery({ produkt: row.productId })}`}
-                            className="ml-2 text-[11px] text-accent-text underline-offset-2 hover:underline"
+                            className="ml-2 text-caption text-accent-text underline-offset-2 hover:underline"
                           >
                             seit Zählbeginn bewegt
                           </Link>
@@ -261,7 +261,7 @@ export function DifferenceDialog({
                     </tr>
                   ))}
                   <tr>
-                    <td className="px-3 py-2 text-[12px] text-text-tertiary" colSpan={4}>
+                    <td className="px-3 py-2 text-small text-text-tertiary" colSpan={4}>
                       Summe der Differenzen
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums font-medium">
@@ -277,7 +277,7 @@ export function DifferenceDialog({
           {/* Two equal buttons and no preselection: this is a choice, not a confirmation. */}
           {uncounted !== '' && (
             <div className="rounded-[var(--radius-md)] border border-line bg-sunken px-4 py-3">
-              <p className="text-[13px]">{uncounted}</p>
+              <p className="text-body">{uncounted}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   variant={handling === 'KEEP' ? 'primary' : 'secondary'}
@@ -292,7 +292,7 @@ export function DifferenceDialog({
                   Nicht buchen
                 </Button>
               </div>
-              <p className="mt-2 text-[12px] text-text-tertiary">
+              <p className="mt-2 text-small text-text-tertiary">
                 Die Wahl steht danach auf der Zählliste und im Protokoll.
               </p>
             </div>

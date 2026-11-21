@@ -116,7 +116,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       key: 'bookedOn',
       header: 'Datum',
       sortKey: 'bookedOn',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (movement) => formatDate(movement.bookedOn),
     },
     {
@@ -125,7 +125,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       sortKey: 'productName',
       render: (movement) => (
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="w-[86px] shrink-0 truncate font-mono text-[12px] text-text-tertiary">
+          <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
             {movement.productNumber ?? '-'}
           </span>
           <span className="truncate font-medium">{movement.productName}</span>
@@ -135,7 +135,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
     {
       key: 'location',
       header: 'Lagerort',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (movement) => (
         <span className="text-text-secondary">{nameOf(active, movement.locationId)}</span>
       ),
@@ -143,12 +143,12 @@ function StockMovements({ tenantId }: { tenantId: number }) {
     {
       key: 'lot',
       header: 'Charge/Serie',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (movement) =>
         movement.lotNumber === undefined || movement.lotNumber === '' ? (
           <span className="text-text-tertiary">-</span>
         ) : (
-          <span className="truncate font-mono text-[12px] text-text-secondary">
+          <span className="truncate font-mono text-small text-text-secondary">
             {movement.lotNumber}
           </span>
         ),
@@ -158,7 +158,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       header: 'Menge',
       align: 'right',
       sortKey: 'quantity',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (movement) => (
         <span
           className={`font-mono ${movement.quantity < 0 ? 'text-danger' : 'text-accent-text'}`}
@@ -173,13 +173,13 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       key: 'reason',
       header: 'Grund',
       sortKey: 'reason',
-      width: 'w-[160px]',
+      width: 'w-[10rem]',
       render: (movement) => <Badge>{reasonLabel(movement.reason)}</Badge>,
     },
     {
       key: 'source',
       header: 'Herkunft',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (movement) => (
         <span className="text-text-secondary">
           {movement.sourceNumber ?? sourceLabel(movement.sourceKind)}
@@ -190,7 +190,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
       key: 'user',
       header: 'Benutzer',
       sortKey: 'createdBy',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (movement) => (
         <span className="text-text-tertiary">{movement.createdBy ?? '-'}</span>
       ),
@@ -198,13 +198,13 @@ function StockMovements({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (movement) =>
         mayMove && isReversible(movement) ? (
           <button
             type="button"
             onClick={() => setReversing(movement)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+            className="text-small text-text-tertiary transition-colors hover:text-danger"
           >
             Stornieren
           </button>
@@ -246,7 +246,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
                   setLocationId(event.target.value)
                   setPage(0)
                 }}
-                className="w-[190px]"
+                className="w-[11.875rem]"
               >
                 <option value="">Alle</option>
                 {active.map((location) => (
@@ -263,7 +263,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
                 setReason(event.target.value)
                 setPage(0)
               }}
-              className="w-[190px]"
+              className="w-[11.875rem]"
             >
               <option value="">Alle</option>
               {REASONS.map((code) => (
@@ -280,7 +280,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
                 setFrom(event.target.value)
                 setPage(0)
               }}
-              className="w-[160px]"
+              className="w-[10rem]"
             />
             <TextField
               label="Bis"
@@ -290,7 +290,7 @@ function StockMovements({ tenantId }: { tenantId: number }) {
                 setTo(event.target.value)
                 setPage(0)
               }}
-              className="w-[160px]"
+              className="w-[10rem]"
             />
           </div>
 

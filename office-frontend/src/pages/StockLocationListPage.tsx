@@ -123,8 +123,8 @@ function StockLocations({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[110px]',
-      render: (location) => <span className="font-mono text-[12px]">{location.code}</span>,
+      width: 'w-[6.875rem]',
+      render: (location) => <span className="font-mono text-small">{location.code}</span>,
     },
     {
       key: 'name',
@@ -150,7 +150,7 @@ function StockLocations({ tenantId }: { tenantId: number }) {
     {
       key: 'policy',
       header: 'Bei Unterdeckung',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (location) => (
         <span className="text-text-secondary">
           {location.negativeStockPolicy === 'BLOCK' ? 'Sperren' : 'Warnen'}
@@ -160,7 +160,7 @@ function StockLocations({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[190px]',
+      width: 'w-[11.875rem]',
       render: (location) => (
         <span className="flex flex-wrap items-center gap-1">
           {location.defaultLocation === true && <Badge tone="accent">Vorgabe</Badge>}
@@ -169,7 +169,7 @@ function StockLocations({ tenantId }: { tenantId: number }) {
             <button
               type="button"
               onClick={() => location.id !== undefined && makeDefault.mutate(location.id)}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-caption text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
             >
               <Star size={12} aria-hidden />
               Als Vorgabe
@@ -181,13 +181,13 @@ function StockLocations({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (location) =>
         mayConfigure && location.active !== false && location.defaultLocation !== true ? (
           <button
             type="button"
             onClick={() => location.id !== undefined && deactivate.mutate(location.id)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+            className="text-small text-text-tertiary transition-colors hover:text-danger"
           >
             Deaktivieren
           </button>
@@ -296,7 +296,7 @@ function StockLocations({ tenantId }: { tenantId: number }) {
             value={form.binHint}
             onChange={(event) => change({ binHint: event.target.value })}
             maxLength={60}
-            hint="Freitext, zum Beispiel «Regal C3». Eine Ortshierarchie gibt es bewusst nicht."
+            tooltip="Freitext, zum Beispiel «Regal C3». Eine Ortshierarchie gibt es bewusst nicht."
           />
           <CatalogueSelect
             label="Bei Unterdeckung"
@@ -304,7 +304,7 @@ function StockLocations({ tenantId }: { tenantId: number }) {
             catalogue="negative-stock-policy"
             value={form.negativeStockPolicy}
             onChange={(code) => change({ negativeStockPolicy: code as NegativeStockPolicy })}
-            hint="Wird ausgewertet, sobald ein Lieferschein Bestand abbucht."
+            tooltip="Wird ausgewertet, sobald ein Lieferschein Bestand abbucht."
           />
           <TextAreaField
             label="Bemerkung"

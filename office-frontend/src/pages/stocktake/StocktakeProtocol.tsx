@@ -77,8 +77,8 @@ export function StocktakeProtocol({
     <Panel title={TITLE} description={DESCRIPTION}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="grid gap-0.5">
-          <span className="text-[13px] font-medium">Inventarprotokoll</span>
-          <span className="text-[12px] text-text-tertiary">{facts.join(' · ')}</span>
+          <span className="text-body font-medium">Inventarprotokoll</span>
+          <span className="text-small text-text-tertiary">{facts.join(' · ')}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button

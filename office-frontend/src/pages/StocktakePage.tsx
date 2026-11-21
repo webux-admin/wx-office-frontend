@@ -245,7 +245,7 @@ function StocktakeMask({ tenantId, stocktakeId }: { tenantId: number; stocktakeI
           {head.note !== undefined && <Fact label="Bemerkung" value={head.note} />}
         </dl>
         {!mayPostIt && counting && (
-          <p className="mt-4 text-[12px] text-text-tertiary">
+          <p className="mt-4 text-small text-text-tertiary">
             Buchen darf, wer das Recht «Inventur buchen» hält.
           </p>
         )}
@@ -294,7 +294,7 @@ function StocktakeMask({ tenantId, stocktakeId }: { tenantId: number; stocktakeI
 
         {/* Announced rather than only drawn: whoever counts with the keyboard never looks at
             the corner of the screen. */}
-        <p aria-live="polite" className="mb-3 text-[12px] text-text-secondary">
+        <p aria-live="polite" className="mb-3 text-small text-text-secondary">
           {countProgressText(head.countedCount, head.lineCount)}
         </p>
 
@@ -343,7 +343,7 @@ function StocktakeMask({ tenantId, stocktakeId }: { tenantId: number; stocktakeI
             loading={movements.isPending}
             stocktakeNumber={bookedNumber}
           />
-          <p className="mt-3 text-[12px] text-text-tertiary">
+          <p className="mt-3 text-small text-text-tertiary">
             {`Differenz insgesamt ${formatQuantity(head.differenceSum ?? 0)}`}
           </p>
         </Panel>
@@ -364,7 +364,7 @@ function StocktakeMask({ tenantId, stocktakeId }: { tenantId: number; stocktakeI
         {trail.isError ? (
           <ErrorNotice error={trail.error} />
         ) : (
-          <ul className="grid gap-2 text-[13px]">
+          <ul className="grid gap-2 text-body">
             {(trail.data ?? []).map((entry, index) => (
               <li key={index} className="flex flex-wrap gap-2 text-text-secondary">
                 <span className="font-medium text-text-primary">
@@ -463,7 +463,7 @@ function LinePager({
       aria-label="Seiten"
       className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line-subtle pt-3"
     >
-      <p className="text-[12px] text-text-secondary" aria-live="polite">
+      <p className="text-small text-text-secondary" aria-live="polite">
         <span className="font-mono tabular-nums">
           {formatCount(first)}–{formatCount(last)}
         </span>{' '}
@@ -477,7 +477,7 @@ function LinePager({
         >
           <ChevronLeft size={15} aria-hidden />
         </PagerStep>
-        <span className="px-2 text-[12px] text-text-secondary">
+        <span className="px-2 text-small text-text-secondary">
           Seite <span className="font-mono tabular-nums">{page.page + 1}</span> von{' '}
           <span className="font-mono tabular-nums">{page.totalPages}</span>
         </span>
@@ -552,7 +552,7 @@ function BookedMovements({
   const page = movements ?? emptyPage<StockMovement>()
   if (page.content.length === 0) {
     return (
-      <p className="text-[13px] text-text-secondary">
+      <p className="text-body text-text-secondary">
         Diese Inventur hat nichts bewegt. Jede gezählte Zeile stimmte mit dem Bestand überein.
       </p>
     )
@@ -561,10 +561,10 @@ function BookedMovements({
   const { last } = pageRange(page)
   return (
     <>
-      <ul className="grid gap-2 text-[13px]">
+      <ul className="grid gap-2 text-body">
         {page.content.map((movement) => (
           <li key={movement.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="w-[86px] shrink-0 truncate font-mono text-[12px] text-text-tertiary">
+            <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
               {movement.productNumber ?? '-'}
             </span>
             <Link
@@ -577,7 +577,7 @@ function BookedMovements({
               {movement.productName}
             </Link>
             {movement.lotNumber !== undefined && (
-              <span className="font-mono text-[12px] text-text-secondary">
+              <span className="font-mono text-small text-text-secondary">
                 {movement.lotNumber}
               </span>
             )}
@@ -591,18 +591,18 @@ function BookedMovements({
               {formatQuantity(movement.quantity)}
               {movement.unitShortName === undefined ? '' : ` ${movement.unitShortName}`}
             </span>
-            <span className="text-[12px] text-text-tertiary">{formatDate(movement.bookedOn)}</span>
+            <span className="text-small text-text-tertiary">{formatDate(movement.bookedOn)}</span>
           </li>
         ))}
       </ul>
 
       {page.totalElements > last && (
-        <p className="mt-2 text-[12px] text-text-tertiary">
+        <p className="mt-2 text-small text-text-tertiary">
           {`… und ${formatCount(page.totalElements - last)} weitere im Journal`}
         </p>
       )}
 
-      <p className="mt-3 text-[13px]">
+      <p className="mt-3 text-body">
         <Link
           to={`${STOCK_MOVEMENT_PATH}?${listQuery({ suche: stocktakeNumber })}`}
           className="text-accent-text underline-offset-2 hover:underline"
@@ -618,8 +618,8 @@ function BookedMovements({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
-      <dt className="text-[12px] text-text-tertiary">{label}</dt>
-      <dd className="text-[13px]">{value}</dd>
+      <dt className="text-small text-text-tertiary">{label}</dt>
+      <dd className="text-body">{value}</dd>
     </div>
   )
 }

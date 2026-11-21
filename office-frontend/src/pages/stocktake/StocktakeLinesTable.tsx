@@ -62,17 +62,17 @@ export function StocktakeLinesTable({
       {editable && <StocktakeScan lines={lines} onJump={mask.focusLine} />}
 
       <div className="overflow-x-auto">
-        <table ref={table} className="w-full border-collapse text-[13px]">
+        <table ref={table} className="w-full border-collapse text-body">
           <thead>
-            <tr className="border-b border-line text-left text-[12px] text-text-tertiary">
-              <th className="px-3 py-2 w-[110px]">Nummer</th>
+            <tr className="border-b border-line text-left text-small text-text-tertiary">
+              <th className="px-3 py-2 w-[6.875rem]">Nummer</th>
               <th className="px-3 py-2">Bezeichnung</th>
-              <th className="px-3 py-2 w-[130px]">Charge/Serie</th>
-              {!blind && <th className="px-3 py-2 w-[90px] text-right">Soll</th>}
-              <th className="px-3 py-2 w-[120px] text-right">Gezählt</th>
-              {!blind && <th className="px-3 py-2 w-[90px] text-right">Differenz</th>}
-              <th className="px-3 py-2 w-[70px]">Einheit</th>
-              <th className="px-3 py-2 w-[170px]">Gezählt von</th>
+              <th className="px-3 py-2 w-[8.125rem]">Charge/Serie</th>
+              {!blind && <th className="px-3 py-2 w-[5.625rem] text-right">Soll</th>}
+              <th className="px-3 py-2 w-[7.5rem] text-right">Gezählt</th>
+              {!blind && <th className="px-3 py-2 w-[5.625rem] text-right">Differenz</th>}
+              <th className="px-3 py-2 w-[4.375rem]">Einheit</th>
+              <th className="px-3 py-2 w-[10.625rem]">Gezählt von</th>
             </tr>
           </thead>
           <tbody>
@@ -83,16 +83,16 @@ export function StocktakeLinesTable({
                   key={line.id}
                   className={`border-b border-line ${entry.failed ? 'bg-danger-surface' : ''}`}
                 >
-                  <td className="px-3 py-2 font-mono text-[12px] text-text-tertiary">
+                  <td className="px-3 py-2 font-mono text-small text-text-tertiary">
                     {line.productNumber ?? '-'}
                   </td>
                   <td className="px-3 py-2">
                     <span className="font-medium">{line.productName}</span>
                     {line.addedDuringCounting && (
-                      <span className="ml-2 text-[11px] text-text-tertiary">gefunden</span>
+                      <span className="ml-2 text-caption text-text-tertiary">gefunden</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[12px]">{line.lotNumber ?? ''}</td>
+                  <td className="px-3 py-2 font-mono text-small">{line.lotNumber ?? ''}</td>
                   {!blind && (
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {formatQuantity(line.expectedQuantity ?? 0)}
@@ -128,7 +128,7 @@ export function StocktakeLinesTable({
                     </td>
                   )}
                   <td className="px-3 py-2 text-text-secondary">{line.unitShortName ?? ''}</td>
-                  <td className="px-3 py-2 text-[12px] text-text-secondary">
+                  <td className="px-3 py-2 text-small text-text-secondary">
                     {line.countedBy === undefined
                       ? ''
                       : `${line.countedBy}${
@@ -159,7 +159,7 @@ export function StocktakeLinesTable({
           aria-label="Zählung überschreiben"
           className="mt-4 rounded-[var(--radius-md)] border border-line bg-sunken px-4 py-3"
         >
-          <p className="text-[13px]">{mask.question}</p>
+          <p className="text-body">{mask.question}</p>
           <div className="mt-3 flex gap-2">
             <Button onClick={mask.overwrite}>Überschreiben</Button>
             <Button variant="secondary" onClick={mask.keep}>
@@ -274,7 +274,7 @@ export function StocktakeScan({
       {/* Mounted for as long as the mask is, with changing text: a region inserted together
           with its text is no change a screen reader announces, and this sentence is the only
           word anybody gets about a code that found nothing. */}
-      <p role="status" className={missed === null ? 'sr-only' : 'text-[12px] text-warning'}>
+      <p role="status" className={missed === null ? 'sr-only' : 'text-small text-warning'}>
         {missed === null ? '' : `${missed} gehört nicht zu dieser Zählung`}
       </p>
     </div>

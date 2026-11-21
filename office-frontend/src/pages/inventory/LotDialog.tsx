@@ -148,7 +148,7 @@ export function LotDialog({
           value={lotNumber}
           onChange={(event) => setLotNumber(event.target.value)}
           maxLength={LOT_NUMBER_MAX}
-          hint="Sobald eine Bewegung darauf zeigt, lässt sie sich nicht mehr ändern."
+          tooltip="Sobald eine Bewegung darauf zeigt, lässt sie sich nicht mehr ändern."
         />
 
         <TextField
@@ -156,7 +156,7 @@ export function LotDialog({
           type="date"
           value={expiryDate}
           onChange={(event) => setExpiryDate(event.target.value)}
-          hint="Warnt und sortiert die Vorschläge. Es sperrt nichts."
+          tooltip="Warnt und sortiert die Vorschläge. Es sperrt nichts."
         />
 
         <TextAreaField
@@ -170,7 +170,7 @@ export function LotDialog({
         <div className="rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3">
           {lot?.blocked === true ? (
             <div className="grid gap-2">
-              <p className="text-[13px] text-text-primary">
+              <p className="text-body text-text-primary">
                 Gesperrt{lot.blockedReason ? `: ${lot.blockedReason}` : ''}. Diese Nummer wird
                 nicht mehr vorgeschlagen und nicht mehr abgebucht.
               </p>
@@ -187,7 +187,7 @@ export function LotDialog({
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={MAX_REASON}
-                hint="Steht überall, wo die Nummer danach abgewiesen wird."
+                tooltip="Steht überall, wo die Nummer danach abgewiesen wird."
               />
               <div className="flex gap-2">
                 <Button
@@ -204,7 +204,7 @@ export function LotDialog({
             </div>
           ) : (
             <div className="grid gap-2">
-              <p className="text-[13px] text-text-secondary">
+              <p className="text-body text-text-secondary">
                 Eine gesperrte Nummer geht nicht mehr aus dem Lager. Zurücknehmen lässt sie sich
                 weiterhin — dafür ist die Sperre da.
               </p>
