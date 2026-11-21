@@ -151,12 +151,12 @@ export function OfferReminders({
     >
       <div className="grid gap-4">
         {reminders.isPending && (
-          <p className="text-[13px] text-text-secondary">Wird geladen ...</p>
+          <p className="text-body text-text-secondary">Wird geladen ...</p>
         )}
         {reminders.error !== null && <ErrorNotice error={reminders.error} />}
 
         {reminders.isSuccess && rows.length === 0 && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Noch keine Erinnerungen. Eine Erinnerung gehört der Person, die sie anlegt, und
             erscheint bei Fälligkeit auf deren Übersicht.
           </p>
@@ -183,10 +183,10 @@ export function OfferReminders({
         )}
 
         {readOnlyNote !== undefined && (
-          <p className="text-[13px] text-text-secondary">{readOnlyNote}</p>
+          <p className="text-body text-text-secondary">{readOnlyNote}</p>
         )}
         {mayWrite && cancelled && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Die Offerte ist storniert: Erinnerungen lassen sich nur noch erledigen.
           </p>
         )}
@@ -234,7 +234,7 @@ export function OfferReminders({
             value={form.note}
             onChange={(event) => setForm({ ...form, note: event.target.value })}
             maxLength={255}
-            hint="Worauf es beim Nachfassen ankommt."
+            tooltip="Worauf es beim Nachfassen ankommt."
           />
           {create.error !== null && <ErrorNotice error={create.error} />}
           {update.error !== null && <ErrorNotice error={update.error} />}
@@ -260,7 +260,7 @@ export function OfferReminders({
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Erledigtes bleibt nachvollziehbar, wenn die Erinnerung stattdessen als erledigt
           markiert wird.
         </p>
@@ -304,7 +304,7 @@ function ReminderRow({
     <li className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 flex-1">
         <span
-          className={`block text-[13px] font-medium ${
+          className={`block text-body font-medium ${
             reminder.done ? 'text-text-tertiary' : overdue ? 'text-danger' : ''
           }`}
         >
@@ -312,9 +312,9 @@ function ReminderRow({
           {overdue && ' · fällig'}
         </span>
         {reminder.note && (
-          <span className="block text-[13px] text-text-secondary">{reminder.note}</span>
+          <span className="block text-body text-text-secondary">{reminder.note}</span>
         )}
-        <span className="block text-[12px] text-text-tertiary">
+        <span className="block text-small text-text-tertiary">
           {reminder.done
             ? `Erledigt ${formatDateTime(reminder.doneAt)}${
                 reminder.doneBy ? ` · ${reminder.doneBy}` : ''

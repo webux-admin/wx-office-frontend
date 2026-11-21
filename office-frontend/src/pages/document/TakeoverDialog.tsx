@@ -140,13 +140,13 @@ export function TakeoverDialog({
           // Two reasons lead to the same empty box, and only one of them is something the
           // reader can do anything about.
           can('DOCUMENT_TYPE_READ') ? (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Keine Belegart für {kind.singular} hat einen Vorgängerbeleg hinterlegt. Das wird
               bei den Belegarten eingestellt — dort legen Sie fest, aus welchem Beleg übernommen
               werden darf.
             </p>
           ) : (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Ob eine Belegart für {kind.singular} einen Vorgängerbeleg führt, lässt sich ohne
               das Recht DOCUMENT_TYPE_READ nicht feststellen.
             </p>
@@ -174,14 +174,14 @@ export function TakeoverDialog({
             {candidates.error !== null && <ErrorNotice error={candidates.error} />}
 
             {candidates.isSuccess && rows.length === 0 && (
-              <p className="text-[13px] text-text-secondary">
+              <p className="text-body text-text-secondary">
                 Es gibt keinen ausgestellten Beleg, aus dem übernommen werden könnte. Entwürfe
                 und stornierte Belege stehen nicht zur Auswahl.
               </p>
             )}
 
             {rows.length > 0 && (
-              <div className="max-h-[260px] overflow-y-auto rounded-[var(--radius-md)] border border-line">
+              <div className="max-h-[16.25rem] overflow-y-auto rounded-[var(--radius-md)] border border-line">
                 <ul>
                   {rows.map((row) => (
                     <li key={row.id}>
@@ -193,20 +193,20 @@ export function TakeoverDialog({
                           row.id === selectedId ? 'bg-sunken' : 'hover:bg-sunken/60'
                         }`}
                       >
-                        <span className="w-[110px] shrink-0 font-mono text-[12px]">
+                        <span className="w-[6.875rem] shrink-0 font-mono text-small">
                           {row.documentNumber}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                        <span className="min-w-0 flex-1 truncate text-body">
                           {row.partnerName}
                         </span>
-                        <span className="w-[92px] shrink-0 text-right text-[12px] text-text-secondary">
+                        <span className="w-[5.75rem] shrink-0 text-right text-small text-text-secondary">
                           {formatDate(row.documentDate)}
                         </span>
-                        <span className="w-[110px] shrink-0 text-right text-[13px] font-medium">
+                        <span className="w-[6.875rem] shrink-0 text-right text-body font-medium">
                           {formatAmount(row.totalGross)}{' '}
                           <span className="text-text-tertiary">{row.currency}</span>
                         </span>
-                        <span className="w-[92px] shrink-0 text-right text-[12px] text-text-secondary">
+                        <span className="w-[5.75rem] shrink-0 text-right text-small text-text-secondary">
                           {openLabel(row)}
                         </span>
                       </button>
@@ -221,7 +221,7 @@ export function TakeoverDialog({
                 {openQuantities.isPending && <LoadingBlock label="Positionen werden geladen" />}
                 {openQuantities.error !== null && <ErrorNotice error={openQuantities.error} />}
                 {completed ? (
-                  <p className="flex items-start gap-2 text-[12px] text-text-secondary">
+                  <p className="flex items-start gap-2 text-small text-text-secondary">
                     <AlertTriangle
                       size={14}
                       className="mt-px shrink-0 text-text-tertiary"
@@ -269,19 +269,19 @@ function openLabel(candidate: PredecessorCandidate): string {
 function OpenLinesPreview({ lines }: { lines: readonly OpenLineQuantity[] }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-line">
-      <table className="w-full min-w-[420px] border-collapse text-[12px]">
+      <table className="w-full min-w-[26.25rem] border-collapse text-small">
         <thead>
           <tr className="border-b border-line text-text-secondary">
             <th scope="col" className="px-3 py-2 text-left font-medium">
               Position
             </th>
-            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+            <th scope="col" className="w-[5.25rem] px-3 py-2 text-right font-medium">
               Bestellt
             </th>
-            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+            <th scope="col" className="w-[5.25rem] px-3 py-2 text-right font-medium">
               Geliefert
             </th>
-            <th scope="col" className="w-[84px] px-3 py-2 text-right font-medium">
+            <th scope="col" className="w-[5.25rem] px-3 py-2 text-right font-medium">
               Offen
             </th>
           </tr>

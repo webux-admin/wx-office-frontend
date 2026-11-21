@@ -405,7 +405,7 @@ export function ProductLineDialog({
             numeric
             invalid={problems.quantity !== undefined}
             hint={problems.quantity}
-            className="sm:max-w-[200px]"
+            className="sm:max-w-[12.5rem]"
           />
 
           {/* Right under the quantity and not in «Weitere Angaben»: on a tracked product the
@@ -416,7 +416,7 @@ export function ProductLineDialog({
               {/* The same sentence the field draws under it, from the same numbers: two
                   counters three lines apart that disagree leave the reader no way of telling
                   which one is lying. */}
-              <p aria-live="polite" className="text-[12px] text-text-secondary">
+              <p aria-live="polite" className="text-small text-text-secondary">
                 {lotHeadline(amount, carried)}
               </p>
               <LotAllocationField
@@ -461,7 +461,7 @@ export function ProductLineDialog({
                 }
               />
               {problems.lots !== undefined && (
-                <p className="text-[12px] text-warning">{problems.lots}</p>
+                <p className="text-small text-warning">{problems.lots}</p>
               )}
             </div>
           )}
@@ -498,13 +498,13 @@ export function ProductLineDialog({
                 value={revenueAccount}
                 onChange={setRevenueAccount}
                 emptyLabel="– Konto des Produkts –"
-                hint="Leer heisst: das Konto aus Produkt oder Vorgabe."
+                tooltip="Leer heisst: das Konto aus Produkt oder Vorgabe."
               />
             </div>
           )}
         </MoreDetails>
 
-        <p className="mt-4 text-[11px] text-text-tertiary">
+        <p className="mt-4 text-caption text-text-tertiary">
           Pfeiltasten wählen einen Treffer, Enter übernimmt ihn.{' '}
           {line
             ? 'Enter in der Menge übernimmt die Position.'

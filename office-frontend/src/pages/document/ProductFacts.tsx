@@ -115,9 +115,9 @@ export function ProductFacts({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-5">
             {facts.map((fact) => (
               <div key={fact.label} className="min-w-0">
-                <dt className="text-[11px] text-text-tertiary">{fact.label}</dt>
+                <dt className="text-caption text-text-tertiary">{fact.label}</dt>
                 <dd
-                  className={`truncate text-[13px] ${
+                  className={`truncate text-body ${
                     fact.warn ? 'text-warning' : 'text-text-primary'
                   }`}
                   title={fact.hint}
@@ -125,21 +125,21 @@ export function ProductFacts({
                   {fact.value}
                 </dd>
                 {fact.hint && (
-                  <dd className="truncate text-[11px] text-text-secondary">{fact.hint}</dd>
+                  <dd className="truncate text-caption text-text-secondary">{fact.hint}</dd>
                 )}
               </div>
             ))}
           </dl>
 
           {resolved.isError && (
-            <p className="mt-2.5 text-[11px] text-text-secondary">
+            <p className="mt-2.5 text-caption text-text-secondary">
               Der Preis konnte nicht gelesen werden.
             </p>
           )}
           {/* Said out loud rather than shown as a 0: a zero next to a product means «sold
               out», and claiming that because a request failed is worse than saying nothing. */}
           {stock.isError && (
-            <p className="mt-2.5 text-[11px] text-text-secondary">
+            <p className="mt-2.5 text-caption text-text-secondary">
               Die Verfügbarkeit konnte nicht gelesen werden.
             </p>
           )}

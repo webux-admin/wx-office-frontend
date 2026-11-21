@@ -171,16 +171,16 @@ export function PartnerQuickSearch<T extends CustomerHit>({
           </p>
 
           {hits.isPending ? (
-            <p className="flex items-center gap-2 px-3 py-3 text-[13px] text-text-secondary">
+            <p className="flex items-center gap-2 px-3 py-3 text-body text-text-secondary">
               <Spinner size={14} label="Kunden werden durchsucht" />
               Kunden werden durchsucht ...
             </p>
           ) : hits.isError ? (
-            <p role="alert" className="px-3 py-3 text-[13px] text-danger">
+            <p role="alert" className="px-3 py-3 text-body text-danger">
               Die Kunden konnten nicht gelesen werden.
             </p>
           ) : found.length === 0 ? (
-            <p className="px-3 py-3 text-[13px] text-text-secondary">
+            <p className="px-3 py-3 text-body text-text-secondary">
               {settled === '' ? emptyHint : `Für «${settled}» gibt es keinen Treffer.`}
             </p>
           ) : (
@@ -189,7 +189,7 @@ export function PartnerQuickSearch<T extends CustomerHit>({
               role="listbox"
               id={listId}
               aria-label="Kunden"
-              className="max-h-[240px] overflow-y-auto py-1"
+              className="max-h-[15rem] overflow-y-auto py-1"
             >
               {found.map((partner, index) => (
                 <li
@@ -204,10 +204,10 @@ export function PartnerQuickSearch<T extends CustomerHit>({
                     index === active ? 'bg-sunken' : ''
                   }`}
                 >
-                  <span className="w-[86px] shrink-0 truncate font-mono text-[12px] text-text-tertiary">
+                  <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
                     <Marked text={partner.partnerNumber ?? '-'} term={settled} />
                   </span>
-                  <span className="truncate text-[13px] text-text-primary">
+                  <span className="truncate text-body text-text-primary">
                     <Marked text={partner.name} term={settled} />
                   </span>
                 </li>
@@ -228,7 +228,7 @@ function Marked({ text, term }: { text: string; term: string }) {
     <>
       {matchParts(text, term).map((part, index) =>
         part.match ? (
-          <mark key={index} className="rounded-[2px] bg-highlight text-text-primary">
+          <mark key={index} className="rounded-[0.125rem] bg-highlight text-text-primary">
             {part.text}
           </mark>
         ) : (

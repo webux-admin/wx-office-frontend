@@ -178,6 +178,7 @@ async function mount({
             validity={validity}
             readOnlyNote={readOnlyNote}
             onChanged={() => undefined}
+            onDirtyChange={() => undefined}
           />
         </AuthContext.Provider>
       </QueryClientProvider>,

@@ -70,7 +70,7 @@ export function DocumentChainPanel({
   if (chain.length <= 1) {
     return (
       <Panel title={TITLE} description={DESCRIPTION}>
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Dieser Beleg steht für sich. Er wurde aus keinem anderen übernommen, und aus ihm
           wurde noch keiner geschrieben.
         </p>
@@ -118,11 +118,11 @@ function ChainRow({
     <>
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
         <Badge tone={TONES[entry.relation] ?? 'muted'}>{relationLabel(entry.relation)}</Badge>
-        <span className="truncate font-mono text-[12px]">{chainEntryLabel(entry)}</span>
+        <span className="truncate font-mono text-small">{chainEntryLabel(entry)}</span>
         {entry.status === 'CANCELLED' && <Badge tone="danger">Storniert</Badge>}
         {entry.status === 'DRAFT' && <Badge tone="muted">Entwurf</Badge>}
       </span>
-      <span className="shrink-0 text-[12px] text-text-secondary">
+      <span className="shrink-0 text-small text-text-secondary">
         {formatDate(entry.documentDate)} · {formatAmount(entry.totalGross)}{' '}
         {entry.currencyCode}
       </span>

@@ -216,7 +216,7 @@ export function DocumentLines({
         }
       >
         {readOnlyNote !== undefined && (
-          <p className="px-5 pt-4 text-[13px] text-text-secondary">{readOnlyNote}</p>
+          <p className="px-5 pt-4 text-body text-text-secondary">{readOnlyNote}</p>
         )}
 
         {/* Only where there is something to report. A strip that is always there is read as
@@ -227,18 +227,18 @@ export function DocumentLines({
               type="button"
               onClick={() => setShortfallsOpen((wasOpen) => !wasOpen)}
               aria-expanded={shortfallsOpen}
-              className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left text-[13px] text-text-primary"
+              className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left text-body text-text-primary"
             >
               <span className="font-medium">Lager:</span>
               <span>{stripText(short, itemLines.length)}</span>
-              <span className="text-[12px] text-text-secondary underline-offset-2">
+              <span className="text-small text-text-secondary underline-offset-2">
                 {shortfallsOpen ? 'weniger' : 'Details'}
               </span>
             </button>
             {shortfallsOpen && (
               <ul className="mt-2 grid gap-1">
                 {short.map((shortfall) => (
-                  <li key={shortfall.productId} className="text-[12px] text-text-secondary">
+                  <li key={shortfall.productId} className="text-small text-text-secondary">
                     {shortfallText(shortfall)}
                   </li>
                 ))}
@@ -354,7 +354,7 @@ export function DocumentLines({
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Position {removing?.lineNumber}
           {removing?.description ? ` — ${removing.description}` : ''} wird endgültig entfernt.
           Rückgängig machen lässt sich das nicht.

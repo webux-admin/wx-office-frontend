@@ -62,7 +62,7 @@ export function PredecessorEditor({
                 onUp={() => onChange(withMovedPredecessor(chosen, index, -1))}
                 onDown={() => onChange(withMovedPredecessor(chosen, index, 1))}
               />
-              <span className="w-[70px] shrink-0 font-mono text-small text-text-secondary">
+              <span className="w-[4.375rem] shrink-0 font-mono text-small text-text-secondary">
                 {type.code}
               </span>
               <span className="flex-1 text-body">{type.name}</span>

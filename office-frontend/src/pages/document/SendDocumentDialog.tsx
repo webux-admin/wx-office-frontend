@@ -179,7 +179,7 @@ export function SendDocumentDialog({
             label="An"
             value={typed.to}
             maxLength={1000}
-            hint="Mehrere Adressen mit Komma trennen"
+            tooltip="Mehrere Adressen mit Komma trennen"
             invalid={recipients.length === 0}
             onChange={(event) => edit({ to: event.target.value })}
           />
@@ -203,8 +203,8 @@ export function SendDocumentDialog({
           />
 
           <div>
-            <p className="text-[12px] font-medium text-text-secondary">Anhang</p>
-            <p className="mt-1 inline-flex items-center gap-2 text-[13px]">
+            <p className="text-small font-medium text-text-secondary">Anhang</p>
+            <p className="mt-1 inline-flex items-center gap-2 text-body">
               <Paperclip size={14} aria-hidden />
               {data.fileName}
               <span className="text-text-tertiary">{formatByteCount(data.byteCount)}</span>

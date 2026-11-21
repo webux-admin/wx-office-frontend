@@ -127,7 +127,7 @@ export function MoreDetails({
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-1 rounded-[var(--radius-sm)] text-[12px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+          className="flex items-center gap-1 rounded-[var(--radius-sm)] text-small font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <ChevronRight
             size={14}
@@ -138,7 +138,7 @@ export function MoreDetails({
         </button>
 
         {summary && (
-          <span className="rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[11px] text-text-secondary">
+          <span className="rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-caption text-text-secondary">
             {summary}
           </span>
         )}
@@ -171,7 +171,7 @@ export function ServiceDateFields({
 }) {
   return (
     <>
-      <p className="mb-3 text-[12px] text-text-secondary">
+      <p className="mb-3 text-small text-text-secondary">
         Bleibt das Leistungsdatum leer, gilt das Belegdatum. Es bestimmt den MwSt-Satz.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">

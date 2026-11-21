@@ -26,15 +26,15 @@ import { lotSummary } from './lineForm'
  * the rows are written out below instead of coming out of a generic table.
  */
 const COLUMNS: { key: string; header: string; right: boolean; width: string }[] = [
-  { key: 'position', header: 'Pos', right: false, width: 'w-[60px]' },
+  { key: 'position', header: 'Pos', right: false, width: 'w-[3.75rem]' },
   { key: 'description', header: 'Bezeichnung', right: false, width: '' },
-  { key: 'account', header: 'Konto', right: false, width: 'w-[80px]' },
-  { key: 'quantity', header: 'Menge', right: true, width: 'w-[110px]' },
-  { key: 'open', header: 'Offen', right: true, width: 'w-[90px]' },
-  { key: 'unitPrice', header: 'Einzelpreis', right: true, width: 'w-[120px]' },
-  { key: 'discount', header: 'Rabatt', right: true, width: 'w-[110px]' },
-  { key: 'vat', header: 'MwSt', right: true, width: 'w-[90px]' },
-  { key: 'net', header: 'Netto', right: true, width: 'w-[120px]' },
+  { key: 'account', header: 'Konto', right: false, width: 'w-[5rem]' },
+  { key: 'quantity', header: 'Menge', right: true, width: 'w-[6.875rem]' },
+  { key: 'open', header: 'Offen', right: true, width: 'w-[5.625rem]' },
+  { key: 'unitPrice', header: 'Einzelpreis', right: true, width: 'w-[7.5rem]' },
+  { key: 'discount', header: 'Rabatt', right: true, width: 'w-[6.875rem]' },
+  { key: 'vat', header: 'MwSt', right: true, width: 'w-[5.625rem]' },
+  { key: 'net', header: 'Netto', right: true, width: 'w-[7.5rem]' },
 ]
 
 /**
@@ -85,8 +85,8 @@ function handleLabel(position: number): string {
 const CELL = 'px-5 py-2.5 align-middle'
 const NUMBER_CELL = `${CELL} text-right font-mono tabular-nums`
 /** The grip stands in front of everything else and takes no more room than the icon needs. */
-const HANDLE_COLUMN = 'w-[44px] pr-0'
-const ACTION_COLUMN = 'w-[100px]'
+const HANDLE_COLUMN = 'w-[2.75rem] pr-0'
+const ACTION_COLUMN = 'w-[6.25rem]'
 
 type LineAction = (line: DocumentLine) => void
 
@@ -308,7 +308,7 @@ export function LinesTable({
 
   return (
     <div className="overflow-x-auto">
-      <table ref={table} className="w-full min-w-[640px] border-collapse text-[13px]">
+      <table ref={table} className="w-full min-w-[40rem] border-collapse text-body">
         <thead>
           <tr className="border-b border-line-subtle">
             {editable && <th scope="col" className={`${CELL} ${HANDLE_COLUMN}`} />}
@@ -351,7 +351,7 @@ export function LinesTable({
                   />
                 </td>
               )}
-              <td className={`${CELL} font-mono text-[12px] text-text-tertiary`}>
+              <td className={`${CELL} font-mono text-small text-text-tertiary`}>
                 {line.lineNumber}
               </td>
               <LineCells
@@ -504,7 +504,7 @@ function LineCells({
   if (line.kind === 'PAGE_BREAK') {
     return (
       <td className={`${CELL} py-1.5`} colSpan={valueColumns}>
-        <span className="flex items-center gap-3 text-[11px] text-text-tertiary">
+        <span className="flex items-center gap-3 text-caption text-text-tertiary">
           <span aria-hidden className="h-px flex-1 border-t border-dashed border-line" />
           {kindLabel('PAGE_BREAK')}
           <span aria-hidden className="h-px flex-1 border-t border-dashed border-line" />
@@ -528,7 +528,7 @@ function LineCells({
             it, named, so neither figure can be read as the wrong one. */}
         <td className={`${NUMBER_CELL} font-medium`}>
           {formatAmount(subtotalsIncludeVat ? line.subtotalGross : line.subtotalNet)}
-          <span className="block text-[11px] font-normal text-text-tertiary">
+          <span className="block text-caption font-normal text-text-tertiary">
             {subtotalsIncludeVat
               ? `${formatAmount(line.subtotalNet)} netto`
               : `${formatAmount(line.subtotalGross)} brutto`}
@@ -556,7 +556,7 @@ function LineCells({
         </span>
         {line.subtitle && <span className="block text-text-secondary">{line.subtitle}</span>}
         {line.note && (
-          <span className="block whitespace-pre-line text-[12px] text-text-secondary">
+          <span className="block whitespace-pre-line text-small text-text-secondary">
             {line.note}
           </span>
         )}
@@ -565,12 +565,12 @@ function LineCells({
             would stay empty on every document that follows no numbers. Shortened after three —
             the printed document carries all of them (backend ADR-0069). */}
         {lotSummary(line.lots) !== '' && (
-          <span className="block font-mono text-[11px] text-text-tertiary">
+          <span className="block font-mono text-caption text-text-tertiary">
             {lotSummary(line.lots)}
           </span>
         )}
         {line.productNumber && (
-          <span className="block font-mono text-[11px] text-text-tertiary">
+          <span className="block font-mono text-caption text-text-tertiary">
             {line.productNumber}
           </span>
         )}
@@ -579,7 +579,7 @@ function LineCells({
           before the chain resolved one are never migrated (backend ADR-0127), and an empty
           cell reads as a rendering fault. */}
       {showsAccount && (
-        <td className={`${CELL} font-mono text-[12px] text-text-tertiary`}>
+        <td className={`${CELL} font-mono text-small text-text-tertiary`}>
           {line.revenueAccount ?? '–'}
         </td>
       )}
@@ -589,7 +589,7 @@ function LineCells({
         {/* Named, never refused: a subsequent delivery beyond the ordered quantity happens.
             The usual reason is a proposed quantity that was overwritten by accident. */}
         {exceedsOpenQuantity(line.quantity, openOfPredecessor?.openQuantity) && (
-          <span className="block text-[11px] font-normal text-warning">
+          <span className="block text-caption font-normal text-warning">
             mehr als offen ({formatQuantity(openOfPredecessor?.openQuantity)})
           </span>
         )}

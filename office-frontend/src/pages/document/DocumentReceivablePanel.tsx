@@ -256,9 +256,9 @@ export function DocumentReceivablePanel({
               tone={state === 'open' ? 'strong' : undefined}
             />
             <div className="grid gap-1">
-              <p className="text-[12px] text-text-tertiary">Fällig</p>
+              <p className="text-small text-text-tertiary">Fällig</p>
               <div className="flex items-center gap-2">
-                <p className="text-[13px]">{formatDate(item.dueDate)}</p>
+                <p className="text-body">{formatDate(item.dueDate)}</p>
                 {item.overdue && (
                   <Badge tone="danger">{item.daysOverdue} Tage überfällig</Badge>
                 )}
@@ -274,7 +274,7 @@ export function DocumentReceivablePanel({
             books by itself (backend ADR-0105). */}
         {surplus > 0 && (
           <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
-            <p className="text-[13px]">
+            <p className="text-body">
               <span className="font-medium">
                 {formatAmount(surplus)} {currency} zu viel bezahlt.
               </span>{' '}
@@ -294,13 +294,13 @@ export function DocumentReceivablePanel({
                 </Button>
               )}
               <Link
-                className="text-[13px] underline"
+                className="text-body underline"
                 to={`${CUSTOMER_CREDIT_PATH}`}
               >
                 Zurückzahlen
               </Link>
             </span>
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               Ein einbehaltener Überschuss ist zusätzliches Entgelt (MWSTG Art. 24 Abs. 1) —
               kein steuerfreies Trinkgeld.
             </p>
@@ -308,16 +308,16 @@ export function DocumentReceivablePanel({
         )}
 
         {payments.isSuccess && rows.length === 0 && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Noch keine Zahlung erfasst.
           </p>
         )}
 
         {rows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-body">
               <thead>
-                <tr className="text-left text-[12px] text-text-tertiary">
+                <tr className="text-left text-small text-text-tertiary">
                   <th className="py-1 pr-4 font-medium">Valuta</th>
                   <th className="py-1 pr-4 font-medium">Art</th>
                   <th className="py-1 pr-4 text-right font-medium">Betrag</th>
@@ -345,13 +345,13 @@ export function DocumentReceivablePanel({
         )}
 
         {!mayRecord && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Erfassen fehlt das Recht «Zahlung erfassen».
           </p>
         )}
 
         {!mayWriteOff && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Ausbuchen fehlt das Recht «Forderung ausbuchen».
           </p>
         )}
@@ -441,7 +441,7 @@ export function DocumentReceivablePanel({
                   value={form.exchangeRateUnit}
                   onChange={(event) =>
                     setForm({ ...form, exchangeRateUnit: event.target.value })}
-                  hint="Manche Währungen werden je 100 notiert."
+                  tooltip="Manche Währungen werden je 100 notiert."
                 >
                   <option value="1">1 Einheit</option>
                   <option value="100">100 Einheiten</option>
@@ -456,7 +456,7 @@ export function DocumentReceivablePanel({
               </div>
 
               {settled !== undefined && (
-                <p className="text-[13px]" aria-live="polite">
+                <p className="text-body" aria-live="polite">
                   {formatAmount(amountValue)} {form.currency} × {form.exchangeRate}
                   {form.exchangeRateUnit === '100' ? ' ÷ 100' : ''} ={' '}
                   <span className="font-medium">
@@ -464,7 +464,7 @@ export function DocumentReceivablePanel({
                   </span>
                 </p>
               )}
-              <p className="text-[12px] text-text-secondary">
+              <p className="text-small text-text-secondary">
                 Ausgeglichen wird in {currency}; gerechnet wird auf dem Server. Was übrig
                 bleibt, ist die Kursdifferenz und wird als eigene Zeile geschlossen — sie
                 mindert das Entgelt nicht (MWSTV Art. 45).
@@ -473,7 +473,7 @@ export function DocumentReceivablePanel({
           )}
 
           {REDUCES_CONSIDERATION.includes(form.kind) && (
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               {PAYMENT_KINDS[form.kind]} mindert das Entgelt und hat eine MWST-Folge nach
               MWSTG Art. 41. Erfassen Sie das über «Ausbuchen»: dort steht der Grund, und dort
               wird die Steuerkorrektur festgehalten.
@@ -492,7 +492,7 @@ export function DocumentReceivablePanel({
               value={form.ledgerAccount}
               onChange={(number) => setForm({ ...form, ledgerAccount: number })}
               emptyLabel="– nicht buchen –"
-              hint="Auf welches Konto das Geld gelangt ist. Leer heisst: die Zahlung wird erfasst und nicht gebucht."
+              tooltip="Auf welches Konto das Geld gelangt ist. Leer heisst: die Zahlung wird erfasst und nicht gebucht."
             />
           )}
 
@@ -547,7 +547,7 @@ export function DocumentReceivablePanel({
             label="Grund"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            hint="Optional. Steht als Notiz auf der Gegenbuchung."
+            tooltip="Optional. Steht als Notiz auf der Gegenbuchung."
           />
           {reverse.error !== null && <ErrorNotice error={reverse.error} />}
         </div>
@@ -594,8 +594,8 @@ function Figure({
 }) {
   return (
     <div className="grid gap-1">
-      <p className="text-[12px] text-text-tertiary">{label}</p>
-      <p className={tone === 'strong' ? 'text-[13px] font-medium' : 'text-[13px]'}>{value}</p>
+      <p className="text-small text-text-tertiary">{label}</p>
+      <p className={tone === 'strong' ? 'text-body font-medium' : 'text-body'}>{value}</p>
     </div>
   )
 }
@@ -646,7 +646,7 @@ function PaymentRow({
           {/* What arrived, where it differs from what the invoice settles: the evidence
               beside the figure (backend ADR-0106). */}
           {payment.originalCurrency !== payment.currency && (
-            <span className="text-[12px] text-text-tertiary no-underline">
+            <span className="text-small text-text-tertiary no-underline">
               {formatAmount(payment.originalAmount)} {payment.originalCurrency}
               {' '}× {payment.exchangeRate}
               {payment.exchangeRateUnit === 100 ? ' ÷ 100' : ''}

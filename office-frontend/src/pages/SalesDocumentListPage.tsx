@@ -164,13 +164,13 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
     {
       key: 'number',
       header: 'Nummer',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       sortKey: 'documentNumber',
       render: (row) => (
         <Link
           to={`${kind.path}/${row.id}`}
           state={origin}
-          className="font-mono text-[12px] transition-colors hover:text-accent-text"
+          className="font-mono text-small transition-colors hover:text-accent-text"
         >
           {row.documentNumber ?? `Entwurf ${row.id}`}
         </Link>
@@ -179,7 +179,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
     {
       key: 'date',
       header: 'Datum',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       sortKey: 'documentDate',
       render: (row) => formatDate(row.documentDate),
     },
@@ -192,7 +192,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       // An issued offer wears its outcome, the way the head of its mask does. Drafts and
       // cancelled documents read as everywhere else, and so does every other kind. Only the
       // open offer can be expired — a mark wins over the calendar.
@@ -211,14 +211,14 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       key: 'net',
       header: 'Netto',
       align: 'right',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (row) => formatAmount(row.totalNet),
     },
     {
       key: 'gross',
       header: 'Brutto',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       sortKey: 'totalGross',
       render: (row) => (
         <span className="font-medium">
@@ -236,7 +236,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
       key: 'open',
       header: 'Offen',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (row) => <OpenCell row={row} />,
     })
   }
@@ -326,7 +326,7 @@ function DocumentList({ tenantId, kind }: { tenantId: number; kind: SalesDocumen
                   setFilterId(entry.id)
                   setPage(0)
                 }}
-                className={`h-8 rounded-[var(--radius-sm)] px-3 text-[13px] transition-colors ${
+                className={`h-8 rounded-[var(--radius-sm)] px-3 text-body transition-colors ${
                   filter.id === entry.id
                     ? 'bg-sunken text-text-primary'
                     : 'text-text-secondary hover:text-text-primary'

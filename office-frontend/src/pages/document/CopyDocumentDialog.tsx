@@ -96,14 +96,14 @@ export function CopyDocumentDialog({
         {documents.error !== null && <ErrorNotice error={documents.error} />}
 
         {documents.isSuccess && rows.length === 0 && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Es gibt noch keinen Beleg, der sich kopieren liesse.
           </p>
         )}
 
         {rows.length > 0 && (
           <>
-            <div className="max-h-[300px] overflow-y-auto rounded-[var(--radius-md)] border border-line">
+            <div className="max-h-[18.75rem] overflow-y-auto rounded-[var(--radius-md)] border border-line">
               <ul>
                 {rows.map((row) => (
                   <li key={row.id}>
@@ -115,16 +115,16 @@ export function CopyDocumentDialog({
                         row.id === sourceId ? 'bg-sunken' : 'hover:bg-sunken/60'
                       }`}
                     >
-                      <span className="w-[110px] shrink-0 font-mono text-[12px]">
+                      <span className="w-[6.875rem] shrink-0 font-mono text-small">
                         {row.documentNumber ?? 'Entwurf'}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[13px]">
+                      <span className="min-w-0 flex-1 truncate text-body">
                         {row.partnerName}
                       </span>
-                      <span className="w-[92px] shrink-0 text-right text-[12px] text-text-secondary">
+                      <span className="w-[5.75rem] shrink-0 text-right text-small text-text-secondary">
                         {formatDate(row.documentDate)}
                       </span>
-                      <span className="w-[110px] shrink-0 text-right text-[13px] font-medium">
+                      <span className="w-[6.875rem] shrink-0 text-right text-body font-medium">
                         {formatAmount(row.totalGross)}{' '}
                         <span className="text-text-tertiary">{row.currency}</span>
                       </span>
@@ -138,7 +138,7 @@ export function CopyDocumentDialog({
               label="Preise"
               value={priceMode}
               onChange={(event) => setPriceMode(event.target.value as CopyPriceMode | '')}
-              hint="Ohne Angabe gilt, was bei der Belegart eingestellt ist."
+              tooltip="Ohne Angabe gilt, was bei der Belegart eingestellt ist."
             >
               <option value="">Vorgabe der Belegart</option>
               <option value="RECALCULATE">Neu aus dem Katalog holen</option>

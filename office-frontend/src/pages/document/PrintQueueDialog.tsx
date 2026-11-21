@@ -183,10 +183,10 @@ function PrintTarget({
 }) {
   return (
     <div className="rounded-[var(--radius-md)] border border-line-subtle bg-sunken px-4 py-3.5">
-      <p className="text-[11px] font-medium uppercase tracking-[0.6px] text-text-tertiary">
+      <p className="text-caption font-medium uppercase tracking-wide text-text-tertiary">
         Ausfertigung
       </p>
-      <p className="mt-0.5 text-[17px] font-semibold leading-6">
+      <p className="mt-0.5 text-heading font-semibold leading-6">
         {printout?.label ?? 'Beleg ohne Beschriftung'}
       </p>
       <p className="mt-0.5 text-body text-text-secondary">

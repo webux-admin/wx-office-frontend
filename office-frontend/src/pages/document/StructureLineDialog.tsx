@@ -115,7 +115,7 @@ export function StructureLineDialog({
             hint={touched && problem ? problem : TEXT[kind].hint}
           />
         ) : (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Ein Seitenwechsel trägt keinen Text. Er beginnt im Beleg eine neue Seite.
           </p>
         )}

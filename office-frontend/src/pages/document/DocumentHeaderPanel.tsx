@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowRightLeft } from 'lucide-react'
 import { Button } from '../../components/Button'
@@ -51,6 +51,7 @@ export function DocumentHeaderPanel({
   validity,
   readOnlyNote,
   onChanged,
+  onDirtyChange,
 }: {
   tenantId: number
   /** Path of the document, without a trailing slash. */
@@ -68,6 +69,8 @@ export function DocumentHeaderPanel({
   readOnlyNote?: string
   /** Called with the document the backend answered with. */
   onChanged: (document: SalesDocument) => void
+  /** Reports whether a field was changed and not yet saved, so leaving asks first. */
+  onDirtyChange: (dirty: boolean) => void
 }) {
   const [form, setForm] = useState<HeaderForm>(() => toHeaderForm(document))
 
@@ -76,6 +79,7 @@ export function DocumentHeaderPanel({
 
   const converting = currencyChanged(form, document)
   const unchanged = headerUnchanged(form, document)
+  useEffect(() => onDirtyChange(editable && !unchanged), [editable, unchanged, onDirtyChange])
 
   const { can } = useAuth()
   // Only where the document moves stock at all, and only with the right to read the inventory.
@@ -161,7 +165,7 @@ export function DocumentHeaderPanel({
           value={document.documentTypeCode ?? ''}
           readOnly
           disabled
-          hint="Bestimmt Adresse, Nummernkreis und Druckvorlage. Steht mit dem Beleg fest."
+          tooltip="Bestimmt Adresse, Nummernkreis und Druckvorlage. Steht mit dem Beleg fest."
         />
 
         <TextField
@@ -170,7 +174,7 @@ export function DocumentHeaderPanel({
           value={form.documentDate}
           onChange={(event) => set('documentDate', event.target.value)}
           disabled={!editable}
-          hint="Zugleich das Leistungsdatum jeder Position, die keines nennt — der MwSt-Satz folgt ihm."
+          tooltip="Zugleich das Leistungsdatum jeder Position, die keines nennt — der MwSt-Satz folgt ihm."
         />
 
         {validity && (
@@ -180,7 +184,7 @@ export function DocumentHeaderPanel({
             value={form.validUntil}
             onChange={(event) => set('validUntil', event.target.value)}
             disabled={!editable}
-            hint="Bis zu diesem Tag steht die Offerte. Leer heisst: ohne Befristung."
+            tooltip="Bis zu diesem Tag steht die Offerte. Leer heisst: ohne Befristung."
           />
         )}
 
@@ -192,7 +196,7 @@ export function DocumentHeaderPanel({
           storedLabel={document.languageLabel}
           onChange={(code) => set('language', code)}
           disabled={!editable}
-          hint="Beschriftungen und Texte des Belegs erscheinen in dieser Sprache."
+          tooltip="Beschriftungen und Texte des Belegs erscheinen in dieser Sprache."
         />
 
         <MasterDataSelect
@@ -218,7 +222,7 @@ export function DocumentHeaderPanel({
           disabled={!editable}
           inputMode="decimal"
           numeric
-          hint="Nur bei Fremdwährung nötig."
+          tooltip="Nur bei Fremdwährung nötig."
         />
 
         <TextField
@@ -227,7 +231,7 @@ export function DocumentHeaderPanel({
           value={form.exchangeRateDate}
           onChange={(event) => set('exchangeRateDate', event.target.value)}
           disabled={!editable}
-          hint="Der Tag, von dem der Kurs stammt."
+          tooltip="Der Tag, von dem der Kurs stammt."
         />
 
         {showsStore &&
@@ -236,7 +240,7 @@ export function DocumentHeaderPanel({
               label="Lagerort"
               value={form.stockLocation}
               onChange={(event) => set('stockLocation', event.target.value)}
-              hint="Wirkt erst beim Ausstellen. Preise und Mengen bleiben unberührt."
+              tooltip="Wirkt erst beim Ausstellen. Preise und Mengen bleiben unberührt."
             >
               <option value="">
                 {fallbackName === undefined
@@ -250,8 +254,8 @@ export function DocumentHeaderPanel({
               ))}
             </SelectField>
           ) : (
-            <div className="grid gap-0.5 text-[13px]">
-              <span className="text-[12px] text-text-tertiary">Lagerort</span>
+            <div className="grid gap-0.5 text-body">
+              <span className="text-small text-text-tertiary">Lagerort</span>
               <span>{document.stockLocationName ?? '—'}</span>
             </div>
           ))}
@@ -262,7 +266,7 @@ export function DocumentHeaderPanel({
           readers stay silent about that. */}
       <p
         aria-live="polite"
-        className="mt-4 flex items-start gap-2 text-[12px] text-text-secondary empty:mt-0"
+        className="mt-4 flex items-start gap-2 text-small text-text-secondary empty:mt-0"
       >
         {converting && (
           <>

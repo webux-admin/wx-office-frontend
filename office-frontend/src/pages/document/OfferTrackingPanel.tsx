@@ -84,7 +84,7 @@ export function OfferTrackingPanel({
     >
       <div className="grid gap-4">
         {decided && (
-          <div className="text-[13px]">
+          <div className="text-body">
             <span className="block font-medium">{outcomeLabel(tracking.outcome)}</span>
             <span className="block text-text-secondary">
               {formatDateTime(tracking.outcomeAt)}
@@ -112,7 +112,7 @@ export function OfferTrackingPanel({
                   aria-pressed={tracking.winProbability === pick}
                   disabled={save.isPending}
                   onClick={() => save.mutate(pick)}
-                  className={`h-8 rounded-[var(--radius-sm)] px-3 text-[13px] transition-colors ${
+                  className={`h-8 rounded-[var(--radius-sm)] px-3 text-body transition-colors ${
                     tracking.winProbability === pick
                       ? 'bg-sunken text-text-primary'
                       : 'text-text-secondary hover:text-text-primary'
@@ -146,14 +146,14 @@ export function OfferTrackingPanel({
             </div>
           </>
         ) : (
-          <p className="text-[13px]">
+          <p className="text-body">
             <span className="block text-text-secondary">Gewinnwahrscheinlichkeit</span>
             <span className="block font-medium">{formatPercent(tracking.winProbability)}</span>
           </p>
         )}
 
         {tracking.weightedGross !== undefined && (
-          <p className="text-[13px]">
+          <p className="text-body">
             <span className="block text-text-secondary">Gewichteter Betrag</span>
             <span className="block font-mono font-medium tabular-nums">
               {formatAmount(tracking.weightedGross)}{' '}
@@ -163,7 +163,7 @@ export function OfferTrackingPanel({
         )}
 
         {readOnlyNote !== undefined && !decided && (
-          <p className="text-[13px] text-text-secondary">{readOnlyNote}</p>
+          <p className="text-body text-text-secondary">{readOnlyNote}</p>
         )}
 
         {save.error !== null && <ErrorNotice error={save.error} />}

@@ -93,39 +93,39 @@ export function DocumentPaymentPanel({
             onChange={setPaymentTerm}
             storedLabel={document.paymentTermName}
             emptyLabel="Ohne Kondition"
-            hint="Bestimmt Fälligkeit und Skonto. Die Staffeln erscheinen beim Ausstellen."
+            tooltip="Bestimmt Fälligkeit und Skonto. Die Staffeln erscheinen beim Ausstellen."
           />
           <TextField
             label="Fällig am"
             type="date"
             value={dueDate}
             onChange={(event) => setDueDate(event.target.value)}
-            hint="Leer lassen, dann rechnet die Kondition die Fälligkeit aus."
+            tooltip="Leer lassen, dann rechnet die Kondition die Fälligkeit aus."
           />
         </div>
       ) : (
-        <dl className="grid gap-2.5 text-[13px]">
+        <dl className="grid gap-2.5 text-body">
           <div className="flex gap-3">
-            <dt className="w-[112px] shrink-0 text-text-tertiary">Kondition</dt>
+            <dt className="w-[7rem] shrink-0 text-text-tertiary">Kondition</dt>
             <dd>{document.paymentTermName ?? document.paymentTerm ?? 'Ohne Kondition'}</dd>
           </div>
           {document.dueDate && (
             <div className="flex gap-3">
-              <dt className="w-[112px] shrink-0 text-text-tertiary">Fällig am</dt>
+              <dt className="w-[7rem] shrink-0 text-text-tertiary">Fällig am</dt>
               <dd className="font-mono tabular-nums">{formatDate(document.dueDate)}</dd>
             </div>
           )}
           {document.paymentReference && (
             <div className="flex gap-3">
-              <dt className="w-[112px] shrink-0 text-text-tertiary">Referenz</dt>
-              <dd className="font-mono text-[12px] tabular-nums">{document.paymentReference}</dd>
+              <dt className="w-[7rem] shrink-0 text-text-tertiary">Referenz</dt>
+              <dd className="font-mono text-small tabular-nums">{document.paymentReference}</dd>
             </div>
           )}
         </dl>
       )}
 
       {document.discountStages && document.discountStages.length > 0 && (
-        <ul className="mt-4 grid gap-1.5 border-t border-line-subtle pt-3 text-[13px]">
+        <ul className="mt-4 grid gap-1.5 border-t border-line-subtle pt-3 text-body">
           {document.discountStages.map((stage) => (
             <li key={stage.days} className="flex items-baseline justify-between gap-3">
               <span className="text-text-secondary">
@@ -141,7 +141,7 @@ export function DocumentPaymentPanel({
       )}
 
       {document.paymentTermText && (
-        <p className="mt-4 border-t border-line-subtle pt-3 text-[12px] text-text-secondary">
+        <p className="mt-4 border-t border-line-subtle pt-3 text-small text-text-secondary">
           {document.paymentTermText}
         </p>
       )}

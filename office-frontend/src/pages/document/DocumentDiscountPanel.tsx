@@ -137,7 +137,7 @@ export function DocumentDiscountPanel({
             )}
           </div>
         ) : (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             {stored === 0
               ? 'Auf diesen Beleg wurde kein Rabatt gewährt.'
               : discountSentence(document)}
@@ -145,11 +145,11 @@ export function DocumentDiscountPanel({
         )}
 
         {editable && stored !== 0 && (
-          <p className="text-[12px] text-text-tertiary">{discountSentence(document)}</p>
+          <p className="text-small text-text-tertiary">{discountSentence(document)}</p>
         )}
 
         {editable && document.discountableBase !== undefined && (
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Rabattfähig sind {formatAmount(document.discountableBase)} {document.currency} ohne
             MwSt.
           </p>

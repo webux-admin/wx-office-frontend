@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState } from 'react'
 import { BellRing, GitBranch, Mail } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -7,16 +7,14 @@ import { Button } from '../components/Button'
 import { SplitButton } from '../components/SplitButton'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
-import { Panel } from '../components/Panel'
+import { FormMask } from '../components/FormMask'
 import { Tabs } from '../components/Tabs'
-import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { showFile } from '../lib/files'
-import { formatDate, formatDateTime } from '../lib/format'
+import { formatDate } from '../lib/format'
 import {
   booksStock,
   reservationReturnNotice,
@@ -49,9 +47,6 @@ import {
 } from '../lib/salesDocument'
 import type {
   DocumentChainEntry,
-  DocumentParty,
-  DocumentStatus,
-  DocumentStatusEntry,
   DocumentType,
   OfferOutcome,
   OfferTracking,
@@ -66,6 +61,7 @@ import { ChangePartnerDialog } from './document/ChangePartnerDialog'
 import { SendDocumentDialog } from './document/SendDocumentDialog'
 import { NewDocumentMask } from './document/NewDocumentMask'
 import { DocumentHeaderPanel } from './document/DocumentHeaderPanel'
+import { DocumentTexts, PartyPanel, StatusTrail } from './document/DocumentPageParts'
 import { DocumentLines } from './document/DocumentLines'
 import { DocumentDiscountPanel } from './document/DocumentDiscountPanel'
 import { DocumentPaymentPanel } from './document/DocumentPaymentPanel'
@@ -80,7 +76,6 @@ import { useOpenQuantities } from './document/useOpenQuantities'
 import { useStockCheck } from './document/stockInfo'
 import { headerKey, paymentKey } from './document/headerForm'
 import { successorNotice } from './document/documentChain'
-import { recipientNote } from './document/recipientNote'
 import {
   itemLineCount,
   type FreeLine,
@@ -543,15 +538,18 @@ function DocumentMask({
    * @param run the mutation to start
    * @returns what the mutation answers, so the dialog can wait for it
    */
+  // Panels that save their own fields report whether something is typed and not yet kept.
+  const [headerDirty, setHeaderDirty] = useState(false)
+  const [textsDirty, setTextsDirty] = useState(false)
+
   const startLine = <T,>(run: () => Promise<T>): Promise<T> => {
     lineMutations.forEach((mutation) => mutation.reset())
     return run()
   }
 
   return (
-    <>
-      <PageHeader
-        title={document.documentNumber ?? `Entwurf ${document.id}`}
+    <FormMask
+      title={document.documentNumber ?? `Entwurf ${document.id}`}
         back={{ to: origin.from, label: origin.label }}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
@@ -589,7 +587,7 @@ function DocumentMask({
               <button
                 type="button"
                 onClick={() => setTab('zusammenhaenge')}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[12px] text-text-primary transition-colors hover:text-accent-text"
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-small text-text-primary transition-colors hover:text-accent-text"
               >
                 <GitBranch size={13} aria-hidden />
                 {successors}
@@ -601,7 +599,7 @@ function DocumentMask({
             {dispatchLine !== null && (
               <Link
                 to={OUTBOX_PATH}
-                className={`inline-flex items-center gap-1 text-[12px] underline-offset-2 hover:underline ${DISPATCH_TONES[dispatchLine.tone]}`}
+                className={`inline-flex items-center gap-1 text-small underline-offset-2 hover:underline ${DISPATCH_TONES[dispatchLine.tone]}`}
               >
                 <Mail size={13} aria-hidden />
                 {dispatchLine.text}
@@ -614,7 +612,7 @@ function DocumentMask({
               <button
                 type="button"
                 onClick={() => setTab('mahnungen')}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-[12px] text-text-primary transition-colors hover:text-accent-text"
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-sunken px-2 py-0.5 text-small text-text-primary transition-colors hover:text-accent-text"
               >
                 <BellRing size={13} aria-hidden />
                 {dunningLine}
@@ -622,7 +620,8 @@ function DocumentMask({
             )}
           </span>
         }
-      >
+      actions={
+        <>
         {/* A draft that has already been issued once carries its number, and a number that
             belongs to nothing is the gap the series exists to avoid. */}
         {document.status === 'DRAFT' &&
@@ -733,14 +732,16 @@ function DocumentMask({
             Ausstellen
           </Button>
         )}
-      </PageHeader>
-
-      <div className="px-8 pb-12">
+        </>
+      }
+      dirty={headerDirty || textsDirty}
+    >
+      <div>
         {/* Said out loud, because sending is the one action of this mask whose result is not
             visible on it. `aria-live` so a screen reader hears it too. */}
         <div aria-live="polite">
           {queued && (
-            <p className="mb-6 text-[13px] text-success">
+            <p className="mb-6 text-body text-success">
               Die E-Mail wurde in den Postausgang gelegt.{' '}
               <Link to={OUTBOX_PATH} className="underline underline-offset-2">
                 Postausgang öffnen
@@ -754,7 +755,7 @@ function DocumentMask({
         {document.status === 'DRAFT'
           && can(kind.rights.finalise)
           && stockIssueNotice(document.stockEffect, document.stockLocationName) !== '' && (
-            <p className="mb-6 text-[13px] text-text-secondary">
+            <p className="mb-6 text-body text-text-secondary">
               {stockIssueNotice(document.stockEffect, document.stockLocationName)}
             </p>
           )}
@@ -857,12 +858,14 @@ function DocumentMask({
               validity={kind.tracking}
               readOnlyNote={readOnlyNote}
               onChanged={refresh}
+              onDirtyChange={setHeaderDirty}
             />
             <DocumentTexts
               tenantId={tenantId}
               kind={kind}
               document={document}
               editable={editable}
+              onDirtyChange={setTextsDirty}
             />
             <DocumentPrintouts
               tenantId={tenantId}
@@ -1052,14 +1055,14 @@ function DocumentMask({
           </>
         }
       >
-        <p className="mb-3 text-[13px] text-text-secondary">
+        <p className="mb-3 text-body text-text-secondary">
           {warnings.length === 1
             ? '1 Position ist nicht gedeckt. Trotzdem ausstellen?'
             : `${warnings.length} Positionen sind nicht gedeckt. Trotzdem ausstellen?`}
         </p>
         <ul className="grid gap-1">
           {warnings.map((shortfall) => (
-            <li key={shortfall.productId} className="text-[13px] text-text-primary">
+            <li key={shortfall.productId} className="text-body text-text-primary">
               {shortfallText(shortfall)}
             </li>
           ))}
@@ -1091,18 +1094,18 @@ function DocumentMask({
           </>
         }
       >
-        <p className="mb-4 text-[13px] text-text-secondary">
+        <p className="mb-4 text-body text-text-secondary">
           Die Belegnummer {document.documentNumber} bleibt auf dem Beleg und wird beim erneuten
           Ausstellen wieder verwendet. Das bisher ausgestellte PDF bleibt im Archiv.
         </p>
         {booksStock(document.stockEffect) && (stockReversal.data ?? []).length > 0 && (
-          <div className="mb-4 text-[13px] text-text-secondary">
+          <div className="mb-4 text-body text-text-secondary">
             <p>
               Dieser Beleg hat Bestand abgebucht. Beim Zurückstellen wird zurückgebucht:
             </p>
             <ul className="mt-2 grid gap-1">
               {(stockReversal.data ?? []).map((line, index) => (
-                <li key={index} className="font-mono text-[12px] text-text-primary">
+                <li key={index} className="font-mono text-small text-text-primary">
                   {stockReversalLabel(line)}
                 </li>
               ))}
@@ -1116,7 +1119,7 @@ function DocumentMask({
         {/* The half nobody expects: the goods coming back is obvious, the reservation of the
             order behind it going back to open is not. */}
         {reservationReturnNotice(document.stockEffect) !== '' && (
-          <p className="mb-4 text-[13px] text-text-secondary">
+          <p className="mb-4 text-body text-text-secondary">
             {reservationReturnNotice(document.stockEffect)}
           </p>
         )}
@@ -1125,7 +1128,7 @@ function DocumentMask({
           value={reopenReason}
           onChange={(event) => setReopenReason(event.target.value)}
           maxLength={200}
-          hint="Wird im Verlauf festgehalten und bleibt dort."
+          tooltip="Wird im Verlauf festgehalten und bleibt dort."
         />
         {reopen.error !== null && (
           <div className="mt-4">
@@ -1155,13 +1158,13 @@ function DocumentMask({
         }
       >
         {booksStock(document.stockEffect) && (
-          <p className="mb-4 text-[13px] text-text-secondary">
+          <p className="mb-4 text-body text-text-secondary">
             Der Storno bucht den Bestand zurück. Er tut das über den Gegenbeleg, also genau
             einmal.
           </p>
         )}
         {reservationReturnNotice(document.stockEffect) !== '' && (
-          <p className="mb-4 text-[13px] text-text-secondary">
+          <p className="mb-4 text-body text-text-secondary">
             {reservationReturnNotice(document.stockEffect)}
           </p>
         )}
@@ -1170,7 +1173,7 @@ function DocumentMask({
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           maxLength={255}
-          hint="Wird im Verlauf festgehalten und bleibt dort."
+          tooltip="Wird im Verlauf festgehalten und bleibt dort."
         />
         {cancel.error !== null && (
           <div className="mt-4">
@@ -1195,7 +1198,7 @@ function DocumentMask({
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Der Beleg wird endgültig entfernt. Rückgängig machen lässt sich das nicht.
         </p>
         {remove.error !== null && (
@@ -1245,7 +1248,7 @@ function DocumentMask({
               value={declineNote}
               onChange={(event) => setDeclineNote(event.target.value)}
               maxLength={255}
-              hint="Bleibt an der Offerte stehen, bis die Markierung aufgehoben wird."
+              tooltip="Bleibt an der Offerte stehen, bis die Markierung aufgehoben wird."
             />
             {setOutcome.error !== null && <ErrorNotice error={setOutcome.error} />}
           </div>
@@ -1263,186 +1266,7 @@ function DocumentMask({
           onCreated={openCreatedOrder}
         />
       )}
-    </>
+    </FormMask>
   )
 }
 
-/** Header text, footer text and the reference of the customer. */
-function DocumentTexts({
-  tenantId,
-  kind,
-  document,
-  editable,
-}: {
-  tenantId: number
-  kind: SalesDocumentKind
-  document: SalesDocument
-  editable: boolean
-}) {
-  const queryClient = useQueryClient()
-  const [headerText, setHeaderText] = useState(document.headerText ?? '')
-  const [footerText, setFooterText] = useState(document.footerText ?? '')
-  const [reference, setReference] = useState(document.reference ?? '')
-
-  const save = useMutation({
-    mutationFn: () =>
-      api.put<SalesDocument>(`/api/tenants/${tenantId}/${kind.resource}/${document.id}/texts`, {
-        headerText: headerText.trim() || undefined,
-        footerText: footerText.trim() || undefined,
-        reference: reference.trim() || undefined,
-      }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: salesDocumentKey(kind, tenantId) }),
-  })
-
-  return (
-    <Panel
-      title="Texte"
-      description="Erscheinen über und unter den Positionen."
-      action={
-        editable ? (
-          <Button variant="secondary" onClick={() => save.mutate()} busy={save.isPending}>
-            Übernehmen
-          </Button>
-        ) : undefined
-      }
-    >
-      <div className="grid gap-4">
-        <TextField
-          label="Referenz des Kunden"
-          value={reference}
-          onChange={(event) => setReference(event.target.value)}
-          disabled={!editable}
-          maxLength={140}
-          hint="Bestellnummer oder Projekt, damit der Kunde den Beleg zuordnen kann."
-        />
-        <TextAreaField
-          label="Kopftext"
-          value={headerText}
-          onChange={(event) => setHeaderText(event.target.value)}
-          disabled={!editable}
-          rows={3}
-        />
-        <TextAreaField
-          label="Fusstext"
-          value={footerText}
-          onChange={(event) => setFooterText(event.target.value)}
-          disabled={!editable}
-          rows={3}
-        />
-        {save.error !== null && <ErrorNotice error={save.error} />}
-      </div>
-    </Panel>
-  )
-}
-
-/**
- * Name and address as they stand on the document.
- *
- * <p>How long they stand there depends on the status, and the section says which of the two
- * it is: a draft follows the partner record, while issuing the document freezes the copy so
- * that it still reads the way it was sent, even after the customer moves (ADR-0040).
- */
-function PartyPanel({
-  title,
-  party,
-  number,
-  status,
-  action,
-}: {
-  title: string
-  party?: DocumentParty
-  number?: string
-  /** Decides whether the address still follows the partner record. */
-  status: DocumentStatus
-  /** Control in the top right, for example "Kunde wechseln". */
-  action?: ReactNode
-}) {
-  if (!party) {
-    if (!action) return null
-    return (
-      <Panel title={title} action={action}>
-        <p className="text-[13px] text-text-secondary">
-          Für diesen Beleg ist keine Adresse festgehalten.
-        </p>
-      </Panel>
-    )
-  }
-
-  return (
-    <Panel
-      title={title}
-      description={recipientNote(status)}
-      action={action}
-    >
-      <address className="not-italic text-[13px] leading-6">
-        <span className="block font-medium">{party.name}</span>
-        {party.addressLine && <span className="block">{party.addressLine}</span>}
-        <span className="block">
-          {[party.street, party.buildingNumber].filter(Boolean).join(' ')}
-        </span>
-        <span className="block">
-          {[party.country, party.postalCode].filter(Boolean).join('-')} {party.town}
-        </span>
-        {party.uid && (
-          <span className="mt-1.5 block font-mono text-[12px] text-text-secondary">
-            {party.uid}
-          </span>
-        )}
-        {number && (
-          <span className="block font-mono text-[12px] text-text-secondary">{number}</span>
-        )}
-      </address>
-    </Panel>
-  )
-}
-
-/** Who moved the document where, and when. */
-function StatusTrail({
-  tenantId,
-  kind,
-  documentId,
-}: {
-  tenantId: number
-  kind: SalesDocumentKind
-  documentId: number
-}) {
-  const statusLabel = useCatalogueLabel(tenantId, 'document-status')
-  const trail = useQuery({
-    queryKey: salesDocumentTrailKey(kind, tenantId, documentId),
-    queryFn: () =>
-      api.get<DocumentStatusEntry[]>(
-        `/api/tenants/${tenantId}/${kind.resource}/${documentId}/status-trail`,
-      ),
-  })
-
-  return (
-    <Panel title="Verlauf">
-      {trail.isPending && <p className="text-[13px] text-text-secondary">Wird geladen ...</p>}
-      {trail.error !== null && <ErrorNotice error={trail.error} />}
-      {trail.data && (
-        <ol className="grid gap-3">
-          {/* Newest first: what happened last is what someone opening the mask wants to see.
-              The API answers in the order it happened, which is the order an audit trail is
-              stored in. */}
-          {[...trail.data].reverse().map((entry, index) => (
-            <li key={`${entry.status}-${entry.changedAt}-${index}`} className="flex gap-3">
-              <span
-                aria-hidden
-                className="mt-1.5 h-2 w-2 shrink-0 rounded-[var(--radius-full)] bg-accent"
-              />
-              <span className="min-w-0 text-[13px]">
-                <span className="block font-medium">{statusLabel(entry.status)}</span>
-                <span className="block text-text-secondary">
-                  {formatDateTime(entry.changedAt)}
-                  {entry.changedBy ? ` · ${entry.changedBy}` : ''}
-                </span>
-                {entry.note && <span className="block text-text-secondary">{entry.note}</span>}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </Panel>
-  )
-}

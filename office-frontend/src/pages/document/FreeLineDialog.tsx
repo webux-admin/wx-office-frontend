@@ -238,7 +238,7 @@ export function FreeLineDialog({
             value={revenueAccount}
             onChange={setRevenueAccount}
             emptyLabel="– Vorgabe –"
-            hint="Leer heisst: das Konto aus der Vorgabe des Mandanten."
+            tooltip="Leer heisst: das Konto aus der Vorgabe des Mandanten."
             className="sm:col-span-2"
           />
         )}
@@ -249,7 +249,7 @@ export function FreeLineDialog({
           the lines are priced, and a promise of the sort would be read as one. */}
       <CheckboxField
         label="Preis versteht sich inklusive MwSt"
-        hint="Mischt ein Beleg Netto- und Bruttopreise, stehen seine Zwischentotale netto."
+        tooltip="Mischt ein Beleg Netto- und Bruttopreise, stehen seine Zwischentotale netto."
         checked={priceIncludesVat}
         onChange={(event) => setPriceIncludesVat(event.target.checked)}
         className="mt-5"
@@ -264,7 +264,7 @@ export function FreeLineDialog({
         onChange={(event) => setNote(event.target.value)}
         maxLength={1000}
         rows={3}
-        hint="Wird unter der Bezeichnung gedruckt."
+        tooltip="Wird unter der Bezeichnung gedruckt."
         className="mt-5"
       />
 

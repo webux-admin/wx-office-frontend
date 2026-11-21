@@ -173,14 +173,14 @@ export function DocumentDunningPanel({
         {stops.error !== null && <ErrorNotice error={stops.error} />}
         {liftStop.error !== null && <ErrorNotice error={liftStop.error} />}
         {standing.length === 0 ? (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Kein Mahnstopp. Diese Rechnung wird gemahnt, sobald sie an der Reihe ist.
           </p>
         ) : (
           <div className="grid gap-2">
             {standing.map((block) => (
               <div key={block.id} className="flex items-start justify-between gap-4">
-                <div className="text-[13px]">
+                <div className="text-body">
                   <Badge tone="danger">{blockLabel(block)}</Badge>{' '}
                   <span className="text-text-secondary">
                     {block.partnerId !== undefined
@@ -188,7 +188,7 @@ export function DocumentDunningPanel({
                       : 'gilt für diese Rechnung'}
                   </span>
                   {block.note !== undefined && (
-                    <div className="text-[12px] text-text-tertiary">{block.note}</div>
+                    <div className="text-small text-text-tertiary">{block.note}</div>
                   )}
                 </div>
                 {mayBlock && (
@@ -235,10 +235,10 @@ export function DocumentDunningPanel({
           </div>
         )}
         {failure !== undefined && (
-          <p className="px-4 py-3 text-[13px] text-text-secondary">{failure.message}</p>
+          <p className="px-4 py-3 text-body text-text-secondary">{failure.message}</p>
         )}
         {failure === undefined && refused !== undefined && (
-          <p className="px-4 py-3 text-[13px] text-text-secondary">
+          <p className="px-4 py-3 text-body text-text-secondary">
             Nicht gemahnt: {refused.note ?? 'die Regel lässt es heute nicht zu.'}
           </p>
         )}
@@ -249,7 +249,7 @@ export function DocumentDunningPanel({
         )}
 
         {notices.isPending && (
-          <p className="px-4 py-3 text-[13px] text-text-secondary">Wird geladen ...</p>
+          <p className="px-4 py-3 text-body text-text-secondary">Wird geladen ...</p>
         )}
         {notices.isSuccess && rows.length === 0 && (
           <EmptyState
@@ -263,9 +263,9 @@ export function DocumentDunningPanel({
         )}
         {rows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-body">
               <thead>
-                <tr className="text-left text-[12px] text-text-tertiary">
+                <tr className="text-left text-small text-text-tertiary">
                   <th className="py-2 pl-4 font-medium">Nummer</th>
                   <th className="py-2 pr-4 font-medium">Stufe</th>
                   <th className="py-2 pr-4 font-medium">Ausgestellt</th>
@@ -279,7 +279,7 @@ export function DocumentDunningPanel({
               <tbody className="divide-y divide-line-subtle">
                 {rows.map((notice) => (
                   <tr key={notice.id} className={isWithdrawn(notice) ? 'opacity-60' : undefined}>
-                    <td className="py-2 pl-4 font-mono text-[12px]">
+                    <td className="py-2 pl-4 font-mono text-small">
                       <span className={isWithdrawn(notice) ? 'line-through' : undefined}>
                         {notice.noticeNumber}
                       </span>
@@ -298,7 +298,7 @@ export function DocumentDunningPanel({
                     <td className="py-2 pr-4 text-text-secondary">
                       {noticeDispatchLabel(notice.channel, messagesOf(notice))}
                       {notice.channel === 'MAIL' && (
-                        <div className="text-[12px] text-text-tertiary">
+                        <div className="text-small text-text-tertiary">
                           <Link className="hover:underline" to={OUTBOX_PATH}>
                             Im Postausgang ansehen
                           </Link>
@@ -310,14 +310,14 @@ export function DocumentDunningPanel({
                         ? 'Einzelmahnung'
                         : `Sammelmahnung über ${notice.lines.length} Rechnungen`}
                       {isWithdrawn(notice) && (
-                        <div className="text-[12px] text-text-tertiary">
+                        <div className="text-small text-text-tertiary">
                           Zurückgezogen am {formatDateTime(notice.withdrawnAt)}
                           {notice.withdrawnReason !== undefined
                             && ` — ${notice.withdrawnReason}`}
                         </div>
                       )}
                       {notice.lines.length > 1 && (
-                        <div className="text-[12px] text-text-tertiary">
+                        <div className="text-small text-text-tertiary">
                           {notice.lines
                             .map((line) => line.documentNumber ?? `Beleg ${line.documentId}`)
                             .join(' · ')}
@@ -373,7 +373,7 @@ export function DocumentDunningPanel({
           }
         >
           <div className="grid gap-3">
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Der Brief bleibt bestehen, samt PDF — er liegt beim Kunden. Zurückgenommen wird
               die Wirkung: die Rechnung steht danach wieder eine Mahnstufe tiefer.
             </p>
@@ -420,7 +420,7 @@ export function DocumentDunningPanel({
           }
         >
           <div className="grid gap-3">
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Der Stopp bleibt auf der Liste stehen, durchgestrichen. Ab dem nächsten
               Mahnvorschlag wird wieder gemahnt.
             </p>

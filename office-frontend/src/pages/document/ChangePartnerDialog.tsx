@@ -196,7 +196,7 @@ export function ChangePartnerDialog({
               type="date"
               value={exchangeRateDate}
               onChange={(event) => setExchangeRateDate(event.target.value)}
-              hint="Leer lassen, dann gilt das Belegdatum."
+              tooltip="Leer lassen, dann gilt das Belegdatum."
             />
           </div>
         )}
@@ -218,7 +218,7 @@ export function ChangePartnerDialog({
         {/* Always in the document, never only when it has something to say: a live region
             that appears together with its text is inserted rather than changed, and most
             screen readers stay silent about that. */}
-        <p aria-live="polite" className="flex items-start gap-2 text-[12px] text-text-secondary">
+        <p aria-live="polite" className="flex items-start gap-2 text-small text-text-secondary">
           {warning !== undefined && (
             <>
               <AlertTriangle size={14} className="mt-px shrink-0 text-text-tertiary" aria-hidden />

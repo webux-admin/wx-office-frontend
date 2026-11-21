@@ -211,7 +211,7 @@ export function NewDocumentMask({
           </div>
         )}
 
-        <div className="grid max-w-[860px] gap-6">
+        <div className="grid max-w-[53.75rem] gap-6">
           <Panel title="Beleg">
             <div className="grid gap-4 sm:grid-cols-2">
               {/* First, and across the whole width: the customer decides everything below,
@@ -287,14 +287,14 @@ export function NewDocumentMask({
             description="Vom Backend ermittelt und hier änderbar. Was hier steht, steht nachher auf dem Beleg — ein anderer Kunde oder eine andere Belegart setzt es neu."
           >
             {!chosen && (
-              <p className="text-[13px] text-text-secondary">
+              <p className="text-body text-text-secondary">
                 Wählen Sie zuerst den Kunden. Danach steht hier, womit der Entwurf
                 beginnt.
               </p>
             )}
 
             {chosen && defaults.isPending && (
-              <p className="text-[13px] text-text-secondary">Vorgaben werden geladen ...</p>
+              <p className="text-body text-text-secondary">Vorgaben werden geladen ...</p>
             )}
 
             {chosen && defaults.error !== null && <ErrorNotice error={defaults.error} />}
@@ -309,7 +309,7 @@ export function NewDocumentMask({
                     value={language}
                     storedLabel={defaults.data.languageLabel}
                     onChange={(code) => set('language', code)}
-                    hint="Beschriftungen und Texte des Belegs erscheinen in dieser Sprache."
+                    tooltip="Beschriftungen und Texte des Belegs erscheinen in dieser Sprache."
                   />
 
                   <PaymentTermSelect
@@ -319,7 +319,7 @@ export function NewDocumentMask({
                     storedLabel={defaults.data.paymentTermName}
                     onChange={(code) => set('paymentTerm', code)}
                     emptyLabel="Ohne Kondition"
-                    hint="Bestimmt Fälligkeit und Skonto auf dem Beleg."
+                    tooltip="Bestimmt Fälligkeit und Skonto auf dem Beleg."
                   />
 
                   <MasterDataSelect
@@ -337,13 +337,13 @@ export function NewDocumentMask({
                     onChange={(event) => setExchangeRate(event.target.value)}
                     inputMode="decimal"
                     numeric
-                    hint="Nur bei Fremdwährung nötig."
+                    tooltip="Nur bei Fremdwährung nötig."
                   />
                 </div>
 
                 {recipient && (
                   <div className="mt-5 border-t border-line-subtle pt-4">
-                    <h3 className="text-[12px] font-medium text-text-secondary">
+                    <h3 className="text-small font-medium text-text-secondary">
                       Empfänger
                       {defaults.data.addressUsage && (
                         <span className="text-text-tertiary">
@@ -363,7 +363,7 @@ export function NewDocumentMask({
                         />
                       </div>
                     ) : (
-                    <address className="mt-1.5 not-italic text-[13px] leading-6">
+                    <address className="mt-1.5 not-italic text-body leading-6">
                       <span className="block font-medium">{recipient.name}</span>
                       {recipient.addressLine && (
                         <span className="block">{recipient.addressLine}</span>
