@@ -118,7 +118,7 @@ function Roles({ tenantId }: { tenantId: number }) {
     {
       key: 'name',
       header: 'Rolle',
-      width: 'w-[200px]',
+      width: 'w-[12.5rem]',
       render: (role) =>
         mayManage ? (
           <button
@@ -141,20 +141,20 @@ function Roles({ tenantId }: { tenantId: number }) {
       key: 'count',
       header: 'Rechte',
       align: 'right',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       render: (role) => formatCount(role.permissions.length),
     },
     {
       key: 'state',
       header: '',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (role) =>
         role.deletable ? (
           mayManage ? (
             <button
               type="button"
               onClick={() => remove.mutate(role.id)}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+              className="text-small text-text-tertiary transition-colors hover:text-danger"
             >
               Löschen
             </button>
@@ -249,7 +249,7 @@ function Roles({ tenantId }: { tenantId: number }) {
           />
 
           <fieldset>
-            <legend className="text-[12px] font-medium text-text-secondary">
+            <legend className="text-small font-medium text-text-secondary">
               Rechte ({permissions.length})
             </legend>
             <div className="mt-2 grid gap-4 sm:grid-cols-2">

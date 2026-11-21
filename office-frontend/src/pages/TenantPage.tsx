@@ -574,7 +574,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 onChange={(code) => set('defaultPaymentTerm', code)}
                 storedLabel={tenant?.defaultPaymentTermLabel}
                 disabled={!mayWrite || creating}
-                hint={creating ? AFTER_CREATION : 'Vorgabe für neue Belege.'}
+                tooltip={creating ? AFTER_CREATION : 'Vorgabe für neue Belege.'}
               />
               {/* The revenue account is gone from here. It is a number out of the chart of
                   accounts now, not a value of a maintained list, and it is set under

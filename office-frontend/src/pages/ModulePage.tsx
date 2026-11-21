@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { Dialog } from '../components/Dialog'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { MissingAccountingRightsNotice } from '../components/MissingAccountingRightsNotice'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
@@ -151,6 +152,12 @@ function Modules({ tenantId }: { tenantId: number }) {
 
   const submit = () => save.mutate()
   useSubmitShortcut(mayWrite && !save.isPending && changes > 0 ? submit : undefined)
+  // A screen without a place to go back to: Escape asks while a switch or a threshold is
+  // changed, and «Verwerfen» puts both back to what is stored.
+  const { question } = useLeaveGuard(changes > 0, () => {
+    setEdits({})
+    setThresholds(null)
+  })
 
   /** Records one switch, and drops the entry again where it matches what is stored. */
   const toggle = (module: TenantModule, active: boolean) => {
@@ -176,7 +183,7 @@ function Modules({ tenantId }: { tenantId: number }) {
       <PageHeader title="Module" subtitle="Welche Teile der Anwendung dieser Mandant betreibt">
         {mayWrite && (
           <div className="flex items-center gap-3">
-            <span aria-live="polite" className="text-[12px] text-text-secondary">
+            <span aria-live="polite" className="text-small text-text-secondary">
               {changes === 0
                 ? 'Keine Änderungen'
                 : `${changes} Änderung${changes === 1 ? '' : 'en'}`}
@@ -204,7 +211,7 @@ function Modules({ tenantId }: { tenantId: number }) {
               disabled={!mayWrite || save.isPending}
             />
             {module.usage !== undefined && (
-              <p className="mt-2 flex flex-wrap items-baseline gap-2 text-[12px] text-text-secondary">
+              <p className="mt-2 flex flex-wrap items-baseline gap-2 text-small text-text-secondary">
                 <span>Im Modul liegen bereits: {module.usage}.</span>
                 {/* Only where the module has an archive to point at, and only for a session that
                     may read it — a link to a mask that turns the reader away with a refusal is no
@@ -243,7 +250,7 @@ function Modules({ tenantId }: { tenantId: number }) {
                     disabled={!mayWrite}
                     inputMode="decimal"
                     numeric
-                    hint="In Prozent der Sollmenge: bei 5 % fragt die Inventur ab 5 Stück Abweichung auf 100 Soll nach einem Grund. 0 % heisst: bei jeder Abweichung."
+                    tooltip="In Prozent der Sollmenge: bei 5 % fragt die Inventur ab 5 Stück Abweichung auf 100 Soll nach einem Grund. 0 % heisst: bei jeder Abweichung."
                   />
                   <TextField
                     label="Untergrenze der Begründungspflicht"
@@ -254,7 +261,7 @@ function Modules({ tenantId }: { tenantId: number }) {
                     disabled={!mayWrite}
                     inputMode="decimal"
                     numeric
-                    hint="Eine Menge, kein Prozentsatz: kleinere Abweichungen bleiben ohne Grund, auch bei 0 %. Bei 1 wird ein fehlendes halbes Kilo nie erklärt."
+                    tooltip="Eine Menge, kein Prozentsatz: kleinere Abweichungen bleiben ohne Grund, auch bei 0 %. Bei 1 wird ein fehlendes halbes Kilo nie erklärt."
                   />
                 </div>
               </>
@@ -286,10 +293,12 @@ function Modules({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {pending === null ? '' : consequenceOf(pending.code)}
         </p>
       </Dialog>
+
+      {question}
     </>
   )
 }

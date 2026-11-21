@@ -117,7 +117,7 @@ export function UserAccessPanel({
             label="Mandant"
             value={tenantId ?? ''}
             onChange={(event) => setTenantId(Number(event.target.value))}
-            className="min-w-[240px] flex-1"
+            className="min-w-[15rem] flex-1"
           >
             {tenants.map((tenant) => (
               <option key={tenant.id} value={tenant.id}>
@@ -140,7 +140,7 @@ export function UserAccessPanel({
         </div>
 
         {user.superuser && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Dieses Konto ist Superuser und kommt in jeden Mandanten, unabhängig von dem, was
             hier steht.
           </p>
@@ -149,14 +149,14 @@ export function UserAccessPanel({
         {error !== null && error !== undefined && <ErrorNotice error={error} />}
 
         {tenantId !== null && !hasAccess && !user.superuser ? (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Dieser Benutzer hat in diesem Mandanten keinen Zugriff. Rollen lassen sich erst
             vergeben, wenn der Zugriff erteilt ist.
           </p>
         ) : (
           <>
             <fieldset>
-              <legend className="text-[12px] font-medium text-text-secondary">Rollen</legend>
+              <legend className="text-small font-medium text-text-secondary">Rollen</legend>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {(roles.data ?? []).map((role) => (
                   <CheckboxField
@@ -169,7 +169,7 @@ export function UserAccessPanel({
                   />
                 ))}
                 {roles.data?.length === 0 && (
-                  <p className="text-[13px] text-text-secondary">
+                  <p className="text-body text-text-secondary">
                     Dieser Mandant hat noch keine Rollen.
                   </p>
                 )}
@@ -178,10 +178,10 @@ export function UserAccessPanel({
 
             {mayWrite && catalogue.data && (
               <fieldset>
-                <legend className="text-[12px] font-medium text-text-secondary">
+                <legend className="text-small font-medium text-text-secondary">
                   Zusatzrechte
                 </legend>
-                <p className="mt-1 text-[12px] text-text-tertiary">
+                <p className="mt-1 text-small text-text-tertiary">
                   Kommen zu dem dazu, was die Rollen bereits erlauben.
                 </p>
                 <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -208,7 +208,7 @@ export function UserAccessPanel({
             )}
 
             <div>
-              <p className="text-[12px] font-medium text-text-secondary">
+              <p className="text-small font-medium text-text-secondary">
                 Wirksame Rechte ({effective.length})
               </p>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -218,7 +218,7 @@ export function UserAccessPanel({
                   </Badge>
                 ))}
                 {effective.length === 0 && (
-                  <span className="text-[13px] text-text-secondary">Keine.</span>
+                  <span className="text-body text-text-secondary">Keine.</span>
                 )}
               </div>
             </div>

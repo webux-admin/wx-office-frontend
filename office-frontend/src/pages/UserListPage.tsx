@@ -46,12 +46,12 @@ function UserList() {
     {
       key: 'username',
       header: 'Benutzername',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (user) => (
         <Link
           to={`/benutzer/${user.id}`}
           state={ORIGIN}
-          className="font-mono text-[12px] font-medium transition-colors hover:text-accent-text"
+          className="font-mono text-small font-medium transition-colors hover:text-accent-text"
         >
           {user.username}
         </Link>
@@ -66,7 +66,7 @@ function UserList() {
     {
       key: 'lastLogin',
       header: 'Zuletzt angemeldet',
-      width: 'w-[180px]',
+      width: 'w-[11.25rem]',
       // Deliberately not called "online": the backend keeps no register of open sessions, so
       // nobody here knows who is signed in right now. What is known is when somebody last
       // signed in, and that is what this says. The exact moment sits in the tooltip.
@@ -82,7 +82,7 @@ function UserList() {
     {
       key: 'twoFactor',
       header: '2FA',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       // One field on the answer, not one request per row: the list is unpaged, and a hundred
       // accounts would have meant a hundred requests for one badge each (ADR-0022).
       render: (user) =>
@@ -97,7 +97,7 @@ function UserList() {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[210px]',
+      width: 'w-[13.125rem]',
       render: (user) => (
         <span className="flex flex-wrap gap-1">
           {user.superuser && <Badge tone="accent">Superuser</Badge>}

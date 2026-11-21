@@ -51,12 +51,12 @@ export function TwoFactorAdminPanel({ user }: { user: User }) {
     <Panel
       title="Zwei-Faktor"
       description="Der zweite Nachweis beim Anmelden. Der Benutzer richtet ihn selbst ein."
-      className="max-w-[720px]"
+      className="max-w-[45rem]"
     >
       {state.error !== null ? (
         <ErrorNotice error={state.error} />
       ) : (
-        <p className="flex flex-wrap items-center gap-2 text-[13px]">
+        <p className="flex flex-wrap items-center gap-2 text-body">
           {enrolled ? (
             <>
               <Badge tone="success">Eingerichtet</Badge>
@@ -98,7 +98,7 @@ export function TwoFactorAdminPanel({ user }: { user: User }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Der Benutzer meldet sich danach <strong>nur noch mit seinem Passwort</strong> an, bis
           er den zweiten Faktor neu einrichtet. Die Wiederherstellungscodes werden ebenfalls
           ungültig.

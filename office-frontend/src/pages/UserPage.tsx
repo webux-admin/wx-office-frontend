@@ -3,10 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
+import { FormMask } from '../components/FormMask'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
@@ -91,16 +90,15 @@ function NewUserMask() {
     password.length < MIN_PASSWORD
 
   // Ctrl+S and Ctrl+Enter do what the primary button does, so the account can be entered
-  // and created without reaching for the mouse.
-  useSubmitShortcut(incomplete || create.isPending ? undefined : () => create.mutate())
+  // and created without reaching for the mouse. The mask also asks before leaving with input.
+  const typed = username !== '' || email !== '' || displayName !== '' || password !== ''
 
   return (
-    <>
-      <PageHeader
-        title="Neuer Benutzer"
-        back={{ to: origin.from, label: origin.label }}
-        subtitle="Das Konto entsteht ohne Zugriff auf einen Mandanten. Der wird danach erteilt."
-      >
+    <FormMask
+      title="Neuer Benutzer"
+      back={{ to: origin.from, label: origin.label }}
+      subtitle="Das Konto entsteht ohne Zugriff auf einen Mandanten. Der wird danach erteilt."
+      actions={
         <Button
           onClick={() => create.mutate()}
           busy={create.isPending}
@@ -109,16 +107,18 @@ function NewUserMask() {
         >
           Anlegen
         </Button>
-      </PageHeader>
-
-      <div className="px-8 pb-12">
+      }
+      dirty={typed}
+      onSubmit={incomplete || create.isPending ? undefined : () => create.mutate()}
+    >
+      <>
         {create.error !== null && (
           <div className="mb-6">
             <ErrorNotice error={create.error} />
           </div>
         )}
 
-        <Panel title="Konto" className="max-w-[720px]">
+        <Panel title="Konto" className="max-w-[45rem]">
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField
               label="Benutzername"
@@ -152,8 +152,8 @@ function NewUserMask() {
             />
           </div>
         </Panel>
-      </div>
-    </>
+      </>
+    </FormMask>
   )
 }
 
@@ -211,18 +211,18 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
 
   const self = signedIn?.userId === user.id
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be filled in and
-  // finished without reaching for the mouse.
-  useSubmitShortcut(mayWrite && !save.isPending ? () => save.mutate() : undefined)
+  // Escape and the back link ask while the name or the address differs from what is stored.
+  const changed = email !== user.email || displayName !== user.displayName
 
   return (
-    <>
-      <PageHeader
-        title={user.displayName}
-        back={{ to: origin.from, label: origin.label }}
-        subtitle={
+    <FormMask
+      title={user.displayName}
+      back={{ to: origin.from, label: origin.label }}
+      dirty={changed}
+      onSubmit={mayWrite && !save.isPending ? () => save.mutate() : undefined}
+      subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[12px]">{user.username}</span>
+            <span className="font-mono text-small">{user.username}</span>
             {user.superuser && <Badge tone="accent">Superuser</Badge>}
             {user.locked && <Badge tone="danger">Gesperrt</Badge>}
             {!user.active && <Badge tone="muted">Deaktiviert</Badge>}
@@ -231,8 +231,9 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
             </span>
           </span>
         }
-      >
-        {mayWrite && !self && (
+      actions={
+        <>
+          {mayWrite && !self && (
           <Button
             variant="secondary"
             onClick={() => setActive.mutate(!user.active)}
@@ -241,14 +242,15 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
             {user.active ? 'Deaktivieren' : 'Aktivieren'}
           </Button>
         )}
-        {mayWrite && (
-          <Button onClick={() => save.mutate()} busy={save.isPending} shortcut>
-            Speichern
-          </Button>
-        )}
-      </PageHeader>
-
-      <div className="grid gap-6 px-8 pb-12">
+          {mayWrite && (
+            <Button onClick={() => save.mutate()} busy={save.isPending} shortcut>
+              Speichern
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="grid gap-6">
         {(save.error || setActive.error) && (
           <ErrorNotice error={save.error ?? setActive.error} />
         )}
@@ -279,7 +281,7 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
             title="Passwort zurücksetzen"
             description="Administrativer Eingriff ohne Kenntnis des alten Passworts."
           >
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Das ist nicht der Weg, auf dem jemand sein eigenes Passwort ändert. Dafür gibt es
               das eigene Konto, und dort wird nach dem bisherigen Passwort gefragt. Hier wird es
               überschrieben, etwa weil sich jemand ausgesperrt hat.
@@ -334,6 +336,6 @@ function UserMask({ user, tenants }: { user: User; tenants: TenantAccess[] }) {
           </div>
         )}
       </Dialog>
-    </>
+    </FormMask>
   )
 }
