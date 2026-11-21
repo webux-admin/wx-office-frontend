@@ -27,6 +27,10 @@ const CONTRACT: Contract = {
   currency: 'CHF',
   positions: [],
   totals: [],
+  slaValues: [
+    { metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT', description: 'pro Monat' },
+    { metric: 'RESPONSE_TIME', targetValue: 4, unit: 'HOURS', description: 'Priorität 1' },
+  ],
 }
 
 function session(permissions: string[], modules = ['CONTRACT']): AuthState {
@@ -111,6 +115,14 @@ describe('ContractListPage', () => {
     expect(text()).toContain('Vertrag')
     expect(text()).toContain('Aktiv')
     expect(text()).toContain('V2')
+  })
+
+  it('contractListPageShowsTheServiceLevelsAsTextTest', async () => {
+    rows = [CONTRACT, { ...CONTRACT, id: 6, contractNumber: 'V-00006', slaValues: [] }]
+    await render(['CONTRACT_READ'])
+
+    expect(text()).toContain('Service-Level')
+    expect(text()).toContain('Verfügbarkeit 99.5 % · Reaktionszeit 4 Stunden')
   })
 
   it('contractListPageInvitesTheFirstContractTest', async () => {

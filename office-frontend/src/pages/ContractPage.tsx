@@ -45,6 +45,7 @@ import { formatDate, formatDateTime } from '../lib/format'
 import { originOf } from '../lib/origin'
 import type { Contract, ContractCustomer } from '../lib/types'
 import { ContractPositions } from './contract/ContractPositions'
+import { ContractSlaValues } from './contract/ContractSlaValues'
 import { ContractVersions } from './contract/ContractVersions'
 import { EndContractDialog } from './contract/EndContractDialog'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
@@ -60,6 +61,11 @@ const SHOWN_FIELDS = [
   'noticePeriodUnit',
   'note',
   'positions',
+  'slaValues',
+  'slaValues.metric',
+  'slaValues.targetValue',
+  'slaValues.unit',
+  'slaValues.description',
   'validFrom',
 ] as const
 
@@ -418,6 +424,15 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
           />
         </div>
 
+        <div className="mt-6">
+          <ContractSlaValues
+            values={form.slaValues}
+            onChange={(slaValues) => set('slaValues', slaValues)}
+            editable={editable}
+            error={slaError()}
+          />
+        </div>
+
         {contract && (
           <p className="mt-6 text-small text-text-tertiary">
             Angelegt {formatDateTime(contract.createdAt)}
@@ -429,6 +444,15 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
 
       </>
     )
+  }
+
+  /**
+   * The first message about the service level values: one about the list, or one the backend
+   * named at a single value, such as `slaValues[1].targetValue`. Its sentence names the value.
+   */
+  function slaError(): string | undefined {
+    const entry = Object.entries(fields.errors).find(([field]) => field.startsWith('slaValues'))
+    return entry?.[1]
   }
 }
 

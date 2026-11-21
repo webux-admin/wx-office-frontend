@@ -39,7 +39,11 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Schritte «Aktivieren» (mit Rückfrage) und «Beenden» (Dialog mit letztem Tag und Grund aus dem
   Katalog), gesperrt solange etwas ungespeichert ist; ein aktiver Vertrag fragt bei einer
   Änderung am Vereinbarten nach «Änderung gilt ab», ein beendeter lässt nur die Notiz ändern;
-  das Register «Versionen» zeigt Verlauf und Versionen nur lesend (ADR-0073, Backend ADR-0145)
+  das Register «Versionen» zeigt Verlauf und Versionen nur lesend (ADR-0073, Backend ADR-0145). SLA-Werte
+  im eigenen Panel «Service-Level» mit Dialog: Kennzahl aus dem festen Katalog, nur die Einheiten,
+  die sie erlaubt, Zielwert im Bereich der Einheit und ein Text; überall nur als Satz, keine Ampel,
+  in der Liste die ersten zwei als Text; eine Änderung am aktiven Vertrag fragt nach «Änderung gilt
+  ab» (ADR-0074, Backend ADR-0146)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

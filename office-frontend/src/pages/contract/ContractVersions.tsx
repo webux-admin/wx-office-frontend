@@ -14,10 +14,12 @@ import {
   contractsKey,
   noticePeriodText,
   toPositionForm,
+  toSlaValueForm,
 } from '../../lib/contract'
 import { formatDate, formatDateTime } from '../../lib/format'
 import type { Contract, ContractStatusChange, ContractVersion } from '../../lib/types'
 import { ContractPositions } from './ContractPositions'
+import { ContractSlaValues } from './ContractSlaValues'
 
 /** What a step is called in the trail. */
 const STEP_LABELS: Record<string, string> = {
@@ -137,6 +139,11 @@ export function ContractVersions({ tenantId, contract }: { tenantId: number; con
               partnerId={String(shown.partnerId)}
               dateOfSupply={shown.validFrom}
               mayReadProducts={false}
+            />
+            <ContractSlaValues
+              values={shown.slaValues.map(toSlaValueForm)}
+              onChange={() => {}}
+              editable={false}
             />
           </section>
         </>

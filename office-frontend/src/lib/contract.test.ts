@@ -3,6 +3,11 @@ import {
   BILLING_INTERVAL_LABELS,
   CONTRACT_END_REASON_LABELS,
   CONTRACT_MAX_POSITIONS,
+  CONTRACT_MAX_SLA_VALUES,
+  SLA_METRIC_LABELS,
+  SLA_METRIC_UNITS,
+  SLA_UNIT_LABELS,
+  SLA_UNIT_RANGES,
   CONTRACT_RIGHTS,
   CONTRACT_STATUS_LABELS,
   CONTRACT_STATUS_TONES,
@@ -19,22 +24,32 @@ import {
   emptyContractForm,
   emptyEndingForm,
   emptyPositionForm,
+  emptySlaValueForm,
   endingComplaints,
   isAgreementEditable,
   isBillingInterval,
   isContractEndReason,
   isNoticePeriodUnit,
+  isSlaMetric,
+  isSlaUnit,
   movePosition,
   noticePeriodText,
   positionComplaints,
   resolvedPriceUrl,
+  slaValueComplaints,
+  slaValueText,
+  slaValuesLine,
   toContractForm,
   toContractRequest,
   toPositionForm,
+  toSlaValueForm,
   validFromComplaint,
   withPosition,
+  withSlaMetric,
+  withSlaValue,
   type ContractForm,
   type PositionForm,
+  type SlaValueForm,
 } from './contract'
 import type { Contract } from './types'
 
@@ -50,6 +65,10 @@ function position(overrides: Partial<PositionForm> = {}): PositionForm {
   }
 }
 
+function sla(overrides: Partial<SlaValueForm> = {}): SlaValueForm {
+  return { ...emptySlaValueForm(), targetValue: '99.5', description: 'pro Monat', ...overrides }
+}
+
 function filled(overrides: Partial<ContractForm> = {}): ContractForm {
   return {
     title: 'Hosting und Support',
@@ -60,6 +79,7 @@ function filled(overrides: Partial<ContractForm> = {}): ContractForm {
     noticePeriodUnit: 'MONTHS',
     note: '',
     positions: [position()],
+    slaValues: [],
     validFrom: '',
     ...overrides,
   }
@@ -95,6 +115,7 @@ const STORED: Contract = {
     },
   ],
   totals: [{ interval: 'MONTHLY', amount: 1000 }],
+  slaValues: [{ metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT', description: null }],
 }
 
 describe('contract', () => {
@@ -166,6 +187,9 @@ describe('contract', () => {
       interval: 'MONTHLY',
       amount: 1000,
     })
+    expect(form.slaValues).toEqual([
+      { metric: 'AVAILABILITY', targetValue: '99.5', unit: 'PERCENT', description: '' },
+    ])
   })
 
   it('toContractFormWithoutNoticePeriodTest', () => {
@@ -220,9 +244,26 @@ describe('contract', () => {
           interval: 'MONTHLY',
         },
       ],
+      slaValues: [],
       lockVersion: null,
       validFrom: null,
     })
+  })
+
+  it('toContractRequestWithSlaValuesTest', () => {
+    const request = toContractRequest(
+      filled({
+        slaValues: [
+          sla({ targetValue: '99,5', description: '  pro Monat  ' }),
+          sla({ metric: 'RESPONSE_TIME', targetValue: '4', unit: 'HOURS', description: ' ' }),
+        ],
+      }),
+    )
+
+    expect(request.slaValues).toEqual([
+      { metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT', description: 'pro Monat' },
+      { metric: 'RESPONSE_TIME', targetValue: 4, unit: 'HOURS', description: null },
+    ])
   })
 
   it('toContractRequestWithLockAndDayTest', () => {
@@ -292,6 +333,15 @@ describe('contract', () => {
 
     expect(contractComplaints(filled({ positions: many })).positions).toBeDefined()
     expect(contractComplaints(filled({ positions: many.slice(1) })).positions).toBeUndefined()
+  })
+
+  it('contractComplaintsWithTooManySlaValuesTest', () => {
+    const fifty = Array.from({ length: CONTRACT_MAX_SLA_VALUES }, () => sla())
+
+    expect(contractComplaints(filled({ slaValues: fifty }))).toEqual({})
+    expect(contractComplaints(filled({ slaValues: [...fifty, sla()] })).slaValues).toContain(
+      'höchstens 50',
+    )
   })
 
   it('positionComplaintsTest', () => {
@@ -417,6 +467,30 @@ describe('contract', () => {
     expect(agreementChanged(stored, { ...stored, endDate: '2029-12-31' })).toBe(true)
   })
 
+  it('agreementChangedWithSlaValuesTest', () => {
+    const stored = filled({ slaValues: [sla()] })
+
+    expect(agreementChanged(stored, { ...stored, slaValues: [sla({ targetValue: '99.9' })] })).toBe(
+      true,
+    )
+    expect(agreementChanged(stored, { ...stored, slaValues: [sla({ unit: 'HOURS' })] })).toBe(true)
+    expect(agreementChanged(stored, { ...stored, slaValues: [sla({ description: '' })] })).toBe(true)
+    expect(agreementChanged(stored, { ...stored, slaValues: [] })).toBe(true)
+    expect(agreementChanged(stored, { ...stored, slaValues: [sla(), sla()] })).toBe(true)
+  })
+
+  it('agreementChangedWithTheSameSlaValuesTest', () => {
+    const stored = filled({ slaValues: [sla()] })
+
+    // Compared by value, the way the backend compares: 99.5 and 99,50 agree.
+    expect(agreementChanged(stored, { ...stored, slaValues: [sla({ targetValue: '99,50' })] })).toBe(
+      false,
+    )
+    expect(
+      agreementChanged(stored, { ...stored, slaValues: [sla({ description: ' pro Monat ' })] }),
+    ).toBe(false)
+  })
+
   it('agreementChangedWithNoteOrDayOnlyTest', () => {
     const stored = filled({ positions: [position({ positionKey: 'a1', amount: 1000 })] })
 
@@ -474,6 +548,164 @@ describe('contract', () => {
     )
     expect(endingComplaints(STORED, { endedOn: '2029-06-30', reason: 'TERM_EXPIRED' }).endedOn).toContain(
       'unbefristeter Vertrag',
+    )
+  })
+
+  // --- service level values ------------------------------------------------------
+
+  it('isSlaMetricAndUnitTest', () => {
+    expect(Object.keys(SLA_METRIC_LABELS).every(isSlaMetric)).toBe(true)
+    expect(Object.keys(SLA_UNIT_LABELS).every(isSlaUnit)).toBe(true)
+    expect(isSlaMetric('CUSTOMER_SATISFACTION')).toBe(false)
+    expect(isSlaUnit('SECONDS')).toBe(false)
+    expect(isSlaMetric('')).toBe(false)
+  })
+
+  it('slaCatalogueTest', () => {
+    // Every unit a metric names has a label and a range; every metric has at least one unit.
+    for (const units of Object.values(SLA_METRIC_UNITS)) {
+      expect(units.length).toBeGreaterThan(0)
+      for (const unit of units) expect(SLA_UNIT_RANGES[unit].max).toBeGreaterThan(0)
+    }
+    expect(SLA_METRIC_UNITS.AVAILABILITY).toEqual(['PERCENT'])
+    expect(SLA_UNIT_RANGES.PERCENT).toEqual({ min: 0, max: 100 })
+  })
+
+  it('slaValueTextTest', () => {
+    expect(
+      slaValueText({ metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT', description: null }),
+    ).toBe('Verfügbarkeit 99.5 %')
+    expect(
+      slaValueText({
+        metric: 'RESPONSE_TIME',
+        targetValue: 4,
+        unit: 'HOURS',
+        description: 'Priorität 1',
+      }),
+    ).toBe('Reaktionszeit 4 Stunden (Priorität 1)')
+  })
+
+  it('slaValueTextAtTheEdgesTest', () => {
+    expect(slaValueText({ metric: 'RESOLUTION_TIME', targetValue: 1, unit: 'BUSINESS_DAYS' })).toBe(
+      'Lösungszeit 1 Arbeitstag',
+    )
+    expect(
+      slaValueText({ metric: 'RECOVERY_POINT_OBJECTIVE', targetValue: 0, unit: 'MINUTES' }),
+    ).toBe('Maximaler Datenverlust (RPO) 0 Minuten')
+    expect(slaValueText({ metric: 'AVAILABILITY', targetValue: 99.999, unit: 'PERCENT' })).toBe(
+      'Verfügbarkeit 99.999 %',
+    )
+  })
+
+  it('slaValuesLineTest', () => {
+    const availability = { metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT' } as const
+    const response = {
+      metric: 'RESPONSE_TIME',
+      targetValue: 4,
+      unit: 'HOURS',
+      description: 'Priorität 1',
+    } as const
+
+    expect(slaValuesLine([availability, response])).toBe(
+      'Verfügbarkeit 99.5 % · Reaktionszeit 4 Stunden',
+    )
+    expect(slaValuesLine([availability, response, response])).toBe(
+      'Verfügbarkeit 99.5 % · Reaktionszeit 4 Stunden · 1 weitere',
+    )
+  })
+
+  it('slaValuesLineOfNoneTest', () => {
+    expect(slaValuesLine([])).toBe('')
+  })
+
+  it('emptySlaValueFormTest', () => {
+    expect(emptySlaValueForm()).toEqual({
+      metric: 'AVAILABILITY',
+      targetValue: '',
+      unit: 'PERCENT',
+      description: '',
+    })
+  })
+
+  it('toSlaValueFormTest', () => {
+    expect(
+      toSlaValueForm({ metric: 'SERVICE_HOURS', targetValue: 45, unit: 'HOURS_PER_WEEK', description: 'Mo–Fr' }),
+    ).toEqual({ metric: 'SERVICE_HOURS', targetValue: '45', unit: 'HOURS_PER_WEEK', description: 'Mo–Fr' })
+    expect(toSlaValueForm({ metric: 'AVAILABILITY', targetValue: 100, unit: 'PERCENT' }).description).toBe('')
+  })
+
+  it('withSlaMetricTest', () => {
+    const response = sla({ metric: 'RESPONSE_TIME', unit: 'MINUTES', targetValue: '30' })
+
+    // A unit the new metric allows stays; one it does not is replaced by its first.
+    expect(withSlaMetric(response, 'RESOLUTION_TIME').unit).toBe('MINUTES')
+    expect(withSlaMetric(response, 'AVAILABILITY').unit).toBe('PERCENT')
+    expect(withSlaMetric(sla({ unit: '' }), 'SERVICE_HOURS').unit).toBe('HOURS_PER_WEEK')
+    expect(withSlaMetric(response, 'AVAILABILITY').targetValue).toBe('30')
+  })
+
+  it('withSlaValueTest', () => {
+    const values = [sla(), sla({ metric: 'RESPONSE_TIME', unit: 'HOURS', targetValue: '4' })]
+
+    expect(withSlaValue(values, null, sla({ targetValue: '98' }))).toHaveLength(3)
+    expect(withSlaValue(values, 1, sla({ targetValue: '98' }))[1].targetValue).toBe('98')
+    expect(withSlaValue([], null, sla())).toEqual([sla()])
+  })
+
+  it('movePositionOfSlaValuesTest', () => {
+    const values = [sla({ targetValue: '1' }), sla({ targetValue: '2' })]
+
+    expect(movePosition(values, 1, -1).map((value) => value.targetValue)).toEqual(['2', '1'])
+    expect(movePosition(values, 0, -1).map((value) => value.targetValue)).toEqual(['1', '2'])
+  })
+
+  it('slaValueComplaintsTest', () => {
+    expect(slaValueComplaints(sla())).toEqual({})
+    expect(slaValueComplaints(sla({ metric: 'RESPONSE_TIME', unit: 'HOURS', targetValue: '4' }))).toEqual({})
+  })
+
+  it('slaValueComplaintsAtTheBoundsTest', () => {
+    expect(slaValueComplaints(sla({ targetValue: '0' }))).toEqual({})
+    expect(slaValueComplaints(sla({ targetValue: '100' }))).toEqual({})
+    expect(slaValueComplaints(sla({ targetValue: '99.999' }))).toEqual({})
+    expect(
+      slaValueComplaints(sla({ metric: 'SERVICE_HOURS', unit: 'HOURS_PER_WEEK', targetValue: '168' })),
+    ).toEqual({})
+    expect(
+      slaValueComplaints(sla({ metric: 'RECOVERY_POINT_OBJECTIVE', unit: 'MINUTES', targetValue: '0' })),
+    ).toEqual({})
+    expect(slaValueComplaints(sla({ description: 'x'.repeat(1000) }))).toEqual({})
+  })
+
+  it('slaValueComplaintsOutOfRangeTest', () => {
+    expect(slaValueComplaints(sla({ targetValue: '100.001' })).targetValue).toBe(
+      'In Prozent liegt ein Zielwert zwischen 0 und 100.',
+    )
+    expect(slaValueComplaints(sla({ targetValue: '-0.5' })).targetValue).toBe(
+      'Der Zielwert darf nicht negativ sein.',
+    )
+    expect(
+      slaValueComplaints(sla({ metric: 'SERVICE_HOURS', unit: 'HOURS_PER_WEEK', targetValue: '0' }))
+        .targetValue,
+    ).toContain('zwischen 1 und 168')
+  })
+
+  it('slaValueComplaintsOfBrokenInputTest', () => {
+    expect(slaValueComplaints(sla({ targetValue: '' })).targetValue).toBe(
+      'Der Zielwert fehlt oder ist keine Zahl.',
+    )
+    expect(slaValueComplaints(sla({ targetValue: '99.9995' })).targetValue).toBe(
+      'Der Zielwert hat höchstens 3 Nachkommastellen.',
+    )
+    expect(slaValueComplaints(sla({ unit: 'HOURS' })).unit).toBe(
+      'Verfügbarkeit wird nicht in Stunden angegeben.',
+    )
+    expect(slaValueComplaints(sla({ metric: '', unit: '' }))).toMatchObject({
+      metric: 'Eine Kennzahl wählen.',
+      unit: 'Eine Einheit wählen.',
+    })
+    expect(slaValueComplaints(sla({ description: 'x'.repeat(1001) })).description).toBe(
+      'Höchstens 1000 Zeichen.',
     )
   })
 })

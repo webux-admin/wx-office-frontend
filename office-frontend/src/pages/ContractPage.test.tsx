@@ -90,7 +90,16 @@ const STORED: Contract = {
     { interval: 'QUARTERLY', amount: 200 },
     { interval: 'YEARLY', amount: 50 },
   ],
+  slaValues: [],
 }
+
+/** Availability 99.5 % a month, as a contract and a version send it. */
+const AVAILABILITY = {
+  metric: 'AVAILABILITY',
+  targetValue: 99.5,
+  unit: 'PERCENT',
+  description: 'pro Kalendermonat',
+} as const
 
 function session(permissions: string[]): AuthState {
   return {
@@ -129,6 +138,7 @@ const VERSION_ONE: ContractVersion = {
   currency: 'CHF',
   positions: [{ ...STORED.positions[0], unitPrice: 900, amount: 900 }],
   totals: [{ interval: 'MONTHLY', amount: 900 }],
+  slaValues: [{ ...AVAILABILITY, targetValue: 99 }],
   createdAt: '2026-12-01T09:00:00Z',
   createdBy: 'anna',
 }
@@ -140,6 +150,7 @@ const VERSION_TWO: ContractVersion = {
   validFrom: '2028-01-01',
   positions: STORED.positions,
   totals: STORED.totals,
+  slaValues: [AVAILABILITY],
   createdAt: '2027-11-20T09:00:00Z',
 }
 
@@ -384,6 +395,7 @@ describe('ContractPage', () => {
               interval: 'MONTHLY',
             },
           ],
+          slaValues: [],
           lockVersion: null,
           validFrom: null,
         },
@@ -699,6 +711,116 @@ describe('ContractPage', () => {
     })
     await settle()
     expect(document.querySelector('[aria-label="Version 1"]')).not.toBeNull()
+  })
+
+  it('contractPageAddsAnSlaValueTest', async () => {
+    await render('/vertraege/neu')
+
+    await fillHead()
+    await press('Service-Level hinzufügen')
+    await type('Zielwert', '99.5', dialog())
+    await type('Text', 'pro Kalendermonat', dialog())
+    await press('Hinzufügen')
+    expect(text()).toContain('Verfügbarkeit 99.5 % (pro Kalendermonat)')
+    await press('Speichern')
+
+    expect(written[0].body.slaValues).toEqual([
+      { metric: 'AVAILABILITY', targetValue: 99.5, unit: 'PERCENT', description: 'pro Kalendermonat' },
+    ])
+  })
+
+  it('contractPageOffersOnlyTheUnitsOfTheMetricTest', async () => {
+    await render('/vertraege/neu')
+
+    await press('Service-Level hinzufügen')
+    const units = () =>
+      [...(control('Einheit', dialog()) as HTMLSelectElement).options].map((option) => option.value)
+    expect(units()).toEqual(['PERCENT'])
+    await choose('Kennzahl', 'RESPONSE_TIME', dialog())
+
+    expect(units()).toEqual(['HOURS', 'MINUTES', 'DAYS', 'BUSINESS_DAYS'])
+    expect((control('Einheit', dialog()) as HTMLSelectElement).value).toBe('HOURS')
+  })
+
+  it('contractPageRefusesAboveHundredPercentInTheDialogTest', async () => {
+    await render('/vertraege/neu')
+
+    await press('Service-Level hinzufügen')
+    await type('Zielwert', '100.5', dialog())
+    await press('Hinzufügen')
+
+    expect(text()).toContain('In Prozent liegt ein Zielwert zwischen 0 und 100.')
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
+  it('contractPageAsksForTheDayWhenAnSlaValueChangesTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2, slaValues: [AVAILABILITY] }
+    answer = () => json({ ...stored, currentVersionNo: 3 })
+    await render('/vertraege/5')
+    expect(text()).toContain('Verfügbarkeit 99.5 % (pro Kalendermonat)')
+
+    await pressIcon('Verfügbarkeit 99.5 % (pro Kalendermonat) bearbeiten')
+    await type('Zielwert', '99.9', dialog())
+    await press('Übernehmen')
+    await press('Speichern')
+    expect(written).toEqual([])
+    expect(text()).toContain('Ab welchem Tag gilt die Änderung?')
+
+    await type('Änderung gilt ab', '2028-01-01')
+    await press('Speichern')
+
+    expect(written[0].body.validFrom).toBe('2028-01-01')
+    expect(written[0].body.slaValues).toEqual([{ ...AVAILABILITY, targetValue: 99.9 }])
+  })
+
+  it('contractPageShowsTheSlaFieldErrorOfTheBackendAtThePanelTest', async () => {
+    answer = () =>
+      json(
+        {
+          status: 400,
+          detail: 'Service-Level 1: Die Kennzahl «UPTIME» gibt es nicht.',
+          errors: [
+            {
+              field: 'slaValues[0].metric',
+              message: 'Service-Level 1: Die Kennzahl «UPTIME» gibt es nicht.',
+            },
+          ],
+        },
+        400,
+      )
+    await render('/vertraege/5')
+
+    await type('Bezeichnung', 'Hosting neu')
+    await press('Speichern')
+
+    const alerts = [...document.querySelectorAll('[role="alert"]')].map((entry) => entry.textContent)
+    expect(alerts).toContain('Service-Level 1: Die Kennzahl «UPTIME» gibt es nicht.')
+    // Told at the panel, so no notice above the form says it a second time.
+    expect(text().split('Die Kennzahl «UPTIME» gibt es nicht.')).toHaveLength(2)
+  })
+
+  it('contractPageShowsTheSlaValuesOfAVersionTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2, slaValues: [AVAILABILITY] }
+    await render('/vertraege/5')
+
+    const register = [...document.querySelectorAll('[role="tab"]')].find((entry) =>
+      entry.textContent?.startsWith('Versionen'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      register.click()
+    })
+    await settle()
+    expect(text()).toContain('Verfügbarkeit 99.5 % (pro Kalendermonat)')
+    expect(text()).not.toContain('Service-Level hinzufügen')
+
+    const older = [...document.querySelectorAll('button[aria-pressed]')].find((entry) =>
+      entry.textContent?.startsWith('Version 1'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      older.click()
+    })
+    await settle()
+    expect(text()).toContain('Verfügbarkeit 99 % (pro Kalendermonat)')
   })
 
   it('contractPageShowsNoRegistersForADraftTest', async () => {

@@ -5025,6 +5025,41 @@ export type ContractPosition = {
   amount: number
 }
 
+/**
+ * A metric of the fixed service level catalogue (backend `SlaMetric`): availability, response
+ * and resolution time, service hours, recovery point and recovery time objective.
+ */
+export type SlaMetric =
+  | 'AVAILABILITY'
+  | 'RESPONSE_TIME'
+  | 'RESOLUTION_TIME'
+  | 'SERVICE_HOURS'
+  | 'RECOVERY_POINT_OBJECTIVE'
+  | 'RECOVERY_TIME_OBJECTIVE'
+
+/** The unit of a service level target (backend `SlaUnit`). */
+export type SlaUnit = 'PERCENT' | 'MINUTES' | 'HOURS' | 'DAYS' | 'BUSINESS_DAYS' | 'HOURS_PER_WEEK'
+
+/**
+ * One service level value of a contract, as `ContractSlaValueDto` sends it. A value of the
+ * contract, never a measurement: the application measures nothing (backend ADR-0146).
+ */
+export type ContractSlaValue = {
+  metric: SlaMetric
+  /** The agreed target, up to three decimals. */
+  targetValue: number
+  unit: SlaUnit
+  description?: string | null
+}
+
+/** One service level value as the contract form sends it (`ContractSlaValueRequest`). */
+export type ContractSlaValueRequest = {
+  metric: SlaMetric
+  targetValue: number
+  unit: SlaUnit
+  description: string | null
+}
+
 /** What the positions of one interval come to together (`ContractTotalDto`). */
 export type ContractTotal = {
   interval: BillingInterval
@@ -5076,6 +5111,8 @@ export type Contract = {
   positions: ContractPosition[]
   /** The sum per interval, monthly first; an interval without positions is missing. */
   totals: ContractTotal[]
+  /** The service level values, in the order shown. */
+  slaValues: ContractSlaValue[]
   createdAt?: string | null
   createdBy?: string | null
   changedAt?: string | null
@@ -5109,6 +5146,7 @@ export type ContractRequest = {
   noticePeriodUnit: NoticePeriodUnit | null
   note: string | null
   positions: ContractPositionRequest[]
+  slaValues: ContractSlaValueRequest[]
   /** On a `PUT`, the `lockVersion` the change was made to; ignored on a `POST`. */
   lockVersion: number | null
   /** On a `PUT` of an active contract that changes what was agreed: the day it holds from. */
@@ -5141,6 +5179,8 @@ export type ContractVersion = {
   currency?: string | null
   positions: ContractPosition[]
   totals: ContractTotal[]
+  /** The service level values as this version holds them. */
+  slaValues: ContractSlaValue[]
   createdAt?: string | null
   createdBy?: string | null
 }

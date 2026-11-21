@@ -22,6 +22,7 @@ import {
   contractTerm,
   contractsKey,
   contractsUrl,
+  slaValuesLine,
 } from '../lib/contract'
 import { formatCount, formatDate } from '../lib/format'
 import { originState } from '../lib/origin'
@@ -123,6 +124,17 @@ function ContractList({ tenantId }: { tenantId: number }) {
               V{contract.currentVersionNo}
             </span>
           )}
+        </span>
+      ),
+    },
+    {
+      key: 'sla',
+      header: 'Service-Level',
+      hideBelow: 'sm',
+      // Text only, no traffic light: the application measures nothing.
+      render: (contract) => (
+        <span className="text-small text-text-secondary">
+          {contract.slaValues.length === 0 ? '-' : slaValuesLine(contract.slaValues)}
         </span>
       ),
     },

@@ -1,6 +1,6 @@
 import type { BadgeTone } from '../components/Badge'
 import type { FieldErrors } from './fieldErrors'
-import { parseDecimal } from './format'
+import { formatQuantity, parseDecimal } from './format'
 import { listQuery } from './paging'
 import type {
   BillingInterval,
@@ -9,8 +9,12 @@ import type {
   ContractPosition,
   ContractPositionRequest,
   ContractRequest,
+  ContractSlaValue,
+  ContractSlaValueRequest,
   ContractStatus,
   NoticePeriodUnit,
+  SlaMetric,
+  SlaUnit,
 } from './types'
 
 /**
@@ -103,6 +107,116 @@ export const NOTICE_UNIT_LABELS: Record<NoticePeriodUnit, string> = {
   DAYS: 'Tage',
   WEEKS: 'Wochen',
   MONTHS: 'Monate',
+}
+
+/**
+ * The catalogue of service level metrics, in the order of the select. The same six codes as
+ * `SlaMetric` of the backend; no free text (backend ADR-0146).
+ */
+export const SLA_METRIC_LABELS: Record<SlaMetric, string> = {
+  AVAILABILITY: 'Verfügbarkeit',
+  RESPONSE_TIME: 'Reaktionszeit',
+  RESOLUTION_TIME: 'Lösungszeit',
+  SERVICE_HOURS: 'Servicezeit',
+  RECOVERY_POINT_OBJECTIVE: 'Maximaler Datenverlust (RPO)',
+  RECOVERY_TIME_OBJECTIVE: 'Wiederherstellungszeit (RTO)',
+}
+
+/** The units each metric allows, the first one proposed; the same lists as the backend. */
+export const SLA_METRIC_UNITS: Record<SlaMetric, readonly SlaUnit[]> = {
+  AVAILABILITY: ['PERCENT'],
+  RESPONSE_TIME: ['HOURS', 'MINUTES', 'DAYS', 'BUSINESS_DAYS'],
+  RESOLUTION_TIME: ['HOURS', 'MINUTES', 'DAYS', 'BUSINESS_DAYS'],
+  SERVICE_HOURS: ['HOURS_PER_WEEK'],
+  RECOVERY_POINT_OBJECTIVE: ['HOURS', 'MINUTES', 'DAYS'],
+  RECOVERY_TIME_OBJECTIVE: ['HOURS', 'MINUTES', 'DAYS'],
+}
+
+/** What each unit is called in a select. */
+export const SLA_UNIT_LABELS: Record<SlaUnit, string> = {
+  PERCENT: 'Prozent',
+  MINUTES: 'Minuten',
+  HOURS: 'Stunden',
+  DAYS: 'Tage',
+  BUSINESS_DAYS: 'Arbeitstage',
+  HOURS_PER_WEEK: 'Stunden pro Woche',
+}
+
+/** What a target is followed by in a text, for one and for many. */
+const SLA_UNIT_WORDS: Record<SlaUnit, [string, string]> = {
+  PERCENT: ['%', '%'],
+  MINUTES: ['Minute', 'Minuten'],
+  HOURS: ['Stunde', 'Stunden'],
+  DAYS: ['Tag', 'Tage'],
+  BUSINESS_DAYS: ['Arbeitstag', 'Arbeitstage'],
+  HOURS_PER_WEEK: ['Stunde pro Woche', 'Stunden pro Woche'],
+}
+
+/**
+ * The range a target may take in each unit, both bounds included; the same as the backend. A
+ * duration is at most one year, and zero is a real target: no data lost at all.
+ */
+export const SLA_UNIT_RANGES: Record<SlaUnit, { min: number; max: number }> = {
+  PERCENT: { min: 0, max: 100 },
+  MINUTES: { min: 0, max: 525600 },
+  HOURS: { min: 0, max: 8760 },
+  DAYS: { min: 0, max: 365 },
+  BUSINESS_DAYS: { min: 0, max: 260 },
+  HOURS_PER_WEEK: { min: 1, max: 168 },
+}
+
+/** Decimals a service level target may carry. */
+const SLA_MAX_DECIMALS = 3
+
+/** Longest text of a service level value the backend takes. */
+export const SLA_DESCRIPTION_MAX_LENGTH = 1000
+
+/** Most service level values one contract takes. */
+export const CONTRACT_MAX_SLA_VALUES = 50
+
+/**
+ * @param value what a select holds
+ * @returns true for one of the six metric codes
+ */
+export function isSlaMetric(value: string): value is SlaMetric {
+  return Object.hasOwn(SLA_METRIC_LABELS, value)
+}
+
+/**
+ * @param value what a select holds
+ * @returns true for one of the six unit codes
+ */
+export function isSlaUnit(value: string): value is SlaUnit {
+  return Object.hasOwn(SLA_UNIT_LABELS, value)
+}
+
+/**
+ * One service level value as text, the only way it is shown: no traffic light, because the
+ * application measures nothing (backend ADR-0136, decision 6).
+ *
+ * @param value the value as stored
+ * @returns «Verfügbarkeit 99.5 %» or «Reaktionszeit 4 Stunden (Priorität 1)»
+ */
+export function slaValueText(value: ContractSlaValue): string {
+  const [one, many] = SLA_UNIT_WORDS[value.unit]
+  const target = `${formatQuantity(value.targetValue)} ${value.targetValue === 1 ? one : many}`
+  const text = `${SLA_METRIC_LABELS[value.metric]} ${target}`
+  return value.description ? `${text} (${value.description})` : text
+}
+
+/**
+ * The service level values of a contract in one line, for the list.
+ *
+ * @param values the values as stored
+ * @param shown how many are written out before the rest is counted
+ * @returns «Verfügbarkeit 99.5 % · Reaktionszeit 4 Stunden · 2 weitere», or an empty string
+ */
+export function slaValuesLine(values: readonly ContractSlaValue[], shown = 2): string {
+  const texts = values.slice(0, shown).map((value) =>
+    slaValueText({ ...value, description: null }),
+  )
+  const rest = values.length - shown
+  return rest > 0 ? [...texts, `${rest} weitere`].join(' · ') : texts.join(' · ')
 }
 
 /** Longest title of a contract the backend takes. */
@@ -287,6 +401,14 @@ export type PositionForm = {
   amount: number | null
 }
 
+/** One service level value as it lives in the form: the target as typed. */
+export type SlaValueForm = {
+  metric: SlaMetric | ''
+  targetValue: string
+  unit: SlaUnit | ''
+  description: string
+}
+
 /** The contract form as it lives in the browser. */
 export type ContractForm = {
   title: string
@@ -297,6 +419,7 @@ export type ContractForm = {
   noticePeriodUnit: NoticePeriodUnit | ''
   note: string
   positions: PositionForm[]
+  slaValues: SlaValueForm[]
   /**
    * The day a change to what an active contract agreed holds from; asked for only then, and
    * empty until the user names it.
@@ -315,6 +438,7 @@ export function emptyContractForm(): ContractForm {
     noticePeriodUnit: '',
     note: '',
     positions: [],
+    slaValues: [],
     validFrom: '',
   }
 }
@@ -354,13 +478,15 @@ export function toContractForm(contract: Contract): ContractForm {
     noticePeriodUnit: contract.noticePeriodUnit ?? '',
     note: contract.note ?? '',
     positions: contract.positions.map(toPositionForm),
+    slaValues: contract.slaValues.map(toSlaValueForm),
     validFrom: '',
   }
 }
 
 /**
- * Whether the form changes what the contract agreed: everything but the note. The same line
- * the backend draws when it decides whether a change takes a new version.
+ * Whether the form changes what the contract agreed: everything but the note, the service
+ * level values included. The same line the backend draws when it decides whether a change
+ * takes a new version; a target is compared by value, so 99.5 and 99.50 agree.
  *
  * @param stored the form as the contract was loaded
  * @param form the form as it is now
@@ -368,7 +494,17 @@ export function toContractForm(contract: Contract): ContractForm {
  */
 export function agreementChanged(stored: ContractForm, form: ContractForm): boolean {
   const agreed = (value: ContractForm) =>
-    JSON.stringify({ ...value, note: '', validFrom: '', positions: value.positions.map(agreedPart) })
+    JSON.stringify({
+      ...value,
+      note: '',
+      validFrom: '',
+      positions: value.positions.map(agreedPart),
+      slaValues: value.slaValues.map((entry) => ({
+        ...entry,
+        targetValue: parseDecimal(entry.targetValue),
+        description: entry.description.trim(),
+      })),
+    })
   return agreed(stored) !== agreed(form)
 }
 
@@ -478,16 +614,12 @@ export function withPosition(
 }
 
 /**
- * @param positions the positions of the form
+ * @param positions the positions of the form, or its service level values
  * @param index the one to move
  * @param step -1 to move it up, 1 to move it down
- * @returns the list with the position moved, unchanged at either end
+ * @returns the list with the entry moved, unchanged at either end
  */
-export function movePosition(
-  positions: readonly PositionForm[],
-  index: number,
-  step: -1 | 1,
-): PositionForm[] {
+export function movePosition<T>(positions: readonly T[], index: number, step: -1 | 1): T[] {
   const target = index + step
   if (target < 0 || target >= positions.length) return [...positions]
   const moved = [...positions]
@@ -537,6 +669,9 @@ export function contractComplaints(form: ContractForm): FieldErrors {
   }
   const positions = positionsComplaint(form.positions)
   if (positions !== null) errors.positions = positions
+  if (form.slaValues.length > CONTRACT_MAX_SLA_VALUES) {
+    errors.slaValues = `Ein Vertrag hat höchstens ${CONTRACT_MAX_SLA_VALUES} Service-Level-Werte.`
+  }
   return errors
 }
 
@@ -599,15 +734,92 @@ export function positionComplaints(position: PositionForm): FieldErrors {
   return errors
 }
 
-/** Whether a typed number can be read and fits four decimals. */
-function decimalComplaint(input: string, label: string): string | null {
+/** Whether a typed number can be read and fits the decimals given. */
+function decimalComplaint(input: string, label: string, maxDecimals = MAX_DECIMALS): string | null {
   const value = parseDecimal(input)
   if (value === null) return `${label} fehlt oder ist keine Zahl.`
   const decimals = input.trim().replace(/[’']/g, '').replace(',', '.').split('.')[1] ?? ''
-  if (decimals.replace(/0+$/, '').length > MAX_DECIMALS) {
-    return `${label} hat höchstens ${MAX_DECIMALS} Nachkommastellen.`
+  if (decimals.replace(/0+$/, '').length > maxDecimals) {
+    return `${label} hat höchstens ${maxDecimals} Nachkommastellen.`
   }
   return null
+}
+
+/** @returns a new service level value: availability in percent, no target yet */
+export function emptySlaValueForm(): SlaValueForm {
+  return { metric: 'AVAILABILITY', targetValue: '', unit: 'PERCENT', description: '' }
+}
+
+/**
+ * @param value a stored service level value
+ * @returns the value as the form holds it
+ */
+export function toSlaValueForm(value: ContractSlaValue): SlaValueForm {
+  return {
+    metric: value.metric,
+    targetValue: String(value.targetValue),
+    unit: value.unit,
+    description: value.description ?? '',
+  }
+}
+
+/**
+ * A metric chosen anew keeps its unit when it allows it, and takes its first one otherwise.
+ *
+ * @param form the value as filled in
+ * @param metric the metric chosen
+ * @returns the value with the metric and a unit that fits it
+ */
+export function withSlaMetric(form: SlaValueForm, metric: SlaMetric): SlaValueForm {
+  const units = SLA_METRIC_UNITS[metric]
+  const unit = form.unit !== '' && units.includes(form.unit) ? form.unit : units[0]
+  return { ...form, metric, unit }
+}
+
+/**
+ * Takes a service level value into the list.
+ *
+ * @param values the values of the form
+ * @param index where the changed one stands, or `null` to add it at the end
+ * @param value the value as the dialog left it
+ * @returns the new list
+ */
+export function withSlaValue(
+  values: readonly SlaValueForm[],
+  index: number | null,
+  value: SlaValueForm,
+): SlaValueForm[] {
+  if (index === null) return [...values, value]
+  return values.map((current, at) => (at === index ? value : current))
+}
+
+/**
+ * The messages under the fields of one service level value, the same rules the backend keeps.
+ *
+ * @param form the value as filled in
+ * @returns message per field, empty when the value can be taken
+ */
+export function slaValueComplaints(form: SlaValueForm): FieldErrors {
+  const errors: Record<string, string> = {}
+  if (form.metric === '') errors.metric = 'Eine Kennzahl wählen.'
+  if (form.unit === '') errors.unit = 'Eine Einheit wählen.'
+  else if (form.metric !== '' && !SLA_METRIC_UNITS[form.metric].includes(form.unit)) {
+    errors.unit = `${SLA_METRIC_LABELS[form.metric]} wird nicht in ${SLA_UNIT_LABELS[form.unit]} angegeben.`
+  }
+  const target = decimalComplaint(form.targetValue, 'Der Zielwert', SLA_MAX_DECIMALS)
+  if (target !== null) errors.targetValue = target
+  else if (form.unit !== '') {
+    const value = parseDecimal(form.targetValue) ?? 0
+    const { min, max } = SLA_UNIT_RANGES[form.unit]
+    if (value < 0) errors.targetValue = 'Der Zielwert darf nicht negativ sein.'
+    else if (value < min || value > max) {
+      errors.targetValue = `In ${SLA_UNIT_LABELS[form.unit]} liegt ein Zielwert zwischen ${formatQuantity(min)} und ${formatQuantity(max)}.`
+    }
+  }
+  if (form.description.trim().length > SLA_DESCRIPTION_MAX_LENGTH) {
+    errors.description = `Höchstens ${SLA_DESCRIPTION_MAX_LENGTH} Zeichen.`
+  }
+  return errors
 }
 
 /**
@@ -632,6 +844,7 @@ export function toContractRequest(
     noticePeriodUnit: form.noticePeriodUnit === '' ? null : form.noticePeriodUnit,
     note: note === '' ? null : note,
     positions: form.positions.map(toPositionRequest),
+    slaValues: form.slaValues.map(toSlaValueRequest),
     lockVersion,
     validFrom: form.validFrom === '' ? null : form.validFrom,
   }
@@ -652,5 +865,16 @@ function toPositionRequest(position: PositionForm): ContractPositionRequest {
     vatCategory: position.vatCategory,
     // Already free of complaints, so the interval is one of the three.
     interval: position.interval === '' ? 'MONTHLY' : position.interval,
+  }
+}
+
+function toSlaValueRequest(value: SlaValueForm): ContractSlaValueRequest {
+  const description = value.description.trim()
+  return {
+    // Already free of complaints, so metric and unit are codes of the catalogue.
+    metric: value.metric === '' ? 'AVAILABILITY' : value.metric,
+    targetValue: parseDecimal(value.targetValue) ?? 0,
+    unit: value.unit === '' ? 'PERCENT' : value.unit,
+    description: description === '' ? null : description,
   }
 }
