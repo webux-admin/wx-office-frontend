@@ -69,9 +69,9 @@ function ProductList({ tenantId }: { tenantId: number }) {
       key: 'number',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (product) => (
-        <span className="font-mono text-[12px] text-text-tertiary">
+        <span className="font-mono text-small text-text-tertiary">
           {product.productNumber ?? '-'}
         </span>
       ),
@@ -90,7 +90,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
             {product.name}
           </Link>
           {onlyBarCodeMatched(product, search.term) && (
-            <span className="font-mono text-[11px] text-text-tertiary">{product.eanCode}</span>
+            <span className="font-mono text-caption text-text-tertiary">{product.eanCode}</span>
           )}
         </span>
       ),
@@ -98,7 +98,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
     {
       key: 'type',
       header: 'Art',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (product) => (
         <span className="text-text-secondary">{typeLabel(product.productType)}</span>
       ),
@@ -106,7 +106,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
     {
       key: 'unit',
       header: 'Einheit',
-      width: 'w-[100px]',
+      width: 'w-column-sm',
       render: (product) => (
         <span className="text-text-secondary">{shortLabelForCode(units, product.unit)}</span>
       ),
@@ -114,7 +114,7 @@ function ProductList({ tenantId }: { tenantId: number }) {
     {
       key: 'vat',
       header: 'MwSt',
-      width: 'w-[180px]',
+      width: 'w-column-xl',
       render: (product) => (
         <span className="text-text-secondary">{vatLabel(product.vatCategory)}</span>
       ),
@@ -124,13 +124,13 @@ function ProductList({ tenantId }: { tenantId: number }) {
       header: 'Grundpreis',
       align: 'right',
       sortKey: 'basePrice',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (product) => formatAmount(product.basePrice),
     },
     {
       key: 'state',
       header: '',
-      width: 'w-[150px]',
+      width: 'w-column-lg',
       render: (product) => (
         <span className="flex flex-wrap items-center gap-1">
           {/* No permission check: whoever does not use the inventory has the flag set

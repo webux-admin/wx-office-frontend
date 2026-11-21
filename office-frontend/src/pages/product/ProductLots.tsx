@@ -85,7 +85,7 @@ export function ProductLots({
       sortKey: 'lotNumber',
       render: (lot) => (
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate font-mono text-[13px]">{lot.lotNumber}</span>
+          <span className="truncate font-mono text-body">{lot.lotNumber}</span>
           {lot.blocked && <Badge tone="danger">gesperrt</Badge>}
         </span>
       ),
@@ -94,7 +94,7 @@ export function ProductLots({
       key: 'expiryDate',
       header: 'Haltbarkeit',
       sortKey: 'expiryDate',
-      width: 'w-[200px]',
+      width: 'w-column-xl',
       render: (lot) =>
         expiryLabel(lot) === '' ? (
           <span className="text-text-tertiary">-</span>
@@ -130,7 +130,7 @@ export function ProductLots({
       header: 'Total',
       align: 'right',
       sortKey: 'quantity',
-      width: 'w-[120px]',
+      width: 'w-column-md',
       render: (lot) => (
         <Link
           to={journalLink(lot)}

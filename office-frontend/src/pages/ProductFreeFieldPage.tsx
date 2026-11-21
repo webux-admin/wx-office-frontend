@@ -176,7 +176,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
     {
       key: 'type',
       header: 'Art',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (field) => (
         <span className="text-text-secondary">
           {field.type ? TYPE_LABELS[field.type] : '-'}
@@ -186,8 +186,8 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Platz',
-      width: 'w-[130px]',
-      render: (field) => <span className="font-mono text-[12px]">{field.code}</span>,
+      width: 'w-column-md',
+      render: (field) => <span className="font-mono text-small">{field.code}</span>,
     },
     {
       key: 'description',
@@ -197,7 +197,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[190px]',
+      width: 'w-column-xl',
       render: (field) => (
         <span className="flex flex-wrap items-center gap-1">
           {field.printable && <Badge tone="accent">Auf Belegen</Badge>}
@@ -208,13 +208,13 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (field) =>
         mayWrite ? (
           <button
             type="button"
             onClick={() => setClearing(field)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+            className="text-small text-text-tertiary transition-colors hover:text-danger"
           >
             Werte leeren
           </button>
@@ -309,14 +309,14 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
               label="Platz"
               value={`${editing.code} — ${editing.type ? TYPE_LABELS[editing.type] : ''}`}
               disabled
-              hint="Der Platz steht fest: an ihm hängen die bereits erfassten Werte."
+              tooltip="Der Platz steht fest: an ihm hängen die bereits erfassten Werte."
             />
           ) : (
             <SelectField
               label="Platz"
               value={form.code}
               onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-              hint="Bestimmt die Art des Werts und lässt sich später nicht mehr wechseln."
+              tooltip="Bestimmt die Art des Werts und lässt sich später nicht mehr wechseln."
             >
               <option value="">Bitte wählen</option>
               {slots.map((slot) => (
@@ -332,7 +332,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
             value={form.name}
             onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
             maxLength={60}
-            hint="So heisst das Feld in der Produktmaske, zum Beispiel Garantie in Monaten."
+            tooltip="So heisst das Feld in der Produktmaske, zum Beispiel Garantie in Monaten."
           />
 
           <TextField
@@ -342,7 +342,6 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
               setForm((current) => ({ ...current, description: event.target.value }))
             }
             maxLength={200}
-            hint="Steht unter dem Feld. Leer lassen ist erlaubt."
           />
 
           <TextField
@@ -353,14 +352,14 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
             }
             inputMode="numeric"
             numeric
-            hint="Kleinere Zahlen stehen weiter oben. Üblich sind Hunderterschritte."
+            tooltip="Kleinere Zahlen stehen weiter oben. Üblich sind Hunderterschritte."
           />
 
           <CheckboxField
             label="In der Produktmaske zeigen"
             checked={form.active}
             onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
-            hint="Aus heisst: nicht mehr sichtbar. Erfasste Werte bleiben erhalten."
+            tooltip="Aus heisst: nicht mehr sichtbar. Erfasste Werte bleiben erhalten."
           />
 
           <CheckboxField
@@ -369,7 +368,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
             onChange={(event) =>
               setForm((current) => ({ ...current, printable: event.target.checked }))
             }
-            hint="Erst dann lässt sich im Formular-Designer eine Spalte dafür setzen. Aus heisst: bleibt im Haus."
+            tooltip="Erst dann lässt sich im Formular-Designer eine Spalte dafür setzen. Aus heisst: bleibt im Haus."
           />
 
           <LabelFields
@@ -402,7 +401,7 @@ function ProductFreeFields({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Der Wert von <strong>{clearing?.name ?? clearing?.code}</strong> wird bei jedem Produkt
           dieses Mandanten entfernt. Bereits geschriebene Belege behalten, was auf ihnen steht.
         </p>

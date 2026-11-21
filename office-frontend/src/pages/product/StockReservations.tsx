@@ -62,9 +62,9 @@ export function StockReservations({
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-body">
             <thead>
-              <tr className="border-b border-line-subtle text-left text-[11px] uppercase tracking-[0.06em] text-text-tertiary">
+              <tr className="border-b border-line-subtle text-left text-caption uppercase tracking-[0.06em] text-text-tertiary">
                 <th className="py-2 font-medium">Beleg</th>
                 <th className="py-2 font-medium">Datum</th>
                 <th className="py-2 font-medium">Lagerort</th>
@@ -82,7 +82,7 @@ export function StockReservations({
                       <Link
                         to={`${ORDER_KIND.path}/${row.sourceId}`}
                         state={origin}
-                        className="font-mono text-[12px] text-accent-text underline-offset-2 hover:underline"
+                        className="font-mono text-small text-accent-text underline-offset-2 hover:underline"
                       >
                         {row.sourceNumber ?? `#${row.sourceId}`}
                       </Link>
@@ -111,7 +111,7 @@ export function StockReservations({
           <Link
             to={`${STOCK_RESERVATION_PATH}?produkt=${product.id}`}
             state={origin}
-            className="text-[13px] text-accent-text underline-offset-2 hover:underline"
+            className="text-body text-accent-text underline-offset-2 hover:underline"
           >
             {result !== undefined && result.totalElements > rows.length
               ? `Alle ${result.totalElements} Reservierungen`

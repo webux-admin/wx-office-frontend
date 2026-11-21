@@ -214,9 +214,9 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
       key: 'number',
       header: 'Nummer',
       sortKey: 'productNumber',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (row) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{row.productNumber ?? '-'}</span>
+        <span className="font-mono text-small text-text-tertiary">{row.productNumber ?? '-'}</span>
       ),
     },
     {
@@ -231,7 +231,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
               among the others without a single field that says why. The product list answers
               the same search the same way. */}
           {onlyBarCodeMatched(row, search.term) && (
-            <span className="font-mono text-[11px] text-text-tertiary">{row.eanCode}</span>
+            <span className="font-mono text-caption text-text-tertiary">{row.eanCode}</span>
           )}
         </span>
       ),
@@ -239,14 +239,14 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
     {
       key: 'unit',
       header: 'Einheit',
-      width: 'w-[110px]',
+      width: 'w-column-sm',
       render: (row) => <span className="text-text-secondary">{row.unitLabel ?? '-'}</span>,
     },
     {
       key: 'effective',
       header: 'Gültig',
       align: 'right',
-      width: 'w-[160px]',
+      width: 'w-column-lg',
       // Not sortable: the server can sort by the base price of a product, and that is not
       // what stands here. A control that sorts by another number than the one in the column
       // is worse than no control.
@@ -254,7 +254,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
         <span className="inline-flex flex-col items-end">
           <span className="tabular-nums">{formatAmount(row.effectivePrice)}</span>
           {row.origin !== undefined && (
-            <span className="text-[11px] text-text-tertiary">{priceOriginText(row.origin)}</span>
+            <span className="text-caption text-text-tertiary">{priceOriginText(row.origin)}</span>
           )}
         </span>
       ),
@@ -263,7 +263,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
       key: 'own',
       header: 'Eigener Preis',
       align: 'right',
-      width: 'w-[180px]',
+      width: 'w-column-xl',
       render: (row) => {
         const index = indexOf.get(row.productId) ?? 0
         const period = periodText(row)
@@ -288,13 +288,13 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
               aria-label={`Preis für ${row.name}`}
               // A field that was typed in is marked: after fifty rows nobody remembers which
               // ones they touched, and the count alone does not say where they are.
-              className={`w-[110px] rounded-[var(--radius-sm)] border px-2 py-1 text-right text-[13px] tabular-nums outline-none transition-colors focus:border-accent disabled:opacity-60 ${
+              className={`w-column-sm rounded-[var(--radius-sm)] border px-2 py-1 text-right text-body tabular-nums outline-none transition-colors focus:border-accent disabled:opacity-60 ${
                 edits[row.productId] === undefined
                   ? 'border-line bg-surface'
                   : 'border-accent-text bg-highlight'
               }`}
             />
-            {period !== '' && <span className="text-[11px] text-text-tertiary">{period}</span>}
+            {period !== '' && <span className="text-caption text-text-tertiary">{period}</span>}
           </span>
         )
       },
@@ -308,7 +308,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
         subtitle="Preise einer Preisgruppe oder eines Kunden über den ganzen Katalog erfassen."
       >
         {changes > 0 && (
-          <span className="text-[13px] text-text-secondary" aria-live="polite">
+          <span className="text-body text-text-secondary" aria-live="polite">
             {changeCountText(changes)}
           </span>
         )}
@@ -325,7 +325,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
         )}
         {result !== null && (
           <p
-            className="flex items-center gap-2 rounded-[var(--radius-md)] border border-line bg-surface px-4 py-3 text-[13px] text-text-secondary"
+            className="flex items-center gap-2 rounded-[var(--radius-md)] border border-line bg-surface px-4 py-3 text-body text-text-secondary"
             aria-live="polite"
           >
             <Check size={15} className="text-accent-text" aria-hidden />
@@ -397,7 +397,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
                   setResult(null)
                 })
               }}
-              hint="Leer heisst: gilt ab sofort."
+              tooltip="Leer heisst: gilt ab sofort."
             />
             <TextField
               label="Gültig bis"
@@ -411,7 +411,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
                   setResult(null)
                 })
               }}
-              hint="Für Aktionspreise. Leer heisst: ohne Ende."
+              tooltip="Für Aktionspreise. Leer heisst: ohne Ende."
             />
           </div>
 
@@ -448,7 +448,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
                 setPage(0)
               }}
             />
-            <span className="text-[12px] text-text-tertiary">
+            <span className="text-small text-text-tertiary">
               Erfasste Preise bleiben beim Blättern und Suchen erhalten und werden gemeinsam
               gespeichert.
             </span>
@@ -506,7 +506,7 @@ function PriceEntry({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Zuerst speichern behält alles: die Erfassung läuft danach mit dem neuen Ziel weiter.
         </p>
       </Dialog>

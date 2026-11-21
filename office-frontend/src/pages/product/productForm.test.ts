@@ -4,7 +4,7 @@ import {
   applyProductType,
   applyStockManaged,
   emptyProduct,
-  firstComplaint,
+  productFieldErrors,
   toForm,
   toFreeFieldForm,
   toFreeFieldPayload,
@@ -141,21 +141,22 @@ describe('toPayload', () => {
   })
 })
 
-describe('firstComplaint', () => {
-  it('firstComplaintTest', () => {
-    expect(firstComplaint(COMPLETE)).toBeNull()
+describe('productFieldErrors', () => {
+  it('productFieldErrorsTest', () => {
+    expect(productFieldErrors(COMPLETE)).toEqual({})
   })
 
-  it('firstComplaintWithoutANameTest', () => {
-    expect(firstComplaint({ ...COMPLETE, name: '   ' })).toContain('Bezeichnung')
+  it('productFieldErrorsWithoutANameTest', () => {
+    expect(productFieldErrors({ ...COMPLETE, name: '   ' }).name).toContain('Bezeichnung')
   })
 
-  it('firstComplaintWithoutAUnitTest', () => {
-    expect(firstComplaint({ ...COMPLETE, unit: '' })).toContain('Einheit')
+  it('productFieldErrorsWithoutAUnitTest', () => {
+    expect(productFieldErrors({ ...COMPLETE, unit: '' }).unit).toContain('Einheit')
   })
 
-  it('firstComplaintNamesTheFirstProblemOnlyTest', () => {
-    expect(firstComplaint({ ...COMPLETE, name: '', unit: '' })).toContain('Bezeichnung')
+  it('productFieldErrorsListsEveryProblemAtItsFieldTest', () => {
+    const errors = productFieldErrors({ ...COMPLETE, name: '', unit: '' })
+    expect(Object.keys(errors).sort()).toEqual(['name', 'unit'])
   })
 })
 
@@ -401,38 +402,45 @@ describe('applyStockManaged', () => {
   })
 })
 
-describe('firstComplaint with stock fields', () => {
-  it('firstComplaintWithStockFieldsTest', () => {
-    expect(firstComplaint(STOCKED)).toBeNull()
+describe('productFieldErrors with stock fields', () => {
+  it('productFieldErrorsWithStockFieldsTest', () => {
+    expect(productFieldErrors(STOCKED)).toEqual({})
   })
 
-  it('firstComplaintWithStockManagedServiceTest', () => {
+  it('productFieldErrorsWithStockManagedServiceTest', () => {
     expect(
-      firstComplaint({ ...COMPLETE, productType: 'SERVICE', stockManaged: true }),
+      productFieldErrors({ ...COMPLETE, productType: 'SERVICE', stockManaged: true }).stockManaged,
     ).toContain('Dienstleistungen')
   })
 
-  it('firstComplaintWithTrackingButNoStockTest', () => {
-    expect(firstComplaint({ ...COMPLETE, tracking: 'SERIAL' })).toContain('Nachverfolgung')
+  it('productFieldErrorsWithTrackingButNoStockTest', () => {
+    expect(productFieldErrors({ ...COMPLETE, tracking: 'SERIAL' }).tracking).toContain(
+      'Nachverfolgung',
+    )
   })
 
-  it('firstComplaintWithNegativeMinimumQuantityTest', () => {
-    expect(firstComplaint({ ...STOCKED, minimumQuantity: '-1' })).toContain('negativ')
+  it('productFieldErrorsWithNegativeMinimumQuantityTest', () => {
+    expect(productFieldErrors({ ...STOCKED, minimumQuantity: '-1' }).minimumQuantity).toContain(
+      'negativ',
+    )
   })
 
-  it('firstComplaintWithAMinimumQuantityThatIsNoNumberTest', () => {
-    expect(firstComplaint({ ...STOCKED, minimumQuantity: 'viel' })).toContain('Zahl')
+  it('productFieldErrorsWithAMinimumQuantityThatIsNoNumberTest', () => {
+    expect(productFieldErrors({ ...STOCKED, minimumQuantity: 'viel' }).minimumQuantity).toContain(
+      'Zahl',
+    )
   })
 
-  it('firstComplaintWithMinimumQuantityButNoStockTest', () => {
+  it('productFieldErrorsWithMinimumQuantityButNoStockTest', () => {
     expect(
-      firstComplaint({ ...COMPLETE, productType: 'GOODS', minimumQuantity: '10' }),
+      productFieldErrors({ ...COMPLETE, productType: 'GOODS', minimumQuantity: '10' })
+        .minimumQuantity,
     ).toContain('Mindestbestand')
   })
 
-  it('firstComplaintWithZeroMinimumQuantityTest', () => {
+  it('productFieldErrorsWithZeroMinimumQuantityTest', () => {
     // 0 is a valid level; only negative numbers are refused.
-    expect(firstComplaint({ ...STOCKED, minimumQuantity: '0' })).toBeNull()
+    expect(productFieldErrors({ ...STOCKED, minimumQuantity: '0' })).toEqual({})
   })
 })
 

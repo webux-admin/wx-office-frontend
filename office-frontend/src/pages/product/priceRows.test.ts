@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   emptyPriceRow,
-  firstPriceComplaint,
   isBlankRow,
+  priceFieldErrors,
+  priceRowsOfAmounts,
   pricesChanged,
   toPricePayload,
   toPriceRowForm,
@@ -24,6 +25,11 @@ const PRODUCT: Product = {
 /** A line the operator has filled in completely. */
 function filled(overrides: Partial<PriceRowForm> = {}): PriceRowForm {
   return { ...emptyPriceRow(), price: '150', ...overrides }
+}
+
+/** The message under the price table, or `null` when the table is fine. */
+function complaintOf(rows: PriceRowForm[]): string | null {
+  return priceFieldErrors(rows).prices ?? null
 }
 
 describe('emptyPriceRow', () => {
@@ -107,7 +113,7 @@ describe('toPricePayload', () => {
 
   it('toPricePayloadKeepsALineWithAnUnreadableAmountTest', () => {
     // Dropping it would delete a stored price because of a typo. The save is stopped by
-    // firstPriceComplaint before this payload is ever built.
+    // priceFieldErrors before this payload is ever built.
     expect(toPricePayload([filled({ price: '150.-' })])).toHaveLength(1)
   })
 
@@ -174,53 +180,93 @@ describe('isBlankRow', () => {
   })
 })
 
-describe('firstPriceComplaint', () => {
-  it('firstPriceComplaintTest', () => {
-    expect(firstPriceComplaint([filled({ validFrom: '2026-01-01', validTo: '2026-12-31' })]))
+describe('priceFieldErrors', () => {
+  it('priceFieldErrorsTest', () => {
+    expect(complaintOf([filled({ validFrom: '2026-01-01', validTo: '2026-12-31' })]))
       .toBeNull()
   })
 
-  it('firstPriceComplaintWithoutLinesTest', () => {
-    expect(firstPriceComplaint([])).toBeNull()
+  it('priceFieldErrorsWithoutLinesTest', () => {
+    expect(complaintOf([])).toBeNull()
   })
 
-  it('firstPriceComplaintIgnoresAnUntouchedLineTest', () => {
-    expect(firstPriceComplaint([emptyPriceRow()])).toBeNull()
+  it('priceFieldErrorsIgnoresAnUntouchedLineTest', () => {
+    expect(complaintOf([emptyPriceRow()])).toBeNull()
   })
 
-  it('firstPriceComplaintWithoutAnAmountTest', () => {
-    expect(firstPriceComplaint([{ ...emptyPriceRow(), priceGroup: '4' }]))
+  it('priceFieldErrorsWithoutAnAmountTest', () => {
+    expect(complaintOf([{ ...emptyPriceRow(), priceGroup: '4' }]))
       .toBe('Jede Preiszeile braucht einen lesbaren Betrag, zum Beispiel 1250.00.')
   })
 
-  it('firstPriceComplaintWithAnUnreadableAmountTest', () => {
+  it('priceFieldErrorsWithAnUnreadableAmountTest', () => {
     // "150.-" is how an amount is written by hand in Switzerland, and it is not a number.
     // Letting it through would send the line without an amount and delete the stored price.
-    expect(firstPriceComplaint([{ ...emptyPriceRow(), price: '150.-' }]))
+    expect(complaintOf([{ ...emptyPriceRow(), price: '150.-' }]))
       .toBe('Jede Preiszeile braucht einen lesbaren Betrag, zum Beispiel 1250.00.')
   })
 
-  it('firstPriceComplaintWithAnUnreadableQuantityTest', () => {
-    expect(firstPriceComplaint([filled({ minQuantity: '10 Stk' })]))
+  it('priceFieldErrorsWithAnUnreadableQuantityTest', () => {
+    expect(complaintOf([filled({ minQuantity: '10 Stk' })]))
       .toBe('Ab Menge muss eine Zahl sein, zum Beispiel 10.')
   })
 
-  it('firstPriceComplaintAcceptsAnEmptyQuantityTest', () => {
-    expect(firstPriceComplaint([filled({ minQuantity: '   ' })])).toBeNull()
+  it('priceFieldErrorsAcceptsAnEmptyQuantityTest', () => {
+    expect(complaintOf([filled({ minQuantity: '   ' })])).toBeNull()
   })
 
-  it('firstPriceComplaintWithABackwardsPeriodTest', () => {
-    expect(firstPriceComplaint([filled({ validFrom: '2026-12-31', validTo: '2026-01-01' })]))
+  it('priceFieldErrorsWithABackwardsPeriodTest', () => {
+    expect(complaintOf([filled({ validFrom: '2026-12-31', validTo: '2026-01-01' })]))
       .toBe('Das Bis-Datum darf nicht vor dem Ab-Datum liegen.')
   })
 
-  it('firstPriceComplaintAcceptsAOneDayPeriodTest', () => {
-    expect(firstPriceComplaint([filled({ validFrom: '2026-01-01', validTo: '2026-01-01' })]))
+  it('priceFieldErrorsAcceptsAOneDayPeriodTest', () => {
+    expect(complaintOf([filled({ validFrom: '2026-01-01', validTo: '2026-01-01' })]))
       .toBeNull()
   })
 
-  it('firstPriceComplaintAcceptsAnOpenEndTest', () => {
-    expect(firstPriceComplaint([filled({ validFrom: '2026-01-01' })])).toBeNull()
-    expect(firstPriceComplaint([filled({ validTo: '2026-12-31' })])).toBeNull()
+  it('priceFieldErrorsAcceptsAnOpenEndTest', () => {
+    expect(complaintOf([filled({ validFrom: '2026-01-01' })])).toBeNull()
+    expect(complaintOf([filled({ validTo: '2026-12-31' })])).toBeNull()
+  })
+})
+
+describe('priceRowsOfAmounts', () => {
+  it('priceRowsOfAmountsTest', () => {
+    // The order follows the object keys, which JavaScript sorts with numbers first; the backend
+    // does not care about the order of the lines, so the test does not either.
+    const rows = priceRowsOfAmounts({ '': '150.00', '4': '132.50' })
+    expect(rows).toHaveLength(2)
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ priceGroup: '', price: '150.00' }),
+        expect.objectContaining({ priceGroup: '4', price: '132.50' }),
+      ]),
+    )
+  })
+
+  it('priceRowsOfAmountsWithoutAmountsTest', () => {
+    expect(priceRowsOfAmounts({})).toEqual([])
+  })
+
+  it('priceRowsOfAmountsLeavesOutBlankAmountsTest', () => {
+    const rows = priceRowsOfAmounts({ '': '   ', '4': '132' })
+    expect(rows.map((row) => row.priceGroup)).toEqual(['4'])
+  })
+
+  it('priceRowsOfAmountsGivesEveryLineNoQuantityOrPeriodTest', () => {
+    const [row] = priceRowsOfAmounts({ '4': '132' })
+    expect(row).toMatchObject({ minQuantity: '', validFrom: '', validTo: '' })
+  })
+
+  it('priceRowsOfAmountsPayloadIsTheBasePriceAndTheGroupTest', () => {
+    const payload = toPricePayload(priceRowsOfAmounts({ '': '150', '4': '132' }))
+    expect(payload).toHaveLength(2)
+    expect(payload).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ priceGroupId: undefined, price: 150 }),
+        expect.objectContaining({ priceGroupId: 4, price: 132 }),
+      ]),
+    )
   })
 })

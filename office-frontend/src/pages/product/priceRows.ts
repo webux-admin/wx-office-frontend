@@ -87,7 +87,7 @@ export function isBlankRow(row: PriceRowForm): boolean {
  *
  * <p>Only untouched lines are left out: a freshly added line nobody filled in is not a price
  * of nought. A line that was written but does not read as a number is **not** dropped here —
- * it is refused by {@link firstPriceComplaint} before the request is built, because the
+ * it is refused by {@link priceFieldErrors} before the request is built, because the
  * request replaces the stored list and a dropped line means a deleted price.
  *
  * @param rows the lines of the table
@@ -125,7 +125,22 @@ export function pricesChanged(rows: PriceRowForm[], product: Product | null): bo
 }
 
 /**
- * Checks what can be checked here, which is little.
+ * The lines of a new product, one per price group that has an amount.
+ *
+ * <p>The key of the base price is the empty string, the same as a line without a group. Blank
+ * amounts are left out, so a group nobody priced gets no line at all.
+ *
+ * @param amounts the amount as typed, per price group id; `''` for the base price
+ * @returns one line per filled amount, without quantity or period
+ */
+export function priceRowsOfAmounts(amounts: Readonly<Record<string, string>>): PriceRowForm[] {
+  return Object.entries(amounts)
+    .filter(([, price]) => price.trim() !== '')
+    .map(([priceGroup, price]) => ({ ...emptyPriceRow(), priceGroup, price }))
+}
+
+/**
+ * Checks what can be checked here, which is little, and says where it is wrong.
  *
  * <p>Whether two periods overlap is decided by the backend, and by the database behind it.
  * This only catches what the operator can see at a glance, so the mask can say it in German
@@ -135,10 +150,18 @@ export function pricesChanged(rows: PriceRowForm[], product: Product | null): bo
  * a number the mask cannot read must stop the save: sending the line without it would delete
  * a price the operator meant to correct.
  *
+ * <p>The price table is one field for the mask, so its message is keyed `prices`. Only the
+ * first problem is named, the table has room for one line of text.
+ *
  * @param rows the lines of the table
- * @returns the German complaint, or `null` when nothing is obviously wrong
+ * @returns the message under `prices`, empty when nothing is obviously wrong
  */
-export function firstPriceComplaint(rows: PriceRowForm[]): string | null {
+export function priceFieldErrors(rows: PriceRowForm[]): Record<string, string> {
+  const problem = firstPriceProblem(rows)
+  return problem === null ? {} : { prices: problem }
+}
+
+function firstPriceProblem(rows: PriceRowForm[]): string | null {
   for (const row of rows) {
     if (isBlankRow(row)) continue
     if (parseDecimal(row.price) === null) {

@@ -95,9 +95,9 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
           </EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-body">
               <thead>
-                <tr className="border-b border-line-subtle text-left text-[11px] uppercase tracking-[0.06em] text-text-tertiary">
+                <tr className="border-b border-line-subtle text-left text-caption uppercase tracking-[0.06em] text-text-tertiary">
                   <th className="py-2 font-medium">Lagerort</th>
                   <th className="py-2 text-right font-medium">Bestand</th>
                   <th className="py-2 text-right font-medium">Reserviert</th>
@@ -155,7 +155,7 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
         ) : latest.error ? (
           <ErrorNotice error={latest.error} />
         ) : (latest.data ?? []).length === 0 ? (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Für dieses Produkt wurde noch nichts gebucht.
           </p>
         ) : (
@@ -163,10 +163,10 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
             {(latest.data ?? []).map((movement) => (
               <li
                 key={movement.id}
-                className="flex items-baseline justify-between gap-3 border-b border-line-subtle py-1.5 text-[13px] last:border-b-0"
+                className="flex items-baseline justify-between gap-3 border-b border-line-subtle py-1.5 text-body last:border-b-0"
               >
                 <span className="flex min-w-0 items-baseline gap-3">
-                  <span className="w-[86px] shrink-0 text-text-tertiary">
+                  <span className="w-column-xs shrink-0 text-text-tertiary">
                     {formatDate(movement.bookedOn)}
                   </span>
                   <Badge>{reasonLabel(movement.reason)}</Badge>
@@ -190,7 +190,7 @@ export function ProductStock({ tenantId, product }: { tenantId: number; product:
         <div className="mt-4">
           <Link
             to={journalLink()}
-            className="text-[13px] text-accent-text underline-offset-2 hover:underline"
+            className="text-body text-accent-text underline-offset-2 hover:underline"
           >
             Alle Bewegungen
           </Link>

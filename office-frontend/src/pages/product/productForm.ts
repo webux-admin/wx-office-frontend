@@ -205,33 +205,36 @@ export function toPayload(form: ProductForm, defined?: FreeFieldSlot[]): Partial
 }
 
 /**
- * Checks what can be checked here, which is little.
+ * Checks what the mask can check before it sends, each message at its field.
  *
  * <p>The rules of the domain (whether the EAN check digit adds up, whether a number is still
- * free) belong to the backend and are answered by it. This only catches what would come back
- * as an English sentence, so the mask can name the field in German instead.
+ * free) belong to the backend and come back under `errors` (backend ADR-0141). This only
+ * catches what is visible on the form, so the answer is immediate and in German.
  *
  * @param form the filled in mask
- * @returns the German complaint, or `null` when nothing is obviously missing
+ * @returns the message per field, empty when nothing is obviously wrong
  */
-export function firstComplaint(form: ProductForm): string | null {
-  if (form.name.trim() === '') return 'Ohne Bezeichnung lässt sich nichts speichern.'
-  if (form.unit === '') return 'Ein Produkt braucht eine Einheit.'
+export function productFieldErrors(form: ProductForm): Record<string, string> {
+  const errors: Record<string, string> = {}
+  if (form.name.trim() === '') errors.name = 'Die Bezeichnung ist erforderlich.'
+  if (form.unit === '') errors.unit = 'Die Einheit ist erforderlich.'
   if (form.stockManaged && form.productType === 'SERVICE') {
-    return 'Dienstleistungen werden nicht im Lager geführt.'
+    errors.stockManaged = 'Dienstleistungen werden nicht im Lager geführt.'
   }
   if (form.tracking !== 'NONE' && !form.stockManaged) {
-    return 'Eine Nachverfolgung braucht ein Produkt, das im Lager geführt wird.'
+    errors.tracking = 'Eine Nachverfolgung braucht ein Produkt, das im Lager geführt wird.'
   }
   if (form.minimumQuantity.trim() !== '') {
     const minimum = parseDecimal(form.minimumQuantity)
-    if (minimum === null) return 'Der Mindestbestand muss eine Zahl sein, zum Beispiel 25.'
-    if (minimum < 0) return 'Der Mindestbestand darf nicht negativ sein.'
-    if (!form.stockManaged) {
-      return 'Ein Mindestbestand braucht ein Produkt, das im Lager geführt wird.'
+    if (minimum === null) {
+      errors.minimumQuantity = 'Der Mindestbestand muss eine Zahl sein, zum Beispiel 25.'
+    } else if (minimum < 0) {
+      errors.minimumQuantity = 'Der Mindestbestand darf nicht negativ sein.'
+    } else if (!form.stockManaged) {
+      errors.minimumQuantity = 'Ein Mindestbestand braucht ein Produkt, das im Lager geführt wird.'
     }
   }
-  return null
+  return errors
 }
 
 /**

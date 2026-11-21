@@ -28,11 +28,14 @@ export function ProductPrices({
   rows,
   onChange,
   mayWrite,
+  error,
 }: {
   tenantId: number
   rows: PriceRowForm[]
   onChange: (rows: PriceRowForm[]) => void
   mayWrite: boolean
+  /** The refusal of the table as a whole, drawn under it in the error colour. */
+  error?: string
 }) {
   const groups = useQuery({
     queryKey: ['price-groups', tenantId],
@@ -77,21 +80,21 @@ export function ProductPrices({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-[13px]">
+          <table className="w-full min-w-[45rem] border-collapse text-body">
             <thead>
               <tr className="border-b border-line-subtle">
                 {HEADERS.map((header, index) => (
                   <th
                     key={header}
                     scope="col"
-                    className={`px-3 py-2 text-[11px] font-medium uppercase tracking-[0.4px] text-text-tertiary ${
+                    className={`px-3 py-2 text-caption font-medium uppercase tracking-wide text-text-tertiary ${
                       index === 0 ? 'pl-5 text-left' : 'text-right'
                     }`}
                   >
                     {header}
                   </th>
                 ))}
-                <th scope="col" className="w-[56px] pr-5">
+                <th scope="col" className="w-14 pr-5">
                   <span className="sr-only">Zeile entfernen</span>
                 </th>
               </tr>
@@ -178,7 +181,13 @@ export function ProductPrices({
         </div>
       )}
 
-      <p className="border-t border-line-subtle px-5 py-3 text-[12px] text-text-secondary">
+      {error !== undefined && (
+        <p role="alert" className="border-t border-line-subtle px-5 py-3 text-small text-danger">
+          {error}
+        </p>
+      )}
+
+      <p className="border-t border-line-subtle px-5 py-3 text-small text-text-secondary">
         Leer heisst offen: ohne Ab-Datum gilt der Preis seit jeher, ohne Bis-Datum bis auf
         weiteres. Zwei Zeilen derselben Gruppe und Menge dürfen sich nicht überschneiden.
       </p>
@@ -220,7 +229,7 @@ function GridInput({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      className={`h-9 w-full rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2 text-[13px] text-text-primary outline-none transition-colors placeholder:text-text-tertiary hover:border-line focus:border-accent disabled:text-text-secondary ${
+      className={`h-9 w-full rounded-[var(--radius-sm)] border border-transparent bg-transparent px-2 text-body text-text-primary outline-none transition-colors placeholder:text-text-tertiary hover:border-line focus:border-accent disabled:text-text-secondary ${
         numeric ? 'text-right font-mono tabular-nums' : ''
       }`}
       {...rest}
@@ -247,7 +256,7 @@ function GridSelect({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 w-full rounded-[var(--radius-sm)] border border-transparent bg-surface px-2 text-[13px] text-text-primary outline-none transition-colors hover:border-line focus:border-accent disabled:text-text-secondary"
+      className="h-9 w-full rounded-[var(--radius-sm)] border border-transparent bg-surface px-2 text-body text-text-primary outline-none transition-colors hover:border-line focus:border-accent disabled:text-text-secondary"
     >
       {children}
     </select>

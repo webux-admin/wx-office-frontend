@@ -1,25 +1,28 @@
-import { useRef, useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { CheckboxField } from '../components/CheckboxField'
+import { FactList, type Fact } from '../components/FactList'
+import { FormMask } from '../components/FormMask'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
-import { Tabs } from '../components/Tabs'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
+import { useChangeTracker } from '../components/useChangeTracker'
+import { useFieldErrors } from '../components/useFieldErrors'
 import { useAuth } from '../auth/useAuth'
 import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../lib/accounting'
 import { INVENTORY_MODULE } from '../lib/inventory'
 import { useRunsModule } from '../lib/modules'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
-import { formatPercent } from '../lib/format'
+import { formatAmount, formatPercent } from '../lib/format'
+import { isToldByFields } from '../lib/fieldErrors'
 import { originOf, type Origin } from '../lib/origin'
 import type {
+  PriceGroup,
   Product,
   ProductFreeFieldDefinition,
   ProductTracking,
@@ -34,20 +37,21 @@ import { ProductFreeFields } from './product/ProductFreeFields'
 import { ProductPrices } from './product/ProductPrices'
 import { ProductStock } from './product/ProductStock'
 import {
-  firstPriceComplaint,
   pricesChanged,
+  priceFieldErrors,
+  priceRowsOfAmounts,
   toPricePayload,
   toPriceRowForm,
   type PriceRowForm,
 } from './product/priceRows'
 import {
   activeChanged,
-  emptyProduct,
-  firstComplaint,
-  toForm,
-  toPayload,
   applyProductType,
   applyStockManaged,
+  emptyProduct,
+  productFieldErrors,
+  toForm,
+  toPayload,
   type ProductForm,
 } from './product/productForm'
 
@@ -61,6 +65,32 @@ const REGISTERS: { id: Register; label: string }[] = [
   { id: 'preise', label: 'Preise' },
   { id: 'buchhaltung', label: 'Buchhaltung' },
 ]
+
+/**
+ * Every field name the mask draws a message under. A refusal that names only these is shown at
+ * its fields; anything else stays in a notice above the form.
+ *
+ * <p>The stock flag is not here on purpose: its checkbox cannot carry a message, so a refusal
+ * about it goes to the notice instead of vanishing.
+ */
+const SHOWN_FIELDS = [
+  'name',
+  'unit',
+  'productNumber',
+  'productType',
+  'subtitle',
+  'eanCode',
+  'vatCategory',
+  'tracking',
+  'minimumQuantity',
+  'prices',
+  'prices.price',
+  'prices.minQuantity',
+  'prices.validTo',
+]
+
+/** The price table has one message; a refusal names it under one of these keys. */
+const PRICE_TABLE_KEYS = ['prices', 'prices.price', 'prices.minQuantity', 'prices.validTo']
 
 /** One article of the catalogue, with its prices per group, quantity and period. */
 export function ProductPage() {
@@ -93,33 +123,45 @@ function ProductLoader({ tenantId }: { tenantId: number }) {
   return <ProductMask key={product.data.id} tenantId={tenantId} product={product.data} />
 }
 
+/**
+ * The mask of one article.
+ *
+ * <p>A new article shows only what it needs to exist: the master data and one price per price
+ * group. Everything else waits for the stored article, which opens with its registers
+ * (ADR-0059). The two are saved differently: a new article goes in one request, prices
+ * included; a stored one updates its master data, and its price table and active flag each in
+ * their own request, only where they changed.
+ */
 function ProductMask({ tenantId, product }: { tenantId: number; product: Product | null }) {
   const { can } = useAuth()
   const runs = useRunsModule()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const origin = originOf(useLocation().state, LIST)
+  const creating = product === null
   const mayWrite = can('PRODUCT_WRITE')
   // Taking an article out of the catalogue is its own right, so the checkbox needs both.
   const mayChangeActive = mayWrite && can('PRODUCT_DEACTIVATE')
 
   const [form, setForm] = useState<ProductForm>(product ? toForm(product) : emptyProduct())
-  // The price rows live next to the mask rather than inside it: they travel in their own
-  // request, and the master data payload must not be able to carry them.
+  // The price rows live next to the mask rather than inside it: a stored article sends them in
+  // their own request, and the master data payload must not be able to carry them.
   const [prices, setPrices] = useState<PriceRowForm[]>(toPriceRowForm(product))
-  // Saving a new article is two requests. If the second one fails the article already exists,
-  // so a second attempt must correct it instead of creating it again — the number would be
-  // taken by the article the first attempt left behind.
-  const createdId = useRef<number | null>(null)
+  // A new article takes one amount per price group. The base price has the empty key.
+  const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [tab, setTab] = useState<Register>('hauptdaten')
-  const [complaint, setComplaint] = useState<string | null>(null)
+  const { changed, track } = useChangeTracker()
 
-  const set = <K extends keyof ProductForm>(field: K, value: ProductForm[K]) =>
-    setForm((current) => ({ ...current, [field]: value }))
+  const base = `/api/tenants/${tenantId}/products`
 
   const vatRates = useQuery({
     queryKey: ['vat-rates', tenantId],
     queryFn: () => api.get<VatRates>(`/api/tenants/${tenantId}/vat-rates`),
+  })
+
+  const groups = useQuery({
+    queryKey: ['price-groups', tenantId],
+    queryFn: () => api.get<PriceGroup[]>(`/api/tenants/${tenantId}/price-groups`),
   })
 
   // What the free fields of this tenant mean. Read here rather than taken from the product,
@@ -132,6 +174,11 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
 
   // Only the ones the tenant shows. A field switched off keeps its value but leaves the mask.
   const freeFields = (freeFieldDefinitions.data ?? []).filter((field) => field.active !== false)
+
+  // The price rows of what is being saved: the table of a stored article, or the amounts a new
+  // one carries.
+  const createRows = priceRowsOfAmounts(amounts)
+  const rows = creating ? createRows : prices
 
   // Two registers appear only where there is something in them: the stock, and the free
   // fields of a tenant that defined none.
@@ -159,34 +206,29 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
   // blank. Falling back never touches the stored product; only what is drawn.
   const shownTab: Register = registers.some((entry) => entry.id === tab) ? tab : 'hauptdaten'
 
+  const rate = vatRates.data?.[form.vatCategory]
+
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['product', tenantId] })
     void queryClient.invalidateQueries({ queryKey: ['products', tenantId] })
   }
 
-  const base = `/api/tenants/${tenantId}/products`
-
   const save = useMutation({
     mutationFn: async () => {
       const payload = toPayload(form, freeFields)
-      const known = product?.id ?? createdId.current
-      let saved =
-        known === null
-          ? await api.post<Product>(base, payload)
-          : await api.put<Product>(`${base}/${known}`, payload)
-      createdId.current = saved.id
-      // The prices replace the stored list in one request of their own, so that a mask which
-      // never opened the register cannot drop them and two rows of one period can be checked
-      // against each other. Sent only when the table really differs from what is stored.
+      if (product === null) {
+        return api.post<Product>(base, { ...payload, prices: toPricePayload(createRows) })
+      }
+      let saved = await api.put<Product>(`${base}/${product.id}`, payload)
       if (pricesChanged(prices, product)) {
-        saved = await api.put<Product>(`${base}/${saved.id}/prices`, {
+        saved = await api.put<Product>(`${base}/${product.id}/prices`, {
           prices: toPricePayload(prices),
         })
       }
       // Whether the article is still offered has its own endpoint, so it travels in its own
       // request — and only when the checkbox really differs from what is stored.
       if (activeChanged(form, product)) {
-        return api.put<Product>(`${base}/${saved.id}/active`, { active: form.active })
+        return api.put<Product>(`${base}/${product.id}/active`, { active: form.active })
       }
       return saved
     },
@@ -199,98 +241,143 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
     },
   })
 
+  const fields = useFieldErrors(
+    () => ({ ...productFieldErrors(form), ...priceFieldErrors(rows) }),
+    save.error,
+  )
+
   const submit = () => {
-    const problem = firstComplaint(form) ?? firstPriceComplaint(prices)
-    setComplaint(problem)
-    if (!problem) save.mutate()
+    if (fields.check()) save.mutate()
   }
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
-  // filled in and finished without reaching for the mouse.
-  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
+  const priceError = PRICE_TABLE_KEYS.map((key) => fields.errors[key]).find(
+    (message) => message !== undefined,
+  )
 
-  const rate = vatRates.data?.[form.vatCategory]
+  const told = save.error !== null && isToldByFields(save.error, SHOWN_FIELDS)
+
+  const facts: Fact[] = product
+    ? [
+        { label: 'Artikelnummer', value: product.productNumber ?? null },
+        {
+          label: 'Grundpreis',
+          value: product.basePrice === undefined ? null : formatAmount(product.basePrice),
+        },
+        { label: 'Einheit', value: product.unitLabel ?? product.unit },
+        { label: 'MwSt-Satz', value: rate === undefined ? null : formatPercent(rate) },
+      ]
+    : []
 
   return (
-    <>
-      <PageHeader
-        title={product ? product.name : 'Neues Produkt'}
-        back={{ to: origin.from, label: origin.label }}
-        subtitle={
-          product ? (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-[12px]">{product.productNumber ?? 'ohne Nummer'}</span>
-              {product.active === false && <Badge tone="muted">Deaktiviert</Badge>}
-            </span>
-          ) : (
-            'Die Artikelnummer wird hier vergeben; das Backend erzeugt keine.'
-          )
-        }
-      >
-        {mayWrite && (
+    <FormMask
+      title={product ? product.name : 'Neues Produkt'}
+      back={{ to: origin.from, label: origin.label }}
+      subtitle={
+        product ? (
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-small">{product.productNumber ?? 'ohne Nummer'}</span>
+            {product.active === false && <Badge tone="muted">Deaktiviert</Badge>}
+          </span>
+        ) : (
+          'Die Artikelnummer wird hier vergeben; das Backend erzeugt keine.'
+        )
+      }
+      actions={
+        mayWrite && (
           <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
+        )
+      }
+      summary={product ? <FactList facts={facts} /> : undefined}
+      tabs={product ? { items: registers, active: shownTab, onChange: setTab } : undefined}
+      dirty={changed}
+      onSubmit={mayWrite && !save.isPending ? submit : undefined}
+    >
+      <div {...track} className="grid gap-6">
+        {save.error !== null && !told && <ErrorNotice error={save.error} />}
+
+        {creating && (
+          <>
+            <Panel title="Stammdaten">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <MainDataFields
+                  tenantId={tenantId}
+                  form={form}
+                  setForm={setForm}
+                  mayWrite={mayWrite}
+                  errors={fields.errors}
+                />
+                <VatField
+                  tenantId={tenantId}
+                  form={form}
+                  setForm={setForm}
+                  mayWrite={mayWrite}
+                  error={fields.errors.vatCategory}
+                  rate={rate}
+                />
+              </div>
+            </Panel>
+
+            <Panel
+              title="Preise"
+              description="Ein Preis je Preisgruppe. Staffeln und Zeiträume erfassen Sie nach dem Speichern im Register Preise."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <AmountField
+                  label="Grundpreis"
+                  amountKey=""
+                  amounts={amounts}
+                  setAmounts={setAmounts}
+                  disabled={!mayWrite}
+                  error={priceError}
+                  tooltip="Gilt für alle Kunden ohne Preisgruppe."
+                />
+                {(groups.data ?? [])
+                  .filter((group) => group.active !== false)
+                  .map((group) => (
+                    <AmountField
+                      key={group.id}
+                      label={`${group.code} · ${group.name}`}
+                      amountKey={String(group.id)}
+                      amounts={amounts}
+                      setAmounts={setAmounts}
+                      disabled={!mayWrite}
+                      tooltip={group.description}
+                    />
+                  ))}
+              </div>
+            </Panel>
+          </>
         )}
-      </PageHeader>
 
-      <div className="px-8 pb-12">
-        <Tabs tabs={registers} active={shownTab} onChange={setTab} label="Register" />
-
-        {(complaint !== null || save.error !== null) && (
-          <div className="mb-6">
-            <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
-          </div>
-        )}
-
-        {shownTab === 'hauptdaten' && (
+        {!creating && shownTab === 'hauptdaten' && (
           <Panel title="Stammdaten">
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="Artikelnummer"
-                value={form.productNumber}
-                onChange={(event) => set('productNumber', event.target.value)}
-                disabled={!mayWrite}
-                maxLength={20}
-                hint="Muss im Mandanten eindeutig sein. Leer lassen ist erlaubt, vergeben wird keine."
-              />
-
-              <CatalogueSelect
-                label="Art"
+              <MainDataFields
                 tenantId={tenantId}
-                catalogue="product-type"
-                value={form.productType}
-                // Through applyProductType, because a service carries no stock: the mask
-                // must not hold a state the server refuses afterwards.
-                onChange={(code) => setForm((current) =>
-                  applyProductType(current, code as ProductType))}
-                disabled={!mayWrite}
-              />
-
-              <TextField
-                label="Bezeichnung"
-                value={form.name}
-                onChange={(event) => set('name', event.target.value)}
-                disabled={!mayWrite}
-                required
-                maxLength={140}
-                className="sm:col-span-2"
+                form={form}
+                setForm={setForm}
+                mayWrite={mayWrite}
+                errors={fields.errors}
+                storedUnitLabel={product?.unitLabel}
               />
 
               <TextField
                 label="Untertitel"
                 value={form.subtitle}
-                onChange={(event) => set('subtitle', event.target.value)}
+                onChange={(event) => setForm((current) => ({ ...current, subtitle: event.target.value }))}
                 disabled={!mayWrite}
                 maxLength={140}
-                hint="Zweite Zeile unter der Bezeichnung. Wird gedruckt."
+                error={fields.errors.subtitle}
+                tooltip="Steht auf dem Beleg unter der Bezeichnung."
                 className="sm:col-span-2"
               />
 
               <TextAreaField
                 label="Beschreibung"
                 value={form.description}
-                onChange={(event) => set('description', event.target.value)}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                 disabled={!mayWrite}
                 className="sm:col-span-2"
                 placeholder="Erscheint als Text der Belegzeile."
@@ -299,48 +386,42 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
               <TextAreaField
                 label="Kommentar"
                 value={form.internalComment}
-                onChange={(event) => set('internalComment', event.target.value)}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, internalComment: event.target.value }))}
                 disabled={!mayWrite}
                 className="sm:col-span-2"
-                hint="Nur für den internen Gebrauch. Erscheint auf keinem Beleg."
-              />
-
-              <MasterDataSelect
-                label="Einheit"
-                tenantId={tenantId}
-                list="units"
-                value={form.unit}
-                storedLabel={product?.unitLabel}
-                onChange={(code) => set('unit', code)}
-                disabled={!mayWrite}
+                tooltip="Nur intern. Erscheint auf keinem Beleg."
               />
 
               <TextField
                 label="EAN-Code"
                 value={form.eanCode}
-                onChange={(event) => set('eanCode', event.target.value)}
+                onChange={(event) => setForm((current) => ({ ...current, eanCode: event.target.value }))}
                 disabled={!mayWrite}
                 inputMode="numeric"
                 maxLength={20}
-                hint="8, 12, 13 oder 14 Ziffern. Die Prüfziffer wird beim Speichern geprüft."
+                error={fields.errors.eanCode}
+                tooltip="8, 12, 13 oder 14 Ziffern. Die Prüfziffer wird beim Speichern geprüft."
               />
 
               <CheckboxField
                 label="Rabattfähig"
                 checked={form.discountable}
-                onChange={(event) => set('discountable', event.target.checked)}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, discountable: event.target.checked }))}
                 disabled={!mayWrite}
-                hint="Aus heisst: eine Belegzeile mit diesem Produkt nimmt keinen Rabatt an."
+                tooltip="Aus: Belegzeilen mit diesem Produkt bekommen keinen Rabatt."
               />
 
               <CheckboxField
                 label="Aktiv"
                 checked={form.active}
-                onChange={(event) => set('active', event.target.checked)}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, active: event.target.checked }))}
                 disabled={!mayChangeActive}
-                hint={
+                tooltip={
                   mayChangeActive
-                    ? 'Aus heisst: nicht mehr zur Auswahl. Bestehende Belegzeilen bleiben, gelöscht wird nichts.'
+                    ? 'Aus: nicht mehr zur Auswahl. Bestehende Belegzeilen bleiben.'
                     : 'Dafür fehlt das Recht, ein Produkt zu deaktivieren.'
                 }
               />
@@ -348,16 +429,17 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           </Panel>
         )}
 
-        {shownTab === 'preise' && (
+        {!creating && shownTab === 'preise' && (
           <ProductPrices
             tenantId={tenantId}
             rows={prices}
             onChange={setPrices}
             mayWrite={mayWrite}
+            error={priceError}
           />
         )}
 
-        {shownTab === 'freifelder' && (
+        {!creating && shownTab === 'freifelder' && (
           <ProductFreeFields
             fields={freeFields}
             values={form.freeFields}
@@ -371,7 +453,7 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
           />
         )}
 
-        {shownTab === 'lager' && (
+        {!creating && shownTab === 'lager' && (
           <Panel
             title="Einrichtung"
             description="Ob und wie genau der Bestand dieses Produkts geführt wird."
@@ -383,10 +465,10 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                 onChange={(event) =>
                   setForm((current) => applyStockManaged(current, event.target.checked))}
                 disabled={!mayWrite || form.productType === 'SERVICE'}
-                hint={
+                tooltip={
                   form.productType === 'SERVICE'
                     ? 'Dienstleistungen werden nicht im Lager geführt.'
-                    : 'Ohne Haken entsteht für dieses Produkt keine Bewegung und kein Bestand.'
+                    : 'Ohne Haken entsteht für dieses Produkt kein Bestand.'
                 }
                 className="items-center"
               />
@@ -399,9 +481,10 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                   tenantId={tenantId}
                   catalogue="product-tracking"
                   value={form.tracking}
-                  onChange={(code) => set('tracking', code as ProductTracking)}
+                  onChange={(code) => setForm((current) => ({ ...current, tracking: code as ProductTracking }))}
                   disabled={!mayWrite}
-                  hint="Chargen führen Lose, Seriennummern eine Zeile je Stück."
+                  error={fields.errors.tracking}
+                  tooltip="Chargen führen Lose, Seriennummern eine Zeile je Stück."
                 />
               )}
 
@@ -409,11 +492,13 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                 <TextField
                   label="Mindestbestand"
                   value={form.minimumQuantity}
-                  onChange={(event) => set('minimumQuantity', event.target.value)}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, minimumQuantity: event.target.value }))}
                   disabled={!mayWrite}
                   inputMode="decimal"
                   numeric
-                  hint="Leer heisst: keine Überwachung."
+                  error={fields.errors.minimumQuantity}
+                  tooltip="Leer: keine Überwachung."
                 />
               )}
             </div>
@@ -422,27 +507,20 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
 
         {/* Only for an article that is saved and followed: a new one has no stock, and one
             without the flag has none by definition. */}
-        {shownTab === 'lager' && product !== null && form.stockManaged && (
-          <div className="mt-6">
-            <ProductStock tenantId={tenantId} product={product} />
-          </div>
+        {!creating && shownTab === 'lager' && product !== null && form.stockManaged && (
+          <ProductStock tenantId={tenantId} product={product} />
         )}
 
-        {shownTab === 'buchhaltung' && (
+        {!creating && shownTab === 'buchhaltung' && (
           <Panel title="Steuer und Konto">
             <div className="grid gap-4 sm:grid-cols-2">
-              <CatalogueSelect
-                label="MwSt-Behandlung"
+              <VatField
                 tenantId={tenantId}
-                catalogue="vat-category"
-                value={form.vatCategory}
-                onChange={(code) => set('vatCategory', code as VatCategory)}
-                disabled={!mayWrite}
-                hint={
-                  rate === undefined
-                    ? 'Den Satz zum Leistungsdatum bestimmt das Backend.'
-                    : `Aktueller Satz: ${formatPercent(rate)}`
-                }
+                form={form}
+                setForm={setForm}
+                mayWrite={mayWrite}
+                error={fields.errors.vatCategory}
+                rate={rate}
               />
 
               {/* Hidden, never emptied: `form.revenueAccount` still carries what the product
@@ -454,16 +532,159 @@ function ProductMask({ tenantId, product }: { tenantId: number; product: Product
                   label="Ertragskonto"
                   tenantId={tenantId}
                   value={form.revenueAccount}
-                  onChange={(code) => set('revenueAccount', code)}
+                  onChange={(code) => setForm((current) => ({ ...current, revenueAccount: code }))}
                   disabled={!mayWrite}
                   emptyLabel="Konto des Mandanten"
-                  hint="Leer heisst: das Konto aus den Mandanteneinstellungen gilt."
+                  tooltip="Leer: das Konto aus den Mandanteneinstellungen gilt."
                 />
               )}
             </div>
           </Panel>
         )}
       </div>
+    </FormMask>
+  )
+}
+
+/** What the mask needs from its form to draw and change the shared fields. */
+type FormFieldsProps = {
+  tenantId: number
+  form: ProductForm
+  setForm: Dispatch<SetStateAction<ProductForm>>
+  mayWrite: boolean
+}
+
+/**
+ * The fields every article has: its kind, number, name and unit.
+ *
+ * <p>Drawn by both the mask of a new article and the stored one, so they stay the same
+ * wherever they appear.
+ */
+function MainDataFields({
+  tenantId,
+  form,
+  setForm,
+  mayWrite,
+  errors,
+  storedUnitLabel,
+}: FormFieldsProps & { errors: Readonly<Record<string, string>>; storedUnitLabel?: string | null }) {
+  return (
+    <>
+      <CatalogueSelect
+        label="Art"
+        tenantId={tenantId}
+        catalogue="product-type"
+        value={form.productType}
+        // Through applyProductType, because a service carries no stock: the mask must not hold
+        // a state the server refuses afterwards.
+        onChange={(code) => setForm((current) => applyProductType(current, code as ProductType))}
+        disabled={!mayWrite}
+        required
+        error={errors.productType}
+      />
+
+      <TextField
+        label="Artikelnummer"
+        value={form.productNumber}
+        onChange={(event) => setForm((current) => ({ ...current, productNumber: event.target.value }))}
+        disabled={!mayWrite}
+        maxLength={20}
+        error={errors.productNumber}
+        tooltip="Eindeutig im Mandanten. Leer lassen heisst: keine Nummer."
+      />
+
+      <TextField
+        label="Bezeichnung"
+        value={form.name}
+        onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+        disabled={!mayWrite}
+        required
+        maxLength={140}
+        error={errors.name}
+        className="sm:col-span-2"
+      />
+
+      <MasterDataSelect
+        label="Einheit"
+        tenantId={tenantId}
+        list="units"
+        value={form.unit}
+        storedLabel={storedUnitLabel}
+        onChange={(code) => setForm((current) => ({ ...current, unit: code }))}
+        disabled={!mayWrite}
+        required
+        error={errors.unit}
+      />
     </>
+  )
+}
+
+/**
+ * The tax treatment of the article, with the rate the date of supply gives it today.
+ *
+ * <p>The rate is shown, not chosen: the backend takes the rate of the date of supply, and the
+ * mask only says which one that is at the moment.
+ */
+function VatField({
+  tenantId,
+  form,
+  setForm,
+  mayWrite,
+  error,
+  rate,
+}: FormFieldsProps & { error?: string; rate: number | undefined }) {
+  return (
+    <CatalogueSelect
+      label="MwSt-Behandlung"
+      tenantId={tenantId}
+      catalogue="vat-category"
+      value={form.vatCategory}
+      onChange={(code) => setForm((current) => ({ ...current, vatCategory: code as VatCategory }))}
+      disabled={!mayWrite}
+      error={error}
+      hint={
+        rate === undefined
+          ? 'Den Satz zum Leistungsdatum bestimmt das Backend.'
+          : `Aktueller Satz: ${formatPercent(rate)}`
+      }
+    />
+  )
+}
+
+/**
+ * One amount of the price panel of a new article, keyed by its price group.
+ *
+ * <p>The key is the group id, or the empty string for the base price, the same key
+ * {@link priceRowsOfAmounts} reads.
+ */
+function AmountField({
+  label,
+  amountKey,
+  amounts,
+  setAmounts,
+  disabled,
+  error,
+  tooltip,
+}: {
+  label: string
+  amountKey: string
+  amounts: Readonly<Record<string, string>>
+  setAmounts: Dispatch<SetStateAction<Record<string, string>>>
+  disabled: boolean
+  error?: string
+  tooltip?: string
+}) {
+  return (
+    <TextField
+      label={label}
+      value={amounts[amountKey] ?? ''}
+      onChange={(event) =>
+        setAmounts((current) => ({ ...current, [amountKey]: event.target.value }))}
+      disabled={disabled}
+      inputMode="decimal"
+      numeric
+      error={error}
+      tooltip={tooltip}
+    />
   )
 }

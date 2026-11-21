@@ -84,15 +84,34 @@ function json(body: unknown) {
   )
 }
 
+const UNITS = [{ id: 1, code: 'PIECE', name: 'Stück', shortName: 'Stk', active: true, isDefault: true }]
+
+const PRICE_GROUPS = [
+  { id: 4, code: 'WIEDER', name: 'Wiederverkauf', active: true, isDefault: false },
+]
+
+/** What the next write answers with, when it is meant to be refused. */
+let refusal: unknown = null
+
 function stubFetch() {
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     if (method !== 'GET') {
       written.push({ url, method, body: JSON.parse(String(init?.body ?? '{}')) })
+      if (refusal !== null) {
+        return Promise.resolve(
+          new Response(JSON.stringify(refusal), {
+            status: 400,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+        )
+      }
       return json(STORED)
     }
     if (url.includes('/vat-rates')) return json({ STANDARD: 8.1, REDUCED: 2.6 })
     if (url.includes('/accounting/accounts')) return json(REVENUE_ACCOUNTS)
+    if (url.includes('/price-groups')) return json(PRICE_GROUPS)
+    if (url.includes('/units')) return json(UNITS)
     if (url.includes('/products/7')) return json(STORED)
     return json([])
   })
@@ -100,6 +119,7 @@ function stubFetch() {
 
 beforeEach(() => {
   written = []
+  refusal = null
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -167,9 +187,38 @@ async function openAccountingRegister() {
   await settle()
 }
 
+/** The input or dropdown behind the label that starts with `label`. */
+function fieldNamed(label: string): HTMLInputElement | HTMLSelectElement {
+  const found = [...container.querySelectorAll('label')].find((entry) =>
+    entry.textContent?.startsWith(label),
+  )
+  const field = found && container.querySelector(`[id="${found.htmlFor}"]`)
+  if (!(field instanceof HTMLInputElement || field instanceof HTMLSelectElement)) {
+    throw new Error(`no field labelled ${label}`)
+  }
+  return field
+}
+
+/** Types into a field the way the user does: the native setter, then the event React reads. */
+async function typeInto(label: string, value: string) {
+  const field = fieldNamed(label)
+  const isSelect = field instanceof HTMLSelectElement
+  await act(async () => {
+    const prototype = isSelect ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value)
+    field.dispatchEvent(new Event(isSelect ? 'change' : 'input', { bubbles: true }))
+  })
+  await settle()
+}
+
+async function saveNew() {
+  await act(async () => save()?.click())
+  await settle()
+}
+
 describe('ProductPage', () => {
   it('productPageShowsTheStockRegisterWithRightAndModuleTest', async () => {
-    await render(session([...READS_PRODUCTS, 'INVENTORY_READ'], ['INVENTORY']))
+    await render(session([...READS_PRODUCTS, 'INVENTORY_READ'], ['INVENTORY']), '7')
 
     expect(register('Lager')).toBeDefined()
 
@@ -180,10 +229,63 @@ describe('ProductPage', () => {
   })
 
   it('productPageHidesTheStockRegisterWithoutTheRightTest', async () => {
-    await render(session(READS_PRODUCTS, ['INVENTORY']))
+    await render(session(READS_PRODUCTS, ['INVENTORY']), '7')
 
     expect(register('Lager')).toBeUndefined()
     expect(text()).not.toContain('Im Lager führen')
+  })
+
+  it('productNewShowsNoRegistersBeforeTheArticleIsStoredTest', async () => {
+    await render(session([...READS_PRODUCTS, 'INVENTORY_READ'], ['INVENTORY']))
+
+    expect(register('Hauptdaten')).toBeUndefined()
+    expect(text()).toContain('Grundpreis')
+  })
+
+  it('productNewSendsItsGroupPricesInOneRequestTest', async () => {
+    await render(session(READS_PRODUCTS, []))
+
+    await typeInto('Bezeichnung', 'Bohrmaschine')
+    await typeInto('Grundpreis', '150')
+    await typeInto('WIEDER', '140')
+    await saveNew()
+
+    const post = written.find((request) => request.method === 'POST')
+    expect(post?.url).toBe('/api/tenants/1/products')
+    expect(post?.body.name).toBe('Bohrmaschine')
+    // Two lines, the base price without a group and the group price, in any order: one request,
+    // no second call that could fail halfway through.
+    expect(post?.body.prices).toHaveLength(2)
+    expect(post?.body.prices).toEqual(
+      expect.arrayContaining([{ price: 150 }, { priceGroupId: 4, price: 140 }]),
+    )
+    expect(written.filter((request) => request.method !== 'GET')).toHaveLength(1)
+  })
+
+  it('productNewWithoutNameIsNotSentTest', async () => {
+    await render(session(READS_PRODUCTS, []))
+
+    await typeInto('Bezeichnung', '   ')
+    await saveNew()
+
+    expect(text()).toContain('Die Bezeichnung ist erforderlich.')
+    expect(written.filter((request) => request.method !== 'GET')).toHaveLength(0)
+  })
+
+  it('productNewShowsARefusalAtItsPriceFieldTest', async () => {
+    refusal = {
+      status: 400,
+      detail: 'Der Preis darf nicht negativ sein.',
+      errors: [{ field: 'prices.price', message: 'Der Preis darf nicht negativ sein.' }],
+    }
+    await render(session(READS_PRODUCTS, []))
+
+    await typeInto('Bezeichnung', 'Bohrmaschine')
+    await typeInto('Grundpreis', '-1')
+    await saveNew()
+
+    // Drawn under the price, once: the notice above the form stays silent about it.
+    expect(text().split('Der Preis darf nicht negativ sein.')).toHaveLength(2)
   })
 
   /**
@@ -193,7 +295,7 @@ describe('ProductPage', () => {
    * holds — and the sidebar has hidden the whole group already (backend ADR-0060, ADR-0032).
    */
   it('productPageHidesTheStockRegisterWithoutTheModuleTest', async () => {
-    await render(session([...READS_PRODUCTS, 'INVENTORY_READ'], []))
+    await render(session([...READS_PRODUCTS, 'INVENTORY_READ'], []), '7')
 
     expect(register('Lager')).toBeUndefined()
     expect(text()).not.toContain('Im Lager führen')

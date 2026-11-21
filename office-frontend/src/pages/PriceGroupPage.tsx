@@ -113,8 +113,8 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[110px]',
-      render: (group) => <span className="font-mono text-[12px]">{group.code}</span>,
+      width: 'w-column-sm',
+      render: (group) => <span className="font-mono text-small">{group.code}</span>,
     },
     {
       key: 'name',
@@ -140,7 +140,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
     {
       key: 'vat',
       header: 'Preise',
-      width: 'w-[130px]',
+      width: 'w-column-md',
       render: (group) => (
         <span className="text-text-secondary">
           {group.priceIncludesVat ? 'inkl. MwSt' : 'exkl. MwSt'}
@@ -150,7 +150,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[190px]',
+      width: 'w-column-xl',
       render: (group) => (
         <span className="flex flex-wrap items-center gap-1">
           {group.isDefault && <Badge tone="accent">Standard</Badge>}
@@ -159,7 +159,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
             <button
               type="button"
               onClick={() => makeDefault.mutate(group.id)}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-caption text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
             >
               <Star size={12} aria-hidden />
               Als Standard
@@ -171,13 +171,13 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[120px]',
+      width: 'w-column-md',
       render: (group) =>
         mayWrite && group.active !== false && !group.isDefault ? (
           <button
             type="button"
             onClick={() => deactivate.mutate(group.id)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+            className="text-small text-text-tertiary transition-colors hover:text-danger"
           >
             Deaktivieren
           </button>
@@ -262,7 +262,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
             value={form.code}
             onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
             maxLength={20}
-            hint="Kurzzeichen, zum Beispiel WIEDERVERKAUF."
+            tooltip="Kurzzeichen, zum Beispiel WIEDERVERKAUF."
           />
           <TextField
             label="Name"
@@ -280,7 +280,7 @@ function PriceGroups({ tenantId }: { tenantId: number }) {
           />
           <CheckboxField
             label="Preise verstehen sich inklusive MwSt"
-            hint="Im Detailhandel üblich; im Geschäftsverkehr eher nicht."
+            tooltip="Im Detailhandel üblich; im Geschäftsverkehr eher nicht."
             checked={form.priceIncludesVat}
             onChange={(event) =>
               setForm((current) => ({ ...current, priceIncludesVat: event.target.checked }))
