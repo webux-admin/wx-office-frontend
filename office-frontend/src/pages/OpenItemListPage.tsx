@@ -112,7 +112,7 @@ function OpenItems({ tenantId }: { tenantId: number }) {
         <span className="grid">
           <span>{row.partnerName ?? '–'}</span>
           {row.partnerNumber !== undefined && (
-            <span className="text-[12px] text-text-tertiary">{row.partnerNumber}</span>
+            <span className="text-small text-text-tertiary">{row.partnerNumber}</span>
           )}
         </span>
       ),
@@ -175,7 +175,7 @@ function OpenItems({ tenantId }: { tenantId: number }) {
       key: 'actions',
       header: '',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) =>
         openState(row.open) === 'open' ? (
           <Button variant="ghost" onClick={() => setWritingOff(row)}>
@@ -196,7 +196,7 @@ function OpenItems({ tenantId }: { tenantId: number }) {
       <div className="grid gap-4 px-8 pb-12">
         <Panel padded={false} title="Rechnungen">
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
-            <span className="w-full max-w-[260px]">
+            <span className="w-full max-w-[16.25rem]">
               <PartnerQuickSearch
                 source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
@@ -266,7 +266,7 @@ function OpenItems({ tenantId }: { tenantId: number }) {
         </Panel>
 
         {!mayWriteOff && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Ausbuchen fehlt das Recht «Forderung ausbuchen».
           </p>
         )}

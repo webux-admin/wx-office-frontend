@@ -181,14 +181,14 @@ function Clearing({ tenantId }: { tenantId: number }) {
     {
       key: 'valueDate',
       header: 'Valuta',
-      width: 'w-[92px]',
+      width: 'w-[5.75rem]',
       render: (row) => formatDate(row.valueDate),
     },
     {
       key: 'amount',
       header: 'Betrag',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (row) => formatAmount(row.amount),
     },
     {
@@ -199,7 +199,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
     {
       key: 'confidence',
       header: 'Konfidenz',
-      width: 'w-[132px]',
+      width: 'w-[8.25rem]',
       render: (row) => (
         <span className="flex flex-wrap items-center gap-1">
           {row.bestConfidence !== undefined ? (
@@ -237,13 +237,13 @@ function Clearing({ tenantId }: { tenantId: number }) {
 
         {runResult !== null && (
           <Panel title="Ergebnis des Laufs">
-            <p className="text-[13px]">
+            <p className="text-body">
               {runResult.posted.length} gebucht über{' '}
               {formatAmount(runResult.postedAmount)} {runResult.currencyCode},{' '}
               {runResult.skipped.length} übersprungen, {runResult.failed.length} fehlgeschlagen.
             </p>
             {[...runResult.skipped, ...runResult.failed].length > 0 && (
-              <ul className="mt-3 grid gap-1 text-[13px] text-text-secondary">
+              <ul className="mt-3 grid gap-1 text-body text-text-secondary">
                 {[...runResult.skipped, ...runResult.failed].map((line) => (
                   <li key={`${line.outcome}-${line.transactionId}`}>
                     <strong>{OUTCOME_NAMES[line.outcome]}:</strong> {line.message}
@@ -260,7 +260,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
         )}
 
         <div className="flex flex-wrap items-end gap-4">
-          <span className="w-full max-w-[200px]">
+          <span className="w-full max-w-[12.5rem]">
             <SelectField
               label="Konfidenz"
               value={confidence}
@@ -279,7 +279,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
             checked={onlyToCheck}
             onChange={(event) => setOnlyToCheck(event.target.checked)}
           />
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Tastatur: <strong>Enter</strong> öffnen · <strong>Ctrl+Enter</strong> buchen ·{' '}
             <strong>S</strong> später klären · <strong>N</strong> nächster ungeklärter
           </p>
@@ -315,14 +315,14 @@ function Clearing({ tenantId }: { tenantId: number }) {
 
           {open === null ? (
             <Panel title="Kein Eingang gewählt">
-              <p className="text-[13px] text-text-secondary">
+              <p className="text-body text-text-secondary">
                 Wählen Sie links einen Eingang, um seine Rohdaten und die Vorschläge zu sehen.
               </p>
             </Panel>
           ) : (
             <div className="grid gap-4">
               <Panel title={`${formatAmount(open.amount)} ${open.currencyCode}`}>
-                <dl className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3">
+                <dl className="grid grid-cols-2 gap-3 text-body sm:grid-cols-3">
                   <Figure label="Valuta">{formatDate(open.valueDate)}</Figure>
                   <Figure label="Zahler">{open.debtorName ?? '-'}</Figure>
                   <Figure label="Zahlerkonto">{open.debtorIban ?? '-'}</Figure>
@@ -331,16 +331,16 @@ function Clearing({ tenantId }: { tenantId: number }) {
                   <Figure label="Buchung">{formatDate(open.bookingDate)}</Figure>
                 </dl>
                 {open.reference && (
-                  <p className="mt-3 font-mono text-[12px]">{open.reference}</p>
+                  <p className="mt-3 font-mono text-small">{open.reference}</p>
                 )}
                 {/* In full, never shortened: the text nobody automated is what decides. */}
                 {open.remittanceUnstructured && (
-                  <p className="mt-3 whitespace-pre-wrap rounded-[var(--radius-md)] bg-sunken p-3 text-[13px]">
+                  <p className="mt-3 whitespace-pre-wrap rounded-[var(--radius-md)] bg-sunken p-3 text-body">
                     {open.remittanceUnstructured}
                   </p>
                 )}
                 {open.toCheck && open.toCheckNote && (
-                  <p className="mt-3 text-[13px] text-text-secondary">
+                  <p className="mt-3 text-body text-text-secondary">
                     Später klären: {open.toCheckNote}
                   </p>
                 )}
@@ -348,7 +348,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
 
               <Panel title="Zuordnung">
                 {lines.length === 0 ? (
-                  <p className="text-[13px] text-text-secondary">
+                  <p className="text-body text-text-secondary">
                     {open.proposalCount > 1
                       ? 'Mehrere Kombinationen möglich — es ist nichts vorgewählt.'
                       : 'Noch nichts gesetzt.'}
@@ -357,10 +357,10 @@ function Clearing({ tenantId }: { tenantId: number }) {
                   <ul className="grid gap-2">
                     {lines.map((line, index) => (
                       <li key={line.documentId} className="flex items-center gap-3">
-                        <span className="flex-1 text-[13px]">
+                        <span className="flex-1 text-body">
                           {open.bestDocumentNumber ?? `Beleg ${line.documentId}`}
                         </span>
-                        <span className="w-[140px]">
+                        <span className="w-[8.75rem]">
                           <TextField
                             label="Teilbetrag"
                             numeric
@@ -391,7 +391,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
 
                 {/* Always visible, and the reason the button is locked. */}
                 <div
-                  className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 text-[14px] font-medium ${
+                  className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 text-control font-medium ${
                     Math.abs(remainder) < 0.005
                       ? 'bg-success/14 text-success'
                       : 'bg-danger/14 text-danger'
@@ -446,18 +446,18 @@ function Clearing({ tenantId }: { tenantId: number }) {
                     label="Woher der Vorschlag kommt"
                   />
                   {tab === 'vorschlaege' && (
-                    <p className="pb-5 text-[13px] text-text-secondary">
+                    <p className="pb-5 text-body text-text-secondary">
                       {open.bestReason ?? 'Die Kaskade hat zu diesem Eingang nichts gefunden.'}
                     </p>
                   )}
                   {tab === 'offene' && (
-                    <p className="pb-5 text-[13px] text-text-secondary">
+                    <p className="pb-5 text-body text-text-secondary">
                       Die Suche über alle offenen Posten folgt mit dem Ausbau dieses Bildschirms.
                     </p>
                   )}
                   {tab === 'sonstiges' && (
                     <div className="grid gap-3 pb-5">
-                      <p className="text-[13px] text-text-secondary">
+                      <p className="text-body text-text-secondary">
                         Nicht jeder Eingang gehört zu einer Rechnung. Was ohne Beleg dieses
                         Hauses kam, wird direkt auf ein Konto der Buchhaltung gebucht — es
                         entsteht keine Ausgleichszeile und kein offener Posten bewegt sich.
@@ -469,11 +469,11 @@ function Clearing({ tenantId }: { tenantId: number }) {
                           </Button>
                         </span>
                       ) : (
-                        <p className="text-[12px] text-text-tertiary">
+                        <p className="text-small text-text-tertiary">
                           Dafür braucht es das Buchhaltungsmodul und das Recht «Buchen».
                         </p>
                       )}
-                      <p className="text-[12px] text-text-tertiary">
+                      <p className="text-small text-text-tertiary">
                         Vorauszahlung, Ausbuchen und Rückstellung führen über die bestehenden
                         Vorgänge — sie sind hier noch nicht verdrahtet.
                       </p>
@@ -544,7 +544,7 @@ function Clearing({ tenantId }: { tenantId: number }) {
 function Figure({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[12px] text-text-tertiary">{label}</dt>
+      <dt className="text-small text-text-tertiary">{label}</dt>
       <dd className="mt-0.5">{children}</dd>
     </div>
   )
@@ -604,7 +604,7 @@ function RunDialog({
         </>
       }
     >
-      <div className="grid gap-3 text-[13px]">
+      <div className="grid gap-3 text-body">
         {proposal.data === undefined ? (
           <p>Wird gerechnet …</p>
         ) : (
@@ -689,7 +689,7 @@ function WithdrawDialog({
       }
     >
       <div className="grid gap-3">
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Zurückgenommen wird durch eine <strong>Gegenbuchung</strong>, nie durch Löschen: im
           Journal steht eine Korrektur immer als Paar.
         </p>
@@ -700,7 +700,7 @@ function WithdrawDialog({
           label="Grund"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          hint="Steht auf der Gegenbuchung."
+          tooltip="Steht auf der Gegenbuchung."
         />
         {take.error !== null && <ErrorNotice error={take.error} />}
       </div>

@@ -141,7 +141,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
         <span className="grid">
           <span>{row.partnerName ?? '–'}</span>
           {row.partnerNumber !== undefined && (
-            <span className="text-[12px] text-text-tertiary">{row.partnerNumber}</span>
+            <span className="text-small text-text-tertiary">{row.partnerNumber}</span>
           )}
         </span>
       ),
@@ -189,7 +189,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
         subtitle="Restbeträge unter einer Toleranz auf einmal aufgeben. Je Posten entsteht eine eigene Buchung."
       >
         {selectedCount > 0 && (
-          <span className="text-[13px] text-text-secondary" aria-live="polite">
+          <span className="text-body text-text-secondary" aria-live="polite">
             {selectionCountText(selectedCount)}
           </span>
         )}
@@ -206,7 +206,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
 
         {result !== null && (
           <div
-            className="grid gap-2 rounded-[var(--radius-md)] border border-line bg-surface px-4 py-3 text-[13px] text-text-secondary"
+            className="grid gap-2 rounded-[var(--radius-md)] border border-line bg-surface px-4 py-3 text-body text-text-secondary"
             aria-live="polite"
           >
             <p className="flex items-center gap-2">
@@ -214,7 +214,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
               {runResultText(result, settings.currency)}
             </p>
             {[...result.skipped, ...result.failed].length > 0 && (
-              <ul className="grid gap-1 pl-6 text-[12px] text-text-tertiary">
+              <ul className="grid gap-1 pl-6 text-small text-text-tertiary">
                 {[...result.skipped, ...result.failed].map((entry) => (
                   <li key={entry.documentId}>
                     {entry.documentNumber ?? entry.documentId}: {entry.message}
@@ -236,7 +236,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
               onChange={(event) =>
                 change({ toleranceKind: event.target.value as ToleranceKind })
               }
-              hint="Entweder ein Betrag oder ein Prozentsatz, nie beides."
+              tooltip="Entweder ein Betrag oder ein Prozentsatz, nie beides."
             >
               <option value="AMOUNT">Betrag</option>
               <option value="PERCENT">Prozent</option>
@@ -249,7 +249,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
                 onChange={(event) => change({ amount: event.target.value })}
                 inputMode="decimal"
                 numeric
-                hint="Derselbe Betrag auf jedem Posten."
+                tooltip="Derselbe Betrag auf jedem Posten."
               />
             ) : (
               <TextField
@@ -258,7 +258,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
                 onChange={(event) => change({ percent: event.target.value })}
                 inputMode="decimal"
                 numeric
-                hint="Gemessen an dem, was auf der Rechnung tatsächlich eingegangen ist — nicht am Belegtotal."
+                tooltip="Gemessen an dem, was auf der Rechnung tatsächlich eingegangen ist — nicht am Belegtotal."
               />
             )}
 
@@ -268,7 +268,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
               list="currencies"
               value={settings.currency}
               onChange={(code) => change({ currency: code })}
-              hint="Ein Lauf trägt genau eine Währung."
+              tooltip="Ein Lauf trägt genau eine Währung."
             />
 
             <TextField
@@ -277,7 +277,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
               max={today}
               value={settings.bookingDate}
               onChange={(event) => change({ bookingDate: event.target.value })}
-              hint="Die Periode der MWST-Korrektur."
+              tooltip="Die Periode der MWST-Korrektur."
             />
 
             <SelectField
@@ -299,7 +299,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
               onChange={(event) => change({ minimumAgeDays: event.target.value })}
               inputMode="numeric"
               numeric
-              hint="Ab Fälligkeit. Eine Rechnung ohne Fälligkeitsdatum bleibt aussen vor."
+              tooltip="Ab Fälligkeit. Eine Rechnung ohne Fälligkeitsdatum bleibt aussen vor."
             />
 
             <span className="grid gap-1">
@@ -360,7 +360,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
         </Panel>
 
         {!mayRun && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Ausbuchen im Stapel fehlt das Recht «Kleindifferenzen ausbuchen».
           </p>
         )}
@@ -382,7 +382,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <div className="grid gap-2 text-[13px] text-text-secondary">
+        <div className="grid gap-2 text-body text-text-secondary">
           <p>
             <strong className="text-text-primary">{selectionCountText(selectedCount)}</strong>,
             zusammen {formatAmount(total)} {settings.currency}.
@@ -391,7 +391,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
             Grund: {WRITE_OFF_REASONS[settings.reason]} · Buchungsdatum{' '}
             {formatDate(settings.bookingDate)}.
           </p>
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Der Vorschlag wird beim Buchen neu gerechnet. Ein Posten, auf den inzwischen eine
             Zahlung eingegangen ist, wird übersprungen und nicht ausgebucht.
           </p>
@@ -420,7 +420,7 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Zuerst ausbuchen behält alles: der Lauf läuft danach mit den neuen Einstellungen
           weiter.
         </p>
@@ -433,8 +433,8 @@ function WriteOffRun({ tenantId }: { tenantId: number }) {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <p className="text-[12px] text-text-tertiary">{label}</p>
-      <p className="text-[13px]">{value}</p>
+      <p className="text-small text-text-tertiary">{label}</p>
+      <p className="text-body">{value}</p>
     </div>
   )
 }

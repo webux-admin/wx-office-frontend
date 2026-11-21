@@ -130,7 +130,7 @@ export function ApplyCreditDialog({
                     setChosen(item)
                     setAmount(proposedApplication(item.open, credit.remaining))
                   }}
-                  className={`flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left text-[13px] ${
+                  className={`flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-left text-body ${
                     chosen?.documentId === item.documentId
                       ? 'bg-accent/12 text-accent-text'
                       : 'hover:bg-sunken'
@@ -157,11 +157,11 @@ export function ApplyCreditDialog({
           onChange={(event) => setAmount(event.target.value)}
           inputMode="decimal"
           numeric
-          hint="Vorbelegt mit dem kleineren von Guthaben und offenem Posten."
+          tooltip="Vorbelegt mit dem kleineren von Guthaben und offenem Posten."
         />
 
         {complaint !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {complaint}
           </p>
         )}

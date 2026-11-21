@@ -142,7 +142,7 @@ export function WriteOffDialog({
             max={today}
             value={form.bookingDate}
             onChange={(event) => setForm({ ...form, bookingDate: event.target.value })}
-            hint="Die Periode der Korrektur. Nie in der Zukunft."
+            tooltip="Die Periode der Korrektur. Nie in der Zukunft."
           />
         </div>
 
@@ -150,24 +150,24 @@ export function WriteOffDialog({
           label="Nachweis"
           value={form.evidence}
           onChange={(event) => setForm({ ...form, evidence: event.target.value })}
-          hint="Verlustschein, Konkursanzeige, Betreibungsnummer. Freiwillig."
+          tooltip="Verlustschein, Konkursanzeige, Betreibungsnummer. Freiwillig."
         />
 
         <TextField
           label="Bemerkung"
           value={form.note}
           onChange={(event) => setForm({ ...form, note: event.target.value })}
-          hint="Steht neben dem Grund, nie statt seiner."
+          tooltip="Steht neben dem Grund, nie statt seiner."
         />
 
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           {WRITE_OFF_REASONS[form.reason]} wird als Vorgang festgehalten, mit der Steuerfolge je
           Satz des Ursprungsbelegs. Diese Anwendung führt kein Hauptbuch und bucht sie nicht —
           die Korrektur der Umsatzsteuer erfolgt ausserhalb.
         </p>
 
         {complaint !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {complaint}
           </p>
         )}

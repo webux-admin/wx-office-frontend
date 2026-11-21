@@ -176,7 +176,7 @@ export function PaymentReceiptDialog({
             max={today}
             value={form.valueDate}
             onChange={(event) => setForm({ ...form, valueDate: event.target.value })}
-            hint="Der Tag der Wertstellung, nicht der Erfassung."
+            tooltip="Der Tag der Wertstellung, nicht der Erfassung."
           />
         </div>
 
@@ -195,7 +195,7 @@ export function PaymentReceiptDialog({
             label="Name des Zahlers"
             value={form.payerName}
             onChange={(event) => setForm({ ...form, payerName: event.target.value })}
-            hint="Darf leer bleiben — ein unklarer Eingang hat keinen."
+            tooltip="Darf leer bleiben — ein unklarer Eingang hat keinen."
           />
         </div>
 
@@ -205,7 +205,7 @@ export function PaymentReceiptDialog({
             value={form.payerReference}
             onChange={(event) => setForm({ ...form, payerReference: event.target.value })}
             maxLength={MAX_REFERENCE_LENGTH}
-            hint="Genau so, wie sie ankam."
+            tooltip="Genau so, wie sie ankam."
           />
           <TextField
             label="Notiz"
@@ -225,7 +225,7 @@ export function PaymentReceiptDialog({
                 setComplaint(null)
               }}
               placeholder="Referenz oder Rechnungsnummer"
-              className="min-w-[260px] flex-1"
+              className="min-w-[16.25rem] flex-1"
             />
             <Button
               variant="secondary"
@@ -238,7 +238,7 @@ export function PaymentReceiptDialog({
           </div>
 
           {form.rows.length === 0 ? (
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Noch nichts zugewiesen. Ein Eingang darf so liegen bleiben — er wartet, bis
               bekannt ist, wohin er gehört.
             </p>
@@ -246,9 +246,9 @@ export function PaymentReceiptDialog({
             <ul className="grid gap-2">
               {form.rows.map((row) => (
                 <li key={row.documentId} className="flex flex-wrap items-end gap-3">
-                  <span className="grid min-w-[200px] flex-1">
-                    <span className="text-[13px]">{row.documentNumber ?? `#${row.documentId}`}</span>
-                    <span className="text-[12px] text-text-tertiary">
+                  <span className="grid min-w-[12.5rem] flex-1">
+                    <span className="text-body">{row.documentNumber ?? `#${row.documentId}`}</span>
+                    <span className="text-small text-text-tertiary">
                       {row.partnerName ?? '–'} · offen {formatAmount(row.open)} {row.currency}
                     </span>
                   </span>
@@ -267,7 +267,7 @@ export function PaymentReceiptDialog({
                     }
                     inputMode="decimal"
                     numeric
-                    className="w-[140px]"
+                    className="w-[8.75rem]"
                   />
                   <Button
                     variant="ghost"
@@ -286,7 +286,7 @@ export function PaymentReceiptDialog({
             </ul>
           )}
 
-          <p className="text-[13px]" aria-live="polite">
+          <p className="text-body" aria-live="polite">
             Noch nicht zugewiesen:{' '}
             <span className={left < 0 ? 'font-medium text-danger' : 'font-medium'}>
               {formatAmount(left)} {form.currency}
@@ -295,13 +295,13 @@ export function PaymentReceiptDialog({
         </div>
 
         {complaint !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {complaint}
           </p>
         )}
         {find.error !== null && <ErrorNotice error={find.error} />}
         {blocking !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {blocking}
           </p>
         )}
@@ -376,13 +376,13 @@ function StoredReceipt({
         </dl>
 
         {receipt.assignments.length === 0 ? (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Dieser Eingang ist noch keiner Rechnung zugewiesen.
           </p>
         ) : (
           <ul className="grid gap-1">
             {receipt.assignments.map((line) => (
-              <li key={line.id} className="flex items-center gap-3 text-[13px]">
+              <li key={line.id} className="flex items-center gap-3 text-body">
                 <span className="flex-1">Rechnung #{line.documentId}</span>
                 <span>
                   {formatAmount(line.amount)} {line.currency}
@@ -394,7 +394,7 @@ function StoredReceipt({
         )}
 
         {mayRecord && !reversible && receipt.state !== 'REVERSED' && standing.length > 0 && (
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Zum Stornieren sind zuerst die Zuweisungen auf ihren Rechnungen zu stornieren —
             sonst mindert eine Ausgleichszeile weiter einen offenen Posten aus Geld, das es nie
             gab.
@@ -409,8 +409,8 @@ function StoredReceipt({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid">
-      <dt className="text-[12px] text-text-tertiary">{label}</dt>
-      <dd className="text-[13px]">{value}</dd>
+      <dt className="text-small text-text-tertiary">{label}</dt>
+      <dd className="text-body">{value}</dd>
     </div>
   )
 }

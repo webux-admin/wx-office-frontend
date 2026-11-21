@@ -111,7 +111,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
         <span className="grid">
           <span>{row.partnerName ?? 'nicht zugeordnet'}</span>
           {row.partnerNumber !== undefined && (
-            <span className="text-[12px] text-text-tertiary">{row.partnerNumber}</span>
+            <span className="text-small text-text-tertiary">{row.partnerNumber}</span>
           )}
         </span>
       ),
@@ -155,7 +155,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
         <span className="grid">
           <span>{row.payerName ?? 'nicht zugeordnet'}</span>
           {row.partnerNumber !== undefined && (
-            <span className="text-[12px] text-text-tertiary">{row.partnerNumber}</span>
+            <span className="text-small text-text-tertiary">{row.partnerNumber}</span>
           )}
         </span>
       ),
@@ -188,7 +188,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
       render: (row) => (
         <span className="grid">
           <span>{row.ageDays} Tage</span>
-          <span className="text-[12px] text-text-tertiary">{creditAgeBand(row.ageDays)}</span>
+          <span className="text-small text-text-tertiary">{creditAgeBand(row.ageDays)}</span>
         </span>
       ),
     },
@@ -199,7 +199,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
       key: 'actions',
       header: '',
       align: 'right',
-      width: 'w-[260px]',
+      width: 'w-[16.25rem]',
       render: (row) =>
         row.remaining > 0 ? (
           <span className="flex justify-end gap-1">
@@ -268,7 +268,7 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
         ) : (
           <Panel padded={false} title="Zahlungseingänge mit Rest">
             <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
-              <span className="w-full max-w-[260px]">
+              <span className="w-full max-w-[16.25rem]">
                 <PartnerQuickSearch
                   source={partnerCustomerSource(tenantId)}
                   term={partnerTerm}
@@ -327,19 +327,19 @@ function CustomerCredits({ tenantId }: { tenantId: number }) {
           </Panel>
         )}
 
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Ein Guthaben verfällt nicht von selbst. Die Verjährung ist eine Einrede, die ein
           Richter nicht von Amtes wegen berücksichtigt (OR Art. 142) — diese Liste macht das
           Alter sichtbar, aufgelöst wird von Hand.
         </p>
 
         {!mayRecord && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Erfassen und Verrechnen fehlt das Recht «Vorauszahlung erfassen».
           </p>
         )}
         {!mayRefund && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Zurückzahlen und Auflösen fehlt das Recht «Guthaben zurückzahlen».
           </p>
         )}
@@ -393,7 +393,7 @@ function BalanceTotals({ balances }: { balances: CustomerCreditBalance[] }) {
     totals.set(row.currency, (totals.get(row.currency) ?? 0) + row.balance)
   }
   return (
-    <div className="flex flex-wrap justify-end gap-6 border-t border-line-subtle px-5 py-3 text-[13px]">
+    <div className="flex flex-wrap justify-end gap-6 border-t border-line-subtle px-5 py-3 text-body">
       {[...totals.entries()].map(([currency, total]) => (
         <span key={currency}>
           <span className="text-text-tertiary">Total {currency}</span>{' '}

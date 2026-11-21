@@ -139,7 +139,7 @@ export function AdvanceDialog({
             max={today}
             value={form.valueDate}
             onChange={(event) => setForm({ ...form, valueDate: event.target.value })}
-            hint="Der Tag der Wertstellung. Er entscheidet über die Steuerperiode."
+            tooltip="Der Tag der Wertstellung. Er entscheidet über die Steuerperiode."
           />
         </div>
 
@@ -168,7 +168,7 @@ export function AdvanceDialog({
             value={form.ledgerAccount}
             onChange={(number) => setForm({ ...form, ledgerAccount: number })}
             emptyLabel="– nicht buchen –"
-            hint="Auf welches Konto das Geld gelangt ist. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
+            tooltip="Auf welches Konto das Geld gelangt ist. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
           />
         )}
 
@@ -177,10 +177,10 @@ export function AdvanceDialog({
           value={form.note}
           onChange={(event) => setForm({ ...form, note: event.target.value })}
           maxLength={MAX_NOTE_LENGTH}
-          hint="Wofür, zum Beispiel «Kostenvorschuss Auftrag B»."
+          tooltip="Wofür, zum Beispiel «Kostenvorschuss Auftrag B»."
         />
 
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           Eine Vorauszahlung ist steuerbar, sobald das Geld eingegangen ist — nicht erst mit der
           Leistung (MWSTG Art. 40 Abs. 1 Bst. c). Hier wird kein MWST-Satz erfasst, und deshalb
           steht dieser Weg nur Mandanten offen, die keine Mehrwertsteuer abrechnen. Ist der
@@ -190,7 +190,7 @@ export function AdvanceDialog({
         </p>
 
         {complaint !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {complaint}
           </p>
         )}

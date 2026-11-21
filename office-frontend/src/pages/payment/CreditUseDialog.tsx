@@ -148,7 +148,7 @@ export function CreditUseDialog({
             max={today}
             value={form.bookingDate}
             onChange={(event) => setForm({ ...form, bookingDate: event.target.value })}
-            hint="Wann darüber verfügt wurde. Nie in der Zukunft."
+            tooltip="Wann darüber verfügt wurde. Nie in der Zukunft."
           />
         </div>
 
@@ -158,7 +158,7 @@ export function CreditUseDialog({
             value={form.refundIban}
             onChange={(event) => setForm({ ...form, refundIban: event.target.value })}
             maxLength={MAX_IBAN_LENGTH}
-            hint="Wohin das Geld ging. Freiwillig, aber der beste Nachweis."
+            tooltip="Wohin das Geld ging. Freiwillig, aber der beste Nachweis."
           />
         )}
 
@@ -174,7 +174,7 @@ export function CreditUseDialog({
             value={form.ledgerAccount}
             onChange={(number) => setForm({ ...form, ledgerAccount: number })}
             emptyLabel="– nicht buchen –"
-            hint="Von welchem Konto das Geld abging. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
+            tooltip="Von welchem Konto das Geld abging. Die Gegenseite ist 2030 «Erhaltene Anzahlungen». Leer heisst: erfassen und nicht buchen."
           />
         )}
 
@@ -183,11 +183,11 @@ export function CreditUseDialog({
           value={form.note}
           onChange={(event) => setForm({ ...form, note: event.target.value })}
           maxLength={MAX_NOTE_LENGTH}
-          hint="Steht neben dem Grund, nie statt seiner."
+          tooltip="Steht neben dem Grund, nie statt seiner."
         />
 
         {!isRefund && (
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Eine Auflösung ist eine Entscheidung des Mandanten, keine der Software: die
             Verjährung ist eine Einrede, die ein Richter nicht von Amtes wegen berücksichtigt
             (OR Art. 142). Gebucht wird 2030 gegen «Übrige Erlöse» — ohne Steuercode, weil das
@@ -197,7 +197,7 @@ export function CreditUseDialog({
         )}
 
         {complaint !== null && (
-          <p className="text-[12px] text-text-secondary" aria-live="polite">
+          <p className="text-small text-text-secondary" aria-live="polite">
             {complaint}
           </p>
         )}

@@ -127,7 +127,7 @@ function PaymentReceipts({ tenantId }: { tenantId: number }) {
         <span className="grid">
           <span>{row.payerName ?? 'nicht zugeordnet'}</span>
           {row.partnerNumber !== undefined && (
-            <span className="text-[12px] text-text-tertiary">{row.partnerNumber}</span>
+            <span className="text-small text-text-tertiary">{row.partnerNumber}</span>
           )}
         </span>
       ),
@@ -180,7 +180,7 @@ function PaymentReceipts({ tenantId }: { tenantId: number }) {
       <div className="grid gap-4 px-8 pb-12">
         <Panel padded={false} title="Zahlungseingänge">
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
-            <span className="w-full max-w-[260px]">
+            <span className="w-full max-w-[16.25rem]">
               <PartnerQuickSearch
                 source={partnerCustomerSource(tenantId)}
                 term={partnerTerm}
@@ -247,7 +247,7 @@ function PaymentReceipts({ tenantId }: { tenantId: number }) {
         </Panel>
 
         {!mayRecord && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Zum Erfassen und Zuweisen fehlt das Recht «Zahlung erfassen».
           </p>
         )}
