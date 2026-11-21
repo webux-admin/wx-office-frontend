@@ -49,7 +49,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       render: (type) => <span className="font-mono text-small">{type.code}</span>,
     },
     {
@@ -70,7 +70,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'category',
       header: 'Kategorie',
-      width: 'w-[180px]',
+      width: 'w-[11.25rem]',
       render: (type) => (
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-text-secondary">{categoryLabel(type.category)}</span>
@@ -88,7 +88,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'prefix',
       header: 'Präfix',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       render: (type) => (
         <span className="font-mono text-small text-text-secondary">
           {type.numberPrefix ?? '-'}
@@ -98,7 +98,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'layout',
       header: 'Druckvorlage',
-      width: 'w-[200px]',
+      width: 'w-[12.5rem]',
       render: (type) =>
         type.documentLayoutName === undefined ? (
           <span className="text-text-tertiary">—</span>
@@ -111,7 +111,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'copies',
       header: 'Ausdruck',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (type) => (
         <span className="grid">
           <span
@@ -134,7 +134,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'predecessors',
       header: 'Vorgängerbeleg',
-      width: 'w-[180px]',
+      width: 'w-[11.25rem]',
       render: (type) => {
         const names = (type.predecessorTypeIds ?? [])
           .map((id) => byId.get(id)?.name)
@@ -151,7 +151,7 @@ function DocumentTypes({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (type) =>
         type.active ? (
           <span className="text-text-secondary">Aktiv</span>

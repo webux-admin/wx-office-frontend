@@ -65,14 +65,14 @@ export function CatalogueDialog({
           onChange={(event) => set('name', event.target.value)}
           maxLength={60}
           required
-          hint="Was in Tabellen, Auswahllisten und auf dem Beleg steht."
+          tooltip="Was in Tabellen, Auswahllisten und auf dem Beleg steht."
         />
         <TextField
           label="Kurzform"
           value={form.shortName}
           onChange={(event) => set('shortName', event.target.value)}
           maxLength={10}
-          hint="Für Tabellen und Belegzeilen. Leer lassen, wenn keine gebraucht wird."
+          tooltip="Für Tabellen und Belegzeilen. Leer lassen, wenn keine gebraucht wird."
         />
 
         <LabelFields
@@ -84,15 +84,15 @@ export function CatalogueDialog({
 
         <CheckboxField
           label="In neuen Auswahllisten anbieten"
-          hint="Ohne Haken verschwindet der Wert nur aus neuen Auswahllisten: wo er schon gespeichert ist, behält er diese Bezeichnung und bleibt druckbar."
+          tooltip="Ohne Haken verschwindet der Wert nur aus neuen Auswahllisten: wo er schon gespeichert ist, behält er diese Bezeichnung und bleibt druckbar."
           checked={form.visible}
           onChange={(event) => set('visible', event.target.checked)}
         />
 
         <div className="border-t border-line-subtle pt-4">
-          <p className="text-[12px] font-medium text-text-secondary">Code</p>
-          <p className="mt-0.5 font-mono text-[12px] text-text-primary">{entry?.code ?? '-'}</p>
-          <p className="mt-1 text-[12px] text-text-tertiary">
+          <p className="text-small font-medium text-text-secondary">Code</p>
+          <p className="mt-0.5 font-mono text-small text-text-primary">{entry?.code ?? '-'}</p>
+          <p className="mt-1 text-small text-text-tertiary">
             In der Anwendung festgelegt, weil Abläufe und Belege darauf zeigen. Er lässt sich
             nicht ändern, und es kommt keiner dazu.
           </p>

@@ -133,7 +133,7 @@ export function PaymentTermDialog({
           value={form.name}
           onChange={(event) => set('name', event.target.value)}
           maxLength={60}
-          hint="Was in der Auswahl und auf dem Beleg steht."
+          tooltip="Was in der Auswahl und auf dem Beleg steht."
         />
         <TextField
           label="Beschreibung"
@@ -150,7 +150,7 @@ export function PaymentTermDialog({
             inputMode="numeric"
             numeric
             maxLength={3}
-            hint="0 heisst: zahlbar sofort netto."
+            tooltip="0 heisst: zahlbar sofort netto."
           />
           <SelectField
             label="Fälligkeit ab"
@@ -160,7 +160,7 @@ export function PaymentTermDialog({
               // select cannot express in its own type.
               set('dueDateBasis', event.target.value as DueDateBasis)
             }
-            hint="Ab Monatsende zählt die Frist erst vom letzten Tag des Belegmonats."
+            tooltip="Ab Monatsende zählt die Frist erst vom letzten Tag des Belegmonats."
           >
             {Object.entries(DUE_DATE_BASES).map(([basis, label]) => (
               <option key={basis} value={basis}>
@@ -171,8 +171,8 @@ export function PaymentTermDialog({
         </div>
 
         <fieldset className="border-t border-line-subtle pt-4">
-          <legend className="text-[12px] font-medium text-text-secondary">Skonto</legend>
-          <p className="mt-1 text-[12px] text-text-tertiary">
+          <legend className="text-small font-medium text-text-secondary">Skonto</legend>
+          <p className="mt-1 text-small text-text-tertiary">
             Der Satz muss mit längerer Frist sinken: wer früher zahlt, darf nicht weniger abziehen
             können.
           </p>
@@ -224,7 +224,7 @@ export function PaymentTermDialog({
           {/* A control that is dead must say why: disabled buttons leave the tab order, so
               without this sentence a reader would not learn that stages exist at all. */}
           {blocked !== null && (
-            <p className="mt-2 text-[12px] text-text-tertiary" aria-live="polite">
+            <p className="mt-2 text-small text-text-tertiary" aria-live="polite">
               {blocked}
             </p>
           )}
@@ -283,8 +283,8 @@ function TermPreview({ tenantId, termId }: { tenantId: number; termId: number })
 
   return (
     <section className="rounded-[var(--radius-md)] border border-line-subtle p-4">
-      <h3 className="text-[13px] font-semibold">Vorschau</h3>
-      <p className="mt-0.5 text-[12px] text-text-secondary">
+      <h3 className="text-body font-semibold">Vorschau</h3>
+      <p className="mt-0.5 text-small text-text-secondary">
         Gerechnet wird im Backend und mit der gespeicherten Kondition. Änderungen an den Feldern
         oben zählen erst nach dem Speichern.
       </p>
@@ -307,7 +307,7 @@ function TermPreview({ tenantId, termId }: { tenantId: number; termId: number })
       </div>
 
       {!ready && (
-        <p className="mt-3 text-[12px] text-text-tertiary">
+        <p className="mt-3 text-small text-text-tertiary">
           Für die Vorschau braucht es einen Betrag über null.
         </p>
       )}
@@ -319,7 +319,7 @@ function TermPreview({ tenantId, termId }: { tenantId: number; termId: number })
       )}
 
       {preview.data && (
-        <div className="mt-3 grid gap-1.5 text-[13px]">
+        <div className="mt-3 grid gap-1.5 text-body">
           <p>
             Fällig am <span className="font-mono tabular-nums">{formatDate(preview.data.dueDate)}</span>
           </p>
@@ -332,8 +332,8 @@ function TermPreview({ tenantId, termId }: { tenantId: number; termId: number })
           ))}
           {preview.data.text !== undefined && preview.data.text !== '' && (
             <div className="mt-1.5 rounded-[var(--radius-sm)] bg-sunken px-3 py-2">
-              <p className="text-[11px] font-medium text-text-tertiary">So steht es auf dem Beleg</p>
-              <p className="mt-0.5 text-[12px] text-text-secondary">{preview.data.text}</p>
+              <p className="text-caption font-medium text-text-tertiary">So steht es auf dem Beleg</p>
+              <p className="mt-0.5 text-small text-text-secondary">{preview.data.text}</p>
             </div>
           )}
         </div>

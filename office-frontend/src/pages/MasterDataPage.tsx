@@ -165,7 +165,7 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
     {
       key: 'order',
       header: '',
-      width: 'w-[74px]',
+      width: 'w-[4.625rem]',
       render: (entry) => {
         if (!mayWrite) return null
         const index = rows.indexOf(entry)
@@ -183,8 +183,8 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[150px]',
-      render: (entry) => <span className="font-mono text-[12px]">{entry.code}</span>,
+      width: 'w-[9.375rem]',
+      render: (entry) => <span className="font-mono text-small">{entry.code}</span>,
     },
     {
       key: 'name',
@@ -205,13 +205,13 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
     {
       key: 'shortName',
       header: 'Kurzform',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (entry) => <span className="text-text-secondary">{entry.shortName ?? '-'}</span>,
     },
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[210px]',
+      width: 'w-[13.125rem]',
       render: (entry) => (
         <span className="flex flex-wrap items-center gap-1">
           {entry.isDefault && <Badge tone="accent">Standard</Badge>}
@@ -222,7 +222,7 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
             <button
               type="button"
               onClick={() => makeDefault.mutate(entry.id)}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-caption text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
             >
               <Star size={12} aria-hidden />
               Als Standard
@@ -234,14 +234,14 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
     {
       key: 'actions',
       header: '',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (entry) => (
         <span className="flex items-center justify-end gap-3">
           {mayDeactivate && !entry.isDefault && (
             <button
               type="button"
               onClick={() => setActive.mutate({ id: entry.id, active: entry.active === false })}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-text-primary"
+              className="text-small text-text-tertiary transition-colors hover:text-text-primary"
             >
               {entry.active === false ? 'Aktivieren' : 'Deaktivieren'}
             </button>
@@ -338,7 +338,7 @@ function MasterData({ tenantId, chosen }: { tenantId: number; chosen: BasicDataL
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {removing?.name} wird endgültig entfernt. Wird der Wert noch benutzt, lehnt das Backend
           das ab — dann bleibt das Deaktivieren, und bestehende Datensätze behalten ihn.
         </p>

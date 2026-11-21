@@ -58,8 +58,8 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[150px]',
-      render: (layout) => <span className="font-mono text-[12px]">{layout.code}</span>,
+      width: 'w-[9.375rem]',
+      render: (layout) => <span className="font-mono text-small">{layout.code}</span>,
     },
     {
       key: 'name',
@@ -85,7 +85,7 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
             <span className="font-medium">{layout.name}</span>
           )}
           {layout.system && (
-            <span className="text-[11px] text-text-tertiary">
+            <span className="text-caption text-text-tertiary">
               Mitgeliefert — zum Ändern kopieren
             </span>
           )}
@@ -95,7 +95,7 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
     {
       key: 'kind',
       header: 'Art',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (layout) =>
         layout.system ? (
           <Badge tone="neutral">Mitgeliefert</Badge>
@@ -106,13 +106,13 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
     {
       key: 'usedBy',
       header: 'Verwendet von',
-      width: 'w-[220px]',
+      width: 'w-[13.75rem]',
       render: (layout) => <UsedBy layout={layout} />,
     },
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[120px]',
+      width: 'w-[7.5rem]',
       render: (layout) =>
         layout.active ? (
           <span className="text-text-secondary">Aktiv</span>
@@ -123,13 +123,13 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[230px]',
+      width: 'w-[14.375rem]',
       render: (layout) => (
         <span className="flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => preview.mutate(layout.id)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-accent-text"
+            className="text-small text-text-tertiary transition-colors hover:text-accent-text"
           >
             Vorschau
           </button>
@@ -137,7 +137,7 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
             <button
               type="button"
               onClick={() => setAdding({ source: layout })}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-accent-text"
+              className="text-small text-text-tertiary transition-colors hover:text-accent-text"
             >
               Kopieren
             </button>
@@ -146,7 +146,7 @@ function PrintLayouts({ tenantId }: { tenantId: number }) {
             <button
               type="button"
               onClick={() => deactivate.mutate(layout.id)}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+              className="text-small text-text-tertiary transition-colors hover:text-danger"
             >
               Deaktivieren
             </button>
@@ -244,7 +244,7 @@ function UsedBy({ layout }: { layout: PrintLayout }) {
           to={`/belegarten/${type.id}`}
           state={ORIGIN}
           title={type.code}
-          className="text-[12px] text-text-secondary underline decoration-line underline-offset-2 transition-colors hover:text-accent-text"
+          className="text-small text-text-secondary underline decoration-line underline-offset-2 transition-colors hover:text-accent-text"
         >
           {type.name}
         </Link>

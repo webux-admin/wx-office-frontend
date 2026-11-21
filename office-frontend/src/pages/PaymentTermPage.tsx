@@ -156,7 +156,7 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
     {
       key: 'order',
       header: '',
-      width: 'w-[74px]',
+      width: 'w-[4.625rem]',
       render: (term) => {
         if (!mayWrite) return null
         const index = rows.indexOf(term)
@@ -174,8 +174,8 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[150px]',
-      render: (term) => <span className="font-mono text-[12px]">{term.code}</span>,
+      width: 'w-[9.375rem]',
+      render: (term) => <span className="font-mono text-small">{term.code}</span>,
     },
     {
       key: 'name',
@@ -194,7 +194,7 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
             <span className="font-medium">{term.name}</span>
           )}
           {term.description !== undefined && term.description !== '' && (
-            <span className="text-[12px] text-text-secondary">{term.description}</span>
+            <span className="text-small text-text-secondary">{term.description}</span>
           )}
         </span>
       ),
@@ -202,13 +202,13 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
     {
       key: 'period',
       header: 'Frist',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (term) => <span className="text-text-secondary">{describePeriod(term)}</span>,
     },
     {
       key: 'discounts',
       header: 'Skonto',
-      width: 'w-[210px]',
+      width: 'w-[13.125rem]',
       render: (term) => {
         const stages = describeDiscounts(term)
         if (stages.length === 0) return <span className="text-text-secondary">-</span>
@@ -224,7 +224,7 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[230px]',
+      width: 'w-[14.375rem]',
       render: (term) => (
         <span className="flex flex-wrap items-center gap-1">
           {term.isDefault && <Badge tone="accent">Standard</Badge>}
@@ -234,7 +234,7 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
             <button
               type="button"
               onClick={() => makeDefault.mutate(term.id)}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-caption text-text-tertiary transition-colors hover:bg-sunken hover:text-text-primary"
             >
               <Star size={12} aria-hidden />
               Als Standard
@@ -246,14 +246,14 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (term) => (
         <span className="flex items-center justify-end gap-3">
           {mayDeactivate && !term.isDefault && (
             <button
               type="button"
               onClick={() => setActive.mutate({ id: term.id, active: term.active === false })}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-text-primary"
+              className="text-small text-text-tertiary transition-colors hover:text-text-primary"
             >
               {term.active === false ? 'Aktivieren' : 'Deaktivieren'}
             </button>
@@ -354,7 +354,7 @@ function PaymentTerms({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {removing?.name} wird endgültig entfernt. Wird die Kondition noch verwendet oder mit der
           Anwendung ausgeliefert, lehnt das Backend das ab — dann bleibt das Deaktivieren. Bereits
           ausgestellte Belege behalten in jedem Fall, was auf ihnen gedruckt steht.

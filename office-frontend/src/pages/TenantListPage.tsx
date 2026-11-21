@@ -43,8 +43,8 @@ function TenantList() {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[120px]',
-      render: (tenant) => <span className="font-mono text-[12px]">{tenant.code}</span>,
+      width: 'w-[7.5rem]',
+      render: (tenant) => <span className="font-mono text-small">{tenant.code}</span>,
     },
     {
       key: 'name',
@@ -62,7 +62,7 @@ function TenantList() {
     {
       key: 'legalForm',
       header: 'Rechtsform',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (tenant) => (
         <span className="text-text-secondary">{tenant.legalFormLabel ?? '-'}</span>
       ),
@@ -79,15 +79,15 @@ function TenantList() {
     {
       key: 'currency',
       header: 'Währung',
-      width: 'w-[100px]',
+      width: 'w-[6.25rem]',
       render: (tenant) => (
-        <span className="font-mono text-[12px]">{tenant.baseCurrency ?? '-'}</span>
+        <span className="font-mono text-small">{tenant.baseCurrency ?? '-'}</span>
       ),
     },
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (tenant) => (
         <span className="flex gap-1">
           {tenant.id === user?.activeTenantId && <Badge tone="accent">Aktiv</Badge>}

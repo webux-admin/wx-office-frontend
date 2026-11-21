@@ -97,7 +97,7 @@ export function NewLayoutDialog({
                 : { ...suggestCopy(chosen), sourceId: event.target.value },
             )
           }}
-          hint="Ohne Vorlage beginnt die neue mit der eingebauten Standardanordnung."
+          tooltip="Ohne Vorlage beginnt die neue mit der eingebauten Standardanordnung."
         >
           <option value="">Leere Standardanordnung</option>
           {layouts.map((entry) => (
@@ -112,7 +112,7 @@ export function NewLayoutDialog({
           value={form.code}
           onChange={(event) => setForm({ ...form, code: event.target.value })}
           maxLength={MAX_LAYOUT_CODE_LENGTH}
-          hint="Buchstaben, Ziffern, Bindestrich. Danach unveränderlich."
+          tooltip="Buchstaben, Ziffern, Bindestrich. Danach unveränderlich."
         />
         <TextField
           label="Bezeichnung"

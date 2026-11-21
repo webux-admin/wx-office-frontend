@@ -145,7 +145,7 @@ function Catalogue({ tenantId }: { tenantId: number }) {
     {
       key: 'order',
       header: '',
-      width: 'w-[74px]',
+      width: 'w-[4.625rem]',
       render: (entry) => {
         if (!mayWrite) return null
         const index = rows.indexOf(entry)
@@ -163,8 +163,8 @@ function Catalogue({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[190px]',
-      render: (entry) => <span className="font-mono text-[12px]">{entry.code}</span>,
+      width: 'w-[11.875rem]',
+      render: (entry) => <span className="font-mono text-small">{entry.code}</span>,
     },
     {
       key: 'name',
@@ -185,13 +185,13 @@ function Catalogue({ tenantId }: { tenantId: number }) {
     {
       key: 'shortName',
       header: 'Kurzform',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (entry) => <span className="text-text-secondary">{entry.shortName ?? '-'}</span>,
     },
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[220px]',
+      width: 'w-[13.75rem]',
       render: (entry) => (
         <span className="flex flex-wrap items-center gap-1.5">
           {entry.visible === false && <Badge tone="muted">Ausgeblendet</Badge>}
@@ -200,7 +200,7 @@ function Catalogue({ tenantId }: { tenantId: number }) {
               type="button"
               onClick={() => setVisible.mutate(entry)}
               disabled={setVisible.isPending}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-text-primary disabled:opacity-40"
+              className="text-small text-text-tertiary transition-colors hover:text-text-primary disabled:opacity-40"
             >
               {entry.visible === false ? 'Wieder anbieten' : 'Ausblenden'}
             </button>
@@ -211,7 +211,7 @@ function Catalogue({ tenantId }: { tenantId: number }) {
     {
       key: 'actions',
       header: '',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (entry) =>
         mayWrite ? (
           <span className="flex items-center justify-end">
@@ -221,7 +221,7 @@ function Catalogue({ tenantId }: { tenantId: number }) {
                 reset.reset()
                 setResetting(entry)
               }}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+              className="text-small text-text-tertiary transition-colors hover:text-danger"
             >
               Zurücksetzen
             </button>
@@ -305,11 +305,11 @@ function Catalogue({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {resetting?.name} heisst danach wieder so, wie die Anwendung den Wert benennt. Die eigene
           Bezeichnung, die Kurzform, die Übersetzungen und die Position gehen dabei verloren.
         </p>
-        <p className="mt-2 text-[13px] text-text-secondary">
+        <p className="mt-2 text-body text-text-secondary">
           Der Wert selbst bleibt: der Code ändert sich nicht, und alle Belege und Datensätze, die
           darauf zeigen, bleiben unberührt.
         </p>

@@ -3,13 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { CheckboxField } from '../components/CheckboxField'
+import { FormMask } from '../components/FormMask'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
+import { useChangeTracker } from '../components/useChangeTracker'
+import { useFieldErrors } from '../components/useFieldErrors'
 import { useAuth } from '../auth/useAuth'
 import { RequirePermission } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -150,7 +151,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
   const tenantId = tenant?.id ?? null
 
   const [form, setForm] = useState<TenantForm>(initial(tenant))
-  const [complaint, setComplaint] = useState<string | null>(null)
+  const { changed, track } = useChangeTracker()
 
   const set = <K extends keyof TenantForm>(field: K, value: TenantForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
@@ -242,48 +243,53 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
     },
   })
 
+  // The sender address needs a postal code and a town, or every document goes out without one.
+  const fields = useFieldErrors(
+    () => ({
+      ...(form.code.trim() === '' ? { code: 'Der Code ist erforderlich.' } : {}),
+      ...(form.name.trim() === '' ? { name: 'Der Name ist erforderlich.' } : {}),
+      ...(form.postalCode.trim() === ''
+        ? { postalCode: 'Ohne Postleitzahl fehlt die Absenderadresse auf jedem Beleg.' }
+        : {}),
+      ...(form.town.trim() === ''
+        ? { town: 'Ohne Ort fehlt die Absenderadresse auf jedem Beleg.' }
+        : {}),
+    }),
+    save.error,
+  )
+
   const submit = () => {
-    const problem =
-      form.code.trim() === '' || form.name.trim() === ''
-        ? 'Code und Name sind Pflicht.'
-        : form.postalCode.trim() === '' || form.town.trim() === ''
-          ? 'Ohne Postleitzahl und Ort fehlt die Absenderadresse auf jedem Beleg.'
-          : null
-    setComplaint(problem)
-    if (!problem) save.mutate()
+    if (fields.check()) save.mutate()
   }
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be
-  // filled in and finished without reaching for the mouse.
-  useSubmitShortcut(mayWrite && !save.isPending ? submit : undefined)
-
   return (
-    <>
-      <PageHeader
-        title={tenant ? tenant.name : 'Neuer Mandant'}
-        back={{ to: origin.from, label: origin.label }}
-        subtitle={
-          tenant ? (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-[12px]">{tenant.code}</span>
-              {tenant.active === false && <Badge tone="muted">Deaktiviert</Badge>}
-            </span>
-          ) : (
-            'Der Mandant ist der Absender jedes Belegs.'
-          )
-        }
-      >
-        {mayWrite && (
+    <FormMask
+      title={tenant ? tenant.name : 'Neuer Mandant'}
+      back={{ to: origin.from, label: origin.label }}
+      subtitle={
+        tenant ? (
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-small">{tenant.code}</span>
+            {tenant.active === false && <Badge tone="muted">Deaktiviert</Badge>}
+          </span>
+        ) : (
+          'Der Mandant ist der Absender jedes Belegs.'
+        )
+      }
+      actions={
+        mayWrite && (
           <Button onClick={submit} busy={save.isPending} shortcut>
             Speichern
           </Button>
-        )}
-      </PageHeader>
-
-      <div className="grid gap-6 px-8 pb-12 lg:grid-cols-2">
-        {(complaint || save.error) && (
+        )
+      }
+      dirty={changed}
+      onSubmit={mayWrite && !save.isPending ? submit : undefined}
+    >
+      <div {...track} className="grid gap-6 lg:grid-cols-2">
+        {save.error !== null && (
           <div className="lg:col-span-2">
-            <ErrorNotice error={save.error ?? new Error(complaint ?? '')} />
+            <ErrorNotice error={save.error} />
           </div>
         )}
 
@@ -291,6 +297,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField
               label="Code"
+              error={fields.errors.code}
               value={form.code}
               onChange={(event) => set('code', event.target.value)}
               disabled={!mayWrite}
@@ -309,6 +316,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
             />
             <TextField
               label="Name"
+              error={fields.errors.name}
               value={form.name}
               onChange={(event) => set('name', event.target.value)}
               disabled={!mayWrite}
@@ -321,7 +329,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
               onChange={(event) => set('uid', event.target.value)}
               disabled={!mayWrite}
               placeholder="CHE-123.456.789"
-              hint="Die Prüfziffer kontrolliert das Backend."
+              tooltip="Die Prüfziffer kontrolliert das Backend."
             />
             <TextField
               label="Handelsregistername"
@@ -349,12 +357,14 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
             />
             <TextField
               label="PLZ"
+              error={fields.errors.postalCode}
               value={form.postalCode}
               onChange={(event) => set('postalCode', event.target.value)}
               disabled={!mayWrite}
             />
             <TextField
               label="Ort"
+              error={fields.errors.town}
               value={form.town}
               onChange={(event) => set('town', event.target.value)}
               disabled={!mayWrite}
@@ -393,7 +403,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
 
         {creating && (
           <Panel title="Nach dem Anlegen" className="lg:col-span-2">
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Mehrwertsteuer, Bank und die Vorgaben für Belege werden eingestellt, sobald der
               Mandant angelegt ist. Er bekommt dabei seine eigenen Auswahllisten mit den
               ausgelieferten Werten — Währung, Sprache und Land stehen dann zur Wahl.
@@ -406,7 +416,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
             <div className="grid gap-4">
               <CheckboxField
                 label="Mehrwertsteuerpflichtig"
-                hint="Ohne Pflicht steht auf keinem Beleg ein Steuersatz."
+                tooltip="Ohne Pflicht steht auf keinem Beleg ein Steuersatz."
                 checked={form.vatLiable}
                 onChange={(event) => set('vatLiable', event.target.checked)}
                 disabled={!mayWrite}
@@ -450,7 +460,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                     value={form.vatAccountingBasisFrom}
                     onChange={(event) => set('vatAccountingBasisFrom', event.target.value)}
                     disabled={!mayWrite}
-                    hint="Ein Wechsel gilt ab dem 1. Januar."
+                    tooltip="Ein Wechsel gilt ab dem 1. Januar."
                   />
 
                   <TextField
@@ -459,7 +469,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                     value={form.vatPeriodsLockedUntil}
                     onChange={(event) => set('vatPeriodsLockedUntil', event.target.value)}
                     disabled={!mayWrite}
-                    hint="Bis zu diesem Tag ist die Mehrwertsteuer abgerechnet; Buchungen bis und mit diesem Tag sind gesperrt. Ein leeres Feld lässt den gespeicherten Tag stehen."
+                    tooltip="Bis zu diesem Tag ist die Mehrwertsteuer abgerechnet; Buchungen bis und mit diesem Tag sind gesperrt. Ein leeres Feld lässt den gespeicherten Tag stehen."
                     className="sm:col-span-2"
                   />
 
@@ -471,7 +481,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                       disabled={!mayWrite}
                       inputMode="decimal"
                       numeric
-                      hint="Der mit der Steuerverwaltung vereinbarte Satz."
+                      tooltip="Der mit der Steuerverwaltung vereinbarte Satz."
                       className="sm:col-span-2"
                     />
                   )}
@@ -496,7 +506,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 value={form.qrIban}
                 onChange={(event) => set('qrIban', event.target.value)}
                 disabled={!mayWrite}
-                hint="Nur nötig für Einzahlungsscheine mit QR-Referenz."
+                tooltip="Nur nötig für Einzahlungsscheine mit QR-Referenz."
               />
               <TextField
                 label="Kundenidentifikation der Bank"
@@ -504,7 +514,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 onChange={(event) => set('qrCustomerId', event.target.value)}
                 disabled={!mayWrite}
                 inputMode="numeric"
-                hint="Sechs Ziffern. Ohne sie lässt sich keine QR-Referenz bilden."
+                tooltip="Sechs Ziffern. Ohne sie lässt sich keine QR-Referenz bilden."
               />
               <CatalogueSelect
                 label="Referenzart"
@@ -545,7 +555,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 disabled={!mayWrite}
                 inputMode="numeric"
                 numeric
-                hint="1 bis 12."
+                tooltip="1 bis 12."
               />
               <MasterDataSelect
                 label="Sprache"
@@ -573,7 +583,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                   typed into it (backend ADR-0127). */}
               <CheckboxField
                 label="Rappenrundung"
-                hint="Rundet den Endbetrag auf das eingestellte Vielfache."
+                tooltip="Rundet den Endbetrag auf das eingestellte Vielfache."
                 checked={form.cashRoundingEnabled}
                 onChange={(event) => set('cashRoundingEnabled', event.target.checked)}
                 disabled={!mayWrite}
@@ -587,7 +597,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                   disabled={!mayWrite}
                   inputMode="decimal"
                   numeric
-                  hint="In der Schweiz 0.05."
+                  tooltip="In der Schweiz 0.05."
                 />
               )}
             </div>
@@ -604,7 +614,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 disabled={!mayWrite}
                 inputMode="decimal"
                 numeric
-                hint="Bis hierher gilt zu viel Geld als Rundung. 0 heisst: nie."
+                tooltip="Bis hierher gilt zu viel Geld als Rundung. 0 heisst: nie."
               />
               <TextField
                 label="Einbehalt vorschlagen bis"
@@ -613,7 +623,7 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 disabled={!mayWrite}
                 inputMode="decimal"
                 numeric
-                hint="Darüber verlangt ein Einbehalt eine Bemerkung."
+                tooltip="Darüber verlangt ein Einbehalt eine Bemerkung."
               />
               <TextField
                 label="Einbehalt höchstens"
@@ -622,11 +632,11 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
                 disabled={!mayWrite}
                 inputMode="decimal"
                 numeric
-                hint="Darüber gar nicht mehr wählbar: der Überschuss bleibt ein Guthaben des Kunden."
+                tooltip="Darüber gar nicht mehr wählbar: der Überschuss bleibt ein Guthaben des Kunden."
               />
             </div>
 
-            <p className="mt-2 text-[12px] text-text-secondary">
+            <p className="mt-2 text-small text-text-secondary">
               Absolute Beträge, kein Prozentsatz — ein Tippfehler wächst nicht mit der
               Rechnungshöhe. Die drei müssen aufsteigend sein. Verglichen wird in der Währung
               des Belegs, ohne Umrechnung.
@@ -650,6 +660,6 @@ function TenantMask({ tenant }: { tenant: Tenant | null }) {
           </Panel>
         )}
       </div>
-    </>
+    </FormMask>
   )
 }

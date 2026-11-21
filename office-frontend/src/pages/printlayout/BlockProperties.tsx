@@ -40,11 +40,11 @@ export function BlockProperties({
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
-        <span className="text-[13px] font-medium">{BLOCK_LABELS[block.type]}</span>
+        <span className="text-body font-medium">{BLOCK_LABELS[block.type]}</span>
         <button
           type="button"
           onClick={onRemove}
-          className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+          className="text-small text-text-tertiary transition-colors hover:text-danger"
         >
           Entfernen
         </button>
@@ -221,8 +221,8 @@ function ColumnPicker({
 
   return (
     <div className="grid gap-3">
-      <span className="text-[13px] font-medium">Spalten</span>
-      <p className="text-[12px] text-text-tertiary">
+      <span className="text-body font-medium">Spalten</span>
+      <p className="text-small text-text-tertiary">
         Ohne Spalte zeigt die Tabelle die übliche Aufteilung. Breite leer heisst „wie
         vorgeschlagen", 0 heisst „nimmt den Rest".
       </p>
@@ -230,7 +230,7 @@ function ColumnPicker({
       {chosen.map((column, index) => (
         <div key={column.code} className="grid gap-2 border-t border-line-subtle pt-3">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-medium">
+            <span className="text-small font-medium">
               {index + 1}. {proposalOf(column.code)?.label ?? column.code}
             </span>
             <span className="flex gap-2">
@@ -239,7 +239,7 @@ function ColumnPicker({
                 aria-label={`${column.code} nach oben`}
                 disabled={index === 0}
                 onClick={() => move(index, -1)}
-                className="text-[12px] text-text-tertiary transition-colors hover:text-accent-text disabled:opacity-40"
+                className="text-small text-text-tertiary transition-colors hover:text-accent-text disabled:opacity-40"
               >
                 ↑
               </button>
@@ -248,14 +248,14 @@ function ColumnPicker({
                 aria-label={`${column.code} nach unten`}
                 disabled={index === chosen.length - 1}
                 onClick={() => move(index, 1)}
-                className="text-[12px] text-text-tertiary transition-colors hover:text-accent-text disabled:opacity-40"
+                className="text-small text-text-tertiary transition-colors hover:text-accent-text disabled:opacity-40"
               >
                 ↓
               </button>
               <button
                 type="button"
                 onClick={() => onChange(chosen.filter((_, position) => position !== index))}
-                className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+                className="text-small text-text-tertiary transition-colors hover:text-danger"
               >
                 Entfernen
               </button>
@@ -323,7 +323,7 @@ function ImageField({
 
   return (
     <div className="grid gap-2">
-      <span className="text-[13px] font-medium">Bild</span>
+      <span className="text-body font-medium">Bild</span>
       <input
         type="file"
         accept="image/png,image/jpeg"
@@ -341,21 +341,21 @@ function ImageField({
           reader.onload = () => onChange(String(reader.result))
           reader.readAsDataURL(file)
         }}
-        className="text-[12px] text-text-secondary"
+        className="text-small text-text-secondary"
       />
       {tooLarge && (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-small text-danger">
           Das Bild ist grösser als {MAX_IMAGE_BYTES / 1024} KB. Ein Logo braucht das nicht, und
           es reist mit jedem Ausdruck mit.
         </p>
       )}
       {value && (
         <div className="flex items-center gap-3">
-          <img src={value} alt="" className="max-h-12 max-w-[120px] border border-line-subtle" />
+          <img src={value} alt="" className="max-h-12 max-w-[7.5rem] border border-line-subtle" />
           <button
             type="button"
             onClick={() => onChange(undefined)}
-            className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+            className="text-small text-text-tertiary transition-colors hover:text-danger"
           >
             Bild entfernen
           </button>

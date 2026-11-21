@@ -85,14 +85,14 @@ export function EntryDialog({
           value={form.name}
           onChange={(event) => set('name', event.target.value)}
           maxLength={60}
-          hint="Was in der Auswahlliste steht."
+          tooltip="Was in der Auswahlliste steht."
         />
         <TextField
           label="Kurzform"
           value={form.shortName}
           onChange={(event) => set('shortName', event.target.value)}
           maxLength={10}
-          hint="Für Tabellen und Belegzeilen, zum Beispiel Stk."
+          tooltip="Für Tabellen und Belegzeilen, zum Beispiel Stk."
         />
         <TextField
           label="Beschreibung"
@@ -109,13 +109,13 @@ export function EntryDialog({
             onChange={(event) => set('decimalPlaces', event.target.value)}
             inputMode="numeric"
             maxLength={1}
-            hint="Leer heisst: beliebig viele. 0 heisst: nur ganze Zahlen, zum Beispiel Stück."
+            tooltip="Leer heisst: beliebig viele. 0 heisst: nur ganze Zahlen, zum Beispiel Stück."
           />
         )}
         {list === 'languages' && editing !== null && (
           <CheckboxField
             label="Belege in dieser Sprache"
-            hint="Nur mit diesem Haken lassen sich Belege in der Sprache ausstellen."
+            tooltip="Nur mit diesem Haken lassen sich Belege in der Sprache ausstellen."
             checked={form.documentLanguage}
             onChange={(event) => set('documentLanguage', event.target.checked)}
           />

@@ -107,12 +107,12 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
     {
       key: 'type',
       header: 'Belegart',
-      width: 'w-[210px]',
+      width: 'w-[13.125rem]',
       render: (range) => {
         const name = nameOf(range.documentTypeCode)
         const label = (
           <>
-            <span className="font-mono text-[12px]">{range.documentTypeCode}</span>
+            <span className="font-mono text-small">{range.documentTypeCode}</span>
             {/* The name only where the kind still exists: a range outlives the kind it
                 counted for, and inventing a name for a code nobody has would be worse. */}
             {name !== undefined && <span className="text-text-secondary"> · {name}</span>}
@@ -135,29 +135,29 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
       key: 'year',
       header: 'Geschäftsjahr',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (range) => range.fiscalYear,
     },
     {
       key: 'prefix',
       header: 'Präfix',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (range) => (
-        <span className="font-mono text-[12px] text-text-secondary">{range.prefix ?? '-'}</span>
+        <span className="font-mono text-small text-text-secondary">{range.prefix ?? '-'}</span>
       ),
     },
     {
       key: 'padding',
       header: 'Stellen',
       align: 'right',
-      width: 'w-[100px]',
+      width: 'w-[6.25rem]',
       render: (range) => formatCount(range.padding),
     },
     {
       key: 'next',
       header: 'Nächste Nummer',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (range) => formatCount(range.nextNumber),
     },
     {
@@ -259,7 +259,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
                 }
                 disabled={locked}
                 maxLength={20}
-                hint="Der Code der Belegart, zum Beispiel AU."
+                tooltip="Der Code der Belegart, zum Beispiel AU."
               />
             ) : (
               <SelectField
@@ -290,7 +290,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
               value={form.prefix}
               onChange={(event) => setForm({ ...form, prefix: event.target.value })}
               maxLength={10}
-              hint="Steht vor der Nummer, zum Beispiel AU-2026-."
+              tooltip="Steht vor der Nummer, zum Beispiel AU-2026-."
             />
 
             <TextField
@@ -299,7 +299,7 @@ function NumberRanges({ tenantId }: { tenantId: number }) {
               onChange={(event) => setForm({ ...form, padding: event.target.value })}
               inputMode="numeric"
               numeric
-              hint="Mit führenden Nullen aufgefüllt, 1 bis 10."
+              tooltip="Mit führenden Nullen aufgefüllt, 1 bis 10."
             />
 
             {configure.error !== null && <ErrorNotice error={configure.error} />}

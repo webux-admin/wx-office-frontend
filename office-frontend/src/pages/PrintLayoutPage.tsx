@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
+import { FormMask } from '../components/FormMask'
 import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -79,10 +78,14 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
   // one. The way back follows the way in, so nobody lands on a list they never came from.
   const origin = originOf(useLocation().state, LIST)
 
+  const stored: PrintLayoutDefinition = layout.definition ?? {
+    page: DEFAULT_PAGE,
+    header: [],
+    body: [],
+    footer: [],
+  }
   const [name, setName] = useState(layout.name)
-  const [definition, setDefinition] = useState<PrintLayoutDefinition>(
-    layout.definition ?? { page: DEFAULT_PAGE, header: [], body: [], footer: [] },
-  )
+  const [definition, setDefinition] = useState<PrintLayoutDefinition>(stored)
   const [selection, setSelection] = useState<{ band: Band; index: number } | null>(null)
   const [target, setTarget] = useState<Band>('header')
 
@@ -120,32 +123,38 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
     selection === null ? undefined : definition[selection.band][selection.index]
 
 
-  // Ctrl+S and Ctrl+Enter do what the primary button does, so a mask can be filled in
-  // and finished without reaching for the mouse.
-  useSubmitShortcut(problem === undefined && !save.isPending ? () => save.mutate() : undefined)
+  // The canvas changes the definition by dragging, which fires no input event; so the question
+  // about throwing changes away compares with what was stored instead of listening for typing.
+  const dirty = name !== layout.name || JSON.stringify(definition) !== JSON.stringify(stored)
 
   return (
-    <>
-      <PageHeader
-        title={layout.name}
-        back={{ to: origin.from, label: origin.label }}
-        subtitle={
-          <span className="font-mono text-[12px] text-text-secondary">{layout.code}</span>
-        }
-      >
-        <Button variant="secondary" onClick={() => preview.mutate()} busy={preview.isPending}>
-          Vorschau
-        </Button>
-        <Button onClick={() => save.mutate()} busy={save.isPending} disabled={problem !== undefined} shortcut>
-          Speichern
-        </Button>
-      </PageHeader>
-
-      <div className="grid gap-6 px-8 pb-12">
+    <FormMask
+      title={layout.name}
+      back={{ to: origin.from, label: origin.label }}
+      subtitle={<span className="font-mono text-small text-text-secondary">{layout.code}</span>}
+      actions={
+        <>
+          <Button variant="secondary" onClick={() => preview.mutate()} busy={preview.isPending}>
+            Vorschau
+          </Button>
+          <Button
+            onClick={() => save.mutate()}
+            busy={save.isPending}
+            disabled={problem !== undefined}
+            shortcut
+          >
+            Speichern
+          </Button>
+        </>
+      }
+      dirty={dirty}
+      onSubmit={problem === undefined && !save.isPending ? () => save.mutate() : undefined}
+    >
+      <div className="grid gap-6">
         {problem !== undefined && (
           <p
             role="alert"
-            className="rounded-[var(--radius-md)] border border-danger/40 bg-danger/8 px-4 py-3 text-[13px] text-text-primary"
+            className="rounded-[var(--radius-md)] border border-danger/40 bg-danger/8 px-4 py-3 text-body text-text-primary"
           >
             {problem}
           </p>
@@ -154,7 +163,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
         {preview.error !== null && <ErrorNotice error={preview.error} />}
 
         <div className="flex flex-wrap items-start gap-6">
-          <div className="grid w-[260px] shrink-0 gap-6">
+          <div className="grid w-[16.25rem] shrink-0 gap-6">
             <Panel title="Vorlage">
               <TextField
                 label="Bezeichnung"
@@ -172,7 +181,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
                       key={band}
                       type="button"
                       onClick={() => setTarget(band)}
-                      className={`rounded-[var(--radius-sm)] border px-2 py-1 text-[12px] transition-colors ${
+                      className={`rounded-[var(--radius-sm)] border px-2 py-1 text-small transition-colors ${
                         target === band
                           ? 'border-accent text-accent-text'
                           : 'border-line text-text-secondary hover:border-accent'
@@ -187,7 +196,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
                     <PaletteButton key={type} type={type} onClick={() => add(type)} />
                   ))}
                 </div>
-                <span className="mt-2 text-[11px] uppercase tracking-wide text-text-tertiary">
+                <span className="mt-2 text-caption uppercase tracking-wide text-text-tertiary">
                   Körper
                 </span>
                 <div className="grid gap-1.5">
@@ -252,10 +261,10 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
             }
           />
 
-          <div className="w-[280px] shrink-0">
+          <div className="w-[17.5rem] shrink-0">
             <Panel title="Eigenschaften">
               {selected === undefined || selection === null ? (
-                <p className="text-[13px] text-text-secondary">
+                <p className="text-body text-text-secondary">
                   Nichts gewählt. Klicke einen Baustein auf der Seite an.
                 </p>
               ) : (
@@ -292,7 +301,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
           </div>
         </div>
       </div>
-    </>
+    </FormMask>
   )
 }
 
@@ -301,7 +310,7 @@ function PaletteButton({ type, onClick }: { type: LayoutBlockType; onClick: () =
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[var(--radius-sm)] border border-line px-2 py-1.5 text-left text-[12px] text-text-secondary transition-colors hover:border-accent hover:text-text-primary"
+      className="rounded-[var(--radius-sm)] border border-line px-2 py-1.5 text-left text-small text-text-secondary transition-colors hover:border-accent hover:text-text-primary"
     >
       + {BLOCK_LABELS[type]}
     </button>

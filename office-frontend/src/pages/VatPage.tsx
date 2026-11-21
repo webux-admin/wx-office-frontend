@@ -73,8 +73,8 @@ function Vat({ tenantId }: { tenantId: number }) {
     {
       key: 'code',
       header: 'Code',
-      width: 'w-[220px]',
-      render: (row) => <span className="font-mono text-[12px]">{row.code}</span>,
+      width: 'w-[13.75rem]',
+      render: (row) => <span className="font-mono text-small">{row.code}</span>,
     },
     {
       key: 'category',
@@ -85,7 +85,7 @@ function Vat({ tenantId }: { tenantId: number }) {
       key: 'rate',
       header: 'Satz',
       align: 'right',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (row) => formatPercent(row.rate),
     },
   ]
@@ -97,7 +97,7 @@ function Vat({ tenantId }: { tenantId: number }) {
         subtitle="Welcher Satz auf eine Belegzeile kommt, und wo die Einstellungen dahinter liegen."
       />
 
-      <div className="grid max-w-[820px] gap-6 px-8 pb-12">
+      <div className="grid max-w-[51.25rem] gap-6 px-8 pb-12">
         <Panel title="Sätze zum Leistungsdatum" padded={false}>
           <div className="border-b border-line-subtle p-5">
             <TextField
@@ -105,8 +105,8 @@ function Vat({ tenantId }: { tenantId: number }) {
               type="date"
               value={dateOfSupply}
               onChange={(event) => setDateOfSupply(event.target.value)}
-              hint="Massgebend ist das Datum der Leistung, nicht das Datum des Belegs."
-              className="max-w-[240px]"
+              tooltip="Massgebend ist das Datum der Leistung, nicht das Datum des Belegs."
+              className="max-w-[15rem]"
             />
           </div>
 
@@ -119,7 +119,7 @@ function Vat({ tenantId }: { tenantId: number }) {
             empty={<EmptyState title="Keine Sätze" description={NO_RATES} />}
           />
 
-          <p className="border-t border-line-subtle px-5 py-3.5 text-[12px] text-text-tertiary">
+          <p className="border-t border-line-subtle px-5 py-3.5 text-small text-text-tertiary">
             Die Bezeichnung einer MwSt-Behandlung lässt sich unter{' '}
             <Link to="/feste-werte" className="text-accent-text hover:underline">
               Feste Werte
@@ -248,20 +248,20 @@ function VatRateChanges({
       render: (period) => (
         <span className="font-medium">
           {categoryLabel(period.category)}{' '}
-          <span className="font-mono text-[11px] text-text-tertiary">{period.category}</span>
+          <span className="font-mono text-caption text-text-tertiary">{period.category}</span>
         </span>
       ),
     },
     {
       key: 'validFrom',
       header: 'Gültig ab',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (period) => <span className="tabular-nums">{formatDate(period.validFrom)}</span>,
     },
     {
       key: 'validTo',
       header: 'Gültig bis',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (period) =>
         period.validTo ? (
           <span className="tabular-nums">{formatDate(period.validTo)}</span>
@@ -273,27 +273,27 @@ function VatRateChanges({
       key: 'rate',
       header: 'Satz',
       align: 'right',
-      width: 'w-[100px]',
+      width: 'w-[6.25rem]',
       render: (period) => formatPercent(period.rate),
     },
     {
       key: 'actions',
       header: '',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (period) =>
         mayWrite && mayTouch(period) ? (
           <span className="flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => openEdit(period)}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-text-primary"
+              className="text-small text-text-tertiary transition-colors hover:text-text-primary"
             >
               Bearbeiten
             </button>
             <button
               type="button"
               onClick={() => period.id !== undefined && remove.mutate(period.id)}
-              className="text-[12px] text-text-tertiary transition-colors hover:text-danger"
+              className="text-small text-text-tertiary transition-colors hover:text-danger"
             >
               Zurücknehmen
             </button>
@@ -309,7 +309,7 @@ function VatRateChanges({
     <>
       <Panel title="Satzänderungen" padded={false}>
         <div className="flex items-center justify-between gap-4 border-b border-line-subtle p-5">
-          <p className="text-[12px] text-text-tertiary">
+          <p className="text-small text-text-tertiary">
             Kündigt die ESTV eine Änderung an, wird hier der neue Satz mit seinem ersten
             Geltungstag erfasst. Die laufende Periode endet automatisch am Vortag; Produkte
             bleiben unangetastet, weil sie nur die MwSt-Behandlung tragen.
@@ -342,7 +342,7 @@ function VatRateChanges({
           }
         />
 
-        <p className="border-t border-line-subtle px-5 py-3.5 text-[12px] text-text-tertiary">
+        <p className="border-t border-line-subtle px-5 py-3.5 text-small text-text-tertiary">
           Die Sätze sind eidgenössisch und gelten für alle Mandanten. Korrigieren lässt sich
           nur eine Änderung, die noch nicht in Kraft ist — was schon gegolten hat, bleibt.
         </p>
@@ -399,14 +399,14 @@ function VatRateChanges({
             onChange={(event) =>
               setForm((current) => ({ ...current, validFrom: event.target.value }))
             }
-            hint="Erster Tag, an dem der neue Satz gilt. Die laufende Periode endet am Vortag."
+            tooltip="Erster Tag, an dem der neue Satz gilt. Die laufende Periode endet am Vortag."
           />
           <TextField
             label="Satz in %"
             value={form.rate}
             onChange={(event) => setForm((current) => ({ ...current, rate: event.target.value }))}
-            hint="Höchstens drei Nachkommastellen, zum Beispiel 8.5."
-            className="max-w-[160px]"
+            tooltip="Höchstens drei Nachkommastellen, zum Beispiel 8.5."
+            className="max-w-[10rem]"
           />
           {save.error !== null && <ErrorNotice error={save.error} />}
         </div>
@@ -448,18 +448,18 @@ function VatSettings({ tenantId }: { tenantId: number }) {
             </SettingRow>
             {vat?.vatMethod === 'SALDO' && (
               <SettingRow label="Saldosteuersatz">
-                <span className="font-mono text-[12px] tabular-nums">
+                <span className="font-mono text-small tabular-nums">
                   {formatPercent(vat.vatSaldoRate)}
                 </span>
               </SettingRow>
             )}
             <SettingRow label="Steuerpflichtig ab">{formatDate(vat?.vatLiableFrom)}</SettingRow>
             <SettingRow label="UID">
-              <span className="font-mono text-[12px]">{tenant.data.uid ?? '-'}</span>
+              <span className="font-mono text-small">{tenant.data.uid ?? '-'}</span>
             </SettingRow>
           </div>
 
-          <p className="mt-4 text-[12px] text-text-tertiary">
+          <p className="mt-4 text-small text-text-tertiary">
             Geändert werden diese Angaben in der{' '}
             <Link
               to={`/mandanten/${tenantId}`}
@@ -480,8 +480,8 @@ function VatSettings({ tenantId }: { tenantId: number }) {
 function SettingRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-6 border-b border-line-subtle py-2.5 first:pt-0 last:border-b-0 last:pb-0">
-      <span className="text-[12px] text-text-tertiary">{label}</span>
-      <span className="text-right text-[13px]">{children}</span>
+      <span className="text-small text-text-tertiary">{label}</span>
+      <span className="text-right text-body">{children}</span>
     </div>
   )
 }

@@ -311,4 +311,22 @@ describe('TenantPage', () => {
 
     expect(Object.keys(written[0].body)).not.toContain('vatPeriodsLockedUntil')
   })
+
+  /** The sender address is missing from every document without a postal code: refused at the field. */
+  it('tenantPageRefusesAnEmptyPostalCodeAtItsFieldTest', async () => {
+    await render()
+    const postalCode = field('PLZ')
+    expect(postalCode).toBeDefined()
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(postalCode, '')
+      postalCode?.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await settle()
+
+    await save()
+
+    expect(container.textContent).toContain('Ohne Postleitzahl fehlt die Absenderadresse')
+    expect(written).toHaveLength(0)
+  })
 })
