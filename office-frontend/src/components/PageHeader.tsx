@@ -28,7 +28,7 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 px-8 pb-6 pt-7">
+    <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-8 pb-6 pt-7">
       <div className="min-w-0">
         {back && (
           <Link
@@ -43,7 +43,7 @@ export function PageHeader({
         <h1 className="truncate text-title font-semibold leading-7 tracking-tight">{title}</h1>
         {subtitle && <div className="mt-1 text-body text-text-secondary">{subtitle}</div>}
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center justify-end gap-2">{children}</div>}
     </header>
   )
 }
