@@ -5032,6 +5032,20 @@ export type ContractTotal = {
 }
 
 /**
+ * Where a contract stands (backend `ContractStatus`): drafted, in force, or ended. It runs
+ * through them in this order and never back (backend ADR-0145).
+ */
+export type ContractStatus = 'DRAFT' | 'ACTIVE' | 'ENDED'
+
+/** Why a contract ended, a code of the fixed catalogue (backend `ContractEndReason`). */
+export type ContractEndReason =
+  | 'TERMINATED_BY_CUSTOMER'
+  | 'TERMINATED_BY_TENANT'
+  | 'MUTUAL_AGREEMENT'
+  | 'TERM_EXPIRED'
+  | 'REPLACED'
+
+/**
  * A contract, as `ContractDto` of the backend sends it.
  *
  * <p>Name and town of the customer are the copy on the contract, taken on every save, not the
@@ -5053,6 +5067,12 @@ export type Contract = {
   note?: string | null
   /** The one currency of all positions; absent without positions. */
   currency?: string | null
+  status: ContractStatus
+  /** The version the agreed values stand for; absent for a draft. */
+  currentVersionNo?: number | null
+  /** ISO date, the last day it runs after it was ended; absent unless ended. */
+  endedOn?: string | null
+  endReason?: ContractEndReason | null
   positions: ContractPosition[]
   /** The sum per interval, monthly first; an interval without positions is missing. */
   totals: ContractTotal[]
@@ -5089,6 +5109,48 @@ export type ContractRequest = {
   noticePeriodUnit: NoticePeriodUnit | null
   note: string | null
   positions: ContractPositionRequest[]
+  /** On a `PUT`, the `lockVersion` the change was made to; ignored on a `POST`. */
+  lockVersion: number | null
+  /** On a `PUT` of an active contract that changes what was agreed: the day it holds from. */
+  validFrom: string | null
+}
+
+/** What the end dialog sends (`ContractEndRequest`). */
+export type ContractEndRequest = {
+  /** ISO date, the last day the contract runs. */
+  endedOn: string
+  reason: ContractEndReason
+}
+
+/**
+ * One version of a contract, as `ContractVersionDto` sends it: what was agreed from one day
+ * on. Read only; there is no way to change one (backend ADR-0145).
+ */
+export type ContractVersion = {
+  versionNo: number
+  /** ISO date the version holds from. */
+  validFrom: string
+  title: string
+  partnerId: number
+  customerName: string
+  customerTown?: string | null
+  startDate: string
+  endDate?: string | null
+  noticePeriodAmount?: number | null
+  noticePeriodUnit?: NoticePeriodUnit | null
+  currency?: string | null
+  positions: ContractPosition[]
+  totals: ContractTotal[]
+  createdAt?: string | null
+  createdBy?: string | null
+}
+
+/** One step of a contract from one status to the next (`ContractStatusChangeDto`). */
+export type ContractStatusChange = {
+  fromStatus: ContractStatus
+  toStatus: ContractStatus
+  changedAt?: string | null
+  changedBy?: string | null
 }
 
 /** A customer a contract can be made with (`ContractCustomer`). */

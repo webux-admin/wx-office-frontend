@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
+import { Badge } from '../components/Badge'
 import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState } from '../components/Notice'
 import { LinkButton } from '../components/LinkButton'
@@ -16,6 +17,8 @@ import {
   CONTRACT_MODULE,
   CONTRACT_PATH,
   CONTRACT_RIGHTS,
+  CONTRACT_STATUS_LABELS,
+  CONTRACT_STATUS_TONES,
   contractTerm,
   contractsKey,
   contractsUrl,
@@ -102,6 +105,24 @@ function ContractList({ tenantId }: { tenantId: number }) {
       render: (contract) => (
         <span className="text-text-secondary tabular-nums">
           {contractTerm(contract.startDate, contract.endDate, formatDate)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortKey: 'status',
+      width: 'w-column-sm',
+      render: (contract) => (
+        <span className="inline-flex items-center gap-2">
+          <Badge tone={CONTRACT_STATUS_TONES[contract.status]}>
+            {CONTRACT_STATUS_LABELS[contract.status]}
+          </Badge>
+          {contract.currentVersionNo != null && (
+            <span className="text-small text-text-tertiary tabular-nums">
+              V{contract.currentVersionNo}
+            </span>
+          )}
         </span>
       ),
     },

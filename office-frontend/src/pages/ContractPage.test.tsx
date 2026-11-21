@@ -5,7 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { Contract, ContractCustomer, Product } from '../lib/types'
+import type {
+  Contract,
+  ContractCustomer,
+  ContractStatusChange,
+  ContractVersion,
+  Product,
+} from '../lib/types'
 import { ContractPage } from './ContractPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -30,6 +36,8 @@ const STORED: Contract = {
   partnerId: 11,
   customerName: 'Bäckerei Huber AG',
   customerTown: 'Bern',
+  status: 'DRAFT',
+  lockVersion: 3,
   startDate: '2027-01-01',
   endDate: null,
   noticePeriodAmount: 3,
@@ -106,7 +114,42 @@ function session(permissions: string[]): AuthState {
   }
 }
 
+/** Version 1 of the stored contract, before the price of hosting went up. */
+const VERSION_ONE: ContractVersion = {
+  versionNo: 1,
+  validFrom: '2027-01-01',
+  title: 'Hosting und Support',
+  partnerId: 11,
+  customerName: 'Bäckerei Huber AG',
+  customerTown: 'Bern',
+  startDate: '2027-01-01',
+  endDate: null,
+  noticePeriodAmount: 3,
+  noticePeriodUnit: 'MONTHS',
+  currency: 'CHF',
+  positions: [{ ...STORED.positions[0], unitPrice: 900, amount: 900 }],
+  totals: [{ interval: 'MONTHLY', amount: 900 }],
+  createdAt: '2026-12-01T09:00:00Z',
+  createdBy: 'anna',
+}
+
+/** Version 2, the one the stored contract stands for once it is active. */
+const VERSION_TWO: ContractVersion = {
+  ...VERSION_ONE,
+  versionNo: 2,
+  validFrom: '2028-01-01',
+  positions: STORED.positions,
+  totals: STORED.totals,
+  createdAt: '2027-11-20T09:00:00Z',
+}
+
+const STEPS: ContractStatusChange[] = [
+  { fromStatus: 'DRAFT', toStatus: 'ACTIVE', changedAt: '2026-12-01T09:00:00Z', changedBy: 'anna' },
+]
+
 let container: HTMLDivElement
+/** What the backend holds as contract 5; a draft unless a test says otherwise. */
+let stored: Contract
 let root: Root
 /** Every write the mask sent: address, method and body per request. */
 let written: { url: string; method: string; body: Record<string, unknown> }[]
@@ -125,6 +168,7 @@ function json(body: unknown, status = 200) {
 }
 
 function stubFetch() {
+  stored = STORED
   written = []
   read = []
   answer = () => json({ ...STORED, id: 6, contractNumber: 'V-00006' }, 201)
@@ -137,7 +181,9 @@ function stubFetch() {
     }
     read.push(url)
     if (url.includes('/contracts/customers')) return json([HUBER])
-    if (url.endsWith('/contracts/5')) return json(STORED)
+    if (url.endsWith('/contracts/5')) return json(stored)
+    if (url.endsWith('/contracts/5/versions')) return json([VERSION_TWO, VERSION_ONE])
+    if (url.endsWith('/contracts/5/status-changes')) return json(STEPS)
     if (url.includes('/currencies')) {
       return json([
         { id: 501, code: 'CHF', name: 'Schweizer Franken', isDefault: true },
@@ -257,6 +303,25 @@ async function pressIcon(label: string) {
   await settle()
 }
 
+/** Chooses an option of a select by its value. */
+async function choose(label: string, value: string, scope: ParentNode = container) {
+  const select = control(label, scope)
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(select), 'value')?.set?.call(select, value)
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await settle()
+}
+
+/** The button that says exactly this, the last one when there are several. */
+function button(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button')]
+    .filter((entry) => entry.textContent?.trim() === label)
+    .at(-1)
+  if (found === undefined) throw new Error(`no button ${label}`)
+  return found
+}
+
 /** Types into a type-ahead and takes the hit that names this record. */
 async function pick(label: string, term: string, name: string, scope: ParentNode = container) {
   await type(label, term, scope)
@@ -319,6 +384,8 @@ describe('ContractPage', () => {
               interval: 'MONTHLY',
             },
           ],
+          lockVersion: null,
+          validFrom: null,
         },
       },
     ])
@@ -385,6 +452,9 @@ describe('ContractPage', () => {
     expect(
       (written[0].body.positions as { positionKey: string }[]).map((entry) => entry.positionKey),
     ).toEqual(['key-hosting', 'key-support'])
+    expect(written[0].body.lockVersion).toBe(3)
+    // A draft takes no version, so no day is asked for and none is sent.
+    expect(written[0].body.validFrom).toBeNull()
   })
 
   it('contractPageMovesAPositionTest', async () => {
@@ -476,6 +546,165 @@ describe('ContractPage', () => {
 
     expect(() => control('Produkt', dialog())).toThrow()
     expect(read.some((url) => url.includes('/products'))).toBe(false)
+  })
+
+  it('contractPageActivatesADraftTest', async () => {
+    answer = () => json({ ...STORED, status: 'ACTIVE', currentVersionNo: 1 })
+    await render('/vertraege/5')
+    expect(text()).toContain('Entwurf')
+
+    await press('Aktivieren')
+    expect(text()).toContain('erhält Version 1')
+    await press('Aktivieren')
+
+    expect(written).toEqual([
+      { url: '/api/tenants/1/contracts/5/activate', method: 'POST', body: {} },
+    ])
+  })
+
+  it('contractPageActivatesOnlyWhatIsSavedTest', async () => {
+    await render('/vertraege/5')
+
+    await type('Bezeichnung', 'Hosting neu')
+
+    expect(button('Aktivieren').disabled).toBe(true)
+    expect(text()).toContain('Aktivieren geht erst, wenn die Änderungen gespeichert sind.')
+  })
+
+  it('contractPageAsksForTheDayOfANewVersionTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    answer = () => json({ ...stored, currentVersionNo: 3 })
+    await render('/vertraege/5')
+    expect(text()).toContain('Jede Änderung am Vereinbarten wird eine neue Version')
+
+    await pressIcon('Domain entfernen')
+    await press('Speichern')
+    expect(written).toEqual([])
+    expect(text()).toContain('Ab welchem Tag gilt die Änderung?')
+
+    await type('Änderung gilt ab', '2028-01-01')
+    await press('Speichern')
+
+    expect(written[0].method).toBe('PUT')
+    expect(written[0].body.validFrom).toBe('2028-01-01')
+    expect(written[0].body.lockVersion).toBe(3)
+  })
+
+  it('contractPageRefusesADayBeforeTheStartTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    await render('/vertraege/5')
+
+    await type('Bezeichnung', 'Hosting')
+    await type('Änderung gilt ab', '2026-12-31')
+    await press('Speichern')
+
+    expect(written).toEqual([])
+    expect(text()).toContain('Die Änderung kann nicht vor dem Vertragsbeginn gelten.')
+  })
+
+  it('contractPageSavesANoteWithoutADayTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    answer = () => json(stored)
+    await render('/vertraege/5')
+
+    await type('Notiz', 'Rückruf im März')
+    expect(() => control('Änderung gilt ab')).toThrow()
+    await press('Speichern')
+
+    expect(written[0].body.note).toBe('Rückruf im März')
+    expect(written[0].body.validFrom).toBeNull()
+  })
+
+  it('contractPageEndsAnActiveContractTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    answer = () =>
+      json({ ...stored, status: 'ENDED', endedOn: '2028-06-30', endReason: 'TERMINATED_BY_CUSTOMER' })
+    await render('/vertraege/5')
+
+    await press('Beenden')
+    expect(text()).toContain('Kündigungsfrist laut Vertrag: 3 Monate')
+    await press('Beenden')
+    expect(written).toEqual([])
+    expect(text()).toContain('Einen Grund aus der Liste wählen.')
+
+    await type('Letzter Vertragstag', '2028-06-30', dialog())
+    await choose('Grund', 'TERMINATED_BY_CUSTOMER', dialog())
+    await press('Beenden')
+
+    expect(written).toEqual([
+      {
+        url: '/api/tenants/1/contracts/5/end',
+        method: 'POST',
+        body: { endedOn: '2028-06-30', reason: 'TERMINATED_BY_CUSTOMER' },
+      },
+    ])
+  })
+
+  it('contractPageRefusesAnExpiredTermWithoutAnEndTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 1 }
+    await render('/vertraege/5')
+
+    await press('Beenden')
+    await type('Letzter Vertragstag', '2028-06-30', dialog())
+    await choose('Grund', 'TERM_EXPIRED', dialog())
+    await press('Beenden')
+
+    expect(written).toEqual([])
+    expect(text()).toContain('Ein unbefristeter Vertrag läuft nicht ab.')
+  })
+
+  it('contractPageKeepsAnEndedContractToItsNoteTest', async () => {
+    stored = {
+      ...STORED,
+      status: 'ENDED',
+      currentVersionNo: 2,
+      endedOn: '2028-06-30',
+      endReason: 'MUTUAL_AGREEMENT',
+    }
+    await render('/vertraege/5')
+
+    expect(text()).toContain('Beendet, letzter Vertragstag 30.06.2028')
+    expect(text()).toContain('Aufhebung im gegenseitigen Einvernehmen')
+    expect((control('Bezeichnung') as HTMLInputElement).disabled).toBe(true)
+    expect((control('Notiz') as HTMLTextAreaElement).disabled).toBe(false)
+    expect(text()).not.toContain('Position hinzufügen')
+    const labels = [...document.querySelectorAll('button')].map((entry) => entry.textContent?.trim())
+    expect(labels).not.toContain('Beenden')
+    expect(labels).not.toContain('Aktivieren')
+  })
+
+  it('contractPageShowsTheVersionsTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    await render('/vertraege/5')
+
+    const register = [...document.querySelectorAll('[role="tab"]')].find((entry) =>
+      entry.textContent?.startsWith('Versionen'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      register.click()
+    })
+    await settle()
+
+    expect(read.some((url) => url.endsWith('/contracts/5/versions'))).toBe(true)
+    expect(text()).toContain('Aktiviert')
+    expect(text()).toContain('gilt ab 01.01.2028')
+    expect(text()).toContain('aktuell')
+    expect(text()).not.toContain('Position hinzufügen')
+
+    const older = [...document.querySelectorAll('button[aria-pressed]')].find((entry) =>
+      entry.textContent?.startsWith('Version 1'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      older.click()
+    })
+    await settle()
+    expect(document.querySelector('[aria-label="Version 1"]')).not.toBeNull()
+  })
+
+  it('contractPageShowsNoRegistersForADraftTest', async () => {
+    await render('/vertraege/5')
+
+    expect(document.querySelector('[role="tab"]')).toBeNull()
   })
 
   it('contractPageIsReadOnlyWithoutTheWriteRightTest', async () => {

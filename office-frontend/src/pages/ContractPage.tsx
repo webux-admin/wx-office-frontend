@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
 import { FormMask } from '../components/FormMask'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
+import { Tabs } from '../components/Tabs'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useFieldErrors } from '../components/useFieldErrors'
@@ -13,28 +16,37 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import {
+  CONTRACT_END_REASON_LABELS,
   CONTRACT_MODULE,
   CONTRACT_NOTE_MAX_LENGTH,
   CONTRACT_PATH,
   CONTRACT_RIGHTS,
+  CONTRACT_STATUS_LABELS,
+  CONTRACT_STATUS_TONES,
   CONTRACT_TITLE_MAX_LENGTH,
   NOTICE_UNIT_LABELS,
+  agreementChanged,
   contractComplaints,
   contractCustomersUrl,
+  contractStepUrl,
   contractUrl,
   contractsKey,
   contractsUrl,
   emptyContractForm,
+  isAgreementEditable,
   isNoticePeriodUnit,
   toContractForm,
   toContractRequest,
+  validFromComplaint,
   type ContractForm,
 } from '../lib/contract'
 import { isToldByFields } from '../lib/fieldErrors'
-import { formatDateTime } from '../lib/format'
+import { formatDate, formatDateTime } from '../lib/format'
 import { originOf } from '../lib/origin'
 import type { Contract, ContractCustomer } from '../lib/types'
 import { ContractPositions } from './contract/ContractPositions'
+import { ContractVersions } from './contract/ContractVersions'
+import { EndContractDialog } from './contract/EndContractDialog'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
 import { partnerLabel, type CustomerHit, type CustomerSource } from './document/partnerSearch'
 
@@ -48,7 +60,11 @@ const SHOWN_FIELDS = [
   'noticePeriodUnit',
   'note',
   'positions',
+  'validFrom',
 ] as const
+
+/** The two registers of a stored contract. */
+type Register = 'contract' | 'versions'
 
 /** One contract, new or stored: its customer, its term and what it bills how often. */
 export function ContractPage() {
@@ -91,13 +107,25 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
 
   const initial = contract ? toContractForm(contract) : emptyContractForm()
   const [form, setForm] = useState<ContractForm>(initial)
-  const editable = can(CONTRACT_RIGHTS.write)
+  const [register, setRegister] = useState<Register>('contract')
+  const [activating, setActivating] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const mayWrite = can(CONTRACT_RIGHTS.write)
+  const status = contract?.status ?? 'DRAFT'
+  // An ended contract takes no new version: only its note stays open (backend ADR-0145).
+  const editable = mayWrite && isAgreementEditable(status)
+  // Saving an active contract that changes what was agreed takes the next version, and that
+  // one needs the day it holds from.
+  const takesVersion = status === 'ACTIVE' && agreementChanged(initial, form)
   const set = <K extends keyof ContractForm>(field: K, value: ContractForm[K]) =>
     setForm((current) => ({ ...current, [field]: value }))
 
   const save = useMutation({
     mutationFn: () => {
-      const body = toContractRequest(form)
+      const body = toContractRequest(
+        takesVersion ? form : { ...form, validFrom: '' },
+        contract?.lockVersion ?? null,
+      )
       return contract
         ? api.put<Contract>(contractUrl(tenantId, contract.id), body)
         : api.post<Contract>(contractsUrl(tenantId), body)
@@ -110,7 +138,22 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
     },
   })
 
-  const fields = useFieldErrors(() => contractComplaints(form), save.error)
+  // A step changes the status and nothing else: the mask stays open on the same contract, and
+  // the query behind it brings the new status.
+  const activate = useMutation({
+    mutationFn: () =>
+      api.post<Contract>(contractStepUrl(tenantId, contract?.id ?? 0, 'activate'), {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contractsKey(tenantId) })
+      setActivating(false)
+    },
+  })
+
+  const fields = useFieldErrors(() => {
+    const errors = { ...contractComplaints(form) }
+    const day = takesVersion ? validFromComplaint(form) : null
+    return day === null ? errors : { ...errors, validFrom: day }
+  }, save.error)
   const submit = () => {
     if (fields.check()) save.mutate()
   }
@@ -128,6 +171,12 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
         contract ? (
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-small">{contract.contractNumber}</span>
+            <Badge tone={CONTRACT_STATUS_TONES[status]}>{CONTRACT_STATUS_LABELS[status]}</Badge>
+            {contract.currentVersionNo != null && (
+              <span className="text-small text-text-secondary">
+                Version {contract.currentVersionNo}
+              </span>
+            )}
             <span>
               {contract.customerName}
               {contract.customerTown ? `, ${contract.customerTown}` : ''}
@@ -138,14 +187,31 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
         )
       }
       actions={
-        editable && (
-          <Button onClick={submit} busy={save.isPending} shortcut>
-            Speichern
-          </Button>
-        )
+        <>
+          {contract && mayWrite && status === 'DRAFT' && (
+            <Button
+              variant="secondary"
+              onClick={() => setActivating(true)}
+              // A step takes the contract as stored; what is typed but not saved would be lost.
+              disabled={dirty}
+            >
+              Aktivieren
+            </Button>
+          )}
+          {contract && mayWrite && status === 'ACTIVE' && (
+            <Button variant="secondary" onClick={() => setEnding(true)} disabled={dirty}>
+              Beenden
+            </Button>
+          )}
+          {mayWrite && (
+            <Button onClick={submit} busy={save.isPending} shortcut>
+              Speichern
+            </Button>
+          )}
+        </>
       }
       dirty={dirty}
-      onSubmit={editable && !save.isPending ? submit : undefined}
+      onSubmit={mayWrite && !save.isPending ? submit : undefined}
     >
       <>
         {save.error !== null && !told && (
@@ -154,6 +220,89 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
           </div>
         )}
 
+        {contract && mayWrite && dirty && status !== 'ENDED' && (
+          <p className="mb-6 text-small text-text-secondary">
+            {status === 'DRAFT' ? 'Aktivieren' : 'Beenden'} geht erst, wenn die Änderungen
+            gespeichert sind.
+          </p>
+        )}
+
+        {contract && status === 'ACTIVE' && (
+          <p className="mb-6 rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-body text-text-secondary">
+            Dieser Vertrag ist aktiv. Jede Änderung am Vereinbarten wird eine neue Version, gültig
+            ab einem Tag, den Sie nennen; die bisherige bleibt unverändert. Die Notiz allein
+            erzeugt keine Version.
+          </p>
+        )}
+
+        {contract && status === 'ENDED' && (
+          <p className="mb-6 rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-body text-text-secondary">
+            Beendet, letzter Vertragstag {formatDate(contract.endedOn)}
+            {contract.endReason ? ` (${CONTRACT_END_REASON_LABELS[contract.endReason]})` : ''}.
+            Das Vereinbarte lässt sich nicht mehr ändern, nur noch die Notiz.
+          </p>
+        )}
+
+        {contract && status !== 'DRAFT' && (
+          <Tabs
+            label="Register des Vertrags"
+            active={register}
+            onChange={setRegister}
+            tabs={[
+              { id: 'contract', label: 'Vertrag' },
+              { id: 'versions', label: 'Versionen', count: contract.currentVersionNo ?? 0 },
+            ]}
+          />
+        )}
+
+        {contract && register === 'versions' ? (
+          <ContractVersions tenantId={tenantId} contract={contract} />
+        ) : (
+          renderContractFields()
+        )}
+
+        {contract && status === 'DRAFT' && (
+          <ConfirmDialog
+            open={activating}
+            title={`${contract.contractNumber} aktivieren?`}
+            confirmLabel="Aktivieren"
+            onConfirm={() => activate.mutate()}
+            onCancel={() => {
+              activate.reset()
+              setActivating(false)
+            }}
+            busy={activate.isPending}
+            error={activate.error}
+          >
+            Der Vertrag gilt damit als abgeschlossen und erhält Version 1, gültig ab Beginn am{' '}
+            {formatDate(contract.startDate)}. Danach wird jede Änderung am Vereinbarten eine neue
+            Version; gelöscht wird ein Vertrag nie, nur beendet.
+          </ConfirmDialog>
+        )}
+
+        {contract && status === 'ACTIVE' && (
+          <EndContractDialog
+            tenantId={tenantId}
+            contract={contract}
+            open={ending}
+            onClose={() => setEnding(false)}
+            onEnded={() => {
+              void queryClient.invalidateQueries({ queryKey: contractsKey(tenantId) })
+              setEnding(false)
+            }}
+          />
+        )}
+      </>
+    </FormMask>
+  )
+
+  /**
+   * The fields of the contract, on the first register. A function and not a component, so the
+   * fields are not mounted anew on every key stroke.
+   */
+  function renderContractFields() {
+    return (
+      <>
         <div className="grid gap-6 lg:grid-cols-2">
           <Panel title="Vertrag">
             <div className="grid gap-4">
@@ -215,6 +364,19 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
                   ))}
                 </SelectField>
               </div>
+              {takesVersion && (
+                <TextField
+                  label="Änderung gilt ab"
+                  type="date"
+                  value={form.validFrom}
+                  onChange={(event) => set('validFrom', event.target.value)}
+                  required
+                  error={fields.errors.validFrom}
+                  tooltip={`Das Vereinbarte ändert sich: gespeichert wird Version ${
+                    (contract?.currentVersionNo ?? 0) + 1
+                  }. Ab diesem Tag gilt sie; nicht vor der Version, der sie folgt.`}
+                />
+              )}
             </div>
           </Panel>
 
@@ -234,7 +396,7 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
                 onChange={(event) => set('note', event.target.value)}
                 maxLength={CONTRACT_NOTE_MAX_LENGTH}
                 rows={4}
-                disabled={!editable}
+                disabled={!mayWrite}
                 error={fields.errors.note}
                 tooltip="Intern. Gehört nicht zum Vereinbarten und steht auf keinem Beleg."
               />
@@ -264,9 +426,10 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
             {contract.changedBy ? ` von ${contract.changedBy}` : ''}
           </p>
         )}
+
       </>
-    </FormMask>
-  )
+    )
+  }
 }
 
 /**

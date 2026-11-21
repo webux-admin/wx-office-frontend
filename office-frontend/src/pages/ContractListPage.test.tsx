@@ -19,6 +19,8 @@ const CONTRACT: Contract = {
   title: 'Hosting und Support',
   partnerId: 11,
   customerName: 'Bäckerei Huber AG',
+  status: 'ACTIVE',
+  currentVersionNo: 2,
   customerTown: 'Bern',
   startDate: '2027-01-01',
   endDate: null,
@@ -107,6 +109,8 @@ describe('ContractListPage', () => {
     expect(text()).toContain('Bäckerei Huber AG, Bern')
     expect(text()).toContain('unbefristet')
     expect(text()).toContain('Vertrag')
+    expect(text()).toContain('Aktiv')
+    expect(text()).toContain('V2')
   })
 
   it('contractListPageInvitesTheFirstContractTest', async () => {

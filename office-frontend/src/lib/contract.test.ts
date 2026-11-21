@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
   BILLING_INTERVAL_LABELS,
+  CONTRACT_END_REASON_LABELS,
   CONTRACT_MAX_POSITIONS,
   CONTRACT_RIGHTS,
+  CONTRACT_STATUS_LABELS,
+  CONTRACT_STATUS_TONES,
+  agreementChanged,
   contractComplaints,
   contractCustomersUrl,
+  contractStatusChangesUrl,
+  contractStepUrl,
+  contractVersionsUrl,
   contractTerm,
   contractUrl,
   contractsKey,
   contractsUrl,
   emptyContractForm,
+  emptyEndingForm,
   emptyPositionForm,
+  endingComplaints,
+  isAgreementEditable,
   isBillingInterval,
+  isContractEndReason,
   isNoticePeriodUnit,
   movePosition,
   noticePeriodText,
@@ -20,6 +31,7 @@ import {
   toContractForm,
   toContractRequest,
   toPositionForm,
+  validFromComplaint,
   withPosition,
   type ContractForm,
   type PositionForm,
@@ -48,6 +60,7 @@ function filled(overrides: Partial<ContractForm> = {}): ContractForm {
     noticePeriodUnit: 'MONTHS',
     note: '',
     positions: [position()],
+    validFrom: '',
     ...overrides,
   }
 }
@@ -58,6 +71,7 @@ const STORED: Contract = {
   title: 'Hosting und Support',
   partnerId: 11,
   customerName: 'Bäckerei Huber AG',
+  status: 'DRAFT',
   customerTown: 'Bern',
   startDate: '2027-01-01',
   endDate: null,
@@ -206,7 +220,17 @@ describe('contract', () => {
           interval: 'MONTHLY',
         },
       ],
+      lockVersion: null,
+      validFrom: null,
     })
+  })
+
+  it('toContractRequestWithLockAndDayTest', () => {
+    const request = toContractRequest(filled({ validFrom: '2028-01-01' }), 4)
+
+    expect(request.lockVersion).toBe(4)
+    expect(request.validFrom).toBe('2028-01-01')
+    expect(toContractRequest(filled(), 0).lockVersion).toBe(0)
   })
 
   it('toContractRequestWithoutPositionsAndNoticeTest', () => {
@@ -349,5 +373,107 @@ describe('contract', () => {
 
   it('toPositionFormTest', () => {
     expect(toPositionForm({ ...STORED.positions[0], description: 'Text' }).description).toBe('Text')
+  })
+
+  it('contractStatusLabelsTest', () => {
+    expect(CONTRACT_STATUS_LABELS).toEqual({ DRAFT: 'Entwurf', ACTIVE: 'Aktiv', ENDED: 'Beendet' })
+    expect(Object.keys(CONTRACT_STATUS_TONES)).toEqual(['DRAFT', 'ACTIVE', 'ENDED'])
+  })
+
+  it('isContractEndReasonTest', () => {
+    expect(Object.keys(CONTRACT_END_REASON_LABELS)).toEqual([
+      'TERMINATED_BY_CUSTOMER',
+      'TERMINATED_BY_TENANT',
+      'MUTUAL_AGREEMENT',
+      'TERM_EXPIRED',
+      'REPLACED',
+    ])
+    expect(isContractEndReason('MUTUAL_AGREEMENT')).toBe(true)
+    expect(isContractEndReason('')).toBe(false)
+    expect(isContractEndReason('ZAHLT_NICHT')).toBe(false)
+  })
+
+  it('isAgreementEditableTest', () => {
+    expect(isAgreementEditable('DRAFT')).toBe(true)
+    expect(isAgreementEditable('ACTIVE')).toBe(true)
+    expect(isAgreementEditable('ENDED')).toBe(false)
+  })
+
+  it('contractStepUrlTest', () => {
+    expect(contractStepUrl(1, 5, 'activate')).toBe('/api/tenants/1/contracts/5/activate')
+    expect(contractStepUrl(1, 5, 'end')).toBe('/api/tenants/1/contracts/5/end')
+    expect(contractVersionsUrl(1, 5)).toBe('/api/tenants/1/contracts/5/versions')
+    expect(contractStatusChangesUrl(1, 5)).toBe('/api/tenants/1/contracts/5/status-changes')
+  })
+
+  it('agreementChangedTest', () => {
+    const stored = filled({ positions: [position({ positionKey: 'a1', amount: 1000 })] })
+
+    expect(agreementChanged(stored, filled({ ...stored, title: 'Hosting' }))).toBe(true)
+    expect(
+      agreementChanged(stored, { ...stored, positions: [position({ positionKey: 'a1', unitPrice: '1100' })] }),
+    ).toBe(true)
+    expect(agreementChanged(stored, { ...stored, positions: [] })).toBe(true)
+    expect(agreementChanged(stored, { ...stored, endDate: '2029-12-31' })).toBe(true)
+  })
+
+  it('agreementChangedWithNoteOrDayOnlyTest', () => {
+    const stored = filled({ positions: [position({ positionKey: 'a1', amount: 1000 })] })
+
+    expect(agreementChanged(stored, stored)).toBe(false)
+    expect(agreementChanged(stored, { ...stored, note: 'Rückruf', validFrom: '2028-01-01' })).toBe(false)
+    // The amount is what the backend worked out, not something the user agreed.
+    expect(
+      agreementChanged(stored, { ...stored, positions: [{ ...stored.positions[0], amount: null }] }),
+    ).toBe(false)
+  })
+
+  it('validFromComplaintTest', () => {
+    expect(validFromComplaint(filled({ validFrom: '2028-01-01' }))).toBeNull()
+    expect(validFromComplaint(filled({ validFrom: '2027-01-01' }))).toBeNull()
+    expect(validFromComplaint(filled({ validFrom: '2029-12-31', endDate: '2029-12-31' }))).toBeNull()
+  })
+
+  it('validFromComplaintOutsideTheTermTest', () => {
+    expect(validFromComplaint(filled())).toBe('Ab welchem Tag gilt die Änderung?')
+    expect(validFromComplaint(filled({ validFrom: '2026-12-31' }))).toContain('vor dem Vertragsbeginn')
+    expect(validFromComplaint(filled({ validFrom: '2030-01-01', endDate: '2029-12-31' }))).toContain(
+      'nach dem Vertragsende',
+    )
+  })
+
+  it('emptyEndingFormTest', () => {
+    expect(emptyEndingForm(STORED)).toEqual({ endedOn: '', reason: '' })
+    expect(emptyEndingForm({ ...STORED, endDate: '2029-12-31' })).toEqual({
+      endedOn: '2029-12-31',
+      reason: '',
+    })
+  })
+
+  it('endingComplaintsTest', () => {
+    expect(endingComplaints(STORED, { endedOn: '2028-06-30', reason: 'TERMINATED_BY_CUSTOMER' })).toEqual({})
+    expect(endingComplaints(STORED, { endedOn: '2027-01-01', reason: 'MUTUAL_AGREEMENT' })).toEqual({})
+    const fixedTerm = { ...STORED, endDate: '2029-12-31' }
+    expect(endingComplaints(fixedTerm, { endedOn: '2029-12-31', reason: 'TERM_EXPIRED' })).toEqual({})
+  })
+
+  it('endingComplaintsWithMissingOrWrongValuesTest', () => {
+    expect(Object.keys(endingComplaints(STORED, { endedOn: '', reason: '' }))).toEqual([
+      'reason',
+      'endedOn',
+    ])
+    expect(endingComplaints(STORED, { endedOn: '2026-12-31', reason: 'REPLACED' }).endedOn).toContain(
+      'vor seinem Beginn',
+    )
+    const fixedTerm = { ...STORED, endDate: '2029-12-31' }
+    expect(endingComplaints(fixedTerm, { endedOn: '2030-01-01', reason: 'REPLACED' }).endedOn).toContain(
+      'vereinbarte Ende',
+    )
+    expect(endingComplaints(fixedTerm, { endedOn: '2029-06-30', reason: 'TERM_EXPIRED' }).endedOn).toContain(
+      'am vereinbarten Ende',
+    )
+    expect(endingComplaints(STORED, { endedOn: '2029-06-30', reason: 'TERM_EXPIRED' }).endedOn).toContain(
+      'unbefristeter Vertrag',
+    )
   })
 })

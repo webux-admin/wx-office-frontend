@@ -35,7 +35,11 @@ Stand der Module (in dieser Reihenfolge gebaut):
   in einem Dialog erfasst und mit dem Vertrag gespeichert. Ein Produkt aus dem Katalog ist nur
   ein Vorschlag (mit `PRODUCT_READ` und gewähltem Kunden), der Preis kommt aus der
   Preisauflösung des Backends; Beträge und Summen zeigt die Maske nur, wie das Backend sie
-  geliefert hat (ADR-0072, Backend ADR-0144)
+  geliefert hat (ADR-0072, Backend ADR-0144). Status Entwurf/Aktiv/Beendet in Liste und Maske,
+  Schritte «Aktivieren» (mit Rückfrage) und «Beenden» (Dialog mit letztem Tag und Grund aus dem
+  Katalog), gesperrt solange etwas ungespeichert ist; ein aktiver Vertrag fragt bei einer
+  Änderung am Vereinbarten nach «Änderung gilt ab», ein beendeter lässt nur die Notiz ändern;
+  das Register «Versionen» zeigt Verlauf und Versionen nur lesend (ADR-0073, Backend ADR-0145)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

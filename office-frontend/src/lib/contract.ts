@@ -1,12 +1,15 @@
+import type { BadgeTone } from '../components/Badge'
 import type { FieldErrors } from './fieldErrors'
 import { parseDecimal } from './format'
 import { listQuery } from './paging'
 import type {
   BillingInterval,
   Contract,
+  ContractEndReason,
   ContractPosition,
   ContractPositionRequest,
   ContractRequest,
+  ContractStatus,
   NoticePeriodUnit,
 } from './types'
 
@@ -28,6 +31,51 @@ export const CONTRACT_RIGHTS = {
   read: 'CONTRACT_READ',
   write: 'CONTRACT_WRITE',
 } as const
+
+/** What each status is called on screen, in the order a contract runs through them. */
+export const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
+  DRAFT: 'Entwurf',
+  ACTIVE: 'Aktiv',
+  ENDED: 'Beendet',
+}
+
+/** How loudly each status shows in the list and in the mask. */
+export const CONTRACT_STATUS_TONES: Record<ContractStatus, BadgeTone> = {
+  DRAFT: 'muted',
+  ACTIVE: 'success',
+  ENDED: 'neutral',
+}
+
+/**
+ * The catalogue of reasons a contract ends, in the order of the select. The same five codes as
+ * `ContractEndReason` of the backend; no free text (backend ADR-0145).
+ */
+export const CONTRACT_END_REASON_LABELS: Record<ContractEndReason, string> = {
+  TERMINATED_BY_CUSTOMER: 'Kündigung durch den Kunden',
+  TERMINATED_BY_TENANT: 'Kündigung durch uns',
+  MUTUAL_AGREEMENT: 'Aufhebung im gegenseitigen Einvernehmen',
+  TERM_EXPIRED: 'Laufzeit abgelaufen',
+  REPLACED: 'Durch einen neuen Vertrag ersetzt',
+}
+
+/**
+ * @param value what a select holds
+ * @returns true for one of the five reason codes
+ */
+export function isContractEndReason(value: string): value is ContractEndReason {
+  return Object.hasOwn(CONTRACT_END_REASON_LABELS, value)
+}
+
+/**
+ * Whether what was agreed may still be changed. An ended contract takes no new version; only
+ * its note stays open.
+ *
+ * @param status where the contract stands
+ * @returns false for an ended contract
+ */
+export function isAgreementEditable(status: ContractStatus): boolean {
+  return status !== 'ENDED'
+}
 
 /** What each interval is called in a select. */
 export const BILLING_INTERVAL_LABELS: Record<BillingInterval, string> = {
@@ -109,6 +157,38 @@ export function contractsUrl(tenantId: number): string {
  */
 export function contractUrl(tenantId: number, contractId: number | string): string {
   return `${contractsUrl(tenantId)}/${contractId}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param contractId the contract
+ * @param step `activate` for a draft, `end` for an active contract
+ * @returns address of the step
+ */
+export function contractStepUrl(
+  tenantId: number,
+  contractId: number,
+  step: 'activate' | 'end',
+): string {
+  return `${contractUrl(tenantId, contractId)}/${step}`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param contractId the contract
+ * @returns address of its versions, newest first
+ */
+export function contractVersionsUrl(tenantId: number, contractId: number): string {
+  return `${contractUrl(tenantId, contractId)}/versions`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param contractId the contract
+ * @returns address of its status steps, oldest first
+ */
+export function contractStatusChangesUrl(tenantId: number, contractId: number): string {
+  return `${contractUrl(tenantId, contractId)}/status-changes`
 }
 
 /**
@@ -217,6 +297,11 @@ export type ContractForm = {
   noticePeriodUnit: NoticePeriodUnit | ''
   note: string
   positions: PositionForm[]
+  /**
+   * The day a change to what an active contract agreed holds from; asked for only then, and
+   * empty until the user names it.
+   */
+  validFrom: string
 }
 
 /** @returns the form of a new contract: nothing chosen yet, no positions */
@@ -230,6 +315,7 @@ export function emptyContractForm(): ContractForm {
     noticePeriodUnit: '',
     note: '',
     positions: [],
+    validFrom: '',
   }
 }
 
@@ -268,7 +354,86 @@ export function toContractForm(contract: Contract): ContractForm {
     noticePeriodUnit: contract.noticePeriodUnit ?? '',
     note: contract.note ?? '',
     positions: contract.positions.map(toPositionForm),
+    validFrom: '',
   }
+}
+
+/**
+ * Whether the form changes what the contract agreed: everything but the note. The same line
+ * the backend draws when it decides whether a change takes a new version.
+ *
+ * @param stored the form as the contract was loaded
+ * @param form the form as it is now
+ * @returns true when saving an active contract takes a new version
+ */
+export function agreementChanged(stored: ContractForm, form: ContractForm): boolean {
+  const agreed = (value: ContractForm) =>
+    JSON.stringify({ ...value, note: '', validFrom: '', positions: value.positions.map(agreedPart) })
+  return agreed(stored) !== agreed(form)
+}
+
+/** A position without what the backend worked out for it, so only what was typed counts. */
+function agreedPart(position: PositionForm): PositionForm {
+  return { ...position, amount: null }
+}
+
+/**
+ * The message under «Gültig ab» when an active contract takes a new version.
+ *
+ * <p>The backend also checks that the day is not before the version it follows.
+ *
+ * @param form the form as filled in
+ * @returns the message, or `null` when the day fits the term
+ */
+export function validFromComplaint(form: ContractForm): string | null {
+  if (form.validFrom === '') return 'Ab welchem Tag gilt die Änderung?'
+  if (form.startDate !== '' && form.validFrom < form.startDate) {
+    return 'Die Änderung kann nicht vor dem Vertragsbeginn gelten.'
+  }
+  if (form.endDate !== '' && form.validFrom > form.endDate) {
+    return 'Die Änderung kann nicht nach dem Vertragsende gelten.'
+  }
+  return null
+}
+
+/** The end dialog as it lives in the browser. */
+export type EndingForm = {
+  endedOn: string
+  reason: ContractEndReason | ''
+}
+
+/**
+ * @param contract the contract to end
+ * @returns the end dialog, the agreed end proposed as the last day when there is one
+ */
+export function emptyEndingForm(contract: Contract): EndingForm {
+  return { endedOn: contract.endDate ?? '', reason: '' }
+}
+
+/**
+ * The messages in the end dialog, the same rules the backend keeps.
+ *
+ * @param contract the contract to end
+ * @param form the dialog as filled in
+ * @returns message per field, empty when the contract can be ended
+ */
+export function endingComplaints(contract: Contract, form: EndingForm): FieldErrors {
+  const errors: Record<string, string> = {}
+  if (form.reason === '') errors.reason = 'Einen Grund aus der Liste wählen.'
+  if (form.endedOn === '') {
+    errors.endedOn = 'Der letzte Tag, an dem der Vertrag läuft.'
+    return errors
+  }
+  if (form.endedOn < contract.startDate) {
+    errors.endedOn = 'Der Vertrag kann nicht vor seinem Beginn enden.'
+  } else if (contract.endDate && form.endedOn > contract.endDate) {
+    errors.endedOn = 'Später als das vereinbarte Ende kann der Vertrag nicht enden.'
+  } else if (form.reason === 'TERM_EXPIRED' && form.endedOn !== contract.endDate) {
+    errors.endedOn = contract.endDate
+      ? 'Läuft die Laufzeit ab, endet der Vertrag am vereinbarten Ende.'
+      : 'Ein unbefristeter Vertrag läuft nicht ab. Einen anderen Grund wählen.'
+  }
+  return errors
 }
 
 /**
@@ -449,9 +614,13 @@ function decimalComplaint(input: string, label: string): string | null {
  * What the form sends.
  *
  * @param form the form as filled in, already free of complaints
+ * @param lockVersion on a change, the state of the contract it was made to; `null` on creating
  * @returns the request body, empty fields as `null`
  */
-export function toContractRequest(form: ContractForm): ContractRequest {
+export function toContractRequest(
+  form: ContractForm,
+  lockVersion: number | null = null,
+): ContractRequest {
   const note = form.note.trim()
   const amount = form.noticePeriodAmount.trim()
   return {
@@ -463,6 +632,8 @@ export function toContractRequest(form: ContractForm): ContractRequest {
     noticePeriodUnit: form.noticePeriodUnit === '' ? null : form.noticePeriodUnit,
     note: note === '' ? null : note,
     positions: form.positions.map(toPositionRequest),
+    lockVersion,
+    validFrom: form.validFrom === '' ? null : form.validFrom,
   }
 }
 
