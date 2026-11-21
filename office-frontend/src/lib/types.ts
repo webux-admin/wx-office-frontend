@@ -5199,3 +5199,116 @@ export type ContractCustomer = {
   partnerNumber?: string | null
   name: string
 }
+
+// --- subscription run (backend ADR-0147) -------------------------------------------
+
+/** Why the subscription run leaves a period unbilled, as `SkipReason` spells it. */
+export type SubscriptionSkipReason =
+  | 'CONTRACT_DRAFT'
+  | 'CONTRACT_ENDED'
+  | 'PARTIAL_PERIOD'
+  | 'ALREADY_BILLED'
+  | 'OVERLAPS_BILLED'
+  | 'TAX_LIABILITY_STARTS'
+  | 'NO_VAT_RATE'
+  | 'VAT_RATE_CHANGES'
+
+/** One line of an invoice draft the run would write (`PlannedLineDto`). */
+export type SubscriptionPlannedLine = {
+  positionKey: string
+  title: string
+  /** ISO date, first day of the period. */
+  periodStart: string
+  /** ISO date, last day of the period. */
+  periodEnd: string
+  quantity: number
+  unitPrice: number
+  priceIncludesVat: boolean
+  vatCategory: string
+  /** Quantity times price, rounded to the rappen; gross when the price includes VAT. */
+  amount: number
+}
+
+/** A period the run leaves unbilled, with the sentence saying why (`SkippedPeriodDto`). */
+export type SubscriptionSkippedPeriod = {
+  contractId: number
+  contractNumber: string
+  positionKey: string
+  title: string
+  periodStart: string
+  periodEnd: string
+  reason: SubscriptionSkipReason
+  message: string
+  /** The draft or invoice that billed the period already, where there is one. */
+  documentId?: number | null
+}
+
+/** One contract in the preview (`ContractPlanDto`). */
+export type SubscriptionContractPlan = {
+  contractId: number
+  contractNumber: string
+  title: string
+  customerName: string
+  status: ContractStatus
+  /** The version the lines come from; absent when nothing is due. */
+  versionNo?: number | null
+  currency?: string | null
+  total: number
+  lines: SubscriptionPlannedLine[]
+  skipped: SubscriptionSkippedPeriod[]
+  notices: string[]
+}
+
+/** A sum in one currency (`CurrencyTotalDto`). */
+export type SubscriptionCurrencyTotal = {
+  currency: string
+  amount: number
+}
+
+/** What a run for one billing month would do (`SubscriptionPreviewDto`). */
+export type SubscriptionPreview = {
+  /** The billing month, `yyyy-MM`. */
+  month: string
+  invoiceCount: number
+  lineCount: number
+  skippedCount: number
+  totals: SubscriptionCurrencyTotal[]
+  contracts: SubscriptionContractPlan[]
+}
+
+/** One draft the run wrote (`CreatedInvoiceDto`). */
+export type SubscriptionCreatedInvoice = {
+  contractId: number
+  contractNumber: string
+  customerName: string
+  documentId: number
+  versionNo: number
+  lineCount: number
+  currency: string
+  totalGross: number
+}
+
+/** A contract whose draft could not be written; nothing of it was kept (`FailedContractDto`). */
+export type SubscriptionFailedContract = {
+  contractId: number
+  contractNumber: string
+  customerName: string
+  message: string
+}
+
+/** A sentence about one contract (`ContractNoticeDto`). */
+export type SubscriptionNotice = {
+  contractId: number
+  contractNumber: string
+  message: string
+}
+
+/** What a run did, in three lists and the notices (`SubscriptionRunResultDto`). */
+export type SubscriptionRunResult = {
+  runId: number
+  month: string
+  created: SubscriptionCreatedInvoice[]
+  skipped: SubscriptionSkippedPeriod[]
+  failed: SubscriptionFailedContract[]
+  notices: SubscriptionNotice[]
+}

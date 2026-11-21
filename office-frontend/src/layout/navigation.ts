@@ -1,6 +1,7 @@
 import {
   Archive,
   FolderKanban,
+  Repeat,
   ScrollText,
   BookCheck,
   ArrowDownToLine,
@@ -110,6 +111,7 @@ import {
   DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
 import { CONTRACT_MODULE, CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
+import { SUBSCRIPTION_MODULE, SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
@@ -440,6 +442,15 @@ export const NAV_GROUPS: NavGroup[] = [
         href: CONTRACT_PATH,
         permission: CONTRACT_RIGHTS.read,
         module: CONTRACT_MODULE,
+      },
+      // Right after the contracts it bills from. Under its own switch: a tenant may keep
+      // contracts without running the run (backend ADR-0136, ADR-0143).
+      {
+        label: 'Abo-Lauf',
+        icon: Repeat,
+        href: SUBSCRIPTION_PATH,
+        permission: SUBSCRIPTION_RIGHTS.read,
+        module: SUBSCRIPTION_MODULE,
       },
     ],
   },

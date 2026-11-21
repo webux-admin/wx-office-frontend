@@ -46,6 +46,7 @@ import {
 import { CUSTOMER_CREDIT_PATH } from '../lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
 import { CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
+import { SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 
 /** Every screen the menu links to, across all groups. */
@@ -188,6 +189,34 @@ describe('NAV_GROUPS', () => {
     const entries = visible.flatMap((group) => flattenNav(group.entries))
 
     expect(entries.map((entry) => entry.href)).not.toContain(CONTRACT_PATH)
+  })
+
+  it('navGroupsCoverTheSubscriptionRunTest', () => {
+    const run = allEntries().filter((entry) => entry.href === SUBSCRIPTION_PATH)
+
+    expect(run).toHaveLength(1)
+    expect(run[0].label).toBe('Abo-Lauf')
+    expect(run[0].permission).toBe(SUBSCRIPTION_RIGHTS.read)
+    expect(run[0].module).toBe('SUBSCRIPTION')
+  })
+
+  /** Two modules, two switches: contracts stay visible while the run is off (backend ADR-0136). */
+  it('visibleNavGroupsHidesTheRunWithoutItsModuleTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'SUBSCRIPTION')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(SUBSCRIPTION_PATH)
+    expect(entries.map((entry) => entry.href)).toContain(CONTRACT_PATH)
+  })
+
+  it('visibleNavGroupsHidesTheRunWithoutTheReadRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== SUBSCRIPTION_RIGHTS.read,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(SUBSCRIPTION_PATH)
   })
 
   it('navGroupsCoverTheOutboxScreensTest', () => {

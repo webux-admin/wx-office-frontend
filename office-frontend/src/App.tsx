@@ -31,6 +31,7 @@ import { STOCK_AS_OF_PATH } from './lib/inventory'
 import { SECURITY_PATH } from './lib/loginPolicy'
 import { MODULE_PATH } from './lib/modules'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
+import { SUBSCRIPTION_PATH } from './lib/subscription'
 import { CUSTOMER_CREDIT_PATH } from './lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
 import {
@@ -88,6 +89,7 @@ const ProjectListPage = lazy(() => import('./pages/ProjectListPage').then((modul
 const ProjectPage = lazy(() => import('./pages/ProjectPage').then((module) => ({ default: module.ProjectPage })))
 const ContractListPage = lazy(() => import('./pages/ContractListPage').then((module) => ({ default: module.ContractListPage })))
 const ContractPage = lazy(() => import('./pages/ContractPage').then((module) => ({ default: module.ContractPage })))
+const SubscriptionRunPage = lazy(() => import('./pages/SubscriptionRunPage').then((module) => ({ default: module.SubscriptionRunPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const PriceEntryPage = lazy(() => import('./pages/PriceEntryPage').then((module) => ({ default: module.PriceEntryPage })))
@@ -176,6 +178,7 @@ export default function App() {
                 <Route path="/projekte/:id" element={<ProjectPage />} />
                 <Route path="/vertraege" element={<ContractListPage />} />
                 <Route path="/vertraege/:id" element={<ContractPage />} />
+                <Route path={SUBSCRIPTION_PATH} element={<SubscriptionRunPage />} />
 
                 <Route path="/produkte" element={<ProductListPage />} />
                 <Route path="/produkte/:id" element={<ProductPage />} />
