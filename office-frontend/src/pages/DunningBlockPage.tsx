@@ -96,7 +96,7 @@ function Blocks({ tenantId }: { tenantId: number }) {
             know here (backend ADR-0099). */}
         {settled.length > 0 && (
           <Panel title="Nichts mehr offen">
-            <p className="text-[13px]">
+            <p className="text-body">
               {settled.length === 1
                 ? 'Ein Mahnstopp gilt für jemanden, der nichts mehr schuldet.'
                 : `${settled.length} Mahnstopps gelten für jemanden, der nichts mehr schuldet.`}{' '}
@@ -112,7 +112,7 @@ function Blocks({ tenantId }: { tenantId: number }) {
           padded={false}
         >
           {blocks.isPending && (
-            <p className="px-4 py-3 text-[13px] text-text-secondary">Wird geladen ...</p>
+            <p className="px-4 py-3 text-body text-text-secondary">Wird geladen ...</p>
           )}
           {blocks.isSuccess && rows.length === 0 && (
             <EmptyState
@@ -122,9 +122,9 @@ function Blocks({ tenantId }: { tenantId: number }) {
           )}
           {rows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
+              <table className="w-full text-body">
                 <thead>
-                  <tr className="text-left text-[12px] text-text-tertiary">
+                  <tr className="text-left text-small text-text-tertiary">
                     <th className="py-2 pl-4 font-medium">Gilt für</th>
                     <th className="py-2 pr-4 font-medium">Grund</th>
                     <th className="py-2 pr-4 font-medium">Bemerkung</th>
@@ -150,12 +150,12 @@ function Blocks({ tenantId }: { tenantId: number }) {
                           {blockLabel(block)}
                         </span>
                         {couldBeLifted(block) && (
-                          <div className="text-[12px] text-text-tertiary">
+                          <div className="text-small text-text-tertiary">
                             keine offenen Posten mehr
                           </div>
                         )}
                         {block.liftedAt !== undefined && (
-                          <div className="text-[12px] text-text-tertiary">
+                          <div className="text-small text-text-tertiary">
                             Aufgehoben am {formatDateTime(block.liftedAt)}
                             {block.liftedReason !== undefined && ` — ${block.liftedReason}`}
                           </div>
@@ -208,7 +208,7 @@ function Blocks({ tenantId }: { tenantId: number }) {
           }
         >
           <div className="grid gap-3">
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Der Stopp bleibt in der Liste stehen, durchgestrichen. Ab dem nächsten
               Mahnvorschlag werden die Rechnungen wieder gemahnt.
             </p>

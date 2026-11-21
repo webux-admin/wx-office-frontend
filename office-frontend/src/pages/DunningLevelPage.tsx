@@ -153,8 +153,8 @@ function Levels({ tenantId }: { tenantId: number }) {
     {
       key: 'level',
       header: 'Stufe',
-      width: 'w-[80px]',
-      render: (level) => <span className="font-mono text-[12px]">{level.levelNo}</span>,
+      width: 'w-[5rem]',
+      render: (level) => <span className="font-mono text-small">{level.levelNo}</span>,
     },
     {
       key: 'name',
@@ -165,21 +165,21 @@ function Levels({ tenantId }: { tenantId: number }) {
       key: 'due',
       header: 'Nach Fälligkeit',
       align: 'right',
-      width: 'w-[140px]',
+      width: 'w-[8.75rem]',
       render: (level) => `${level.daysAfterDue} Tage`,
     },
     {
       key: 'payment',
       header: 'Zahlfrist',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (level) => `${level.paymentDays} Tage`,
     },
     {
       key: 'block',
       header: 'Sperrfrist',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (level) =>
         level.minDaysSincePrevious === 0 ? '–' : `${level.minDaysSincePrevious} Tage`,
     },
@@ -187,7 +187,7 @@ function Levels({ tenantId }: { tenantId: number }) {
       key: 'fee',
       header: 'Gebühr',
       align: 'right',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (level) =>
         level.feeAmount === 0 ? (
           <span className="text-text-tertiary">–</span>
@@ -198,7 +198,7 @@ function Levels({ tenantId }: { tenantId: number }) {
     {
       key: 'state',
       header: 'Status',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       render: (level) =>
         level.active ? (
           <Badge tone="success">Aktiv</Badge>
@@ -216,7 +216,7 @@ function Levels({ tenantId }: { tenantId: number }) {
       key: 'actions',
       header: '',
       align: 'right',
-      width: 'w-[220px]',
+      width: 'w-[13.75rem]',
       render: (level) => (
         <div className="flex justify-end gap-2">
           <Button
@@ -296,7 +296,7 @@ function Levels({ tenantId }: { tenantId: number }) {
           />
         </Panel>
 
-        <p className="mt-4 text-[12px] text-text-secondary">
+        <p className="mt-4 text-small text-text-secondary">
           Eine Stufe wird immer oben angehängt und nur von oben entfernt — sonst entstünde die
           Folge 1, 3, 4. Abschalten behält die Stufe für bereits ausgestellte Mahnungen.
         </p>
@@ -374,7 +374,7 @@ function Levels({ tenantId }: { tenantId: number }) {
           />
 
           {Number(form.feeAmount.replace(',', '.')) > 0 && (
-            <p className="text-[12px] text-text-secondary">
+            <p className="text-small text-text-secondary">
               Eine Mahngebühr ist nur geschuldet, wenn sie vertraglich vereinbart ist — im
               Vertrag, in der Offerte oder in einbezogenen AGB. Ob sie mehrwertsteuerpflichtig
               ist, klärt Ihr Treuhänder. Sie wirkt erst, wenn die Gebührenlogik ausgeliefert
@@ -405,7 +405,7 @@ function Levels({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <p className="text-[13px]">
+        <p className="text-body">
           Stufe {removing?.levelNo} «{removing?.dunningTypeName}» wird entfernt. Die aktive
           Stufenzahl sinkt damit auf {Math.max(activeLevelCount(rows) - 1, 0)}.
         </p>

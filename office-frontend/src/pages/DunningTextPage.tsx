@@ -5,6 +5,7 @@ import { Button } from '../components/Button'
 import { ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { Tooltip } from '../components/Tooltip'
 import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
@@ -128,7 +129,7 @@ function Texts({ tenantId }: { tenantId: number }) {
         )}
 
         {levels.isSuccess && rows.length === 0 && (
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Noch keine Mahnstufen. Sie entstehen beim ersten Öffnen der Mahneinstellungen.
           </p>
         )}
@@ -315,7 +316,7 @@ function LanguagePanel({
           onFocus={() => setField('introText')}
           register={(element) => (fields.current.introText = element)}
           disabled={!mayWrite}
-          hint="Steht über der Aufstellung der Rechnungen. Die Aufstellung selbst zeichnet die Druckvorlage."
+          tooltip="Steht über der Aufstellung der Rechnungen. Die Aufstellung selbst zeichnet die Druckvorlage."
         />
 
         <TextArea
@@ -346,7 +347,7 @@ function LanguagePanel({
 
         {mayWrite && placeholders.length > 0 && (
           <div>
-            <p className="text-[12px] text-text-tertiary">
+            <p className="text-small text-text-tertiary">
               Platzhalter einfügen — landet an der Cursorposition im zuletzt angeklickten Feld.
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -357,8 +358,8 @@ function LanguagePanel({
                   onClick={() => insert(placeholder.token)}
                   className={
                     placeholder.availableWhenCollective
-                      ? 'rounded-[var(--radius-full)] border border-line px-2 py-0.5 font-mono text-[11px] transition-colors hover:border-accent hover:text-accent-text'
-                      : 'rounded-[var(--radius-full)] border border-dashed border-line px-2 py-0.5 font-mono text-[11px] text-text-tertiary transition-colors hover:border-accent hover:text-accent-text'
+                      ? 'rounded-[var(--radius-full)] border border-line px-2 py-0.5 font-mono text-caption transition-colors hover:border-accent hover:text-accent-text'
+                      : 'rounded-[var(--radius-full)] border border-dashed border-line px-2 py-0.5 font-mono text-caption text-text-tertiary transition-colors hover:border-accent hover:text-accent-text'
                   }
                   title={
                     placeholder.availableWhenCollective
@@ -370,7 +371,7 @@ function LanguagePanel({
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-[12px] text-text-tertiary">
+            <p className="mt-2 text-small text-text-tertiary">
               Gestrichelt umrandete Platzhalter bleiben bei einer Sammelmahnung leer. Eine
               Zeile, die einen davon verliert, fällt ganz weg — deshalb: <b>eine Aussage pro
               Zeile</b>.
@@ -379,7 +380,7 @@ function LanguagePanel({
         )}
 
         {risky.length > 0 && (
-          <p className="text-[12px] text-text-secondary">
+          <p className="text-small text-text-secondary">
             Dieser Text benutzt {risky.join(', ')}. Bei einer Sammelmahnung bleiben diese leer,
             und die Zeilen darum fallen weg. Für eine Einzelmahnung ist das in Ordnung.
           </p>
@@ -413,10 +414,10 @@ function RenderedText({
     <div className="grid gap-2">
       <p className="text-overline text-text-tertiary">{label}</p>
       <div className="rounded-[var(--radius-md)] border border-line-subtle p-3">
-        <p className="text-[13px] font-medium">{rendered.title}</p>
-        <p className="mt-2 whitespace-pre-wrap text-[13px]">{rendered.introText}</p>
-        <p className="mt-2 whitespace-pre-wrap text-[13px]">{rendered.closingText}</p>
-        <p className="mt-3 text-[12px] text-text-tertiary">Betreff: {rendered.mailSubject}</p>
+        <p className="text-body font-medium">{rendered.title}</p>
+        <p className="mt-2 whitespace-pre-wrap text-body">{rendered.introText}</p>
+        <p className="mt-2 whitespace-pre-wrap text-body">{rendered.closingText}</p>
+        <p className="mt-3 text-small text-text-tertiary">Betreff: {rendered.mailSubject}</p>
       </div>
     </div>
   )
@@ -430,7 +431,7 @@ function TextArea({
   onFocus,
   register,
   disabled,
-  hint,
+  tooltip,
 }: {
   label: string
   value: string
@@ -438,11 +439,14 @@ function TextArea({
   onFocus: () => void
   register: (element: HTMLTextAreaElement | null) => void
   disabled?: boolean
-  hint?: string
+  tooltip?: string
 }) {
   return (
     <div className="grid gap-1">
-      <label className="text-[12px] font-medium text-text-secondary">{label}</label>
+      <div className="flex items-center gap-2">
+        <label className="text-small font-medium text-text-secondary">{label}</label>
+        {tooltip !== undefined && <Tooltip text={tooltip} label={`Hinweis zu ${label}`} />}
+      </div>
       <textarea
         ref={register}
         value={value}
@@ -451,9 +455,8 @@ function TextArea({
         onClick={onFocus}
         disabled={disabled}
         rows={5}
-        className="w-full rounded-[var(--radius-md)] border border-line bg-surface px-3 py-2 text-[13px] outline-none transition-colors focus:border-accent disabled:text-text-tertiary"
+        className="w-full rounded-[var(--radius-md)] border border-line bg-surface px-3 py-2 text-body outline-none transition-colors focus:border-accent disabled:text-text-tertiary"
       />
-      {hint !== undefined && <p className="text-[12px] text-text-tertiary">{hint}</p>}
     </div>
   )
 }

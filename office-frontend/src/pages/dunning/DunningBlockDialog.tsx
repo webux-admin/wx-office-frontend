@@ -77,7 +77,7 @@ export function DunningBlockDialog({
       }
     >
       <div className="grid gap-3">
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           {documentId === undefined
             ? 'Solange der Stopp gilt, wird keine Rechnung dieses Kunden gemahnt.'
             : 'Solange der Stopp gilt, wird diese Rechnung nicht gemahnt. Die übrigen Rechnungen des Kunden laufen weiter.'}
@@ -87,7 +87,7 @@ export function DunningBlockDialog({
           label="Grund"
           value={reasonId}
           onChange={(event) => setReasonId(event.target.value)}
-          hint="Der Sachverhalt, aus dem Katalog. Zu pflegen unter Systemeinstellungen → Mahnstopp-Gründe."
+          tooltip="Der Sachverhalt, aus dem Katalog. Zu pflegen unter Systemeinstellungen → Mahnstopp-Gründe."
           autoFocus
         >
           <option value="">Bitte wählen</option>
@@ -104,7 +104,7 @@ export function DunningBlockDialog({
           onChange={(event) => setNote(event.target.value)}
           rows={3}
           placeholder="Ware beanstandet, Prüfung läuft"
-          hint="Der Einzelfall, der in keine Schublade passt. Ein Sachverhalt, kein Urteil über den Kunden."
+          tooltip="Der Einzelfall, der in keine Schublade passt. Ein Sachverhalt, kein Urteil über den Kunden."
         />
 
         <TextField
@@ -112,7 +112,7 @@ export function DunningBlockDialog({
           type="date"
           value={validUntil}
           onChange={(event) => setValidUntil(event.target.value)}
-          hint="Leer heisst: bis jemand den Stopp aufhebt. Für eine Zahlungsvereinbarung reicht ein Datum."
+          tooltip="Leer heisst: bis jemand den Stopp aufhebt. Für eine Zahlungsvereinbarung reicht ein Datum."
         />
 
         {save.error !== null && <ErrorNotice error={save.error} />}

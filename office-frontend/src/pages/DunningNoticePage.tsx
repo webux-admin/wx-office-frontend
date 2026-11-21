@@ -87,7 +87,7 @@ function Notices({ tenantId }: { tenantId: number }) {
           padded={false}
         >
           {notices.isPending && (
-            <p className="px-4 py-3 text-[13px] text-text-secondary">Wird geladen ...</p>
+            <p className="px-4 py-3 text-body text-text-secondary">Wird geladen ...</p>
           )}
           {notices.isSuccess && rows.length === 0 && (
             <EmptyState
@@ -97,9 +97,9 @@ function Notices({ tenantId }: { tenantId: number }) {
           )}
           {rows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
+              <table className="w-full text-body">
                 <thead>
-                  <tr className="text-left text-[12px] text-text-tertiary">
+                  <tr className="text-left text-small text-text-tertiary">
                     <th className="py-2 pl-4 font-medium">Nummer</th>
                     <th className="py-2 pr-4 font-medium">Kunde</th>
                     <th className="py-2 pr-4 font-medium">Stufe</th>
@@ -116,7 +116,7 @@ function Notices({ tenantId }: { tenantId: number }) {
                       key={notice.id}
                       className={isWithdrawn(notice) ? 'opacity-60' : undefined}
                     >
-                      <td className="py-2 pl-4 font-mono text-[12px]">
+                      <td className="py-2 pl-4 font-mono text-small">
                         <span className={isWithdrawn(notice) ? 'line-through' : undefined}>
                           {notice.noticeNumber}
                         </span>
@@ -138,7 +138,7 @@ function Notices({ tenantId }: { tenantId: number }) {
                       </td>
                       <td className="py-2 pr-4 text-right whitespace-nowrap">
                         {isWithdrawn(notice) && (
-                          <span className="mr-2 text-[12px] text-text-tertiary">
+                          <span className="mr-2 text-small text-text-tertiary">
                             zurückgezogen
                           </span>
                         )}

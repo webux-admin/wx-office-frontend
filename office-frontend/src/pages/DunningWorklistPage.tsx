@@ -223,12 +223,12 @@ function Worklist({ tenantId }: { tenantId: number }) {
         {problems.length > 0 && (
           <Panel title="Die Einstellungen sind unvollständig">
             <div className="grid gap-2">
-              <p className="text-[13px]">
+              <p className="text-body">
                 {problems.map((reason) => DUNNING_SKIP_REASONS[reason]).join(' · ')}. Solange
                 das so bleibt, verwirft der Lauf diese Zeilen — eine Liste, die Mahnungen
                 verspricht, die nie hinausgehen, ist schlimmer als eine leere.
               </p>
-              <p className="text-[12px] text-text-secondary">
+              <p className="text-small text-text-secondary">
                 Zu ändern unter{' '}
                 <a className="text-accent-text" href={DUNNING_SETTINGS_PATH}>
                   Mahnwesen → Einstellungen
@@ -245,7 +245,7 @@ function Worklist({ tenantId }: { tenantId: number }) {
           padded={false}
         >
           {worklist.isPending && (
-            <p className="px-4 py-3 text-[13px] text-text-secondary">Wird geladen ...</p>
+            <p className="px-4 py-3 text-body text-text-secondary">Wird geladen ...</p>
           )}
           {worklist.isSuccess && sending.length === 0 && (
             <EmptyState
@@ -274,7 +274,7 @@ function Worklist({ tenantId }: { tenantId: number }) {
             description="Hier hat ein Mensch entschieden, nicht die Regel. Die Zeilen bleiben sichtbar — wer nicht gemahnt wird, soll nicht verschwinden."
             padded={false}
             action={
-              <Link className="text-[13px] text-accent-text" to={DUNNING_BLOCKS_PATH}>
+              <Link className="text-body text-accent-text" to={DUNNING_BLOCKS_PATH}>
                 Alle Mahnstopps
               </Link>
             }
@@ -310,7 +310,7 @@ function Worklist({ tenantId }: { tenantId: number }) {
           </>
         }
       >
-        <div className="grid gap-3 text-[13px]">
+        <div className="grid gap-3 text-body">
           <p>
             Es gehen <strong>{runSummary(wanted)}</strong> hinaus. Jede bekommt eine
             lückenlose Nummer und wird archiviert — zurückholen lässt sie sich nicht.
@@ -387,7 +387,7 @@ function RunResult({
             </Button>
           )}
           <a
-            className="self-center text-[13px] text-accent-text"
+            className="self-center text-body text-accent-text"
             href={DUNNING_NOTICES_PATH}
           >
             Alle Mahnungen
@@ -398,10 +398,10 @@ function RunResult({
         </div>
       }
     >
-      <div className="grid gap-2 text-[13px]">
+      <div className="grid gap-2 text-body">
         {result.issued.map((notice) => (
           <div key={notice.id} className="flex gap-2">
-            <span className="font-mono text-[12px]">{notice.noticeNumber}</span>
+            <span className="font-mono text-small">{notice.noticeNumber}</span>
             <span>{notice.recipientName}</span>
             <span className="text-text-tertiary">
               {notice.levelName ?? `Stufe ${notice.levelNo}`}
@@ -417,7 +417,7 @@ function RunResult({
                 {failure.message}
               </p>
             ))}
-            <p className="text-[12px] text-text-tertiary">
+            <p className="text-small text-text-tertiary">
               Diese Briefe stehen mit Nummer und Archivkopie — sie müssen gedruckt werden.
             </p>
           </div>
@@ -430,7 +430,7 @@ function RunResult({
                 {failure.message}
               </p>
             ))}
-            <p className="text-[12px] text-text-tertiary">
+            <p className="text-small text-text-tertiary">
               Jeder Fehler blieb bei seinem Brief — die davor sind ausgestellt und bleiben es.
             </p>
           </div>
@@ -459,11 +459,11 @@ function CandidateTable({
   const selectable = picked !== undefined && onPick !== undefined
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
+      <table className="w-full text-body">
         <thead>
-          <tr className="text-left text-[12px] text-text-tertiary">
-            {selectable && <th className="w-[36px] py-2 pl-4" />}
-            <th className="w-[36px] py-2 pl-4" />
+          <tr className="text-left text-small text-text-tertiary">
+            {selectable && <th className="w-[2.25rem] py-2 pl-4" />}
+            <th className="w-[2.25rem] py-2 pl-4" />
             <th className="py-2 pr-4 font-medium">Kunde</th>
             <th className="py-2 pr-4 font-medium">{skipped ? 'Grund' : 'Stufe'}</th>
             <th className="py-2 pr-4 text-right font-medium">Rg.</th>
@@ -511,7 +511,7 @@ function CandidateTable({
                           under OR Art. 120 ff. that belongs to a person (backend ADR-0104). */}
                       {candidate.partnerCreditBalance !== undefined
                         && candidate.partnerCreditBalance > 0 && (
-                        <span className="text-[12px] text-danger">
+                        <span className="text-small text-danger">
                           {formatAmount(candidate.partnerCreditBalance)}{' '}
                           {candidate.partnerCreditCurrency} Guthaben bei diesem Kunden
                         </span>
@@ -529,7 +529,7 @@ function CandidateTable({
                           {DUNNING_SKIP_REASONS[candidate.skipReason]}
                         </Badge>
                         {candidate.note !== undefined && (
-                          <span className="text-[12px] text-text-tertiary">
+                          <span className="text-small text-text-tertiary">
                             {candidate.note}
                           </span>
                         )}
@@ -557,7 +557,7 @@ function CandidateTable({
                     <tr key={`${key}-${invoice.documentId}`} className="text-text-secondary">
                       {selectable && <td />}
                       <td />
-                      <td className="py-1.5 pr-4 pl-4 font-mono text-[12px]">
+                      <td className="py-1.5 pr-4 pl-4 font-mono text-small">
                         {invoice.documentNumber}
                       </td>
                       <td className="py-1.5 pr-4">{formatDate(invoice.documentDate)}</td>

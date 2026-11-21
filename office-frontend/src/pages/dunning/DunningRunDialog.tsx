@@ -49,7 +49,7 @@ export function DunningRunDialog({ open, onClose }: { open: boolean; onClose: ()
         type="date"
         value={asOf}
         onChange={(event) => setAsOf(event.target.value)}
-        hint="Vorgabe ist heute. Ein späterer Tag zeigt, was dann zu mahnen wäre."
+        tooltip="Vorgabe ist heute. Ein späterer Tag zeigt, was dann zu mahnen wäre."
       />
     </Dialog>
   )
