@@ -213,7 +213,7 @@ export function SendDocumentDialog({
 
           <CheckboxField
             label="Kopie an mich"
-            hint={`Als Blindkopie an ${data.senderAddress}, damit der Kunde sie nicht sieht.`}
+            tooltip={`Als Blindkopie an ${data.senderAddress}, damit der Kunde sie nicht sieht.`}
             checked={typed.copyToSender}
             onChange={(event) => edit({ copyToSender: event.target.checked })}
           />

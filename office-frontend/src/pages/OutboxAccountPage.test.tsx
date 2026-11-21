@@ -170,6 +170,18 @@ async function type(label: string, value: string) {
 }
 
 describe('OutboxAccountPage', () => {
+  it('outboxAccountPageAsksBeforeLeavingWithChangesTest', async () => {
+    await render()
+
+    await type('Port', '465')
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await settle()
+
+    expect(container.textContent).toContain('Änderungen verwerfen?')
+  })
+
   it('outboxAccountPageShowsTheStoredAccountTest', async () => {
     await render()
 

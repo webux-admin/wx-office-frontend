@@ -217,7 +217,7 @@ function Templates({ tenantId }: { tenantId: number }) {
                   />
                   {mayConfigure && (
                     <div className="mt-3">
-                      <p className="text-[12px] text-text-secondary">
+                      <p className="text-small text-text-secondary">
                         Platzhalter einfügen — sie werden beim Versand ersetzt:
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -228,7 +228,7 @@ function Templates({ tenantId }: { tenantId: number }) {
                             title={placeholder.hint}
                             disabled={busy}
                             onClick={() => insert(template, placeholder.name)}
-                            className="rounded-[var(--radius-sm)] bg-sunken px-2 py-1 font-mono text-[11px] text-text-secondary transition-colors hover:text-accent-text disabled:opacity-50"
+                            className="rounded-[var(--radius-sm)] bg-sunken px-2 py-1 font-mono text-caption text-text-secondary transition-colors hover:text-accent-text disabled:opacity-50"
                           >
                             {`{{${placeholder.name}}}`}
                           </button>

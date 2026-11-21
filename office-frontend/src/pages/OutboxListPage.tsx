@@ -87,14 +87,14 @@ function Outbox({ tenantId }: { tenantId: number }) {
       key: 'createdAt',
       header: 'Eingereiht',
       sortKey: 'createdAt',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (message) => formatDateTime(message.createdAt),
     },
     {
       key: 'status',
       header: 'Status',
       sortKey: 'status',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (message) => (
         <span className="flex items-center gap-2">
           <Badge tone={messageStatusTone(message.status)}>
@@ -109,7 +109,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
     {
       key: 'recipients',
       header: 'Empfänger',
-      width: 'w-[220px]',
+      width: 'w-[13.75rem]',
       render: (message) => <span className="truncate">{message.recipients}</span>,
     },
     {
@@ -122,7 +122,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
       key: 'sentAt',
       header: 'Gesendet',
       sortKey: 'sentAt',
-      width: 'w-[150px]',
+      width: 'w-[9.375rem]',
       render: (message) =>
         message.sentAt === undefined ? (
           <span className="text-text-tertiary">-</span>
@@ -134,7 +134,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
       key: 'attempts',
       header: 'Versuche',
       align: 'right',
-      width: 'w-[90px]',
+      width: 'w-[5.625rem]',
       render: (message) => (
         <span className={message.attempts > 1 ? 'text-danger' : 'text-text-tertiary'}>
           {message.attempts}
@@ -166,7 +166,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
                 setStatus(event.target.value as MessageStatus | '')
                 setPage(0)
               }}
-              className="w-[190px]"
+              className="w-[11.875rem]"
             >
               <option value="">Alle</option>
               {MESSAGE_STATUSES.map((code) => (
@@ -183,7 +183,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
                 setFrom(event.target.value)
                 setPage(0)
               }}
-              className="w-[160px]"
+              className="w-[10rem]"
             />
             <TextField
               label="Bis"
@@ -193,7 +193,7 @@ function Outbox({ tenantId }: { tenantId: number }) {
                 setUntil(event.target.value)
                 setPage(0)
               }}
-              className="w-[160px]"
+              className="w-[10rem]"
             />
           </div>
 

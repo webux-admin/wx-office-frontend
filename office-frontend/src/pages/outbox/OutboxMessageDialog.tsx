@@ -107,7 +107,7 @@ export function OutboxMessageDialog({
       {resend.error !== null && <ErrorNotice error={resend.error} />}
 
       {full !== undefined && (
-        <div className="space-y-4 text-[13px]">
+        <div className="space-y-4 text-body">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={messageStatusTone(full.status)}>
               {messageStatusLabel(full.status)}
@@ -125,7 +125,7 @@ export function OutboxMessageDialog({
           {/* In plain words. The status says that it failed; this says what to fix. */}
           {full.lastError !== undefined && full.lastError !== '' && (
             <div className="rounded-[var(--radius-md)] bg-danger/8 p-3">
-              <p className="text-[12px] font-medium text-danger">Grund</p>
+              <p className="text-small font-medium text-danger">Grund</p>
               <p className="mt-1 break-words whitespace-pre-wrap text-text-primary">
                 {full.lastError}
               </p>
@@ -150,7 +150,7 @@ export function OutboxMessageDialog({
           </dl>
 
           <div>
-            <p className="text-[12px] font-medium text-text-secondary">Text</p>
+            <p className="text-small font-medium text-text-secondary">Text</p>
             <p className="mt-1 rounded-[var(--radius-md)] bg-sunken p-3 whitespace-pre-wrap">
               {full.body}
             </p>
@@ -158,7 +158,7 @@ export function OutboxMessageDialog({
 
           {full.attachments.length > 0 && (
             <div>
-              <p className="text-[12px] font-medium text-text-secondary">Anhänge</p>
+              <p className="text-small font-medium text-text-secondary">Anhänge</p>
               <ul className="mt-1 space-y-1">
                 {full.attachments.map((file) => (
                   <li key={file.id}>

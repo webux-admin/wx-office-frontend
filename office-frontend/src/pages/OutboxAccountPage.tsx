@@ -4,17 +4,17 @@ import { PlugZap } from 'lucide-react'
 import { Button } from '../components/Button'
 import { CheckboxField } from '../components/CheckboxField'
 import { ErrorNotice, LoadingBlock, WarningNotice } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
+import { FormMask } from '../components/FormMask'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
 import { TextField } from '../components/TextField'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api, ApiError } from '../lib/api'
 import {
   mailAccountKey,
   mailAccountUrl,
+  OUTBOX_PATH,
   OUTBOX_RIGHTS,
   SMTP_SECURITIES,
 } from '../lib/outbox'
@@ -137,24 +137,25 @@ function Account({ tenantId }: { tenantId: number }) {
   })
 
   const submit = () => save.mutate()
-  useSubmitShortcut(mayConfigure && !save.isPending && changed ? submit : undefined)
 
   const locked = !mayConfigure || save.isPending
 
   return (
-    <>
-      <PageHeader
-        title="Postausgang"
-        subtitle="Das Konto, über das E-Mails versendet werden"
-      >
-        {mayConfigure && (
+    <FormMask
+      title="Postausgang"
+      subtitle="Das Konto, über das E-Mails versendet werden"
+      back={{ to: OUTBOX_PATH, label: 'Postausgang' }}
+      actions={
+        mayConfigure && (
           <Button onClick={submit} busy={save.isPending} disabled={!changed} shortcut>
             Speichern
           </Button>
-        )}
-      </PageHeader>
-
-      <div className="px-8 pb-12">
+        )
+      }
+      dirty={changed}
+      onSubmit={mayConfigure && changed && !save.isPending ? submit : undefined}
+    >
+      <>
         {account.isPending && <LoadingBlock />}
         {account.error !== null && <ErrorNotice error={account.error} />}
         {save.error !== null && <ErrorNotice error={save.error} />}
@@ -211,7 +212,7 @@ function Account({ tenantId }: { tenantId: number }) {
                   value={typed.username}
                   disabled={locked}
                   maxLength={255}
-                  hint="Leer lassen, wo der Server ohne Anmeldung annimmt"
+                  tooltip="Leer lassen, wo der Server ohne Anmeldung annimmt"
                   onChange={(event) => set('username', event.target.value)}
                 />
                 <TextField
@@ -258,13 +259,13 @@ function Account({ tenantId }: { tenantId: number }) {
                   value={typed.replyTo}
                   disabled={locked}
                   maxLength={255}
-                  hint="Leer lassen: Antworten gehen an die Absenderadresse"
+                  tooltip="Leer lassen: Antworten gehen an die Absenderadresse"
                   onChange={(event) => set('replyTo', event.target.value)}
                 />
               </div>
               <CheckboxField
                 label="Konto aktiv"
-                hint="Ausgeschaltet wird nichts mehr eingereiht und nichts mehr gesendet."
+                tooltip="Ausgeschaltet wird nichts mehr eingereiht und nichts mehr gesendet."
                 checked={typed.active}
                 disabled={locked}
                 className="mt-4"
@@ -293,7 +294,7 @@ function Account({ tenantId }: { tenantId: number }) {
                   <PlugZap size={15} aria-hidden />
                   Verbindung prüfen
                 </Button>
-                <p className="mt-2 text-[12px] text-text-secondary">
+                <p className="mt-2 text-small text-text-secondary">
                   {stored === null
                     ? 'Erst speichern, dann prüfen.'
                     : changed
@@ -302,7 +303,7 @@ function Account({ tenantId }: { tenantId: number }) {
                 </p>
                 <div aria-live="polite">
                   {tested !== null && (
-                    <p className="mt-3 text-[13px] font-medium text-success">{tested}</p>
+                    <p className="mt-3 text-body font-medium text-success">{tested}</p>
                   )}
                   {test.error !== null && <ErrorNotice error={test.error} />}
                 </div>
@@ -310,8 +311,8 @@ function Account({ tenantId }: { tenantId: number }) {
             )}
           </>
         )}
-      </div>
-    </>
+      </>
+    </FormMask>
   )
 }
 
