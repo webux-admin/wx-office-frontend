@@ -325,6 +325,19 @@ describe('ProjectPage', () => {
     expect(options('Verantwortlich')).toEqual(['Noch niemand', 'Anna Meier'])
   })
 
+  it('projectPageAsksBeforeLeavingWithChangesTest', async () => {
+    await render('/projekte/5')
+
+    await type('Name', 'Umbau Etappe 2')
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await settle()
+
+    expect(text()).toContain('Änderungen verwerfen?')
+    expect(written).toHaveLength(0)
+  })
+
   it('projectPageChangesAStoredProjectTest', async () => {
     await render('/projekte/5')
 

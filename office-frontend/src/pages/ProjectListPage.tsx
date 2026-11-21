@@ -72,10 +72,10 @@ function ProjectList({ tenantId }: { tenantId: number }) {
     {
       key: 'number',
       header: 'Nummer',
-      width: 'w-[110px]',
+      width: 'w-[6.875rem]',
       sortKey: 'projectNumber',
       render: (project) => (
-        <span className="font-mono text-[12px] text-text-tertiary">{project.projectNumber}</span>
+        <span className="font-mono text-small text-text-tertiary">{project.projectNumber}</span>
       ),
     },
     {
@@ -102,7 +102,7 @@ function ProjectList({ tenantId }: { tenantId: number }) {
     {
       key: 'responsible',
       header: 'Verantwortlich',
-      width: 'w-[170px]',
+      width: 'w-[10.625rem]',
       render: (project) => (
         <span className="text-text-secondary">{project.responsibleName ?? '-'}</span>
       ),
@@ -110,7 +110,7 @@ function ProjectList({ tenantId }: { tenantId: number }) {
     {
       key: 'period',
       header: 'Zeitraum',
-      width: 'w-[200px]',
+      width: 'w-[12.5rem]',
       sortKey: 'startDate',
       render: (project) => (
         <span className="text-text-secondary tabular-nums">
@@ -121,7 +121,7 @@ function ProjectList({ tenantId }: { tenantId: number }) {
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[130px]',
+      width: 'w-[8.125rem]',
       render: (project) => (
         <Badge tone={PROJECT_STATUS_TONES[project.status]}>{PROJECT_STATUS_LABELS[project.status]}</Badge>
       ),

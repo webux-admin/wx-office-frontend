@@ -5,12 +5,11 @@ import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Dialog } from '../components/Dialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { PageHeader } from '../components/PageHeader'
+import { FormMask } from '../components/FormMask'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
 import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
-import { useSubmitShortcut } from '../components/useSubmitShortcut'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
@@ -134,54 +133,58 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
     if (!problem) save.mutate()
   }
 
-  useSubmitShortcut(editable && !save.isPending ? submit : undefined)
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(project ? toProjectForm(project) : emptyProjectForm())
 
   const failure = save.error ?? step.error ?? (complaint === null ? null : new Error(complaint))
 
   return (
-    <>
-      <PageHeader
-        title={project ? project.name : 'Neues Projekt'}
-        back={{ to: origin.from, label: origin.label }}
-        subtitle={
-          project ? (
-            <span className="flex items-center gap-2">
-              <span className="font-mono text-[12px]">{project.projectNumber}</span>
-              <Badge tone={PROJECT_STATUS_TONES[project.status]}>
-                {PROJECT_STATUS_LABELS[project.status]}
-              </Badge>
-            </span>
-          ) : (
-            'Die Projektnummer wird beim Speichern vergeben.'
-          )
-        }
-      >
-        {project && mayWrite && isProjectDeletable(project.status) && (
-          <Button variant="secondary" onClick={() => setDeleting(true)}>
-            Löschen
-          </Button>
-        )}
-        {project &&
-          mayWrite &&
-          projectStepsFrom(project.status).map((next) => (
-            <Button
-              key={next}
-              variant="secondary"
-              onClick={() => step.mutate(next)}
-              busy={step.isPending && step.variables === next}
-              disabled={step.isPending}
-            >
-              {PROJECT_STEP_LABELS[next]}
+    <FormMask
+      title={project ? project.name : 'Neues Projekt'}
+      back={{ to: origin.from, label: origin.label }}
+      subtitle={
+        project ? (
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-small">{project.projectNumber}</span>
+            <Badge tone={PROJECT_STATUS_TONES[project.status]}>
+              {PROJECT_STATUS_LABELS[project.status]}
+            </Badge>
+          </span>
+        ) : (
+          'Die Projektnummer wird beim Speichern vergeben.'
+        )
+      }
+      actions={
+        <>
+          {project && mayWrite && isProjectDeletable(project.status) && (
+            <Button variant="secondary" onClick={() => setDeleting(true)}>
+              Löschen
             </Button>
-          ))}
-        {editable && (
-          <Button onClick={submit} busy={save.isPending} shortcut>
-            Speichern
-          </Button>
-        )}
-      </PageHeader>
-
-      <div className="px-8 pb-12">
+          )}
+          {project &&
+            mayWrite &&
+            projectStepsFrom(project.status).map((next) => (
+              <Button
+                key={next}
+                variant="secondary"
+                onClick={() => step.mutate(next)}
+                busy={step.isPending && step.variables === next}
+                disabled={step.isPending}
+              >
+                {PROJECT_STEP_LABELS[next]}
+              </Button>
+            ))}
+          {editable && (
+            <Button onClick={submit} busy={save.isPending} shortcut>
+              Speichern
+            </Button>
+          )}
+        </>
+      }
+      dirty={dirty}
+      onSubmit={editable && !save.isPending ? submit : undefined}
+    >
+      <>
         {failure !== null && (
           <div className="mb-6" aria-live="polite">
             <ErrorNotice error={failure} />
@@ -189,7 +192,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
         )}
 
         {project && !isProjectEditable(project.status) && (
-          <p className="mb-6 rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-[13px] text-text-secondary">
+          <p className="mb-6 rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-body text-text-secondary">
             Dieses Projekt ist archiviert und lässt sich nur noch lesen.
             {mayWrite ? ' Zum Bearbeiten zuerst aus dem Archiv holen.' : ''}
           </p>
@@ -220,7 +223,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
                   value={form.endDate}
                   onChange={(event) => set('endDate', event.target.value)}
                   disabled={!editable}
-                  hint="Leer lassen, solange das Ende offen ist."
+                  tooltip="Leer lassen, solange das Ende offen ist."
                 />
               </div>
               <TextAreaField
@@ -266,14 +269,14 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
         </div>
 
         {project && (
-          <p className="mt-6 text-[12px] text-text-tertiary">
+          <p className="mt-6 text-small text-text-tertiary">
             Angelegt {formatDateTime(project.createdAt)}
             {project.createdBy ? ` von ${project.createdBy}` : ''}
             {project.changedAt ? ` · geändert ${formatDateTime(project.changedAt)}` : ''}
             {project.changedBy ? ` von ${project.changedBy}` : ''}
           </p>
         )}
-      </div>
+      </>
 
       {project && (
         <Dialog
@@ -295,7 +298,7 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
           {remove.error !== null && <ErrorNotice error={remove.error} />}
         </Dialog>
       )}
-    </>
+    </FormMask>
   )
 }
 
