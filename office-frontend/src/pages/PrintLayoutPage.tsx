@@ -150,7 +150,7 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
       dirty={dirty}
       onSubmit={problem === undefined && !save.isPending ? () => save.mutate() : undefined}
     >
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {problem !== undefined && (
           <p
             role="alert"
@@ -239,27 +239,29 @@ function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout 
             </Panel>
           </div>
 
-          <DesignCanvas
-            definition={definition}
-            selection={selection}
-            onSelect={setSelection}
-            onMove={(band, index, position) =>
-              setDefinition(
-                withBlock(definition, band, index, {
-                  ...definition[band][index],
-                  ...position,
-                }),
-              )
-            }
-            onResize={(band, index, size) =>
-              setDefinition(
-                withBlock(definition, band, index, {
-                  ...definition[band][index],
-                  ...size,
-                }),
-              )
-            }
-          />
+          <div className="min-w-0 max-w-full overflow-x-auto">
+            <DesignCanvas
+              definition={definition}
+              selection={selection}
+              onSelect={setSelection}
+              onMove={(band, index, position) =>
+                setDefinition(
+                  withBlock(definition, band, index, {
+                    ...definition[band][index],
+                    ...position,
+                  }),
+                )
+              }
+              onResize={(band, index, size) =>
+                setDefinition(
+                  withBlock(definition, band, index, {
+                    ...definition[band][index],
+                    ...size,
+                  }),
+                )
+              }
+            />
+          </div>
 
           <div className="w-[17.5rem] shrink-0">
             <Panel title="Eigenschaften">
