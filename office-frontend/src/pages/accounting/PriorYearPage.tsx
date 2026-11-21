@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { LinkButton } from '../../components/LinkButton'
@@ -11,6 +11,7 @@ import {
   WarningNotice,
 } from '../../components/Notice'
 import { PageHeader } from '../../components/PageHeader'
+import { useLeaveGuard } from '../../components/useLeaveGuard'
 import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
 import { TextAreaField } from '../../components/TextAreaField'
@@ -110,6 +111,10 @@ function PriorYear({ tenantId }: { tenantId: number }) {
     return named === null ? null : Number(named)
   })
   const [saved, setSaved] = useState<OpeningEntryOutcome | null>(null)
+  // Set by the grid while a value is typed and not yet saved; Escape and the back link ask.
+  const [unsaved, setUnsaved] = useState(false)
+  const navigate = useNavigate()
+  const { onBack, question } = useLeaveGuard(unsaved, () => void navigate(FISCAL_YEARS_PATH))
 
   const years = useQuery({
     queryKey: fiscalYearsKey(tenantId),
@@ -217,6 +222,7 @@ function PriorYear({ tenantId }: { tenantId: number }) {
           </>
         }
         back={{ to: FISCAL_YEARS_PATH, label: 'Geschäftsjahre' }}
+        onBack={onBack}
       />
 
       <div className="grid gap-4 px-8 pb-12">
@@ -336,11 +342,14 @@ function PriorYear({ tenantId }: { tenantId: number }) {
                 typeOf={(accountId) => typeById.get(accountId)}
                 mayClose={mayClose}
                 onSaved={setSaved}
+                onDirtyChange={setUnsaved}
               />
             )}
           </>
         )}
       </div>
+
+      {question}
     </>
   )
 }
@@ -359,6 +368,7 @@ function Capture({
   typeOf,
   mayClose,
   onSaved,
+  onDirtyChange,
 }: {
   tenantId: number
   year: FiscalYear
@@ -367,9 +377,16 @@ function Capture({
   typeOf: (accountId: number) => AccountType | undefined
   mayClose: boolean
   onSaved: (outcome: OpeningEntryOutcome) => void
+  onDirtyChange: (dirty: boolean) => void
 }) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<PriorYearForm>(() => priorYearFormOf(balances.lines))
+  const dirty = JSON.stringify(form) !== JSON.stringify(priorYearFormOf(balances.lines))
+  useEffect(() => {
+    onDirtyChange(dirty)
+  }, [dirty, onDirtyChange])
+  // Leaving the grid, by a new year or a fresh answer, takes its changes with it.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange])
   const [replacing, setReplacing] = useState(false)
   const captured = balances.captured
 

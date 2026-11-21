@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
@@ -10,6 +10,7 @@ import { Panel } from '../components/Panel'
 import { TextField } from '../components/TextField'
 import { useDebouncedValue } from '../components/useDebouncedValue'
 import { useSubmitShortcut } from '../components/useSubmitShortcut'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import {
@@ -261,6 +262,21 @@ function EntryMask({ tenantId }: { tenantId: number }) {
   useSubmitShortcut(busy ? undefined : submit)
 
   /**
+   * Throws the typed entry away. An entry being edited is left and goes back to the drafts; a new
+   * entry is emptied, and the rescued copy goes with it, so the banner does not offer it back.
+   */
+  const abandon = () => {
+    if (editing !== null) {
+      void navigate(DRAFT_PATH)
+      return
+    }
+    clearEntryDraft(tenantId)
+    setOffer(undefined)
+    setDraft(emptyEntryDraft(today))
+  }
+  const { onBack, question } = useLeaveGuard(isDirty(draft), abandon)
+
+  /**
    * Puts a template into the grid — and asks first where anything it would replace is typed.
    *
    * <p><b>Applying replaces, it does not append.</b> Appending would be the more dangerous of
@@ -387,7 +403,7 @@ function EntryMask({ tenantId }: { tenantId: number }) {
 
   return (
     <>
-      <Header editing={editing !== null}>
+      <Header editing={editing !== null} onBack={onBack}>
         {editing !== null && (
           <Button variant="ghost" onClick={() => setRemoving(true)}>
             Entwurf löschen
@@ -592,6 +608,8 @@ function EntryMask({ tenantId }: { tenantId: number }) {
           {remove.error !== null && <ErrorNotice error={remove.error} />}
         </div>
       </Dialog>
+
+      {question}
     </>
   )
 }
@@ -608,12 +626,21 @@ export const IRREVERSIBLE =
 /** The chart is read whole: a picker wants every account, not a page. */
 const ACCOUNT_QUERY = listQuery({ activeOnly: true, size: PICKER_SIZE, sort: 'accountNumber,asc' })
 
-function Header({ editing, children }: { editing: boolean; children?: ReactNode }) {
+function Header({
+  editing,
+  onBack,
+  children,
+}: {
+  editing: boolean
+  onBack?: (event: MouseEvent<HTMLAnchorElement>) => void
+  children?: ReactNode
+}) {
   return (
     <PageHeader
       title={editing ? 'Entwurf bearbeiten' : 'Buchen'}
       subtitle="Soll und Haben müssen aufgehen. Was verbucht ist, bleibt stehen."
       back={editing ? { to: DRAFT_PATH, label: 'Entwürfe' } : undefined}
+      onBack={onBack}
     >
       {children}
     </PageHeader>

@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { ErrorNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { Tooltip } from '../components/Tooltip'
 import { Tabs } from '../components/Tabs'
 import { TextField } from '../components/TextField'
@@ -80,6 +81,20 @@ function Texts({ tenantId }: { tenantId: number }) {
   })
 
   const [levelId, setLevelId] = useState<number | null>(null)
+  // Per level and language: whether the text typed there is not saved yet.
+  const [unsaved, setUnsaved] = useState<Record<string, boolean>>({})
+  // Bumped on «Verwerfen» to remount the panels, which then read the stored texts again.
+  const [generation, setGeneration] = useState(0)
+  const reportDirty = useCallback(
+    (key: string, dirty: boolean) =>
+      setUnsaved((current) => (current[key] === dirty ? current : { ...current, [key]: dirty })),
+    [],
+  )
+  const anyUnsaved = Object.values(unsaved).some(Boolean)
+  const { question } = useLeaveGuard(anyUnsaved, () => {
+    setUnsaved({})
+    setGeneration((current) => current + 1)
+  })
 
   const rows = levels.data ?? []
   const active = levelId ?? rows[0]?.id ?? null
@@ -120,11 +135,12 @@ function Texts({ tenantId }: { tenantId: number }) {
 
         {level !== undefined && (
           <LevelTexts
-            key={level.id}
+            key={`${level.id}:${generation}`}
             tenantId={tenantId}
             level={level}
             placeholders={placeholders.data ?? []}
             mayWrite={mayWrite}
+            onDirtyChange={reportDirty}
           />
         )}
 
@@ -134,6 +150,8 @@ function Texts({ tenantId }: { tenantId: number }) {
           </p>
         )}
       </div>
+
+      {question}
     </>
   )
 }
@@ -143,11 +161,13 @@ function LevelTexts({
   level,
   placeholders,
   mayWrite,
+  onDirtyChange,
 }: {
   tenantId: number
   level: DunningLevel
   placeholders: DunningPlaceholder[]
   mayWrite: boolean
+  onDirtyChange: (key: string, dirty: boolean) => void
 }) {
   const languages = useMasterDataList(tenantId, 'languages')
 
@@ -173,6 +193,7 @@ function LevelTexts({
           stored={stored.find((text) => text.languageCode === code)}
           placeholders={placeholders}
           mayWrite={mayWrite}
+          onDirtyChange={onDirtyChange}
         />
       ))}
     </div>
@@ -186,6 +207,7 @@ function LanguagePanel({
   stored,
   placeholders,
   mayWrite,
+  onDirtyChange,
 }: {
   tenantId: number
   level: DunningLevel
@@ -193,11 +215,19 @@ function LanguagePanel({
   stored: DunningText | undefined
   placeholders: DunningPlaceholder[]
   mayWrite: boolean
+  onDirtyChange: (key: string, dirty: boolean) => void
 }) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<TextForm>(() => formOf(stored))
   const [field, setField] = useState<keyof TextForm>('introText')
   const [previewing, setPreviewing] = useState(false)
+  const dirty = JSON.stringify(form) !== JSON.stringify(formOf(stored))
+  const reportKey = `${level.id}-${language}`
+  useEffect(() => {
+    onDirtyChange(reportKey, dirty)
+  }, [dirty, onDirtyChange, reportKey])
+  // Leaving the level or the page takes what was typed here with it.
+  useEffect(() => () => onDirtyChange(reportKey, false), [onDirtyChange, reportKey])
   const fields = useRef<Partial<Record<keyof TextForm, HTMLTextAreaElement | null>>>({})
 
   const refresh = () => {

@@ -383,6 +383,25 @@ describe('EntryPage', () => {
     expect(container.textContent).not.toContain('Sie hatten hier etwas angefangen')
   })
 
+  it('entryAsksBeforeAbandoningANewEntryTest', async () => {
+    await paint()
+
+    type(field('Beleg'), 'MB-1')
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await settle()
+
+    expect(container.textContent).toContain('Änderungen verwerfen?')
+
+    await act(async () => {
+      button('Verwerfen')?.click()
+    })
+    await settle()
+
+    expect(field('Beleg').value).toBe('')
+  })
+
   /**
    * A state the shipped version before this one wrote carries no stamp. The banner said
    * «zuletzt -.» over it — a broken screen at the moment somebody decides whether to trust what

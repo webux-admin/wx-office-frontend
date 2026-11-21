@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { isCancelShortcut } from '../lib/shortcuts'
-import { DiscardQuestion } from './Dialog'
 import { PageHeader } from './PageHeader'
 import { Tabs, type TabItem } from './Tabs'
+import { useLeaveGuard } from './useLeaveGuard'
 import { useSubmitShortcut } from './useSubmitShortcut'
 
 type FormMaskProps<Id extends string> = {
@@ -55,34 +54,9 @@ export function FormMask<Id extends string>({
   children,
 }: FormMaskProps<Id>) {
   const navigate = useNavigate()
-  const [asking, setAsking] = useState(false)
 
   useSubmitShortcut(onSubmit)
-
-  const leave = () => void navigate(back.to)
-  const cancel = useRef(() => {})
-  useEffect(() => {
-    cancel.current = () => (dirty ? setAsking(true) : leave())
-  })
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isCancelShortcut(event) || event.defaultPrevented) return
-      // A dialog over the mask owns the keyboard, Escape included.
-      if (document.querySelector('[role="dialog"]') !== null) return
-      event.preventDefault()
-      cancel.current()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  const onBack = (event: MouseEvent<HTMLAnchorElement>) => {
-    // A click with a modifier opens a new tab; the mask here stays as it is, nothing is lost.
-    if (!dirty || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
-    event.preventDefault()
-    setAsking(true)
-  }
+  const { onBack, question } = useLeaveGuard(dirty, () => void navigate(back.to))
 
   return (
     <>
@@ -98,14 +72,7 @@ export function FormMask<Id extends string>({
         {children}
       </div>
 
-      <DiscardQuestion
-        open={asking}
-        onKeep={() => setAsking(false)}
-        onDiscard={() => {
-          setAsking(false)
-          leave()
-        }}
-      />
+      {question}
     </>
   )
 }

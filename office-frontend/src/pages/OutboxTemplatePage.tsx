@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { useLeaveGuard } from '../components/useLeaveGuard'
 import { ErrorNotice, LoadingBlock, WarningNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
@@ -50,6 +51,8 @@ function Templates({ tenantId }: { tenantId: number }) {
 
   const [category, setCategory] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  // A draft lives only while its text differs from the stored template. Escape drops them all.
+  const { question } = useLeaveGuard(Object.keys(drafts).length > 0, () => setDrafts({}))
   // Where a clicked placeholder goes. Whichever field was last written in wins; without it
   // the buttons would have to guess, and guessing wrong drops text into the subject.
   const focused = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -242,6 +245,8 @@ function Templates({ tenantId }: { tenantId: number }) {
           </>
         )}
       </div>
+
+      {question}
     </>
   )
 }
