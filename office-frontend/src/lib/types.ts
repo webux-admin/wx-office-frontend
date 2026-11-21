@@ -4996,3 +4996,104 @@ export type ProjectResponsible = {
   /** `false` once the account was deactivated; such a user cannot be chosen anew. */
   active: boolean
 }
+
+/** How often a contract position is billed, as the backend `BillingInterval` spells it. */
+export type BillingInterval = 'MONTHLY' | 'QUARTERLY' | 'YEARLY'
+
+/** The unit of a notice period, as the backend `NoticePeriodUnit` spells it. */
+export type NoticePeriodUnit = 'DAYS' | 'WEEKS' | 'MONTHS'
+
+/**
+ * One position of a contract, as `ContractPositionDto` sends it.
+ *
+ * <p>Values only: product number and text are what the catalogue said when the position was
+ * written, nothing points back at the product (backend ADR-0144).
+ */
+export type ContractPosition = {
+  /** Stays the same while the position is changed; sent back unchanged. */
+  positionKey: string
+  title: string
+  productNumber?: string | null
+  description?: string | null
+  quantity: number
+  unitPrice: number
+  currency: string
+  priceIncludesVat: boolean
+  vatCategory: VatCategory
+  interval: BillingInterval
+  /** Quantity times price for one interval, rounded to the rappen by the backend. */
+  amount: number
+}
+
+/** What the positions of one interval come to together (`ContractTotalDto`). */
+export type ContractTotal = {
+  interval: BillingInterval
+  amount: number
+}
+
+/**
+ * A contract, as `ContractDto` of the backend sends it.
+ *
+ * <p>Name and town of the customer are the copy on the contract, taken on every save, not the
+ * partner as it is today (backend ADR-0144).
+ */
+export type Contract = {
+  id: number
+  contractNumber: string
+  title: string
+  partnerId: number
+  customerName: string
+  customerTown?: string | null
+  /** ISO date, `yyyy-mm-dd`. */
+  startDate: string
+  /** ISO date, `yyyy-mm-dd`; absent for an open ended contract. */
+  endDate?: string | null
+  noticePeriodAmount?: number | null
+  noticePeriodUnit?: NoticePeriodUnit | null
+  note?: string | null
+  /** The one currency of all positions; absent without positions. */
+  currency?: string | null
+  positions: ContractPosition[]
+  /** The sum per interval, monthly first; an interval without positions is missing. */
+  totals: ContractTotal[]
+  createdAt?: string | null
+  createdBy?: string | null
+  changedAt?: string | null
+  changedBy?: string | null
+  /** Optimistic locking; not a contract version. */
+  lockVersion?: number | null
+}
+
+/** One position as the contract form sends it (`ContractPositionRequest`). */
+export type ContractPositionRequest = {
+  /** The stored position, `null` for a new one. */
+  positionKey: string | null
+  title: string
+  productNumber: string | null
+  description: string | null
+  quantity: number
+  unitPrice: number
+  currency: string
+  priceIncludesVat: boolean
+  vatCategory: string
+  interval: BillingInterval
+}
+
+/** What the contract form sends, for a `POST` as well as for a `PUT` (`ContractRequest`). */
+export type ContractRequest = {
+  title: string
+  partnerId: number
+  startDate: string
+  endDate: string | null
+  noticePeriodAmount: number | null
+  noticePeriodUnit: NoticePeriodUnit | null
+  note: string | null
+  positions: ContractPositionRequest[]
+}
+
+/** A customer a contract can be made with (`ContractCustomer`). */
+export type ContractCustomer = {
+  partnerId: number
+  partnerNumber?: string | null
+  name: string
+}

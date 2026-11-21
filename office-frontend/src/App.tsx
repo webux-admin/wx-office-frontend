@@ -86,6 +86,8 @@ const PartnerListPage = lazy(() => import('./pages/PartnerListPage').then((modul
 const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({ default: module.PartnerPage })))
 const ProjectListPage = lazy(() => import('./pages/ProjectListPage').then((module) => ({ default: module.ProjectListPage })))
 const ProjectPage = lazy(() => import('./pages/ProjectPage').then((module) => ({ default: module.ProjectPage })))
+const ContractListPage = lazy(() => import('./pages/ContractListPage').then((module) => ({ default: module.ContractListPage })))
+const ContractPage = lazy(() => import('./pages/ContractPage').then((module) => ({ default: module.ContractPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const PriceEntryPage = lazy(() => import('./pages/PriceEntryPage').then((module) => ({ default: module.PriceEntryPage })))
@@ -172,6 +174,8 @@ export default function App() {
                 <Route path="/lieferanten/:id" element={<PartnerPage role="supplier" />} />
                 <Route path="/projekte" element={<ProjectListPage />} />
                 <Route path="/projekte/:id" element={<ProjectPage />} />
+                <Route path="/vertraege" element={<ContractListPage />} />
+                <Route path="/vertraege/:id" element={<ContractPage />} />
 
                 <Route path="/produkte" element={<ProductListPage />} />
                 <Route path="/produkte/:id" element={<ProductPage />} />

@@ -1,6 +1,7 @@
 import {
   Archive,
   FolderKanban,
+  ScrollText,
   BookCheck,
   ArrowDownToLine,
   ArrowLeftRight,
@@ -108,6 +109,7 @@ import {
   DUNNING_NOTICES_PATH,
   DUNNING_WORKLIST_PATH,
 } from '../lib/dunning'
+import { CONTRACT_MODULE, CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
@@ -428,6 +430,16 @@ export const NAV_GROUPS: NavGroup[] = [
         href: PROJECT_PATH,
         permission: PROJECT_RIGHTS.read,
         module: PROJECT_MODULE,
+      },
+      // Beside the projects: both are what is agreed with a customer, and a contract is what
+      // the recurring invoices will come from. Under the module switch, like the projects
+      // (backend ADR-0136).
+      {
+        label: 'Verträge',
+        icon: ScrollText,
+        href: CONTRACT_PATH,
+        permission: CONTRACT_RIGHTS.read,
+        module: CONTRACT_MODULE,
       },
     ],
   },

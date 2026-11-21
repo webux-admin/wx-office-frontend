@@ -45,6 +45,7 @@ import {
 } from './navigation'
 import { CUSTOMER_CREDIT_PATH } from '../lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
+import { CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 
 /** Every screen the menu links to, across all groups. */
@@ -160,6 +161,33 @@ describe('NAV_GROUPS', () => {
 
     expect(entries.map((entry) => entry.href)).not.toContain(PROJECT_PATH)
     expect(entries.map((entry) => entry.href)).toContain('/kunden')
+  })
+
+  it('navGroupsCoverTheContractListTest', () => {
+    const contracts = allEntries().filter((entry) => entry.href === CONTRACT_PATH)
+
+    expect(contracts).toHaveLength(1)
+    expect(contracts[0].label).toBe('Verträge')
+    expect(contracts[0].permission).toBe(CONTRACT_RIGHTS.read)
+    expect(contracts[0].module).toBe('CONTRACT')
+  })
+
+  it('visibleNavGroupsHidesTheContractsWithoutTheModuleTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'CONTRACT')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(CONTRACT_PATH)
+    expect(entries.map((entry) => entry.href)).toContain(PROJECT_PATH)
+  })
+
+  it('visibleNavGroupsHidesTheContractsWithoutTheReadRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== CONTRACT_RIGHTS.read,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(CONTRACT_PATH)
   })
 
   it('navGroupsCoverTheOutboxScreensTest', () => {

@@ -30,6 +30,12 @@ Stand der Module (in dieser Reihenfolge gebaut):
   ist nur lesbar, und die Liste blendet Archiviertes aus, solange der Filter nicht danach
   fragt. Beim Kunden zeigt der Reiter «Projekte» alle seine Projekte, archivierte
   eingeschlossen (Backend ADR-0131)
+- **contract** — Vertragsliste und Vertragsmaske unter `/vertraege`, hinter dem Modulschalter
+  `CONTRACT`. Der Kunde kommt aus dem Nachschlageweg des Vertragsmoduls, die Positionen werden
+  in einem Dialog erfasst und mit dem Vertrag gespeichert. Ein Produkt aus dem Katalog ist nur
+  ein Vorschlag (mit `PRODUCT_READ` und gewähltem Kunden), der Preis kommt aus der
+  Preisauflösung des Backends; Beträge und Summen zeigt die Maske nur, wie das Backend sie
+  geliefert hat (ADR-0072, Backend ADR-0144)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 
