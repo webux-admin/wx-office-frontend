@@ -288,14 +288,14 @@ function AccountDialog({
           label="Auf dieses Konto wird mit QR-Referenz fakturiert"
           checked={qrAccount}
           onChange={(event) => setQrAccount(event.target.checked)}
-          hint="Nur Auskunft. Was ein Beleg druckt, entscheiden weiterhin die Mandanteneinstellungen."
+          tooltip="Nur Auskunft. Was ein Beleg druckt, entscheiden weiterhin die Mandanteneinstellungen."
         />
         {existing !== undefined && (
           <CheckboxField
             label="Aktiv"
             checked={active}
             onChange={(event) => setActive(event.target.checked)}
-            hint="Ein stillgelegtes Konto behält seine Auszüge und fällt aus der Auswahl."
+            tooltip="Ein stillgelegtes Konto behält seine Auszüge und fällt aus der Auswahl."
           />
         )}
         {save.error !== null && <ErrorNotice error={save.error} />}

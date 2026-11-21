@@ -149,7 +149,7 @@ export function AccountBookingDialog({
       }
     >
       <div className="grid gap-4">
-        <div className="rounded-md bg-surface-sunken px-4 py-3 text-[13px]">
+        <div className="rounded-md bg-surface-sunken px-4 py-3 text-body">
           <div className="flex flex-wrap items-baseline gap-x-4">
             <span>{formatDate(movement.valueDate)}</span>
             <span className="font-medium">{amount}</span>
@@ -176,7 +176,7 @@ export function AccountBookingDialog({
           value={account}
           onChange={setAccount}
           emptyLabel="– bitte wählen –"
-          hint="Wohin der Betrag gehört. Die Gegenseite ist das Fibu-Konto dieses Bankkontos."
+          tooltip="Wohin der Betrag gehört. Die Gegenseite ist das Fibu-Konto dieses Bankkontos."
         />
 
         <CodeSelect
@@ -188,7 +188,7 @@ export function AccountBookingDialog({
           value={taxCode}
           onChange={setTaxCode}
           emptyLabel="– ohne –"
-          hint="Hier wählt ein Mensch: VSM81 und VSI81 sind derselbe Satz auf zwei Konten und zwei ESTV-Ziffern."
+          tooltip="Hier wählt ein Mensch: VSM81 und VSI81 sind derselbe Satz auf zwei Konten und zwei ESTV-Ziffern."
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -197,19 +197,19 @@ export function AccountBookingDialog({
             type="date"
             value={bookingDate}
             onChange={(event) => setBookingDate(event.target.value)}
-            hint="Vorbelegt mit dem Tag, an dem die Bank gebucht hat."
+            tooltip="Vorbelegt mit dem Tag, an dem die Bank gebucht hat."
           />
           <TextField
             label="Text"
             value={text}
             onChange={(event) => setText(event.target.value)}
             maxLength={200}
-            hint="Steht als Buchungstext im Journal."
+            tooltip="Steht als Buchungstext im Journal."
           />
         </div>
 
         <div
-          className="rounded-md border border-border-subtle px-4 py-3 text-[13px]"
+          className="rounded-md border border-border-subtle px-4 py-3 text-body"
           data-testid="booking-preview"
         >
           <div className="pb-1 font-medium">So wird gebucht</div>
@@ -226,7 +226,7 @@ export function AccountBookingDialog({
             effect={debit ? 'Guthaben sinkt' : 'nimmt zu'}
           />
           {taxCode !== '' && (
-            <div className="pt-1 text-[12px] text-text-tertiary">
+            <div className="pt-1 text-small text-text-tertiary">
               Der Steuerbetrag wird aus dem Bruttobetrag herausgerechnet und auf das Konto des
               Codes {taxCode} gebucht.
             </div>
@@ -256,7 +256,7 @@ function BookingLine({
       <span className="w-12 text-text-secondary">{side}</span>
       <span className="font-mono">{account}</span>
       <span className="ml-auto">{amount}</span>
-      <span className="w-full pl-12 text-[12px] text-text-tertiary">{effect}</span>
+      <span className="w-full pl-12 text-small text-text-tertiary">{effect}</span>
     </div>
   )
 }

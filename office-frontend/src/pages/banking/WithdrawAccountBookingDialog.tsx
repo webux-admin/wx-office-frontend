@@ -82,7 +82,7 @@ export function WithdrawAccountBookingDialog({
       }
     >
       <div className="grid gap-4">
-        <div className="rounded-md bg-surface-sunken px-4 py-3 text-[13px]">
+        <div className="rounded-md bg-surface-sunken px-4 py-3 text-body">
           <div className="flex flex-wrap items-baseline gap-x-4">
             <span>{formatDate(movement.valueDate)}</span>
             <span className="font-medium">
@@ -100,10 +100,10 @@ export function WithdrawAccountBookingDialog({
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           maxLength={MAX_REASON_LENGTH}
-          hint="Pflicht: der Grund steht in der Gegenbuchung und erklärt sie später."
+          tooltip="Pflicht: der Grund steht in der Gegenbuchung und erklärt sie später."
         />
 
-        <p className="text-[12px] text-text-secondary">
+        <p className="text-small text-text-secondary">
           Es ist keine Rechnung betroffen; eine Mahnung ändert sich dadurch nicht.
         </p>
 

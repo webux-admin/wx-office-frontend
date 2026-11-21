@@ -94,7 +94,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
       render: (row) => (
         <div>
           <div className="font-medium">{row.fileName}</div>
-          <div className="text-[12px] text-text-tertiary">
+          <div className="text-small text-text-tertiary">
             {row.messageType.replace('_', '.').toLowerCase()} · {formatByteCount(row.byteCount)}
           </div>
         </div>
@@ -108,7 +108,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
         <div>
           <div>{row.accountLabel ?? '-'}</div>
           {row.accountIban && (
-            <div className="text-[12px] text-text-tertiary">{row.accountIban}</div>
+            <div className="text-small text-text-tertiary">{row.accountIban}</div>
           )}
         </div>
       ),
@@ -126,7 +126,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
       render: (row) => (
         <div>
           <div>{formatDateTime(row.createdAt)}</div>
-          <div className="text-[12px] text-text-tertiary">{row.createdBy}</div>
+          <div className="text-small text-text-tertiary">{row.createdBy}</div>
         </div>
       ),
     },
@@ -137,13 +137,13 @@ function BankStatements({ tenantId }: { tenantId: number }) {
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={toneOf(row.state)}>{IMPORT_STATES[row.state]}</Badge>
-            <span className="text-[13px]">{importSummary(row)}</span>
+            <span className="text-body">{importSummary(row)}</span>
           </div>
           {row.sequenceGap && (
-            <div className="text-[12px] text-danger">{row.sequenceGap}</div>
+            <div className="text-small text-danger">{row.sequenceGap}</div>
           )}
           {row.copyDuplicateIndicator && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               Von der Bank als Kopie gekennzeichnet ({row.copyDuplicateIndicator})
             </div>
           )}
@@ -179,7 +179,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
 
         <Panel padded={false} title="Eingelesene Dateien">
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
-            <span className="w-full max-w-[220px]">
+            <span className="w-full max-w-[13.75rem]">
               <SelectField
                 label="Konto"
                 value={accountId}
@@ -193,7 +193,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
                 ))}
               </SelectField>
             </span>
-            <span className="w-full max-w-[200px]">
+            <span className="w-full max-w-[12.5rem]">
               <SelectField
                 label="Zustand"
                 value={state}
@@ -207,7 +207,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
                 ))}
               </SelectField>
             </span>
-            <span className="w-full max-w-[170px]">
+            <span className="w-full max-w-[10.625rem]">
               <TextField
                 label="Eingelesen ab"
                 type="date"
@@ -215,7 +215,7 @@ function BankStatements({ tenantId }: { tenantId: number }) {
                 onChange={(event) => setFrom(event.target.value)}
               />
             </span>
-            <span className="w-full max-w-[170px]">
+            <span className="w-full max-w-[10.625rem]">
               <TextField
                 label="Eingelesen bis"
                 type="date"
@@ -301,7 +301,7 @@ function UploadDialog({
           hint="camt.053 (Kontoauszug) oder camt.054 (Avisierung), höchstens 20 MB"
           onSelect={setFile}
         />
-        <p className="text-[13px] text-text-secondary">
+        <p className="text-body text-text-secondary">
           Dieselbe Datei ein zweites Mal einzulesen ist erlaubt und ändert nichts: bereits
           erfasste Posten werden als «doppelt» gezählt statt erneut gutgeschrieben.
         </p>

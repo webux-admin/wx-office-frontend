@@ -159,14 +159,14 @@ function Rules({ tenantId }: { tenantId: number }) {
 
       <div className="grid gap-4 px-8 pb-12">
         <Panel title="Was ohne Nachfrage durchgeht">
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-body text-text-secondary">
             Übernommen werden darf nur, was <strong>hoch</strong> und <strong>ohne
             Prüfung</strong> ist und keinen Restbetrag lässt. Ausgeliefert sind das genau zwei
             Regeln: Priorität 10 (die Referenz zeigt auf den Beleg und der Betrag stimmt) und
             30 (die Belegnummer steht im Text <em>und</em> der Zahler passt). Beide paaren
             einen Beleg mit einer zweiten, unabhängigen Tatsache.
           </p>
-          <p className="mt-2 text-[13px] text-text-secondary">
+          <p className="mt-2 text-body text-text-secondary">
             Findet sich für einen Befund gar keine Regel, gilt <strong>tief</strong> mit
             Prüfung. Schweigen ist keine Erlaubnis.
           </p>
@@ -186,13 +186,13 @@ function Rules({ tenantId }: { tenantId: number }) {
 
         {settings.data && (
           <Panel title="Zuordnungstoleranz">
-            <p className="text-[13px] text-text-secondary">
+            <p className="text-body text-text-secondary">
               Bis {settings.data.toleranceAmount.toFixed(2)} entsteht ein Vorschlag ohne
               Prüfflag, bis {settings.data.toleranceMaximum.toFixed(2)} einer mit Prüfflag,
               darüber gar keiner. Zahlungskonten werden{' '}
               {settings.data.learnPayerAccounts ? 'gelernt' : 'nicht gelernt'}.
             </p>
-            <p className="mt-2 text-[13px] text-text-tertiary">
+            <p className="mt-2 text-body text-text-tertiary">
               Diese Toleranz <strong>schreibt nichts</strong>. Sie entscheidet nur, ob ein
               Vorschlag entsteht — anders als die Ausbuchungstoleranz, die eine eigene Forderung
               aufgibt, und anders als die Überzahlungsschwelle, die über fremdes Geld verfügt.
@@ -302,7 +302,7 @@ function RuleDialog({
           numeric
           value={form.priority}
           onChange={(event) => setForm({ ...form, priority: event.target.value })}
-          hint="Kleiner gewinnt. Jede Priorität gibt es nur einmal."
+          tooltip="Kleiner gewinnt. Jede Priorität gibt es nur einmal."
         />
 
         <SelectField
@@ -361,7 +361,7 @@ function RuleDialog({
           onChange={(event) =>
             setForm({ ...form, confidence: event.target.value as Confidence })
           }
-          hint={CONFIDENCE_HINTS[form.confidence]}
+          tooltip={CONFIDENCE_HINTS[form.confidence]}
         >
           {CONFIDENCE_ORDER.map((code) => (
             <option key={code} value={code}>
@@ -374,14 +374,14 @@ function RuleDialog({
           label="Prüfung nötig"
           checked={form.reviewRequired}
           onChange={(event) => setForm({ ...form, reviewRequired: event.target.checked })}
-          hint="Ohne Häkchen darf ein Vorschlag dieser Regel ohne Nachfrage übernommen werden. Die Vorgabe ist Vorsicht."
+          tooltip="Ohne Häkchen darf ein Vorschlag dieser Regel ohne Nachfrage übernommen werden. Die Vorgabe ist Vorsicht."
         />
 
         <CheckboxField
           label="Aktiv"
           checked={form.active}
           onChange={(event) => setForm({ ...form, active: event.target.checked })}
-          hint="Eine abgeschaltete Regel bleibt stehen: bestehende Vorschläge zeigen darauf."
+          tooltip="Eine abgeschaltete Regel bleibt stehen: bestehende Vorschläge zeigen darauf."
         />
 
         {save.error !== null && <ErrorNotice error={save.error} />}
@@ -453,22 +453,22 @@ function SettingsDialog({
           numeric
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
-          hint="Rappenrundung. Ausgeliefert 0.05."
+          tooltip="Rappenrundung. Ausgeliefert 0.05."
         />
         <TextField
           label="Mit Prüfflag bis"
           numeric
           value={maximum}
           onChange={(event) => setMaximum(event.target.value)}
-          hint="Darüber entsteht gar kein Betragsvorschlag. Ausgeliefert 5.00."
+          tooltip="Darüber entsteht gar kein Betragsvorschlag. Ausgeliefert 5.00."
         />
         <CheckboxField
           label="Zahlungskonten lernen"
           checked={learn}
           onChange={(event) => setLearn(event.target.checked)}
-          hint="Nur aus bestätigten Zuordnungen. Eine gelernte IBAN ist ein Personendatum am Stammsatz und am Partner einzeln löschbar (revDSG Art. 6 Abs. 4)."
+          tooltip="Nur aus bestätigten Zuordnungen. Eine gelernte IBAN ist ein Personendatum am Stammsatz und am Partner einzeln löschbar (revDSG Art. 6 Abs. 4)."
         />
-        <p className="text-[13px] text-text-tertiary">
+        <p className="text-body text-text-tertiary">
           Diese Toleranz schreibt nichts — sie entscheidet nur, ob ein Vorschlag entsteht und
           mit welcher Restdifferenz.
         </p>

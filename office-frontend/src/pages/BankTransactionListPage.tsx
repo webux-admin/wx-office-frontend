@@ -98,7 +98,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
       render: (item) => (
         <div>
           <div>{formatDate(item.valueDate)}</div>
-          <div className="text-[12px] text-text-tertiary">{item.accountIban}</div>
+          <div className="text-small text-text-tertiary">{item.accountIban}</div>
         </div>
       ),
     },
@@ -109,7 +109,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
         <div>
           <div>{item.debtorName ?? '-'}</div>
           {item.ultimateDebtorName && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               für {item.ultimateDebtorName}
             </div>
           )}
@@ -121,13 +121,13 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
       header: 'Referenz',
       render: (item) => (
         <div className="grid gap-0.5">
-          <span className="font-mono text-[12px]">
+          <span className="font-mono text-small">
             {item.reference ?? item.remittanceUnstructured ?? '-'}
           </span>
           {referenceIsBroken(item) ? (
             <Badge tone="danger">{referenceLabel(item)}</Badge>
           ) : (
-            <span className="text-[12px] text-text-tertiary">{referenceLabel(item)}</span>
+            <span className="text-small text-text-tertiary">{referenceLabel(item)}</span>
           )}
         </div>
       ),
@@ -137,7 +137,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
       header: 'Mitteilung',
       hideBelow: 'sm',
       render: (item) => (
-        <span className="text-[13px] text-text-secondary">
+        <span className="text-body text-text-secondary">
           {item.remittanceStructured ?? item.remittanceUnstructured ?? '-'}
         </span>
       ),
@@ -153,12 +153,12 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
             {formatAmount(item.amount)} {item.currency}
           </div>
           {!item.inAccountCurrency && item.instructedAmount !== undefined && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               aufgegeben {formatAmount(item.instructedAmount)} {item.instructedCurrency}
             </div>
           )}
           {item.returnReasonCode && (
-            <div className="text-[12px] text-danger">
+            <div className="text-small text-danger">
               Rückbelastung {item.returnReasonCode}
             </div>
           )}
@@ -214,7 +214,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
       <div className="grid gap-4 px-8 pb-12">
         <Panel padded={false} title="Einzelposten">
           <div className="flex flex-wrap items-end gap-4 px-5 pb-4">
-            <span className="w-full max-w-[260px]">
+            <span className="w-full max-w-[16.25rem]">
               <SelectField
                 label="Konto"
                 value={accountIban}
@@ -228,7 +228,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
                 ))}
               </SelectField>
             </span>
-            <span className="w-full max-w-[200px]">
+            <span className="w-full max-w-[12.5rem]">
               <SelectField
                 label="Zustand"
                 value={state}
@@ -242,7 +242,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
                 ))}
               </SelectField>
             </span>
-            <span className="w-full max-w-[170px]">
+            <span className="w-full max-w-[10.625rem]">
               <TextField
                 label="Valuta ab"
                 type="date"
@@ -250,7 +250,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
                 onChange={(event) => setFrom(event.target.value)}
               />
             </span>
-            <span className="w-full max-w-[170px]">
+            <span className="w-full max-w-[10.625rem]">
               <TextField
                 label="Valuta bis"
                 type="date"
@@ -262,7 +262,7 @@ function BankTransactions({ tenantId }: { tenantId: number }) {
               label="Nur Gutschriften"
               checked={creditsOnly}
               onChange={(event) => setCreditsOnly(event.target.checked)}
-              hint="Eine Belastung ist eine Rücklastschrift oder eine Gebühr — beides gleicht keine Rechnung aus."
+              tooltip="Eine Belastung ist eine Rücklastschrift oder eine Gebühr — beides gleicht keine Rechnung aus."
             />
           </div>
 

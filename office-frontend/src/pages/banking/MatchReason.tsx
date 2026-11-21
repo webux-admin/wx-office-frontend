@@ -35,7 +35,7 @@ export function MatchReason({
         ))}
       </div>
       {!compact && (
-        <p className="text-[13px] text-text-secondary">{proposal.reason}</p>
+        <p className="text-body text-text-secondary">{proposal.reason}</p>
       )}
     </div>
   )
@@ -48,5 +48,5 @@ export function MatchReason({
  * inferred from three adjectives.
  */
 export function ConfidenceHint({ confidence }: { confidence: MatchProposal['confidence'] }) {
-  return <span className="text-[12px] text-text-tertiary">{CONFIDENCE_HINTS[confidence]}</span>
+  return <span className="text-small text-text-tertiary">{CONFIDENCE_HINTS[confidence]}</span>
 }

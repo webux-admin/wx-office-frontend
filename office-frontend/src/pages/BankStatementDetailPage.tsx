@@ -80,7 +80,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
       render: (entry) => (
         <div>
           <div>{formatDate(entry.bookingDate)}</div>
-          <div className="text-[12px] text-text-tertiary">
+          <div className="text-small text-text-tertiary">
             Valuta {formatDate(entry.valueDate)}
           </div>
         </div>
@@ -98,7 +98,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
             </Badge>
             {entry.reversalIndicator && <Badge tone="danger">Rückbelastung</Badge>}
             {entry.bankTransactionCode && (
-              <span className="text-[12px] text-text-tertiary">
+              <span className="text-small text-text-tertiary">
                 {entry.bankTransactionCode}
               </span>
             )}
@@ -117,7 +117,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
             {formatAmount(entry.amount)} {entry.currency}
           </div>
           {entry.chargesTotal !== undefined && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               Gebühr {formatAmount(entry.chargesTotal)}
               {entry.chargesIncluded ? ' (im Betrag enthalten)' : ' (zusätzlich)'}
             </div>
@@ -133,7 +133,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
         <div>
           <div>{entry.transactionCount}</div>
           {entryHasGap(entry) && (
-            <div className="text-[12px] text-danger">
+            <div className="text-small text-danger">
               Summe {formatAmount(entry.transactionSum)}
             </div>
           )}
@@ -155,7 +155,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
         <div>
           <div>{item.debtorName ?? '-'}</div>
           {item.ultimateDebtorName && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               für {item.ultimateDebtorName}
             </div>
           )}
@@ -167,10 +167,10 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
       header: 'Referenz',
       render: (item) => (
         <div>
-          <div className="font-mono text-[12px]">
+          <div className="font-mono text-small">
             {item.reference ?? item.remittanceUnstructured ?? '-'}
           </div>
-          <div className="text-[12px] text-text-tertiary">{referenceLabel(item)}</div>
+          <div className="text-small text-text-tertiary">{referenceLabel(item)}</div>
         </div>
       ),
     },
@@ -184,7 +184,7 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
             {formatAmount(item.amount)} {item.currency}
           </div>
           {!item.inAccountCurrency && item.instructedAmount !== undefined && (
-            <div className="text-[12px] text-text-tertiary">
+            <div className="text-small text-text-tertiary">
               aufgegeben {formatAmount(item.instructedAmount)} {item.instructedCurrency}
             </div>
           )}
@@ -245,13 +245,13 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
             <Figure label="davon doppelt">{file.duplicateCount}</Figure>
           </dl>
           {file.duplicateCount > 0 && (
-            <p className="mt-3 text-[13px] text-text-secondary">
+            <p className="mt-3 text-body text-text-secondary">
               Doppelte Posten sind der Normalfall: dieselbe Zahlung kommt einmal als
               camt.054-Avisierung und ein zweites Mal in der camt.053-Sammelauflösung.
             </p>
           )}
           {file.skippedCount > 0 && (
-            <p className="mt-1 text-[13px] text-text-secondary">
+            <p className="mt-1 text-body text-text-secondary">
               {file.skippedCount} Posten wurden übersprungen: sie stehen unter einer noch
               schwebenden Buchung oder tragen keine Bankreferenz, an der sie beim nächsten Mal
               wiedererkennbar wären.
@@ -294,8 +294,8 @@ function Statement({ tenantId, importId }: { tenantId: number; importId: number 
 function Figure({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[12px] text-text-tertiary">{label}</dt>
-      <dd className="mt-0.5 text-[14px] font-medium">{children}</dd>
+      <dt className="text-small text-text-tertiary">{label}</dt>
+      <dd className="mt-0.5 text-control font-medium">{children}</dd>
     </div>
   )
 }
