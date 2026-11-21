@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
 import { readFlag, writeFlag } from '../lib/preferences'
 
-/** Below this width the sidebar has no room for labels and stays a rail. */
+/** Below this width there is no room beside the content: the sidebar becomes a drawer. */
 const WIDE_ENOUGH = '(min-width: 768px)'
 
 const PREFERENCE = 'sidebarCollapsed'
 
 /**
- * Whether the sidebar shows labels, and how to change that.
+ * How the sidebar is shown on this screen.
  *
- * <p>Two things decide it. The person can fold the sidebar away and that choice is
- * remembered; a narrow window folds it regardless, because there is no room. The remembered
- * choice is not overwritten in that case, so widening the window brings the labels back.
+ * <p>On a wide screen the person can fold the sidebar to a rail, and that choice is remembered.
+ * On a narrow screen there is no rail at all: the sidebar is hidden and opens as a drawer over
+ * the content. The remembered choice is kept, so widening the window brings it back.
  *
- * @returns `collapsed` for rendering, `toggle` for the button, and `locked` when the window
- *          is too narrow to unfold at all
+ * @returns `collapsed` for the wide layout, `narrow` for the drawer layout, and `toggle` for the
+ *          fold button of the wide layout
  */
 export function useSidebarCollapsed(): {
   collapsed: boolean
-  locked: boolean
+  narrow: boolean
   toggle: () => void
 } {
   const [preferred, setPreferred] = useState(() => readFlag(PREFERENCE, false))
@@ -41,5 +41,5 @@ export function useSidebarCollapsed(): {
     writeFlag(PREFERENCE, next)
   }, [preferred])
 
-  return { collapsed: preferred || !wideEnough, locked: !wideEnough, toggle }
+  return { collapsed: preferred, narrow: !wideEnough, toggle }
 }

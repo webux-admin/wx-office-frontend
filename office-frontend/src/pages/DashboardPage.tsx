@@ -292,7 +292,7 @@ export function DashboardPage() {
         <div className="px-8 pb-12">
           <section aria-busy={loading}>
             {/* Four across, so the sale stands in one row and the master data under it. */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               {salesTiles.map((tile, index) => (
                 <SalesDocumentTile
                   key={tile.kind.category}

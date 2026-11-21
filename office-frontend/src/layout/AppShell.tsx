@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
   LogOut,
+  Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -43,11 +44,61 @@ const FOLD = { duration: 0.26, ease: [0.16, 1, 0.3, 1] } as const
  * backend refuses the request either way.
  */
 export function AppShell() {
-  const { collapsed, locked, toggle } = useSidebarCollapsed()
+  const { collapsed, narrow, toggle } = useSidebarCollapsed()
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Escape closes the drawer, as it closes every other layer above the content.
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [drawerOpen])
+
+  // Narrow screens: no sidebar beside the content. A bar opens it as a drawer over the page,
+  // and a click on a link or on the backdrop closes it again.
+  if (narrow) {
+    return (
+      <div className="flex min-h-screen flex-col bg-canvas">
+        <div className="sticky top-0 z-30 flex items-center border-b border-line-subtle bg-canvas px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-expanded={drawerOpen}
+            className="inline-flex h-control items-center gap-2 rounded-[var(--radius-md)] border border-line px-3 text-body"
+          >
+            <Menu size={16} aria-hidden />
+            Navigation
+          </button>
+        </div>
+        {drawerOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="Navigation schliessen"
+              onClick={() => setDrawerOpen(false)}
+              className="fixed inset-0 z-40 cursor-default bg-black/40"
+            />
+            <Sidebar
+              collapsed={false}
+              onToggle={() => setDrawerOpen(false)}
+              overlay
+              onNavigate={() => setDrawerOpen(false)}
+            />
+          </>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Outlet />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      <Sidebar collapsed={collapsed} locked={locked} onToggle={toggle} />
+      <Sidebar collapsed={collapsed} onToggle={toggle} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Outlet />
       </div>
@@ -57,12 +108,16 @@ export function AppShell() {
 
 function Sidebar({
   collapsed,
-  locked,
   onToggle,
+  overlay = false,
+  onNavigate,
 }: {
   collapsed: boolean
-  locked: boolean
   onToggle: () => void
+  /** On a narrow screen the sidebar floats over the page instead of sitting beside it. */
+  overlay?: boolean
+  /** Called after a click on a link, so the drawer can close. */
+  onNavigate?: () => void
 }) {
   const { user, signOut, can } = useAuth()
 
@@ -81,12 +136,19 @@ function Sidebar({
       animate={{ width: collapsed ? RAIL : WIDE }}
       initial={false}
       transition={FOLD}
-      className="sticky top-0 z-20 flex h-screen shrink-0 flex-col border-r border-ink-border bg-ink text-text-inverse"
+      className={`flex h-screen flex-col border-r border-ink-border bg-ink text-text-inverse ${
+        overlay ? 'fixed inset-y-0 left-0 z-50 shadow-xl' : 'sticky top-0 z-20 shrink-0'
+      }`}
     >
-      <SidebarHeader collapsed={collapsed} locked={locked} onToggle={onToggle} />
+      <SidebarHeader collapsed={collapsed} onToggle={onToggle} />
 
       <nav
         className={`mt-2 flex-1 overflow-y-auto overflow-x-hidden pb-4 ${collapsed ? 'px-2' : 'px-3'}`}
+        onClick={(event) => {
+          if (onNavigate !== undefined && (event.target as HTMLElement).closest('a') !== null) {
+            onNavigate()
+          }
+        }}
       >
         {visibleGroups.map((group, index) => (
           <div key={group.title} className="mb-5">
@@ -176,11 +238,9 @@ function Sidebar({
  */
 function SidebarHeader({
   collapsed,
-  locked,
   onToggle,
 }: {
   collapsed: boolean
-  locked: boolean
   onToggle: () => void
 }) {
   return (
@@ -188,18 +248,16 @@ function SidebarHeader({
       className={`flex gap-1 ${collapsed ? 'flex-col items-center p-2' : 'items-center p-3 pb-2'}`}
     >
       <TenantSwitcher collapsed={collapsed} />
-      {!locked && (
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
-          title={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-inverse-muted transition-colors hover:bg-ink-hover hover:text-text-inverse"
-        >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+        title={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-inverse-muted transition-colors hover:bg-ink-hover hover:text-text-inverse"
+      >
+        {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+      </button>
     </div>
   )
 }
