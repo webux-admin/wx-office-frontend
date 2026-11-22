@@ -66,10 +66,13 @@ export function CheckboxField({
         />
         <span
           aria-hidden
-          className={`pointer-events-none grid size-checkbox place-items-center rounded-[var(--radius-xs)] border bg-surface text-on-accent transition-colors peer-focus-visible:outline peer-focus-visible:outline-[0.125rem] peer-focus-visible:outline-offset-[0.125rem] peer-focus-visible:outline-accent-text peer-disabled:opacity-50 ${
+          // The fill is named once per state, never both: two background utilities on one
+          // element are decided by their order in the stylesheet, and there `bg-surface` comes
+          // after `bg-accent` — a ticked box came out white with a white tick on it.
+          className={`pointer-events-none grid size-checkbox place-items-center rounded-[var(--radius-xs)] border text-on-accent transition-colors peer-focus-visible:outline peer-focus-visible:outline-[0.125rem] peer-focus-visible:outline-offset-[0.125rem] peer-focus-visible:outline-accent-text peer-disabled:opacity-50 ${
             marked
               ? 'border-accent bg-accent'
-              : 'border-line peer-checked:border-accent peer-checked:bg-accent'
+              : 'border-line bg-surface peer-checked:border-accent peer-checked:bg-accent'
           }`}
         >
           <motion.span
