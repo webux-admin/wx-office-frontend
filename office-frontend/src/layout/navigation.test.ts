@@ -1106,7 +1106,7 @@ describe('the accounting group', () => {
    * as an entry that silently never gets a number.
    */
   it('everyNavCounterKeyIsKnownTest', () => {
-    const known: NavCounterKey[] = ['CLEARING', 'ACCOUNTING_DRAFTS']
+    const known: NavCounterKey[] = ['CLEARING', 'ACCOUNTING_DRAFTS', 'SUBSCRIPTION_NOTICES']
     const entries = NAV_GROUPS.flatMap((candidate) => flattenNav(candidate.entries))
 
     const used = entries

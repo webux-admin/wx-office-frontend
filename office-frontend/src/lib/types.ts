@@ -5499,3 +5499,34 @@ export type SubscriptionRunResult = {
   failed: SubscriptionFailedContract[]
   notices: SubscriptionNotice[]
 }
+
+/**
+ * A contract version that reaches into a period the run billed earlier, still open
+ * (`BilledChangeNoticeDto`, backend issue #120, ADR-0154).
+ */
+export type SubscriptionBilledChangeNotice = {
+  id: number
+  contractId: number
+  contractNumber: string
+  versionNo: number
+  /** `yyyy-MM-dd`, the day the version holds from */
+  validFrom: string
+  positionTitle: string
+  /** `yyyy-MM-dd` */
+  periodStart: string
+  /** `yyyy-MM-dd` */
+  periodEnd: string
+  billedVersionNo: number
+}
+
+/** The reasons of the catalogue an acknowledgement takes (`AcknowledgementReason`). */
+export type SubscriptionAcknowledgementReason =
+  | 'CORRECTION_ISSUED'
+  | 'NO_CORRECTION_NEEDED'
+  | 'OTHER'
+
+/** The body that acknowledges a notice (`BilledChangeAcknowledgementRequest`). */
+export type SubscriptionAcknowledgementBody = {
+  reason: SubscriptionAcknowledgementReason
+  note?: string
+}

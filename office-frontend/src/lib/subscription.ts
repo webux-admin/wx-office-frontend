@@ -1,6 +1,9 @@
 import { api } from './api'
-import { formatAmount } from './format'
+import { formatAmount, formatDate } from './format'
 import type {
+  SubscriptionAcknowledgementBody,
+  SubscriptionAcknowledgementReason,
+  SubscriptionBilledChangeNotice,
   SubscriptionContractPlan,
   SubscriptionCurrencyTotal,
   SubscriptionMissingRunMonths,
@@ -220,4 +223,93 @@ export function runResultText(result: SubscriptionRunResult): string {
     )
   }
   return `${parts.join(', ')}.`
+}
+
+/** What each acknowledgement reason is called on a button and in a list. */
+export const BILLED_CHANGE_REASON_LABELS: Record<SubscriptionAcknowledgementReason, string> = {
+  CORRECTION_ISSUED: 'Korrektur ausgestellt',
+  NO_CORRECTION_NEEDED: 'Keine Korrektur nötig',
+  OTHER: 'Anderes',
+}
+
+/** The longest note an acknowledgement takes, as the backend counts it. */
+export const BILLED_CHANGE_NOTE_MAX_LENGTH = 200
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the open notices, and below it of the acknowledgements
+ */
+export function billedChangeNoticesUrl(tenantId: number): string {
+  return `/api/tenants/${tenantId}/subscription-notices`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key prefix of the notices of the tenant; a run and an acknowledgement refresh
+ *   every list under it
+ */
+export function billedChangeNoticesKey(tenantId: number): readonly unknown[] {
+  return ['subscription-notices', tenantId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the number of open notices, for the counter at the menu entry
+ */
+export function billedChangeNoticeCountKey(tenantId: number): readonly unknown[] {
+  return ['subscription-notice-count', tenantId]
+}
+
+/**
+ * Asks for the open notices of the tenant, or of one contract. Writes nothing.
+ *
+ * @param tenantId the tenant
+ * @param contractId the contract, `undefined` for all of the tenant
+ * @returns the open notices, oldest first
+ */
+export function fetchOpenBilledChangeNotices(
+  tenantId: number,
+  contractId?: number,
+): Promise<SubscriptionBilledChangeNotice[]> {
+  const query = contractId === undefined ? '' : `?contractId=${contractId}`
+  return api.get<SubscriptionBilledChangeNotice[]>(`${billedChangeNoticesUrl(tenantId)}${query}`)
+}
+
+/**
+ * Asks how many notices are open. Writes nothing.
+ *
+ * @param tenantId the tenant
+ * @returns the number of open notices
+ */
+export function fetchOpenBilledChangeNoticeCount(tenantId: number): Promise<{ open: number }> {
+  return api.get<{ open: number }>(`${billedChangeNoticesUrl(tenantId)}/open-count`)
+}
+
+/**
+ * Acknowledges one open notice. The server takes the user and the moment.
+ *
+ * @param tenantId the tenant
+ * @param noticeId the notice
+ * @param body the reason and the optional note
+ */
+export function acknowledgeBilledChangeNotice(
+  tenantId: number,
+  noticeId: number,
+  body: SubscriptionAcknowledgementBody,
+): Promise<void> {
+  return api.post<void>(`${billedChangeNoticesUrl(tenantId)}/${noticeId}/acknowledgement`, body)
+}
+
+/**
+ * @param notice an open notice
+ * @returns the sentence that says what changed and which period it reaches into, for example
+ *   «Version 2 gilt ab 15.01.2028 und betrifft die verrechnete Periode 01.01.2028 – 31.01.2028
+ *   (Hosting, Version 1).»
+ */
+export function billedChangeNoticeText(notice: SubscriptionBilledChangeNotice): string {
+  return (
+    `Version ${notice.versionNo} gilt ab ${formatDate(notice.validFrom)} und betrifft die ` +
+    `verrechnete Periode ${formatDate(notice.periodStart)} – ${formatDate(notice.periodEnd)} ` +
+    `(${notice.positionTitle}, Version ${notice.billedVersionNo}).`
+  )
 }

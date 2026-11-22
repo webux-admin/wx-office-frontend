@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../components/Badge'
+import { ContractBilledChangeNotices } from '../components/BilledChangeNotices'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorNotice, LoadingBlock } from '../components/Notice'
@@ -269,7 +270,10 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
         {contract && register === 'versions' ? (
           <ContractVersions tenantId={tenantId} contract={contract} />
         ) : (
-          renderContractFields()
+          <>
+            {contract && <ContractBilledChangeNotices tenantId={tenantId} contractId={contract.id} />}
+            {renderContractFields()}
+          </>
         )}
 
         {contract && status === 'DRAFT' && (

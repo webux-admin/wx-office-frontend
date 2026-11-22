@@ -5,7 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { SubscriptionPreview, SubscriptionRunResult } from '../lib/types'
+import type {
+  SubscriptionBilledChangeNotice,
+  SubscriptionPreview,
+  SubscriptionRunResult,
+} from '../lib/types'
 import { SubscriptionRunPage } from './SubscriptionRunPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -49,6 +53,8 @@ let previewFailure: { status: number; detail: string } | 'pending' | null
 let runFailure: { status: number; detail: string } | null
 /** The months without a run the server answers with. */
 let missingMonths: string[]
+/** The open notices of billed periods the server answers with. */
+let openNotices: SubscriptionBilledChangeNotice[]
 
 function json(body: unknown) {
   return Promise.resolve(
@@ -73,6 +79,7 @@ function stubFetch() {
   previewFailure = null
   runFailure = null
   missingMonths = []
+  openNotices = []
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
@@ -86,6 +93,12 @@ function stubFetch() {
     }
     if (url.includes('/subscription-runs')) {
       return runFailure !== null ? problem(runFailure) : json(result)
+    }
+    if (url.includes('/subscription-notices/') && method === 'POST') {
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }
+    if (url.includes('/subscription-notices')) {
+      return json(openNotices)
     }
     return json([])
   })
@@ -609,4 +622,74 @@ describe('SubscriptionRunPage', () => {
       requests.some((entry) => entry.url.endsWith('/subscription-runs/missing-months')),
     ).toBe(true)
   })
+
+  /** An open notice is listed with its sentence, and only a runner may acknowledge it. */
+  it('subscriptionRunPageShowsOpenNoticesTest', async () => {
+    openNotices = [openNotice()]
+    await render()
+
+    expect(text()).toContain('Offene Hinweise zu verrechneten Perioden')
+    expect(text()).toContain('Version 2 gilt ab 15.01.2028')
+    expect(button('Quittieren')).toBeDefined()
+  })
+
+  /** A reader sees the notice and cannot acknowledge it. */
+  it('subscriptionRunPageShowsOpenNoticesToAReaderTest', async () => {
+    openNotices = [openNotice()]
+    await render(READER)
+
+    expect(text()).toContain('Version 2 gilt ab 15.01.2028')
+    expect(button('Quittieren')).toBeUndefined()
+  })
+
+  /** The acknowledgement goes to the server with the reason; the server adds who and when. */
+  it('subscriptionRunPageAcknowledgesANoticeTest', async () => {
+    openNotices = [openNotice()]
+    await render()
+    await click(button('Quittieren'))
+    await click(lastButton('Quittieren'))
+
+    expect(writes()).toHaveLength(1)
+    expect(writes()[0].url).toBe('/api/tenants/1/subscription-notices/5/acknowledgement')
+    expect(writes()[0].body).toEqual({ reason: 'CORRECTION_ISSUED' })
+  })
+
+  /** «Anderes» without a note writes nothing and says what is missing. */
+  it('subscriptionRunPageRefusesOtherWithoutNoteTest', async () => {
+    openNotices = [openNotice()]
+    await render()
+    await click(button('Quittieren'))
+    const reason = document.body.querySelector('select') as HTMLSelectElement
+    await act(async () => {
+      reason.value = 'OTHER'
+      reason.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+    await click(lastButton('Quittieren'))
+
+    expect(writes()).toHaveLength(0)
+    expect(text()).toContain('Bitte sagen, was entschieden wurde.')
+  })
 })
+
+/** The last button with the label: the dialog stands after the row that opened it. */
+function lastButton(label: string): HTMLButtonElement | undefined {
+  return [...document.body.querySelectorAll('button')]
+    .filter((entry) => entry.textContent === label)
+    .at(-1) as HTMLButtonElement | undefined
+}
+
+/** A notice the run left open: version 2 reaches into the billed January period. */
+function openNotice(): SubscriptionBilledChangeNotice {
+  return {
+    id: 5,
+    contractId: 7,
+    contractNumber: 'V-00007',
+    versionNo: 2,
+    validFrom: '2028-01-15',
+    positionTitle: 'Hosting',
+    periodStart: '2028-01-01',
+    periodEnd: '2028-01-31',
+    billedVersionNo: 1,
+  }
+}

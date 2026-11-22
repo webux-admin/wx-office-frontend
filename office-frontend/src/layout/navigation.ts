@@ -138,7 +138,7 @@ export type NavModule = LicensedModuleCode
  * <p>A closed list, so an entry cannot name a source that does not exist. The test in
  * `navigation.test.ts` holds it against the sources the shell knows (ADR-0043).
  */
-export type NavCounterKey = 'CLEARING' | 'ACCOUNTING_DRAFTS'
+export type NavCounterKey = 'CLEARING' | 'ACCOUNTING_DRAFTS' | 'SUBSCRIPTION_NOTICES'
 
 /** One navigation entry: a screen the sidebar links to. */
 export type NavEntry = {
@@ -451,6 +451,8 @@ export const NAV_GROUPS: NavGroup[] = [
         href: SUBSCRIPTION_PATH,
         permission: SUBSCRIPTION_RIGHTS.read,
         module: SUBSCRIPTION_MODULE,
+        // Open notices of billed periods: they wait for an acknowledgement, not for a run.
+        counter: 'SUBSCRIPTION_NOTICES',
       },
     ],
   },

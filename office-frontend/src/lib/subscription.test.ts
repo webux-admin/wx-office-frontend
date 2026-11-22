@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BILLED_CHANGE_REASON_LABELS,
   SKIP_REASON_LABELS,
+  billedChangeNoticeCountKey,
+  billedChangeNoticeText,
+  billedChangeNoticesKey,
+  billedChangeNoticesUrl,
   currentMonth,
   draftCountText,
   draftLineCount,
@@ -193,5 +198,39 @@ describe('subscription', () => {
   it('fetchMissingRunMonthsUrlTest', () => {
     expect(subscriptionRunsUrl(3)).toBe('/api/tenants/3/subscription-runs')
     expect(subscriptionMissingMonthsKey(3)).toEqual(['subscription-missing-months', 3])
+  })
+
+  /** The open notices are asked under the tenant address; the count has its own key. */
+  it('billedChangeNoticesUrlTest', () => {
+    expect(billedChangeNoticesUrl(3)).toBe('/api/tenants/3/subscription-notices')
+    expect(billedChangeNoticesKey(3)).toEqual(['subscription-notices', 3])
+    expect(billedChangeNoticeCountKey(3)).toEqual(['subscription-notice-count', 3])
+  })
+
+  /** The sentence names the version, the day it holds from and the billed period. */
+  it('billedChangeNoticeTextTest', () => {
+    const text = billedChangeNoticeText({
+      id: 5,
+      contractId: 7,
+      contractNumber: 'V-00007',
+      versionNo: 2,
+      validFrom: '2028-01-15',
+      positionTitle: 'Hosting',
+      periodStart: '2028-01-01',
+      periodEnd: '2028-01-31',
+      billedVersionNo: 1,
+    })
+
+    expect(text).toContain('Version 2 gilt ab 15.01.2028')
+    expect(text).toContain('01.01.2028 – 31.01.2028 (Hosting, Version 1).')
+  })
+
+  /** Every reason of the catalogue has a label on the button and in the dialog. */
+  it('billedChangeReasonLabelsTest', () => {
+    expect(Object.keys(BILLED_CHANGE_REASON_LABELS).sort()).toEqual([
+      'CORRECTION_ISSUED',
+      'NO_CORRECTION_NEEDED',
+      'OTHER',
+    ])
   })
 })

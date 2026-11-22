@@ -9,6 +9,8 @@ import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState, ErrorNotice, WarningNotice } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { SelectField } from '../components/SelectField'
+import { TextAreaField } from '../components/TextAreaField'
 import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
@@ -17,14 +19,21 @@ import { formatAmount, formatDate, formatPercent, formatQuantity } from '../lib/
 import { originState } from '../lib/origin'
 import { salesDocumentFor, salesDocumentListKey } from '../lib/salesDocument'
 import {
+  BILLED_CHANGE_NOTE_MAX_LENGTH,
+  BILLED_CHANGE_REASON_LABELS,
   SKIP_REASON_LABELS,
   SUBSCRIPTION_MODULE,
   SUBSCRIPTION_PATH,
   SUBSCRIPTION_RIGHTS,
+  acknowledgeBilledChangeNotice,
+  billedChangeNoticeCountKey,
+  billedChangeNoticeText,
+  billedChangeNoticesKey,
   currentMonth,
   draftCountText,
   draftLineCount,
   fetchMissingRunMonths,
+  fetchOpenBilledChangeNotices,
   fetchSubscriptionPreview,
   isCompleteMonth,
   isSplitLine,
@@ -37,6 +46,8 @@ import {
   totalsText,
 } from '../lib/subscription'
 import type {
+  SubscriptionAcknowledgementReason,
+  SubscriptionBilledChangeNotice,
   SubscriptionContractPlan,
   SubscriptionNotice,
   SubscriptionPlannedPart,
@@ -87,6 +98,47 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
     queryFn: () => fetchMissingRunMonths(tenantId),
   })
   const missingMonths = missing.data?.months ?? []
+
+  // Open notices stay here through every later run, until somebody acknowledges them (ADR-0154).
+  const openNotices = useQuery({
+    queryKey: billedChangeNoticesKey(tenantId),
+    queryFn: () => fetchOpenBilledChangeNotices(tenantId),
+    retry: false,
+  })
+  const openList = openNotices.data ?? []
+  const [acknowledging, setAcknowledging] = useState<SubscriptionBilledChangeNotice | null>(null)
+  const [reason, setReason] = useState<SubscriptionAcknowledgementReason>('CORRECTION_ISSUED')
+  const [note, setNote] = useState('')
+  const [triedToSave, setTriedToSave] = useState(false)
+  const noteText = note.trim()
+  const noteMissing = reason === 'OTHER' && noteText === ''
+
+  const acknowledge = useMutation({
+    mutationFn: (notice: SubscriptionBilledChangeNotice) =>
+      acknowledgeBilledChangeNotice(tenantId, notice.id, {
+        reason,
+        note: noteText === '' ? undefined : noteText,
+      }),
+    onSuccess: () => {
+      setAcknowledging(null)
+      void queryClient.invalidateQueries({ queryKey: billedChangeNoticesKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: billedChangeNoticeCountKey(tenantId) })
+    },
+  })
+
+  const openAcknowledge = (notice: SubscriptionBilledChangeNotice) => {
+    acknowledge.reset()
+    setReason('CORRECTION_ISSUED')
+    setNote('')
+    setTriedToSave(false)
+    setAcknowledging(notice)
+  }
+
+  const confirmAcknowledge = () => {
+    setTriedToSave(true)
+    if (acknowledging === null || noteMissing) return
+    acknowledge.mutate(acknowledging)
+  }
 
   const run = useMutation({
     mutationFn: () => runSubscription(tenantId, month),
@@ -271,6 +323,33 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
           </Panel>
         )}
 
+        {openList.length > 0 && (
+          <Panel
+            title="Offene Hinweise zu verrechneten Perioden"
+            description="Eine Vertragsänderung greift in eine Periode, die schon verrechnet ist. Der Hinweis bleibt auch über spätere Läufe, bis er quittiert ist."
+          >
+            <ul className="grid gap-3">
+              {openList.map((notice) => (
+                <li
+                  key={notice.id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+                >
+                  <span className="text-body">
+                    <ContractLink contractId={notice.contractId}>{notice.contractNumber}</ContractLink>
+                    {': '}
+                    {billedChangeNoticeText(notice)}
+                  </span>
+                  {mayRun && (
+                    <Button variant="secondary" onClick={() => openAcknowledge(notice)}>
+                      Quittieren
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
+
         {!mayRun && (
           <p className="text-body text-text-secondary">
             Zum Starten des Abo-Laufs fehlt das Recht «Abo-Lauf ausführen».
@@ -295,6 +374,51 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
           Der Lauf rechnet beim Start neu. Eine Periode, die inzwischen verrechnet ist, wird
           übersprungen. Die Entwürfe werden nicht finalisiert.
         </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={acknowledging !== null}
+        title="Hinweis quittieren"
+        confirmLabel="Quittieren"
+        onConfirm={confirmAcknowledge}
+        onCancel={() => {
+          acknowledge.reset()
+          setAcknowledging(null)
+        }}
+        busy={acknowledge.isPending}
+        error={acknowledge.error}
+      >
+        {acknowledging !== null && (
+          <p>
+            {acknowledging.contractNumber}: {billedChangeNoticeText(acknowledging)}
+          </p>
+        )}
+        <div className="mt-4 grid gap-4">
+          <SelectField
+            label="Begründung"
+            value={reason}
+            onChange={(event) =>
+              setReason(event.target.value as SubscriptionAcknowledgementReason)
+            }
+          >
+            {(Object.keys(BILLED_CHANGE_REASON_LABELS) as SubscriptionAcknowledgementReason[]).map(
+              (code) => (
+                <option key={code} value={code}>
+                  {BILLED_CHANGE_REASON_LABELS[code]}
+                </option>
+              ),
+            )}
+          </SelectField>
+          <TextAreaField
+            label="Bemerkung"
+            rows={2}
+            maxLength={BILLED_CHANGE_NOTE_MAX_LENGTH}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            hint={`Optional, höchstens ${BILLED_CHANGE_NOTE_MAX_LENGTH} Zeichen. Bei «Anderes» Pflicht.`}
+            error={triedToSave && noteMissing ? 'Bitte sagen, was entschieden wurde.' : undefined}
+          />
+        </div>
       </ConfirmDialog>
     </>
   )

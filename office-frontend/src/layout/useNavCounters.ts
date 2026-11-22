@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { attentionKey, fetchAttention } from '../lib/accounting'
 import { fetchWorklistCount, worklistCountKey } from '../lib/clearing'
+import {
+  billedChangeNoticeCountKey,
+  fetchOpenBilledChangeNoticeCount,
+} from '../lib/subscription'
 import type { NavCounterKey } from './navigation'
 
 /**
@@ -50,9 +54,21 @@ export function useNavCounters(
     retry: false,
   })
 
+  const notices = useQuery({
+    queryKey: billedChangeNoticeCountKey(tenant),
+    queryFn: () => fetchOpenBilledChangeNoticeCount(tenant),
+    enabled: known && counter === 'SUBSCRIPTION_NOTICES',
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  })
+
   const counts: Partial<Record<NavCounterKey, number>> = {}
   if (clearing.data !== undefined) {
     counts.CLEARING = clearing.data.open
+  }
+  if (notices.data !== undefined) {
+    counts.SUBSCRIPTION_NOTICES = notices.data.open
   }
   // Only where a period is actually about to be locked. In hand bookkeeping a draft is the
   // normal state of an entry somebody is in the middle of, and a permanent badge for the
