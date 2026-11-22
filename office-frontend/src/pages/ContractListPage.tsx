@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Repeat } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState } from '../components/Notice'
@@ -25,8 +25,10 @@ import {
   slaValuesLine,
 } from '../lib/contract'
 import { formatCount, formatDate } from '../lib/format'
+import { useRunsModule } from '../lib/modules'
 import { originState } from '../lib/origin'
 import { emptyPage, listQuery, PAGE_SIZE } from '../lib/paging'
+import { SUBSCRIPTION_MODULE, SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import type { Contract, Page } from '../lib/types'
 
 /** Where the mask returns to, and what its back link says. */
@@ -48,10 +50,14 @@ export function ContractListPage() {
 
 function ContractList({ tenantId }: { tenantId: number }) {
   const { can } = useAuth()
+  const runs = useRunsModule()
   const search = useQuickSearch()
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState('contractNumber,desc')
   const mayWrite = can(CONTRACT_RIGHTS.write)
+  // The way on to the run that bills these contracts, under its own switch and right: a tenant
+  // may keep contracts without running the run (backend ADR-0136, frontend ADR-0077).
+  const mayOpenRun = runs(SUBSCRIPTION_MODULE) && can(SUBSCRIPTION_RIGHTS.read)
 
   const query = listQuery({ search: search.term, page, size: PAGE_SIZE, sort })
   const contracts = useQuery({
@@ -155,6 +161,12 @@ function ContractList({ tenantId }: { tenantId: number }) {
   return (
     <>
       <PageHeader title="Verträge" subtitle={`${formatCount(result.totalElements)} Verträge`}>
+        {mayOpenRun && (
+          <LinkButton to={SUBSCRIPTION_PATH} state={ORIGIN} variant="secondary">
+            <Repeat size={15} aria-hidden />
+            Abo-Lauf
+          </LinkButton>
+        )}
         {mayWrite && (
           <LinkButton to={`${CONTRACT_PATH}/neu`} state={ORIGIN}>
             <Plus size={15} aria-hidden />

@@ -44,6 +44,9 @@ let root: Root
 let requests: { method: string; url: string; body: Record<string, unknown> }[]
 let preview: SubscriptionPreview
 let result: SubscriptionRunResult
+/** What the next preview or run answers instead of success; `pending` never answers. */
+let previewFailure: { status: number; detail: string } | 'pending' | null
+let runFailure: { status: number; detail: string } | null
 
 function json(body: unknown) {
   return Promise.resolve(
@@ -54,14 +57,30 @@ function json(body: unknown) {
   )
 }
 
+function problem(failure: { status: number; detail: string }) {
+  return Promise.resolve(
+    new Response(JSON.stringify({ status: failure.status, detail: failure.detail }), {
+      status: failure.status,
+      headers: { 'Content-Type': 'application/problem+json' },
+    }),
+  )
+}
+
 function stubFetch() {
   requests = []
+  previewFailure = null
+  runFailure = null
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
     requests.push({ method, url, body })
-    if (url.includes('/subscription-runs/preview')) return json(preview)
-    if (url.includes('/subscription-runs')) return json(result)
+    if (url.includes('/subscription-runs/preview')) {
+      if (previewFailure === 'pending') return new Promise<Response>(() => {})
+      return previewFailure !== null ? problem(previewFailure) : json(preview)
+    }
+    if (url.includes('/subscription-runs')) {
+      return runFailure !== null ? problem(runFailure) : json(result)
+    }
     return json([])
   })
 }
@@ -71,6 +90,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2028, 0, 10))
   preview = {
     month: '2028-01',
+    vatLiable: true,
     invoiceCount: 1,
     lineCount: 2,
     skippedCount: 1,
@@ -83,6 +103,7 @@ beforeEach(() => {
         customerName: 'Bäckerei Huber AG',
         status: 'ACTIVE',
         versionNo: 2,
+        invoiceText: 'Vertrag V-00007, Version 2',
         currency: 'CHF',
         total: 1300,
         lines: [
@@ -96,6 +117,15 @@ beforeEach(() => {
             priceIncludesVat: false,
             vatCategory: 'STANDARD',
             amount: 100,
+            parts: [
+              {
+                periodStart: '2028-01-01',
+                periodEnd: '2028-01-31',
+                days: 31,
+                amount: 100,
+                vatRate: 8.1,
+              },
+            ],
           },
           {
             positionKey: 'b',
@@ -107,6 +137,15 @@ beforeEach(() => {
             priceIncludesVat: false,
             vatCategory: 'STANDARD',
             amount: 1200,
+            parts: [
+              {
+                periodStart: '2028-01-01',
+                periodEnd: '2028-12-31',
+                days: 366,
+                amount: 1200,
+                vatRate: 8.1,
+              },
+            ],
           },
         ],
         skipped: [],
@@ -243,6 +282,19 @@ async function type(element: HTMLInputElement, value: string) {
   await settle()
 }
 
+/** The dialog is gone or fading out: a closing box is inert until its fade is over. */
+function dialogClosed(): boolean {
+  const confirm = button('Entwürfe erstellen')
+  return confirm === undefined || confirm.closest('[inert]') !== null
+}
+
+/** The alerts a user can still read, without those of a dialog fading out. */
+function liveAlerts(): string[] {
+  return [...document.body.querySelectorAll('[role=alert]')]
+    .filter((alert) => alert.closest('[inert]') === null)
+    .map((alert) => alert.textContent ?? '')
+}
+
 function writes() {
   return requests.filter((entry) => entry.method === 'POST')
 }
@@ -323,6 +375,7 @@ describe('SubscriptionRunPage', () => {
   it('subscriptionRunPageWithNothingDueTest', async () => {
     preview = {
       month: '2028-01',
+      vatLiable: true,
       invoiceCount: 0,
       lineCount: 0,
       skippedCount: 0,
@@ -332,6 +385,7 @@ describe('SubscriptionRunPage', () => {
     await render()
 
     expect(text()).toContain('Nichts fällig')
+    expect(text()).toContain('keine Periode eines laufenden Vertrags')
     expect(button('Abo-Lauf starten')?.disabled).toBe(true)
   })
 
@@ -342,6 +396,174 @@ describe('SubscriptionRunPage', () => {
     expect(text()).toContain('V-00007')
     expect(button('Abo-Lauf starten')).toBeUndefined()
     expect(text()).toContain('fehlt das Recht')
+  })
+
+  /** A preview the server cannot answer says why, and nothing can be started. */
+  it('subscriptionRunPageWhenThePreviewFailsTest', async () => {
+    previewFailure = { status: 500, detail: 'Die Vorschau ist gerade nicht verfügbar.' }
+    await render()
+
+    expect(text()).toContain('Die Vorschau ist gerade nicht verfügbar.')
+    expect(text()).not.toContain('Summe wie vereinbart')
+    expect(button('Abo-Lauf starten')?.disabled).toBe(true)
+    expect(writes()).toHaveLength(0)
+  })
+
+  /** A refused run keeps the dialog open and says why, once and not twice. */
+  it('subscriptionRunPageWhenTheRunIsRefusedTest', async () => {
+    runFailure = { status: 409, detail: 'Der Abo-Lauf ist für diesen Mandanten ausgeschaltet.' }
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Entwürfe erstellen'))
+
+    expect(button('Entwürfe erstellen')).toBeDefined()
+    expect(text().split('Der Abo-Lauf ist für diesen Mandanten ausgeschaltet.')).toHaveLength(2)
+    expect(text()).not.toContain('Ergebnis Januar 2028')
+  })
+
+  /** A server error is shown the same way, and stays on the page once the dialog is closed. */
+  it('subscriptionRunPageWhenTheRunFailsTest', async () => {
+    runFailure = { status: 500, detail: 'Interner Fehler beim Abo-Lauf.' }
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Entwürfe erstellen'))
+
+    expect(button('Entwürfe erstellen')).toBeDefined()
+    expect(text().split('Interner Fehler beim Abo-Lauf.')).toHaveLength(2)
+
+    await click(button('Abbrechen'))
+
+    expect(dialogClosed()).toBe(true)
+    expect(liveAlerts()).toEqual(['Interner Fehler beim Abo-Lauf.'])
+    expect(writes()).toHaveLength(1)
+  })
+
+  /** Cancel and Escape close the dialog without writing anything. */
+  it('subscriptionRunPageCancelsWithoutWritingTest', async () => {
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Abbrechen'))
+
+    expect(dialogClosed()).toBe(true)
+
+    await click(button('Abo-Lauf starten'))
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await settle()
+
+    expect(dialogClosed()).toBe(true)
+    expect(writes()).toHaveLength(0)
+  })
+
+  /** A period the rate changes in: one position, one line per rate below it (backend ADR-0150). */
+  it('subscriptionRunPageShowsASplitPeriodTest', async () => {
+    const [plan] = preview.contracts
+    preview = {
+      ...preview,
+      lineCount: 3,
+      contracts: [
+        {
+          ...plan,
+          lines: [
+            plan.lines[0],
+            {
+              ...plan.lines[1],
+              periodStart: '2027-10-01',
+              periodEnd: '2028-09-30',
+              parts: [
+                {
+                  periodStart: '2027-10-01',
+                  periodEnd: '2027-12-31',
+                  days: 92,
+                  amount: 301.64,
+                  vatRate: 7.7,
+                  shareText: 'Anteil 92 von 366 Tagen der Periode 01.10.2027 - 30.09.2028',
+                },
+                {
+                  periodStart: '2028-01-01',
+                  periodEnd: '2028-09-30',
+                  days: 274,
+                  amount: 898.36,
+                  vatRate: 8.5,
+                  shareText: 'Anteil 274 von 366 Tagen der Periode 01.10.2027 - 30.09.2028',
+                },
+              ],
+            },
+          ],
+        },
+        ...preview.contracts.slice(1),
+      ],
+    }
+    await render()
+    const row = [...container.querySelectorAll('tr')].find((entry) =>
+      entry.textContent?.includes('V-00007'),
+    )
+    // «Positionen» counts the lines of the draft: one for hosting, two for the split licence.
+    expect([...(row?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent)).toContain(
+      '3',
+    )
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('Kopftext der Rechnung: Vertrag V-00007, Version 2')
+    expect(text()).toContain('Geteilt nach Satz')
+    const parts = container.querySelector('[aria-label="Teilzeiträume"]')
+    expect(parts?.textContent).toContain('01.10.2027 – 31.12.2027')
+    expect(parts?.textContent).toContain('92 Tage')
+    expect(parts?.textContent).toContain('7.7 %')
+    expect(parts?.textContent).toContain('301.64')
+    expect(parts?.textContent).toContain('274 Tage')
+    expect(parts?.textContent).toContain('8.5 %')
+    expect(parts?.textContent).toContain('898.36')
+  })
+
+  /** An unsplit line names its one rate; no list of parts stands under it. */
+  it('subscriptionRunPageShowsTheRateOfAnUnsplitLineTest', async () => {
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('8.1 %')
+    expect(text()).not.toContain('Geteilt nach Satz')
+    expect(container.querySelector('[aria-label="Teilzeiträume"]')).toBeNull()
+  })
+
+  /** «zzgl. MWST» means something only for a tenant registered for VAT. */
+  it('subscriptionRunPageNamesTheVatOnlyForARegisteredTenantTest', async () => {
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('zzgl. MWST')
+  })
+
+  it('subscriptionRunPageWithoutVatForATenantNotRegisteredTest', async () => {
+    preview = { ...preview, vatLiable: false }
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('Lizenz')
+    expect(text()).not.toContain('MWST')
+  })
+
+  /** While another month loads, the figures of the last one do not stand under its title. */
+  it('subscriptionRunPageHidesTheFiguresOfTheLastMonthTest', async () => {
+    await render()
+    expect(text()).toContain('Summe wie vereinbart')
+
+    previewFailure = 'pending'
+    await type(monthField(), '2028-02')
+
+    expect(text()).toContain('Vorschau Februar 2028')
+    expect(text()).not.toContain('Summe wie vereinbart')
+  })
+
+  /** An incomplete month shows no figures at all. */
+  it('subscriptionRunPageWithoutAMonthTest', async () => {
+    await render()
+    await type(monthField(), '')
+
+    expect(text()).toContain('Einen Monat wählen.')
+    expect(text()).not.toContain('Summe wie vereinbart')
+    expect(button('Abo-Lauf starten')?.disabled).toBe(true)
   })
 
   /** A tenant that does not run the module sees no run and asks nothing. */

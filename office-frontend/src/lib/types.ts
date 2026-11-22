@@ -5367,9 +5367,28 @@ export type SubscriptionSkipReason =
   | 'OVERLAPS_BILLED'
   | 'TAX_LIABILITY_STARTS'
   | 'NO_VAT_RATE'
-  | 'VAT_RATE_CHANGES'
+  | 'SPLIT_NOT_POSSIBLE'
 
-/** One line of an invoice draft the run would write (`PlannedLineDto`). */
+/**
+ * One line of the draft a position becomes (`PlannedPartDto`): the whole period when the rate
+ * holds throughout, one span per rate when it changes within the period (backend ADR-0150).
+ */
+export type SubscriptionPlannedPart = {
+  /** ISO date, first day of supply of the line. */
+  periodStart: string
+  /** ISO date, last day of supply of the line. */
+  periodEnd: string
+  /** Calendar days of the line, both ends included. */
+  days: number
+  /** Its share of the agreed amount, to the rappen. */
+  amount: number
+  /** The percentage on these days; absent for a tenant without VAT or a category without one. */
+  vatRate?: number | null
+  /** The second line of its description on the draft; absent for an unsplit period. */
+  shareText?: string | null
+}
+
+/** One position due for one period (`PlannedLineDto`). */
 export type SubscriptionPlannedLine = {
   positionKey: string
   title: string
@@ -5383,6 +5402,8 @@ export type SubscriptionPlannedLine = {
   vatCategory: string
   /** Quantity times price, rounded to the rappen; gross when the price includes VAT. */
   amount: number
+  /** The lines it becomes on the draft, in order: more than one when the rate changes. */
+  parts: SubscriptionPlannedPart[]
 }
 
 /** A period the run leaves unbilled, with the sentence saying why (`SkippedPeriodDto`). */
@@ -5408,6 +5429,8 @@ export type SubscriptionContractPlan = {
   status: ContractStatus
   /** The version the lines come from; absent when nothing is due. */
   versionNo?: number | null
+  /** What the draft says above its lines: contract number and version; absent when nothing is due. */
+  invoiceText?: string | null
   currency?: string | null
   total: number
   lines: SubscriptionPlannedLine[]
@@ -5425,6 +5448,8 @@ export type SubscriptionCurrencyTotal = {
 export type SubscriptionPreview = {
   /** The billing month, `yyyy-MM`. */
   month: string
+  /** Whether the tenant is registered for VAT; without it no price says anything about VAT. */
+  vatLiable: boolean
   invoiceCount: number
   lineCount: number
   skippedCount: number

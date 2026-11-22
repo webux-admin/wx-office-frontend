@@ -69,6 +69,10 @@ const SHOWN_FIELDS = [
   'validFrom',
 ] as const
 
+/** Why the start of an active or ended contract takes no input. */
+const START_FIXED =
+  'Die Perioden des Abo-Laufs zählen ab dem Beginn. Für einen anderen Beginn den Vertrag beenden und einen neuen anlegen; das Ende bleibt änderbar.'
+
 /** The two registers of a stored contract. */
 type Register = 'contract' | 'versions'
 
@@ -120,6 +124,7 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
   const status = contract?.status ?? 'DRAFT'
   // An ended contract takes no new version: only its note stays open (backend ADR-0145).
   const editable = mayWrite && isAgreementEditable(status)
+  const startFixed = status !== 'DRAFT'
   // Saving an active contract that changes what was agreed takes the next version, and that
   // one needs the day it holds from.
   const takesVersion = status === 'ACTIVE' && agreementChanged(initial, form)
@@ -327,8 +332,12 @@ function ContractMask({ tenantId, contract }: { tenantId: number; contract: Cont
                   type="date"
                   value={form.startDate}
                   onChange={(event) => set('startDate', event.target.value)}
-                  disabled={!editable}
-                  required
+                  // Every billing period counts from the start, so it is fixed once the
+                  // contract is active (backend ADR-0148). The end stays open.
+                  disabled={!editable || startFixed}
+                  required={!startFixed}
+                  locked={startFixed ? START_FIXED : undefined}
+                  hint={startFixed ? 'Steht fest seit der Aktivierung.' : undefined}
                   error={fields.errors.startDate}
                 />
                 <TextField
