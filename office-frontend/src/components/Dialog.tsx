@@ -40,6 +40,11 @@ type DialogProps = {
   /** Wider box for a dialog holding a form rather than a question. */
   wide?: boolean
   /**
+   * The widest box, for a dialog that shows a document rather than asks for input: the PDF
+   * preview of a print form. Wins over `wide`.
+   */
+  large?: boolean
+  /**
    * Where the focus lands when the box opens. Without it the first field in the box takes it,
    * and where there is no field, the close button.
    */
@@ -83,6 +88,7 @@ export function Dialog({
   onSubmit,
   dirty,
   wide = false,
+  large = false,
   initialFocus,
   children,
 }: DialogProps) {
@@ -244,7 +250,7 @@ export function Dialog({
                 exit={{ opacity: 0, y: 6, scale: 0.99 }}
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className={`relative z-10 flex max-h-[86vh] w-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface shadow-card ${
-                  wide ? 'max-w-dialog-wide' : 'max-w-dialog'
+                  large ? 'max-w-dialog-large' : wide ? 'max-w-dialog-wide' : 'max-w-dialog'
                 }`}
               >
                 <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-5 py-3.5">

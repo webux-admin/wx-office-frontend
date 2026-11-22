@@ -1333,76 +1333,188 @@ export type OpenLineQuantity = {
 
 // --- print layouts -----------------------------------------------------------
 
-/** What a block on a designed form draws. Mirrors `ch.webux.office.printing.LayoutBlockType`. */
-export type LayoutBlockType =
-  | 'TEXT'
-  | 'FIELD'
-  | 'IMAGE'
-  | 'LINE'
-  | 'ADDRESS'
-  | 'POSITIONS'
-  | 'TOTALS'
-  | 'VAT_SUMMARY'
-  | 'DISCOUNT_STAGES'
-  | 'PAYMENT_TERMS'
-  | 'DOCUMENT_TEXT'
+/** The paper a form is printed on. `CUSTOM` carries its own width and height. */
+export type PaperFormat = 'A4' | 'A5' | 'A3' | 'LETTER' | 'LEGAL' | 'CUSTOM'
 
-/** How a block looks. Every value is checked again on the server before it becomes CSS. */
+/** Which way the paper lies. Ignored for a custom format, which names both sides itself. */
+export type PaperOrientation = 'PORTRAIT' | 'LANDSCAPE'
+
+/**
+ * Paper and margins of a form, all lengths in millimetres.
+ *
+ * <p>The margins bind only the content that flows. A placed element may sit anywhere on the
+ * paper, margins included — that is how a footer is made.
+ */
+export type LayoutPage = {
+  format: PaperFormat
+  orientation: PaperOrientation
+  /** Only for `CUSTOM`, 50 to 450. */
+  customWidth: number | null
+  /** Only for `CUSTOM`, 50 to 450. */
+  customHeight: number | null
+  /** Where the content starts on every page after the first. */
+  marginTop: number
+  marginRight: number
+  /** Where the content ends on every page. */
+  marginBottom: number
+  marginLeft: number
+}
+
+/** Where the Swiss QR payment part goes when the document has one. */
+export type PaymentPartPlacement = 'OWN_PAGE' | 'LAST_PAGE_BOTTOM'
+
+/** What an element placed on the page draws. */
+export type LayoutElementType = 'TEXT' | 'FIELD' | 'IMAGE' | 'LINE' | 'ADDRESS' | 'PAGE_NUMBER'
+
+/** Whether a placed element prints on the first page only or on every page. */
+export type LayoutRepeat = 'FIRST_PAGE' | 'EVERY_PAGE'
+
+/** How text is aligned inside its box. */
+export type LayoutAlign = 'left' | 'right' | 'center'
+
+/**
+ * How an element or a section looks. Every value is checked again on the server before it
+ * becomes CSS.
+ *
+ * <p>Font size and line width are points, the colour is `#rrggbb`. A value left out or `null`
+ * means the default of the renderer: 9 pt, black, left aligned.
+ */
 export type LayoutStyle = {
-  fontSize?: number
-  bold: boolean
-  align?: 'left' | 'right' | 'center'
-  colour?: string
+  fontSize?: number | null
+  bold?: boolean
+  italic?: boolean
+  align?: LayoutAlign | null
+  colour?: string | null
+  /** Thickness of a line in points, only for `LINE`. */
+  lineWidth?: number | null
 }
 
 /**
- * One element of a form.
+ * One element placed at a fixed spot.
  *
- * <p>Blocks of the head and the foot carry millimetres from the top left of the printable
- * area. Blocks of the body carry none: they follow each other, because their height depends
- * on how much the document says.
+ * <p>On the page, `x` and `y` are millimetres from the top left corner of the paper. Inside a
+ * free section they are measured from the top left corner of that section, and `repeat` is
+ * absent: the element moves with the content.
  */
-export type LayoutBlock = {
-  type: LayoutBlockType
-  field?: string
-  text?: string
-  image?: string
-  columns: LayoutColumn[]
+export type LayoutElement = {
+  type: LayoutElementType
+  /** Only on page elements. A `PAGE_NUMBER` always behaves as `EVERY_PAGE`. */
+  repeat?: LayoutRepeat
+  /** `FIELD`: the path of the value. `ADDRESS`: `recipient` or `issuer`. */
+  field: string | null
+  /** `TEXT`: the text. `FIELD`: the label printed in front of the value. */
+  text: string | null
+  /** `IMAGE`: a `data:` URI (png, jpeg, gif, webp). */
+  image: string | null
   x: number
   y: number
-  width?: number
-  height?: number
+  /**
+   * `null` means up to the right margin — or to the edge of the paper for an element that
+   * starts inside that margin. Zero is a width too: a standing line has none.
+   */
+  width: number | null
+  /** `null` means as high as the content. */
+  height: number | null
   style: LayoutStyle
 }
 
 /**
  * One column of the positions table, as the form asks for it.
  *
- * <p>Width and heading are optional: left out, the proposal from the server is used. A width
- * of zero means the column takes whatever is left over.
+ * <p>Width, heading and alignment are optional: `null` takes the proposal of the catalogue.
+ * A width of zero means the column takes whatever is left over.
  */
 export type LayoutColumn = {
   code: string
-  widthMm?: number
-  label?: string
+  widthMm: number | null
+  label: string | null
+  align: LayoutAlign | null
 }
 
-/** Margins and the height of the two fixed bands, in millimetres. */
-export type PageSetup = {
-  marginTop: number
-  marginRight: number
-  marginBottom: number
-  marginLeft: number
-  headerHeight: number
-  footerHeight: number
+/** What a section of the content flow draws. */
+export type LayoutSectionType =
+  | 'DOCUMENT_TEXT'
+  | 'POSITIONS'
+  | 'TOTALS'
+  | 'VAT_SUMMARY'
+  | 'PAYMENT_TERMS'
+  | 'DISCOUNT_STAGES'
+  | 'FREE'
+
+/** What every section that draws content of the document shares. */
+type LayoutSectionBox = {
+  /**
+   * Offset from the left margin in millimetres. `null` means at the margin — and right
+   * aligned for totals and the VAT summary, which is where a Swiss invoice has them.
+   */
+  x: number | null
+  /** `null` means up to the right margin; for totals and the VAT summary it means 78 mm. */
+  width: number | null
+  /** Gap below the section in millimetres, 0 to 50. */
+  spaceAfter: number
+  style: LayoutStyle
 }
 
-/** A form as the designer edits it and the renderer reads it. */
+/** The free text of a document, above or below the positions. */
+export type DocumentTextSection = LayoutSectionBox & {
+  type: 'DOCUMENT_TEXT'
+  field: 'header' | 'footer'
+}
+
+/** The table of positions with its columns. An empty list means the default columns. */
+export type PositionsSection = LayoutSectionBox & {
+  type: 'POSITIONS'
+  columns: LayoutColumn[]
+  showHeader: boolean
+  rowLines: boolean
+}
+
+/** A section whose content is fixed and of which only place, width and look are chosen. */
+export type PlainSection = LayoutSectionBox & {
+  type: 'TOTALS' | 'VAT_SUMMARY' | 'PAYMENT_TERMS' | 'DISCOUNT_STAGES'
+}
+
+/**
+ * A box of fixed height across the content width that holds placed elements and moves with
+ * the flow. Empty, it is a spacer.
+ */
+export type FreeSection = {
+  type: 'FREE'
+  /** 2 to 250 millimetres. */
+  height: number
+  spaceAfter: number
+  /**
+   * What the elements inside inherit where they name nothing themselves: the renderer writes
+   * it onto the box. The designer has no setting for it, and sends it back as it came.
+   */
+  style: LayoutStyle
+  elements: LayoutElement[]
+}
+
+/** One section of the content flow. They stack in list order. */
+export type LayoutSection = DocumentTextSection | PositionsSection | PlainSection | FreeSection
+
+/**
+ * A form as the designer edits it and the renderer reads it, version 2.
+ *
+ * <p>This is the shape the designer sends. What the server answers is the same form with two
+ * habits of its serialiser: a property that is `null` is left out altogether, and every
+ * section carries an empty `columns` and `elements` list whatever its type. The designer
+ * reads an answer through `normalizeDefinition`, which closes both gaps.
+ *
+ * <p>Three ideas: the page, the elements placed on it, and the content that flows from
+ * `flow.top` on the first page and from the top margin on every later one.
+ */
 export type PrintLayoutDefinition = {
-  page: PageSetup
-  header: LayoutBlock[]
-  body: LayoutBlock[]
-  footer: LayoutBlock[]
+  version: 2
+  page: LayoutPage
+  paymentPart: PaymentPartPlacement
+  elements: LayoutElement[]
+  flow: {
+    /** Where the content starts on the first page, in millimetres from the top of the paper. */
+    top: number
+    sections: LayoutSection[]
+  }
 }
 
 /**
@@ -1430,25 +1542,69 @@ export type DocumentTypeRef = {
   name: string
 }
 
-/** One value a form may place on the page. */
+/** One value a form may place on the page, with what it prints on the sample document. */
 export type PrintoutField = {
   path: string
   label: string
   group: string
+  sample: string
 }
 
-/** One column the positions table may show. */
+/** One column the positions table may show. A proposed width of zero fills the rest. */
 export type PrintoutColumn = {
   code: string
   label: string
   widthMm: number
   numeric: boolean
+  sample: string
 }
 
-/** What a form may show, as the server offers it. */
+/** A paper format the designer offers; `CUSTOM` is not among them. */
+export type PrintoutFormat = {
+  code: Exclude<PaperFormat, 'CUSTOM'>
+  label: string
+  widthMm: number
+  heightMm: number
+}
+
+/** One row of the sample positions. */
+export type PrintoutSampleLine =
+  | {
+      kind: 'ITEM'
+      /** A value for every column code of the catalogue, empty where the sample has none. */
+      cells: Record<string, string>
+      /** Lines under the description: a second name, the period of supply. */
+      details?: string[]
+    }
+  | { kind: 'COMMENT'; text: string }
+  | { kind: 'SUBTOTAL'; label: string; amount: string }
+
+/** One row of the sample totals. `VAT` rows move to the VAT summary when the form has one. */
+export type PrintoutSampleTotal = {
+  label: string
+  amount: string
+  kind: 'SUBTOTAL' | 'DISCOUNT' | 'NET' | 'VAT' | 'GRAND'
+}
+
+/** The made up document the designer draws on the sheet, formatted exactly as the PDF. */
+export type PrintoutSample = {
+  recipient: string[]
+  issuer: string[]
+  headerText: string
+  footerText: string
+  lines: PrintoutSampleLine[]
+  totals: PrintoutSampleTotal[]
+  paymentTerms: string[]
+  discountStages: string[]
+  pageNumber: string
+}
+
+/** What a form may show and what the sample document says, as the server offers it. */
 export type PrintLayoutFields = {
   fields: PrintoutField[]
   columns: PrintoutColumn[]
+  formats: PrintoutFormat[]
+  sample: PrintoutSample
 }
 
 /**

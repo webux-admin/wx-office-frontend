@@ -1,49 +1,17 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
-import { ErrorNotice, LoadingBlock } from '../components/Notice'
-import { FormMask } from '../components/FormMask'
-import { Panel } from '../components/Panel'
-import { TextField } from '../components/TextField'
+import { EmptyState, ErrorNotice, LoadingBlock } from '../components/Notice'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
-import { showFile } from '../lib/files'
-import { originOf, type Origin } from '../lib/origin'
-import type { LayoutBlockType, PrintLayout, PrintLayoutDefinition } from '../lib/types'
-import {
-  BLOCK_LABELS,
-  DEFAULT_PAGE,
-  isPlaced,
-  newBlock,
-  pageProblemOf,
-  withAddedBlock,
-  withBlock,
-  withMovedBodyBlock,
-  withoutBlock,
-  type Band,
-} from '../printlayout/layout'
+import type { PrintLayout } from '../lib/types'
 import { usePrintoutFields } from '../printlayout/usePrintLayouts'
-import { BlockProperties } from './printlayout/BlockProperties'
-import { DesignCanvas } from './printlayout/DesignCanvas'
+import { Designer } from './printlayout/Designer'
 
-/** Where the designer goes when it was opened without naming a screen to return to. */
-const LIST: Origin = { from: '/druckvorlagen', label: 'Druckvorlagen' }
-
-/** Blocks that are dragged onto the head or the foot. */
-const PLACED_TYPES: LayoutBlockType[] = ['TEXT', 'FIELD', 'ADDRESS', 'IMAGE', 'LINE']
-
-/** Blocks that flow in the body, in the order they were added. */
-const FLOWING_TYPES: LayoutBlockType[] = [
-  'DOCUMENT_TEXT',
-  'POSITIONS',
-  'VAT_SUMMARY',
-  'TOTALS',
-  'PAYMENT_TERMS',
-  'DISCOUNT_STAGES',
-]
-
-/** One form: what it is called, and where every block on it sits. */
+/**
+ * One print form in the designer: the sheet, what can be put on it, and the settings of
+ * whatever is selected.
+ */
 export function PrintLayoutPage() {
   return (
     <RequireTenant permission="PRINT_LAYOUT_WRITE">
@@ -52,269 +20,76 @@ export function PrintLayoutPage() {
   )
 }
 
+/**
+ * Waits for the two things the designer cannot start without: the form, and the catalogue it
+ * draws the sample document from.
+ */
 function LayoutLoader({ tenantId }: { tenantId: number }) {
   const { id } = useParams()
 
   const layout = useQuery({
     queryKey: ['print-layout', tenantId, id],
     queryFn: () => api.get<PrintLayout>(`/api/tenants/${tenantId}/print-layouts/${id}`),
+    // A refetch while somebody is drawing would bring nothing they want: the designer holds
+    // the form from the moment it opens until it is saved.
+    refetchOnWindowFocus: false,
   })
+  const catalogue = usePrintoutFields(tenantId)
 
-  if (layout.isPending) return <LoadingBlock label="Druckvorlage wird geladen" />
-  if (layout.error) {
+  if (layout.isPending || catalogue.isPending) {
+    return <LoadingBlock label="Druckvorlage wird geladen" />
+  }
+  if (layout.error !== null || catalogue.error !== null) {
     return (
-      <div className="p-8">
-        <ErrorNotice error={layout.error} />
+      <div className="grid gap-4 p-8">
+        <ErrorNotice error={layout.error ?? catalogue.error}>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void layout.refetch()
+                void catalogue.refetch()
+              }}
+            >
+              Erneut versuchen
+            </Button>
+            <BackToList />
+          </div>
+        </ErrorNotice>
       </div>
     )
   }
-  return <Designer tenantId={tenantId} layout={layout.data} />
-}
-
-function Designer({ tenantId, layout }: { tenantId: number; layout: PrintLayout }) {
-  const queryClient = useQueryClient()
-  const catalogue = usePrintoutFields(tenantId)
-  // Reached from the list of forms, but just as often from a Belegart that prints on this
-  // one. The way back follows the way in, so nobody lands on a list they never came from.
-  const origin = originOf(useLocation().state, LIST)
-
-  const stored: PrintLayoutDefinition = layout.definition ?? {
-    page: DEFAULT_PAGE,
-    header: [],
-    body: [],
-    footer: [],
+  if (!layout.data.designed) {
+    // A shipped form has no drawing. Opening it would show an empty sheet under its name, and
+    // saving that sheet would be refused — it is copied before it is changed.
+    return (
+      <EmptyState
+        title="Diese Vorlage ist mitgeliefert"
+        description={`«${layout.data.name}» lässt sich nicht direkt gestalten. Kopieren Sie sie in der Liste der Druckvorlagen — die Kopie gehört Ihnen und lässt sich frei anpassen.`}
+      >
+        <BackToList />
+      </EmptyState>
+    )
   }
-  const [name, setName] = useState(layout.name)
-  const [definition, setDefinition] = useState<PrintLayoutDefinition>(stored)
-  const [selection, setSelection] = useState<{ band: Band; index: number } | null>(null)
-  const [target, setTarget] = useState<Band>('header')
-
-  const problem = pageProblemOf(definition.page)
-
-  const save = useMutation({
-    mutationFn: () =>
-      api.put<PrintLayout>(`/api/tenants/${tenantId}/print-layouts/${layout.id}`, {
-        name: name.trim(),
-        definition,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['print-layout', tenantId] })
-      void queryClient.invalidateQueries({ queryKey: ['print-layouts', tenantId] })
-    },
-  })
-
-  const preview = useMutation({
-    mutationFn: () =>
-      api.file(`/api/tenants/${tenantId}/print-layouts/preview`, {
-        name: name.trim(),
-        definition,
-      }),
-    onSuccess: showFile,
-  })
-
-  const add = (type: LayoutBlockType) => {
-    const band: Band = isPlaced(type) ? target : 'body'
-    const next = withAddedBlock(definition, band, newBlock(type, { x: 5, y: 5 }))
-    setDefinition(next)
-    setSelection({ band, index: next[band].length - 1 })
-  }
-
-  const selected =
-    selection === null ? undefined : definition[selection.band][selection.index]
-
-
-  // The canvas changes the definition by dragging, which fires no input event; so the question
-  // about throwing changes away compares with what was stored instead of listening for typing.
-  const dirty = name !== layout.name || JSON.stringify(definition) !== JSON.stringify(stored)
-
+  // Keyed by the form, so opening another one starts a fresh history instead of offering to
+  // undo into the form before.
   return (
-    <FormMask
-      title={layout.name}
-      back={{ to: origin.from, label: origin.label }}
-      subtitle={<span className="font-mono text-small text-text-secondary">{layout.code}</span>}
-      actions={
-        <>
-          <Button variant="secondary" onClick={() => preview.mutate()} busy={preview.isPending}>
-            Vorschau
-          </Button>
-          <Button
-            onClick={() => save.mutate()}
-            busy={save.isPending}
-            disabled={problem !== undefined}
-            shortcut
-          >
-            Speichern
-          </Button>
-        </>
-      }
-      dirty={dirty}
-      onSubmit={problem === undefined && !save.isPending ? () => save.mutate() : undefined}
-    >
-      <div className="grid grid-cols-1 gap-6">
-        {problem !== undefined && (
-          <p
-            role="alert"
-            className="rounded-[var(--radius-md)] border border-danger/40 bg-danger/8 px-4 py-3 text-body text-text-primary"
-          >
-            {problem}
-          </p>
-        )}
-        {save.error !== null && <ErrorNotice error={save.error} />}
-        {preview.error !== null && <ErrorNotice error={preview.error} />}
-
-        <div className="flex flex-wrap items-start gap-6">
-          <div className="grid w-[16.25rem] shrink-0 gap-6">
-            <Panel title="Vorlage">
-              <TextField
-                label="Bezeichnung"
-                value={name}
-                maxLength={60}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Panel>
-
-            <Panel title="Bausteine" description="Erst das Band wählen, dann den Baustein.">
-              <div className="grid gap-3">
-                <div className="flex gap-2">
-                  {(['header', 'footer'] as const).map((band) => (
-                    <button
-                      key={band}
-                      type="button"
-                      onClick={() => setTarget(band)}
-                      className={`rounded-[var(--radius-sm)] border px-2 py-1 text-small transition-colors ${
-                        target === band
-                          ? 'border-accent text-accent-text'
-                          : 'border-line text-text-secondary hover:border-accent'
-                      }`}
-                    >
-                      {band === 'header' ? 'Kopf' : 'Fuss'}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid gap-1.5">
-                  {PLACED_TYPES.map((type) => (
-                    <PaletteButton key={type} type={type} onClick={() => add(type)} />
-                  ))}
-                </div>
-                <span className="mt-2 text-caption uppercase tracking-wide text-text-tertiary">
-                  Körper
-                </span>
-                <div className="grid gap-1.5">
-                  {FLOWING_TYPES.map((type) => (
-                    <PaletteButton key={type} type={type} onClick={() => add(type)} />
-                  ))}
-                </div>
-              </div>
-            </Panel>
-
-            <Panel title="Seite" description="Ränder und Höhe der beiden festen Bänder, in mm.">
-              <div className="grid grid-cols-2 gap-3">
-                {(
-                  [
-                    ['marginTop', 'Rand oben'],
-                    ['marginBottom', 'Rand unten'],
-                    ['marginLeft', 'Rand links'],
-                    ['marginRight', 'Rand rechts'],
-                    ['headerHeight', 'Höhe Kopf'],
-                    ['footerHeight', 'Höhe Fuss'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <TextField
-                    key={key}
-                    label={label}
-                    numeric
-                    inputMode="decimal"
-                    value={String(definition.page[key])}
-                    onChange={(event) => {
-                      const parsed = Number(event.target.value.replace(',', '.'))
-                      if (Number.isNaN(parsed)) return
-                      setDefinition({
-                        ...definition,
-                        page: { ...definition.page, [key]: parsed },
-                      })
-                    }}
-                  />
-                ))}
-              </div>
-            </Panel>
-          </div>
-
-          <div className="min-w-0 max-w-full overflow-x-auto">
-            <DesignCanvas
-              definition={definition}
-              selection={selection}
-              onSelect={setSelection}
-              onMove={(band, index, position) =>
-                setDefinition(
-                  withBlock(definition, band, index, {
-                    ...definition[band][index],
-                    ...position,
-                  }),
-                )
-              }
-              onResize={(band, index, size) =>
-                setDefinition(
-                  withBlock(definition, band, index, {
-                    ...definition[band][index],
-                    ...size,
-                  }),
-                )
-              }
-            />
-          </div>
-
-          <div className="w-[17.5rem] shrink-0">
-            <Panel title="Eigenschaften">
-              {selected === undefined || selection === null ? (
-                <p className="text-body text-text-secondary">
-                  Nichts gewählt. Klicke einen Baustein auf der Seite an.
-                </p>
-              ) : (
-                <BlockProperties
-                  block={selected}
-                  fields={catalogue.data?.fields ?? []}
-                  columns={catalogue.data?.columns ?? []}
-                  onChange={(block) =>
-                    setDefinition(withBlock(definition, selection.band, selection.index, block))
-                  }
-                  onRemove={() => {
-                    setDefinition(withoutBlock(definition, selection.band, selection.index))
-                    setSelection(null)
-                  }}
-                  onMoveUp={
-                    selection.band === 'body' && selection.index > 0
-                      ? () => {
-                          setDefinition(withMovedBodyBlock(definition, selection.index, -1))
-                          setSelection({ band: 'body', index: selection.index - 1 })
-                        }
-                      : undefined
-                  }
-                  onMoveDown={
-                    selection.band === 'body' && selection.index < definition.body.length - 1
-                      ? () => {
-                          setDefinition(withMovedBodyBlock(definition, selection.index, 1))
-                          setSelection({ band: 'body', index: selection.index + 1 })
-                        }
-                      : undefined
-                  }
-                />
-              )}
-            </Panel>
-          </div>
-        </div>
-      </div>
-    </FormMask>
+    <Designer
+      key={layout.data.id}
+      tenantId={tenantId}
+      layout={layout.data}
+      catalogue={catalogue.data}
+    />
   )
 }
 
-function PaletteButton({ type, onClick }: { type: LayoutBlockType; onClick: () => void }) {
+function BackToList() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-[var(--radius-sm)] border border-line px-2 py-1.5 text-left text-small text-text-secondary transition-colors hover:border-accent hover:text-text-primary"
+    <Link
+      to="/druckvorlagen"
+      className="text-body text-accent-text underline-offset-2 hover:underline"
     >
-      + {BLOCK_LABELS[type]}
-    </button>
+      Zu den Druckvorlagen
+    </Link>
   )
 }

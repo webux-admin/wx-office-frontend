@@ -6,8 +6,8 @@ import { showFile } from '../lib/files'
  * Asks the server to draw a stored form on a made up document and shows the PDF.
  *
  * <p>Reading, not writing: whoever may see which forms exist may look at them. The designer
- * has a preview of its own, because while blocks are being dragged there is nothing stored
- * yet — this one is for the forms that already exist.
+ * has a preview of its own, because while a form is being changed its newest state is not
+ * stored yet — this one is for the forms that already exist.
  *
  * @param tenantId the tenant, null while none is chosen
  * @param documentTypeId the kind of document to pretend the sample is; without it the sample

@@ -44,6 +44,16 @@ Stand der Module (in dieser Reihenfolge gebaut):
   die sie erlaubt, Zielwert im Bereich der Einheit und ein Text; überall nur als Satz, keine Ampel,
   in der Liste die ersten zwei als Text; eine Änderung am aktiven Vertrag fragt nach «Änderung gilt
   ab» (ADR-0074, Backend ADR-0146)
+- **printlayout** — Druckvorlagen-Designer unter `/druckvorlagen/:id`: ein Blatt in Millimetern
+  mit Musterdaten des Backends statt grauer Kästchen. Drei Ideen und nicht mehr — das **Blatt**
+  (Papierformat, Ausrichtung, Ränder), **feste Elemente**, die überall stehen dürfen, auch im
+  Rand, und der **Inhalt**, der ab der Linie «Inhalt beginnt hier» mit dem Beleg wächst
+  (Positionen mit wählbaren Spalten, Totale, MwSt, freie Bereiche). Palette mit Elementen,
+  Feldern samt Beispielwert und Aufbau links, Einstellungen rechts. Ziehen ist nie der einzige
+  Weg: Klick fügt ein, Millimeter lassen sich eintippen, Reihenfolgen haben Knöpfe. Der
+  QR-Zahlteil ist gesperrt — unten auf der letzten Seite oder auf eigener Seite. Das Modell ohne
+  React liegt in `src/printlayout/`, keine Zeichen- oder Drag-Bibliothek (ADR-0076, Backend
+  ADR-0148)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

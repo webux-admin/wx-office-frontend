@@ -123,6 +123,28 @@
   --shadow-card: 0 0.125rem 1rem rgba(26, 25, 23, 0.06);
 
   /*
+   * The print form designer. Paper is paper: the sheet and everything drawn on it keep the
+   * same colours in both appearances, because they show what comes out of the printer. Only
+   * the table the sheet lies on follows the appearance.
+   *
+   * `print-*` are the colours of the PDF renderer itself — black text, the grey rules of the
+   * positions table — and `sheet-*` are the marks of the tool on top of the paper: margins,
+   * the start of the content, the selection, the guides while something is aligned.
+   */
+  --color-workspace: #dcd9d2;
+  --color-paper: #ffffff;
+  --color-print-ink: #000000;
+  --color-print-rule: #cccccc;
+  --color-print-muted: #555555;
+  --color-print-comment: #333333;
+  --color-sheet-margin: #6f93c0;
+  --color-sheet-flow: #1e4d3f;
+  --color-sheet-selection: #1668d6;
+  --color-sheet-guide: #d6336c;
+  --color-sheet-warning: #b45309;
+  --shadow-sheet: 0 0.0625rem 0.1875rem rgba(26, 25, 23, 0.14), 0 0.5rem 2rem rgba(26, 25, 23, 0.14);
+
+  /*
    * Sizes are relative throughout: rem for everything tied to the type, so a user who sets a
    * larger default font in the browser gets a larger mask and not just larger letters. The
    * only px values left in the application are the 1px of borders and rules.
@@ -168,10 +190,21 @@
   --container-dialog: 27.5rem;
   --container-dialog-wide: 42.5rem;
   --container-tooltip: 17.5rem;
+  /* A dialog that shows a document rather than asks a question: the PDF preview. */
+  --container-dialog-large: 64rem;
+
+  /* The two side panes of the print form designer, and the thickness of its rulers. */
+  --spacing-pane: 18rem;
+  --spacing-inspector: 20.5rem;
+  --spacing-ruler: 1.25rem;
 
   --font-sans:
     'Google Sans Flex', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Code', monospace;
+  /* What the sheet of the print form designer is set in. The PDF uses Liberation Sans, which
+     is metric-compatible with Arial and Helvetica — so a line on screen breaks where the
+     printed one does. Deliberately not the typeface of the application. */
+  --font-print: 'Liberation Sans', Arial, Helvetica, sans-serif;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -235,6 +268,10 @@
     --color-module-system: #66599b;
 
     --shadow-card: 0 0.125rem 1rem rgba(0, 0, 0, 0.45);
+
+    /* The table under the sheet goes dark; the sheet itself stays white. */
+    --color-workspace: #100f0d;
+    --shadow-sheet: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.5), 0 0.5rem 2rem rgba(0, 0, 0, 0.55);
   }
 
   html {
@@ -286,6 +323,113 @@
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+  }
+}
+
+/*
+ * The sheet of the print form designer.
+ *
+ * It is laid out in real millimetres and points and then scaled as a whole, so what is drawn
+ * on it is the arithmetic of the PDF and not an approximation in pixels. Whatever belongs to
+ * the tool rather than to the paper — outlines, grips, tags — divides its size by the zoom,
+ * which the designer writes into `--sheet-zoom`, and so stays the same size on screen.
+ */
+@layer components {
+  .sheet {
+    --sheet-zoom: 1;
+    /* One sixteenth of a rem on screen, whatever the zoom: the 1px of a rule. */
+    --sheet-px: calc(0.0625rem / var(--sheet-zoom));
+    background-color: var(--color-paper);
+    box-shadow: var(--shadow-sheet);
+    color: var(--color-print-ink);
+    font-family: var(--font-print);
+    font-size: 9pt;
+    /* The body of the application sets an absolute line height and tabular figures; neither
+       is what the renderer does. */
+    line-height: normal;
+    font-variant-numeric: normal;
+    letter-spacing: normal;
+  }
+
+  /* The sheet takes the focus when the object that had it is deleted. Its ring is drawn in
+     the colour of the selection and at a width that does not grow with the zoom. */
+  .sheet:focus-visible {
+    outline: calc(var(--sheet-px) * 2) solid var(--color-sheet-selection);
+    outline-offset: calc(var(--sheet-px) * 3);
+  }
+
+  /* Text of the tool on the paper is set in the typeface of the application again. */
+  .sheet-chrome {
+    font-family: var(--font-sans);
+    font-size: var(--text-caption);
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1rem;
+    text-align: left;
+    transform: scale(calc(1 / var(--sheet-zoom)));
+  }
+
+  .sheet-outline {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    outline: var(--sheet-px) solid transparent;
+    outline-offset: var(--sheet-px);
+  }
+
+  .sheet-object:hover > .sheet-outline {
+    outline-color: color-mix(in srgb, var(--color-sheet-selection) 50%, transparent);
+  }
+
+  .sheet-object[data-selected='true'] > .sheet-outline {
+    outline-color: var(--color-sheet-selection);
+    outline-width: calc(var(--sheet-px) * 1.5);
+  }
+
+  /* The focus ring of the application would be scaled with the sheet and is drawn in a
+     colour of the theme; on paper the outline of the object takes its place. */
+  .sheet-object > [data-object]:focus-visible {
+    outline: none;
+  }
+
+  .sheet-object:has(> [data-object]:focus-visible) > .sheet-outline {
+    outline-color: var(--color-sheet-selection);
+    outline-width: calc(var(--sheet-px) * 2.5);
+  }
+
+  /* The name of a section, at its corner while the pointer is over it. */
+  .sheet-tag {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+
+  .sheet-object:hover > .sheet-tag {
+    opacity: 1;
+  }
+
+  .sheet-handle {
+    position: absolute;
+    width: calc(var(--sheet-px) * 9);
+    height: calc(var(--sheet-px) * 9);
+    margin: calc(var(--sheet-px) * -4.5);
+    border: calc(var(--sheet-px) * 1.5) solid var(--color-sheet-selection);
+    border-radius: calc(var(--sheet-px) * 2);
+    background-color: var(--color-paper);
+    touch-action: none;
+  }
+
+  /* A grip of nine pixels is a small thing to hit; the area around it counts as well. On a
+     finger it has to be the 44 pixels a finger needs. */
+  .sheet-handle::after {
+    position: absolute;
+    inset: calc(var(--sheet-px) * -6);
+    content: '';
+  }
+
+  @media (pointer: coarse) {
+    .sheet-handle::after {
+      inset: calc(var(--sheet-px) * -18);
+    }
   }
 }
 
