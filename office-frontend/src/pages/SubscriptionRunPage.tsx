@@ -13,7 +13,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { CONTRACT_PATH } from '../lib/contract'
-import { formatAmount, formatDate, formatQuantity } from '../lib/format'
+import { formatAmount, formatDate, formatPercent, formatQuantity } from '../lib/format'
 import { originState } from '../lib/origin'
 import { salesDocumentFor, salesDocumentListKey } from '../lib/salesDocument'
 import {
@@ -23,8 +23,10 @@ import {
   SUBSCRIPTION_RIGHTS,
   currentMonth,
   draftCountText,
+  draftLineCount,
   fetchSubscriptionPreview,
   isCompleteMonth,
+  isSplitLine,
   monthLabel,
   runResultText,
   runSubscription,
@@ -34,6 +36,7 @@ import {
 import type {
   SubscriptionContractPlan,
   SubscriptionNotice,
+  SubscriptionPlannedPart,
   SubscriptionRunResult,
   SubscriptionSkippedPeriod,
 } from '../lib/types'
@@ -140,7 +143,7 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
       header: 'Positionen',
       align: 'right',
       hideBelow: 'sm',
-      render: (plan) => <span className="tabular-nums">{plan.lines.length}</span>,
+      render: (plan) => <span className="tabular-nums">{draftLineCount(plan)}</span>,
     },
     {
       key: 'total',
@@ -269,8 +272,12 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
 }
 
 /**
- * The lines one draft would carry, under its contract row. «inkl.» or «zzgl. MWST» only for a
- * tenant registered for VAT; for the others a price is just a price.
+ * The lines one draft would carry, under its contract row, and the text it names the contract
+ * with. «inkl.» or «zzgl. MWST» and the rate only for a tenant registered for VAT; for the others
+ * a price is just a price.
+ *
+ * <p>A period the rate changes in is one position and several lines of the draft: the position as
+ * agreed, and below it one line per rate with its days and its share (backend ADR-0150).
  */
 function PlannedLines({
   plan,
@@ -280,18 +287,63 @@ function PlannedLines({
   vatLiable: boolean
 }) {
   return (
-    <ul className="grid gap-1 py-1 text-small text-text-secondary">
-      {plan.lines.map((line) => (
-        <li key={`${line.positionKey}-${line.periodStart}`} className="flex flex-wrap gap-x-3">
-          <span className="font-medium text-text-primary">{line.title}</span>
+    <div className="grid gap-2 py-1 text-small text-text-secondary">
+      {plan.invoiceText != null && (
+        <p>
+          <span className="text-text-tertiary">Kopftext der Rechnung:</span>{' '}
+          <span className="text-text-primary">{plan.invoiceText}</span>
+        </p>
+      )}
+      <ul className="grid gap-1">
+        {plan.lines.map((line) => {
+          const split = isSplitLine(line)
+          const rate = line.parts[0]?.vatRate
+          return (
+            <li key={`${line.positionKey}-${line.periodStart}`} className="grid gap-1">
+              <span className="flex flex-wrap items-center gap-x-3">
+                <span className="font-medium text-text-primary">{line.title}</span>
+                <span className="tabular-nums">
+                  {formatDate(line.periodStart)} – {formatDate(line.periodEnd)}
+                </span>
+                <span className="tabular-nums">
+                  {formatQuantity(line.quantity)} × {formatAmount(line.unitPrice)}
+                </span>
+                {vatLiable && <span>{line.priceIncludesVat ? 'inkl. MWST' : 'zzgl. MWST'}</span>}
+                {vatLiable && !split && rate != null && (
+                  <span className="tabular-nums">{formatPercent(rate)}</span>
+                )}
+                {split && <Badge tone="muted">Geteilt nach Satz</Badge>}
+                <span className="ml-auto tabular-nums">{formatAmount(line.amount)}</span>
+              </span>
+              {split && <PlannedParts parts={line.parts} vatLiable={vatLiable} />}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/** The lines of a split period: days, rate and share, as the draft will carry them. */
+function PlannedParts({
+  parts,
+  vatLiable,
+}: {
+  parts: SubscriptionPlannedPart[]
+  vatLiable: boolean
+}) {
+  return (
+    <ul className="grid gap-0.5 border-l border-line-subtle pl-3" aria-label="Teilzeiträume">
+      {parts.map((part) => (
+        <li key={part.periodStart} className="flex flex-wrap gap-x-3">
           <span className="tabular-nums">
-            {formatDate(line.periodStart)} – {formatDate(line.periodEnd)}
+            {formatDate(part.periodStart)} – {formatDate(part.periodEnd)}
           </span>
-          <span className="tabular-nums">
-            {formatQuantity(line.quantity)} × {formatAmount(line.unitPrice)}
-          </span>
-          {vatLiable && <span>{line.priceIncludesVat ? 'inkl. MWST' : 'zzgl. MWST'}</span>}
-          <span className="ml-auto tabular-nums">{formatAmount(line.amount)}</span>
+          <span className="tabular-nums">{part.days === 1 ? '1 Tag' : `${part.days} Tage`}</span>
+          {vatLiable && part.vatRate != null && (
+            <span className="tabular-nums">{formatPercent(part.vatRate)}</span>
+          )}
+          <span className="ml-auto tabular-nums">{formatAmount(part.amount)}</span>
         </li>
       ))}
     </ul>

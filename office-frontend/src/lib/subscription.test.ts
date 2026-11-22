@@ -3,14 +3,59 @@ import {
   SKIP_REASON_LABELS,
   currentMonth,
   draftCountText,
+  draftLineCount,
   isCompleteMonth,
+  isSplitLine,
   monthLabel,
   runResultText,
   subscriptionPreviewKey,
   subscriptionRunsUrl,
   totalsText,
 } from './subscription'
-import type { SubscriptionRunResult } from './types'
+import type {
+  SubscriptionContractPlan,
+  SubscriptionPlannedLine,
+  SubscriptionRunResult,
+} from './types'
+
+/** A yearly position over a rate change, cut into as many parts as asked for. */
+function plannedLine(parts: number): SubscriptionPlannedLine {
+  return {
+    positionKey: `k-${parts}`,
+    title: 'Lizenz',
+    periodStart: '2027-10-01',
+    periodEnd: '2028-09-30',
+    quantity: 1,
+    unitPrice: 1200,
+    priceIncludesVat: false,
+    vatCategory: 'STANDARD',
+    amount: 1200,
+    parts: Array.from({ length: parts }, (_, index) => ({
+      periodStart: index === 0 ? '2027-10-01' : '2028-01-01',
+      periodEnd: index === parts - 1 ? '2028-09-30' : '2027-12-31',
+      days: parts === 1 ? 366 : index === 0 ? 92 : 274,
+      amount: parts === 1 ? 1200 : index === 0 ? 301.64 : 898.36,
+      vatRate: index === 0 ? 7.7 : 8.1,
+    })),
+  }
+}
+
+function contractPlan(lines: SubscriptionPlannedLine[]): SubscriptionContractPlan {
+  return {
+    contractId: 7,
+    contractNumber: 'V-00007',
+    title: 'Lizenz',
+    customerName: 'Huber',
+    status: 'ACTIVE',
+    versionNo: 1,
+    invoiceText: 'Vertrag V-00007, Version 1',
+    currency: 'CHF',
+    total: 1200,
+    lines,
+    skipped: [],
+    notices: [],
+  }
+}
 
 function result(created: number, skipped: number, failed: number): SubscriptionRunResult {
   return {
@@ -114,8 +159,21 @@ describe('subscription', () => {
     )
   })
 
+  /** A rate change no longer skips a period; it splits it (backend ADR-0150). */
   it('skipReasonLabelsCoverTheCatalogueTest', () => {
     expect(Object.keys(SKIP_REASON_LABELS)).toHaveLength(8)
-    expect(SKIP_REASON_LABELS.VAT_RATE_CHANGES).toBe('Satzwechsel in der Periode')
+    expect(SKIP_REASON_LABELS.SPLIT_NOT_POSSIBLE).toBe('Teilung nicht möglich')
+    expect(Object.keys(SKIP_REASON_LABELS)).not.toContain('VAT_RATE_CHANGES')
+  })
+
+  it('isSplitLineTest', () => {
+    expect(isSplitLine(plannedLine(2))).toBe(true)
+    expect(isSplitLine(plannedLine(1))).toBe(false)
+  })
+
+  /** One line per part on the draft; a contract without lines has none. */
+  it('draftLineCountTest', () => {
+    expect(draftLineCount(contractPlan([plannedLine(2), plannedLine(1)]))).toBe(3)
+    expect(draftLineCount(contractPlan([]))).toBe(0)
   })
 })

@@ -1,7 +1,9 @@
 import { api } from './api'
 import { formatAmount } from './format'
 import type {
+  SubscriptionContractPlan,
   SubscriptionCurrencyTotal,
+  SubscriptionPlannedLine,
   SubscriptionPreview,
   SubscriptionRunResult,
   SubscriptionSkipReason,
@@ -40,7 +42,23 @@ export const SKIP_REASON_LABELS: Record<SubscriptionSkipReason, string> = {
   OVERLAPS_BILLED: 'Überschneidet Verrechnetes',
   TAX_LIABILITY_STARTS: 'MWST-Pflicht beginnt',
   NO_VAT_RATE: 'Kein MwSt-Satz',
-  VAT_RATE_CHANGES: 'Satzwechsel in der Periode',
+  SPLIT_NOT_POSSIBLE: 'Teilung nicht möglich',
+}
+
+/**
+ * @param line a position due for one period
+ * @returns true when a rate change cuts it into several lines of the draft (backend ADR-0150)
+ */
+export function isSplitLine(line: SubscriptionPlannedLine): boolean {
+  return line.parts.length > 1
+}
+
+/**
+ * @param plan one contract of the preview
+ * @returns how many lines its draft carries: a split period counts once per rate
+ */
+export function draftLineCount(plan: SubscriptionContractPlan): number {
+  return plan.lines.reduce((count, line) => count + line.parts.length, 0)
 }
 
 /**

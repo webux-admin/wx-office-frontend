@@ -103,6 +103,7 @@ beforeEach(() => {
         customerName: 'Bäckerei Huber AG',
         status: 'ACTIVE',
         versionNo: 2,
+        invoiceText: 'Vertrag V-00007, Version 2',
         currency: 'CHF',
         total: 1300,
         lines: [
@@ -116,6 +117,15 @@ beforeEach(() => {
             priceIncludesVat: false,
             vatCategory: 'STANDARD',
             amount: 100,
+            parts: [
+              {
+                periodStart: '2028-01-01',
+                periodEnd: '2028-01-31',
+                days: 31,
+                amount: 100,
+                vatRate: 8.1,
+              },
+            ],
           },
           {
             positionKey: 'b',
@@ -127,6 +137,15 @@ beforeEach(() => {
             priceIncludesVat: false,
             vatCategory: 'STANDARD',
             amount: 1200,
+            parts: [
+              {
+                periodStart: '2028-01-01',
+                periodEnd: '2028-12-31',
+                days: 366,
+                amount: 1200,
+                vatRate: 8.1,
+              },
+            ],
           },
         ],
         skipped: [],
@@ -435,6 +454,77 @@ describe('SubscriptionRunPage', () => {
 
     expect(dialogClosed()).toBe(true)
     expect(writes()).toHaveLength(0)
+  })
+
+  /** A period the rate changes in: one position, one line per rate below it (backend ADR-0150). */
+  it('subscriptionRunPageShowsASplitPeriodTest', async () => {
+    const [plan] = preview.contracts
+    preview = {
+      ...preview,
+      lineCount: 3,
+      contracts: [
+        {
+          ...plan,
+          lines: [
+            plan.lines[0],
+            {
+              ...plan.lines[1],
+              periodStart: '2027-10-01',
+              periodEnd: '2028-09-30',
+              parts: [
+                {
+                  periodStart: '2027-10-01',
+                  periodEnd: '2027-12-31',
+                  days: 92,
+                  amount: 301.64,
+                  vatRate: 7.7,
+                  shareText: 'Anteil 92 von 366 Tagen der Periode 01.10.2027 - 30.09.2028',
+                },
+                {
+                  periodStart: '2028-01-01',
+                  periodEnd: '2028-09-30',
+                  days: 274,
+                  amount: 898.36,
+                  vatRate: 8.5,
+                  shareText: 'Anteil 274 von 366 Tagen der Periode 01.10.2027 - 30.09.2028',
+                },
+              ],
+            },
+          ],
+        },
+        ...preview.contracts.slice(1),
+      ],
+    }
+    await render()
+    const row = [...container.querySelectorAll('tr')].find((entry) =>
+      entry.textContent?.includes('V-00007'),
+    )
+    // «Positionen» counts the lines of the draft: one for hosting, two for the split licence.
+    expect([...(row?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent)).toContain(
+      '3',
+    )
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('Kopftext der Rechnung: Vertrag V-00007, Version 2')
+    expect(text()).toContain('Geteilt nach Satz')
+    const parts = container.querySelector('[aria-label="Teilzeiträume"]')
+    expect(parts?.textContent).toContain('01.10.2027 – 31.12.2027')
+    expect(parts?.textContent).toContain('92 Tage')
+    expect(parts?.textContent).toContain('7.7 %')
+    expect(parts?.textContent).toContain('301.64')
+    expect(parts?.textContent).toContain('274 Tage')
+    expect(parts?.textContent).toContain('8.5 %')
+    expect(parts?.textContent).toContain('898.36')
+  })
+
+  /** An unsplit line names its one rate; no list of parts stands under it. */
+  it('subscriptionRunPageShowsTheRateOfAnUnsplitLineTest', async () => {
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('8.1 %')
+    expect(text()).not.toContain('Geteilt nach Satz')
+    expect(container.querySelector('[aria-label="Teilzeiträume"]')).toBeNull()
   })
 
   /** «zzgl. MWST» means something only for a tenant registered for VAT. */

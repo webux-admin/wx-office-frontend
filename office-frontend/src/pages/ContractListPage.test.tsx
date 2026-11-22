@@ -140,6 +140,25 @@ describe('ContractListPage', () => {
     expect(text()).not.toContain('Ersten Vertrag anlegen')
   })
 
+  /** The run bills these contracts; the list leads there when the tenant runs it. */
+  it('contractListPageLeadsToTheSubscriptionRunTest', async () => {
+    await render(['CONTRACT_READ', 'SUBSCRIPTION_READ'], ['CONTRACT', 'SUBSCRIPTION'])
+
+    const link = [...container.querySelectorAll('a')].find(
+      (entry) => entry.textContent === 'Abo-Lauf',
+    )
+    expect(link?.getAttribute('href')).toBe('/abo-lauf')
+  })
+
+  /** Two switches and two rights: without the run, or without the right to see it, no way there. */
+  it('contractListPageWithoutTheSubscriptionRunTest', async () => {
+    await render(['CONTRACT_READ', 'SUBSCRIPTION_READ'], ['CONTRACT'])
+    expect(text()).not.toContain('Abo-Lauf')
+
+    await render(['CONTRACT_READ'], ['CONTRACT', 'SUBSCRIPTION'])
+    expect(text()).not.toContain('Abo-Lauf')
+  })
+
   it('contractListPageStaysShutWithoutTheModuleTest', async () => {
     await render(['CONTRACT_READ'], [])
 
