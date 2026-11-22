@@ -101,6 +101,9 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
     })),
   )
   const invoiceCount = preview.data?.invoiceCount ?? 0
+  const vatLiable = preview.data?.vatLiable ?? false
+  // While another month loads, the figures of the last one would stand under the new title.
+  const figuresShown = complete && preview.data !== undefined && !preview.isPlaceholderData
   const draftPath = (documentId: number) =>
     invoiceKind ? `${invoiceKind.path}/${documentId}` : undefined
 
@@ -159,7 +162,10 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
       >
         {mayRun && (
           <Button
-            onClick={() => setConfirming(true)}
+            onClick={() => {
+              run.reset()
+              setConfirming(true)
+            }}
             disabled={!complete || invoiceCount === 0 || preview.isFetching}
           >
             Abo-Lauf starten
@@ -168,7 +174,8 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
       </PageHeader>
 
       <div className="grid gap-4 px-8 pb-12">
-        {run.error !== null && <ErrorNotice error={run.error} />}
+        {/* While the dialog is open, it shows the error itself. */}
+        {run.error !== null && !confirming && <ErrorNotice error={run.error} />}
 
         {result !== null && (
           <RunResult result={result} draftPath={draftPath} />
@@ -191,7 +198,7 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
         </Panel>
 
         <Panel padded={false} title={`Vorschau ${monthLabel(month)}`}>
-          {preview.data !== undefined && (
+          {figuresShown && preview.data !== undefined && (
             <div className="flex flex-wrap gap-x-8 gap-y-3 px-5 pb-4 pt-4">
               <Figure label="Rechnungsentwürfe" value={String(preview.data.invoiceCount)} />
               <Figure label="Positionen" value={String(preview.data.lineCount)} />
@@ -208,12 +215,12 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
             empty={
               <EmptyState
                 title="Nichts fällig"
-                description="In diesem Monat beginnt keine Periode eines aktiven Vertrags, oder alles ist schon verrechnet."
+                description="In diesem Monat beginnt keine Periode eines laufenden Vertrags, oder alles ist schon verrechnet."
               />
             }
             expanded={expanded}
             onExpandedChange={setExpanded}
-            renderExpanded={(plan) => <PlannedLines plan={plan} />}
+            renderExpanded={(plan) => <PlannedLines plan={plan} vatLiable={vatLiable} />}
           />
         </Panel>
 
@@ -261,8 +268,17 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
   )
 }
 
-/** The lines one draft would carry, under its contract row. */
-function PlannedLines({ plan }: { plan: SubscriptionContractPlan }) {
+/**
+ * The lines one draft would carry, under its contract row. «inkl.» or «zzgl. MWST» only for a
+ * tenant registered for VAT; for the others a price is just a price.
+ */
+function PlannedLines({
+  plan,
+  vatLiable,
+}: {
+  plan: SubscriptionContractPlan
+  vatLiable: boolean
+}) {
   return (
     <ul className="grid gap-1 py-1 text-small text-text-secondary">
       {plan.lines.map((line) => (
@@ -274,7 +290,7 @@ function PlannedLines({ plan }: { plan: SubscriptionContractPlan }) {
           <span className="tabular-nums">
             {formatQuantity(line.quantity)} × {formatAmount(line.unitPrice)}
           </span>
-          <span>{line.priceIncludesVat ? 'inkl. MWST' : 'zzgl. MWST'}</span>
+          {vatLiable && <span>{line.priceIncludesVat ? 'inkl. MWST' : 'zzgl. MWST'}</span>}
           <span className="ml-auto tabular-nums">{formatAmount(line.amount)}</span>
         </li>
       ))}

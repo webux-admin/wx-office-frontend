@@ -5269,6 +5269,8 @@ export type SubscriptionCurrencyTotal = {
 export type SubscriptionPreview = {
   /** The billing month, `yyyy-MM`. */
   month: string
+  /** Whether the tenant is registered for VAT; without it no price says anything about VAT. */
+  vatLiable: boolean
   invoiceCount: number
   lineCount: number
   skippedCount: number

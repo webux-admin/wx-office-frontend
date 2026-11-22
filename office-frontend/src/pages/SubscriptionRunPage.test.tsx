@@ -44,6 +44,9 @@ let root: Root
 let requests: { method: string; url: string; body: Record<string, unknown> }[]
 let preview: SubscriptionPreview
 let result: SubscriptionRunResult
+/** What the next preview or run answers instead of success; `pending` never answers. */
+let previewFailure: { status: number; detail: string } | 'pending' | null
+let runFailure: { status: number; detail: string } | null
 
 function json(body: unknown) {
   return Promise.resolve(
@@ -54,14 +57,30 @@ function json(body: unknown) {
   )
 }
 
+function problem(failure: { status: number; detail: string }) {
+  return Promise.resolve(
+    new Response(JSON.stringify({ status: failure.status, detail: failure.detail }), {
+      status: failure.status,
+      headers: { 'Content-Type': 'application/problem+json' },
+    }),
+  )
+}
+
 function stubFetch() {
   requests = []
+  previewFailure = null
+  runFailure = null
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
     requests.push({ method, url, body })
-    if (url.includes('/subscription-runs/preview')) return json(preview)
-    if (url.includes('/subscription-runs')) return json(result)
+    if (url.includes('/subscription-runs/preview')) {
+      if (previewFailure === 'pending') return new Promise<Response>(() => {})
+      return previewFailure !== null ? problem(previewFailure) : json(preview)
+    }
+    if (url.includes('/subscription-runs')) {
+      return runFailure !== null ? problem(runFailure) : json(result)
+    }
     return json([])
   })
 }
@@ -71,6 +90,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2028, 0, 10))
   preview = {
     month: '2028-01',
+    vatLiable: true,
     invoiceCount: 1,
     lineCount: 2,
     skippedCount: 1,
@@ -243,6 +263,19 @@ async function type(element: HTMLInputElement, value: string) {
   await settle()
 }
 
+/** The dialog is gone or fading out: a closing box is inert until its fade is over. */
+function dialogClosed(): boolean {
+  const confirm = button('Entwürfe erstellen')
+  return confirm === undefined || confirm.closest('[inert]') !== null
+}
+
+/** The alerts a user can still read, without those of a dialog fading out. */
+function liveAlerts(): string[] {
+  return [...document.body.querySelectorAll('[role=alert]')]
+    .filter((alert) => alert.closest('[inert]') === null)
+    .map((alert) => alert.textContent ?? '')
+}
+
 function writes() {
   return requests.filter((entry) => entry.method === 'POST')
 }
@@ -323,6 +356,7 @@ describe('SubscriptionRunPage', () => {
   it('subscriptionRunPageWithNothingDueTest', async () => {
     preview = {
       month: '2028-01',
+      vatLiable: true,
       invoiceCount: 0,
       lineCount: 0,
       skippedCount: 0,
@@ -332,6 +366,7 @@ describe('SubscriptionRunPage', () => {
     await render()
 
     expect(text()).toContain('Nichts fällig')
+    expect(text()).toContain('keine Periode eines laufenden Vertrags')
     expect(button('Abo-Lauf starten')?.disabled).toBe(true)
   })
 
@@ -342,6 +377,103 @@ describe('SubscriptionRunPage', () => {
     expect(text()).toContain('V-00007')
     expect(button('Abo-Lauf starten')).toBeUndefined()
     expect(text()).toContain('fehlt das Recht')
+  })
+
+  /** A preview the server cannot answer says why, and nothing can be started. */
+  it('subscriptionRunPageWhenThePreviewFailsTest', async () => {
+    previewFailure = { status: 500, detail: 'Die Vorschau ist gerade nicht verfügbar.' }
+    await render()
+
+    expect(text()).toContain('Die Vorschau ist gerade nicht verfügbar.')
+    expect(text()).not.toContain('Summe wie vereinbart')
+    expect(button('Abo-Lauf starten')?.disabled).toBe(true)
+    expect(writes()).toHaveLength(0)
+  })
+
+  /** A refused run keeps the dialog open and says why, once and not twice. */
+  it('subscriptionRunPageWhenTheRunIsRefusedTest', async () => {
+    runFailure = { status: 409, detail: 'Der Abo-Lauf ist für diesen Mandanten ausgeschaltet.' }
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Entwürfe erstellen'))
+
+    expect(button('Entwürfe erstellen')).toBeDefined()
+    expect(text().split('Der Abo-Lauf ist für diesen Mandanten ausgeschaltet.')).toHaveLength(2)
+    expect(text()).not.toContain('Ergebnis Januar 2028')
+  })
+
+  /** A server error is shown the same way, and stays on the page once the dialog is closed. */
+  it('subscriptionRunPageWhenTheRunFailsTest', async () => {
+    runFailure = { status: 500, detail: 'Interner Fehler beim Abo-Lauf.' }
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Entwürfe erstellen'))
+
+    expect(button('Entwürfe erstellen')).toBeDefined()
+    expect(text().split('Interner Fehler beim Abo-Lauf.')).toHaveLength(2)
+
+    await click(button('Abbrechen'))
+
+    expect(dialogClosed()).toBe(true)
+    expect(liveAlerts()).toEqual(['Interner Fehler beim Abo-Lauf.'])
+    expect(writes()).toHaveLength(1)
+  })
+
+  /** Cancel and Escape close the dialog without writing anything. */
+  it('subscriptionRunPageCancelsWithoutWritingTest', async () => {
+    await render()
+    await click(button('Abo-Lauf starten'))
+    await click(button('Abbrechen'))
+
+    expect(dialogClosed()).toBe(true)
+
+    await click(button('Abo-Lauf starten'))
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    await settle()
+
+    expect(dialogClosed()).toBe(true)
+    expect(writes()).toHaveLength(0)
+  })
+
+  /** «zzgl. MWST» means something only for a tenant registered for VAT. */
+  it('subscriptionRunPageNamesTheVatOnlyForARegisteredTenantTest', async () => {
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('zzgl. MWST')
+  })
+
+  it('subscriptionRunPageWithoutVatForATenantNotRegisteredTest', async () => {
+    preview = { ...preview, vatLiable: false }
+    await render()
+    await click(container.querySelector('[aria-label="Zeile aufklappen"]') ?? undefined)
+
+    expect(text()).toContain('Lizenz')
+    expect(text()).not.toContain('MWST')
+  })
+
+  /** While another month loads, the figures of the last one do not stand under its title. */
+  it('subscriptionRunPageHidesTheFiguresOfTheLastMonthTest', async () => {
+    await render()
+    expect(text()).toContain('Summe wie vereinbart')
+
+    previewFailure = 'pending'
+    await type(monthField(), '2028-02')
+
+    expect(text()).toContain('Vorschau Februar 2028')
+    expect(text()).not.toContain('Summe wie vereinbart')
+  })
+
+  /** An incomplete month shows no figures at all. */
+  it('subscriptionRunPageWithoutAMonthTest', async () => {
+    await render()
+    await type(monthField(), '')
+
+    expect(text()).toContain('Einen Monat wählen.')
+    expect(text()).not.toContain('Summe wie vereinbart')
+    expect(button('Abo-Lauf starten')?.disabled).toBe(true)
   })
 
   /** A tenant that does not run the module sees no run and asks nothing. */

@@ -602,6 +602,33 @@ describe('ContractPage', () => {
     expect(written[0].body.lockVersion).toBe(3)
   })
 
+  it('contractPageFixesTheStartOfAnActiveContractTest', async () => {
+    stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
+    answer = () => json({ ...stored, currentVersionNo: 3 })
+    await render('/vertraege/5')
+
+    expect((control('Beginn') as HTMLInputElement).disabled).toBe(true)
+    expect(text()).toContain('Steht fest seit der Aktivierung.')
+    expect(document.querySelector('[aria-label="Beginn: nicht änderbar"]')).not.toBeNull()
+
+    // Extending the contract stays open: a new end takes the next version.
+    expect((control('Ende') as HTMLInputElement).disabled).toBe(false)
+    await type('Ende', '2030-12-31')
+    await type('Änderung gilt ab', '2028-01-01')
+    await press('Speichern')
+
+    expect(written[0].method).toBe('PUT')
+    expect(written[0].body.endDate).toBe('2030-12-31')
+    expect(written[0].body.startDate).toBe(STORED.startDate)
+  })
+
+  it('contractPageLeavesTheStartOfADraftOpenTest', async () => {
+    await render('/vertraege/5')
+
+    expect((control('Beginn') as HTMLInputElement).disabled).toBe(false)
+    expect(text()).not.toContain('Steht fest seit der Aktivierung.')
+  })
+
   it('contractPageRefusesADayBeforeTheStartTest', async () => {
     stored = { ...STORED, status: 'ACTIVE', currentVersionNo: 2 }
     await render('/vertraege/5')
