@@ -1,8 +1,8 @@
-# ADR-0076 — Druckvorlagen-Designer: ein Blatt mit freier Platzierung
+# ADR-0078 — Druckvorlagen-Designer: ein Blatt mit freier Platzierung
 
 - **Status:** Angenommen
 - **Datum:** 2026-11-21
-- **Verhältnis:** Neu. Setzt die Druckvorlage Version 2 des Backends um — ADR-0148 (Backend):
+- **Verhältnis:** Neu. Setzt die Druckvorlage Version 2 des Backends um — ADR-0152 (Backend):
   Papierformat, freie Platzierung, anordenbarer Inhalt, Lage des QR-Zahlteils. Löst Punkt 2 von
   [ADR-0060](ADR-0060-stammdaten-masken-auf-den-gemeinsamen-bausteinen.md) ab («Die Druckvorlage
   ist eine `FormMask`») und folgt den Tastenkürzeln (ADR-0012), dem Änderungsschutz (ADR-0048,

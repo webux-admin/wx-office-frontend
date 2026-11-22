@@ -52,8 +52,8 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Feldern samt Beispielwert und Aufbau links, Einstellungen rechts. Ziehen ist nie der einzige
   Weg: Klick fügt ein, Millimeter lassen sich eintippen, Reihenfolgen haben Knöpfe. Der
   QR-Zahlteil ist gesperrt — unten auf der letzten Seite oder auf eigener Seite. Das Modell ohne
-  React liegt in `src/printlayout/`, keine Zeichen- oder Drag-Bibliothek (ADR-0076, Backend
-  ADR-0148)
+  React liegt in `src/printlayout/`, keine Zeichen- oder Drag-Bibliothek (ADR-0078, Backend
+  ADR-0152)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 
