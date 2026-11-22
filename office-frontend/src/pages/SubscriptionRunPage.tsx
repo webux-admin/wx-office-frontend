@@ -24,12 +24,15 @@ import {
   currentMonth,
   draftCountText,
   draftLineCount,
+  fetchMissingRunMonths,
   fetchSubscriptionPreview,
   isCompleteMonth,
   isSplitLine,
+  missingRunText,
   monthLabel,
   runResultText,
   runSubscription,
+  subscriptionMissingMonthsKey,
   subscriptionPreviewKey,
   totalsText,
 } from '../lib/subscription'
@@ -79,12 +82,19 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
     placeholderData: keepPreviousData,
   })
 
+  const missing = useQuery({
+    queryKey: subscriptionMissingMonthsKey(tenantId),
+    queryFn: () => fetchMissingRunMonths(tenantId),
+  })
+  const missingMonths = missing.data?.months ?? []
+
   const run = useMutation({
     mutationFn: () => runSubscription(tenantId, month),
     onSuccess: (answer) => {
       setResult(answer)
       setConfirming(false)
       void queryClient.invalidateQueries({ queryKey: subscriptionPreviewKey(tenantId) })
+      void queryClient.invalidateQueries({ queryKey: subscriptionMissingMonthsKey(tenantId) })
       if (invoiceKind) {
         void queryClient.invalidateQueries({
           queryKey: salesDocumentListKey(invoiceKind, tenantId),
@@ -182,6 +192,25 @@ function SubscriptionRun({ tenantId }: { tenantId: number }) {
 
         {result !== null && (
           <RunResult result={result} draftPath={draftPath} />
+        )}
+
+        {missingMonths.length > 0 && (
+          <WarningNotice>
+            <ul className="grid gap-2">
+              {missingMonths.map((missingMonth) => (
+                <li key={missingMonth} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span>{missingRunText(missingMonth)}</span>
+                  <Button
+                    variant="secondary"
+                    onClick={() => changeMonth(missingMonth)}
+                    disabled={month === missingMonth}
+                  >
+                    Zu {monthLabel(missingMonth)}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </WarningNotice>
         )}
 
         <Panel

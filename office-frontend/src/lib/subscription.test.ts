@@ -6,8 +6,10 @@ import {
   draftLineCount,
   isCompleteMonth,
   isSplitLine,
+  missingRunText,
   monthLabel,
   runResultText,
+  subscriptionMissingMonthsKey,
   subscriptionPreviewKey,
   subscriptionRunsUrl,
   totalsText,
@@ -175,5 +177,21 @@ describe('subscription', () => {
   it('draftLineCountTest', () => {
     expect(draftLineCount(contractPlan([plannedLine(2), plannedLine(1)]))).toBe(3)
     expect(draftLineCount(contractPlan([]))).toBe(0)
+  })
+
+  /** The hint names the month in words, as the screen writes months. */
+  it('missingRunTextTest', () => {
+    expect(missingRunText('2026-10')).toBe('Für Oktober 2026 lief noch kein Abo-Lauf.')
+  })
+
+  /** A value that is no complete month is shown as it is, not as a month name. */
+  it('missingRunTextWithBrokenMonthTest', () => {
+    expect(missingRunText('2026-1')).toBe('Für 2026-1 lief noch kein Abo-Lauf.')
+  })
+
+  /** The missing months are asked from the server, under the tenant's address. */
+  it('fetchMissingRunMonthsUrlTest', () => {
+    expect(subscriptionRunsUrl(3)).toBe('/api/tenants/3/subscription-runs')
+    expect(subscriptionMissingMonthsKey(3)).toEqual(['subscription-missing-months', 3])
   })
 })

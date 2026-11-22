@@ -47,6 +47,8 @@ let result: SubscriptionRunResult
 /** What the next preview or run answers instead of success; `pending` never answers. */
 let previewFailure: { status: number; detail: string } | 'pending' | null
 let runFailure: { status: number; detail: string } | null
+/** The months without a run the server answers with. */
+let missingMonths: string[]
 
 function json(body: unknown) {
   return Promise.resolve(
@@ -70,6 +72,7 @@ function stubFetch() {
   requests = []
   previewFailure = null
   runFailure = null
+  missingMonths = []
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
@@ -77,6 +80,9 @@ function stubFetch() {
     if (url.includes('/subscription-runs/preview')) {
       if (previewFailure === 'pending') return new Promise<Response>(() => {})
       return previewFailure !== null ? problem(previewFailure) : json(preview)
+    }
+    if (url.includes('/subscription-runs/missing-months')) {
+      return json({ months: missingMonths })
     }
     if (url.includes('/subscription-runs')) {
       return runFailure !== null ? problem(runFailure) : json(result)
@@ -572,5 +578,35 @@ describe('SubscriptionRunPage', () => {
 
     expect(button('Abo-Lauf starten')).toBeUndefined()
     expect(requests).toHaveLength(0)
+  })
+
+  /** A month without a run is named, and the link jumps to it. */
+  it('subscriptionRunPageShowsAMissingMonthAndJumpsToItTest', async () => {
+    missingMonths = ['2027-11']
+    await render()
+
+    expect(text()).toContain('Für November 2027 lief noch kein Abo-Lauf.')
+
+    await click(button('Zu November 2027'))
+
+    expect(requests.some((entry) => entry.url.endsWith('preview?month=2027-11'))).toBe(true)
+    expect(text()).toContain('Vorschau November 2027')
+  })
+
+  /** A tenant whose months all ran shows no hint at all. */
+  it('subscriptionRunPageWithoutMissingMonthsTest', async () => {
+    await render()
+
+    expect(text()).not.toContain('lief noch kein Abo-Lauf')
+    expect(button('Zu November 2027')).toBeUndefined()
+  })
+
+  /** The hint is answered by the server, not computed from the preview. */
+  it('subscriptionRunPageAsksForTheMissingMonthsTest', async () => {
+    await render()
+
+    expect(
+      requests.some((entry) => entry.url.endsWith('/subscription-runs/missing-months')),
+    ).toBe(true)
   })
 })

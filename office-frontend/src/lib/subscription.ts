@@ -3,6 +3,7 @@ import { formatAmount } from './format'
 import type {
   SubscriptionContractPlan,
   SubscriptionCurrencyTotal,
+  SubscriptionMissingRunMonths,
   SubscriptionPlannedLine,
   SubscriptionPreview,
   SubscriptionRunResult,
@@ -91,6 +92,32 @@ export function fetchSubscriptionPreview(
   return api.get<SubscriptionPreview>(
     `${subscriptionRunsUrl(tenantId)}/preview?month=${encodeURIComponent(month)}`,
   )
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns cache key of the months without a run, so a run refreshes them
+ */
+export function subscriptionMissingMonthsKey(tenantId: number): readonly unknown[] {
+  return ['subscription-missing-months', tenantId]
+}
+
+/**
+ * Asks which billing months since the first run no run covers. Writes nothing.
+ *
+ * @param tenantId the tenant
+ * @returns the months, `yyyy-MM`, oldest first
+ */
+export function fetchMissingRunMonths(tenantId: number): Promise<SubscriptionMissingRunMonths> {
+  return api.get<SubscriptionMissingRunMonths>(`${subscriptionRunsUrl(tenantId)}/missing-months`)
+}
+
+/**
+ * @param month a month, `yyyy-MM`
+ * @returns the hint for a month without a run, «Für Oktober 2026 lief noch kein Abo-Lauf.»
+ */
+export function missingRunText(month: string): string {
+  return `Für ${monthLabel(month)} lief noch kein Abo-Lauf.`
 }
 
 /**

@@ -5438,6 +5438,12 @@ export type SubscriptionContractPlan = {
   notices: string[]
 }
 
+/** The billing months since the first run that no run covers (`MissingRunMonthsDto`). */
+export type SubscriptionMissingRunMonths = {
+  /** The months, `yyyy-MM`, oldest first; empty when nothing is missing. */
+  months: string[]
+}
+
 /** A sum in one currency (`CurrencyTotalDto`). */
 export type SubscriptionCurrencyTotal = {
   currency: string
