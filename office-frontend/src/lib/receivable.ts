@@ -264,8 +264,13 @@ export type SurplusParts = {
  * settle: 1’010.00 paid on 1’000.00 and 100.00 credited are 100.00 from the Gutschrift and
  * 10.00 paid too much (backend ADR-0157).
  *
+ * <p><b>What was paid back counts against the Gutschriften first.</b> The mask proposes a
+ * negative payment only for the part out of a Gutschrift; an overpayment goes back over the
+ * customer credit or is kept. 1’010.00 paid, 100.00 credited and 100.00 paid back leave
+ * 10.00 paid too much — not 10.00 of a Gutschrift (backend ADR-0158).
+ *
  * <p>Worked out from the lines the server sends, not guessed: each line a Gutschrift wrote
- * names it and carries its amount.
+ * names it and carries its amount, and a payment back is a negative payment.
  *
  * @param surplus  what the invoice owes the customer, zero or more
  * @param payments the settlement lines of the invoice
@@ -273,9 +278,13 @@ export type SurplusParts = {
  */
 export function surplusParts(surplus: number, payments: readonly Payment[]): SurplusParts {
   const surplusCents = Math.max(0, Math.round(surplus * 100))
-  const creditedCents = payments
-    .filter((payment) => payment.creditNoteId !== undefined && stillCounts(payment))
+  const standing = payments.filter(stillCounts)
+  const creditedCents = standing
+    .filter((payment) => payment.creditNoteId !== undefined)
     .reduce((cents, payment) => cents + Math.round(payment.amount * 100), 0)
-  const fromCreditNotes = Math.min(surplusCents, Math.max(0, creditedCents))
+  const paidBackCents = standing
+    .filter((payment) => payment.kind === 'PAYMENT' && payment.amount < 0)
+    .reduce((cents, payment) => cents - Math.round(payment.amount * 100), 0)
+  const fromCreditNotes = Math.min(surplusCents, Math.max(0, creditedCents - paidBackCents))
   return { fromCreditNotes: fromCreditNotes / 100, overpaid: (surplusCents - fromCreditNotes) / 100 }
 }

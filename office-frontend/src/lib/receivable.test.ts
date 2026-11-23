@@ -121,6 +121,27 @@ describe('surplusParts', () => {
     expect(surplusParts(0, [])).toEqual({ fromCreditNotes: 0, overpaid: 0 })
   })
 
+  /**
+   * 1’010.00 paid on 1’000.00, 100.00 credited and paid back: what is left is the 10.00 paid
+   * too much, not a credit out of the Gutschrift.
+   */
+  it('surplusPartsAfterTheRefundOfTheGutschriftTest', () => {
+    const payments = [line({ amount: 1010 }),
+      line({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 12 }),
+      line({ id: 3, amount: -100 })]
+
+    expect(surplusParts(10, payments)).toEqual({ fromCreditNotes: 0, overpaid: 10 })
+  })
+
+  /** Paid back only in part: the rest of the Gutschrift is still the customer's credit. */
+  it('surplusPartsAfterAPartialRefundTest', () => {
+    const payments = [line({ amount: 1010 }),
+      line({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 12 }),
+      line({ id: 3, amount: -60 })]
+
+    expect(surplusParts(50, payments)).toEqual({ fromCreditNotes: 40, overpaid: 10 })
+  })
+
   /** The Gutschrift was reversed: its line and the counter line no longer count. */
   it('surplusPartsAfterTheStornoOfTheGutschriftTest', () => {
     const payments = [
