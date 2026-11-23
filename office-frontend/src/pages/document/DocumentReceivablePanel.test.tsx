@@ -337,6 +337,51 @@ describe('DocumentReceivablePanel', () => {
     expect(field('Betrag')?.value).toBe('-125.00')
   })
 
+  /**
+   * <b>Paid 1’010.00 on 1’000.00, then 100.00 credited.</b> 100.00 are the Gutschrift and go
+   * back; the 10.00 paid too much stay an ordinary overpayment with the ways of ADR-0105.
+   */
+  it('documentReceivablePanelSplitsAMixedSurplusTest', async () => {
+    item = openItem({ totalGross: 1000, settled: 1110, open: -110 })
+    payments = [
+      creditLine({ id: 1, kind: 'PAYMENT', amount: 1010 }),
+      creditLine({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 21 }),
+    ]
+
+    await render()
+
+    expect(text()).toContain('100.00 CHF Guthaben aus Gutschrift')
+    expect(text()).toContain('10.00 CHF zu viel bezahlt')
+    expect(button('Einbehalten')).toBeDefined()
+    expect(text()).toContain('Zurückzahlen')
+
+    const refunds = [...document.querySelectorAll('button')]
+      .filter((entry) => entry.textContent === 'Zahlung erfassen')
+    await act(async () => {
+      refunds[refunds.length - 1].click()
+    })
+    await settle()
+
+    expect(field('Betrag')?.value).toBe('-100.00')
+  })
+
+  /** Keeping is offered for the 10.00 paid too much, not for what the Gutschrift gave back. */
+  it('documentReceivablePanelKeepsOnlyWhatWasPaidTooMuchTest', async () => {
+    item = openItem({ totalGross: 1000, settled: 1110, open: -110 })
+    payments = [
+      creditLine({ id: 1, kind: 'PAYMENT', amount: 1010 }),
+      creditLine({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 21 }),
+    ]
+
+    await render()
+    await act(async () => {
+      button('Einbehalten')?.click()
+    })
+    await settle()
+
+    expect(field('Betrag in CHF')?.value).toBe('10.00')
+  })
+
   it('documentReceivablePanelHidesTheRefundWithoutTheRightTest', async () => {
     item = openItem({ totalGross: 1250, settled: 1375, open: -125 })
     payments = [

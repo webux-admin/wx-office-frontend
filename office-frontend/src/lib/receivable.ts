@@ -245,17 +245,37 @@ export function isReversibleOnItsOwn(payment: Payment): boolean {
   return stillCounts(payment) && payment.creditNoteId === undefined
 }
 
+/** A surplus on an invoice, told apart by where it comes from. */
+export type SurplusParts = {
+  /** What standing Gutschriften gave back beyond what is owed: paid back, never kept. */
+  fromCreditNotes: number
+  /** What arrived beyond what was owed: an ordinary overpayment (backend ADR-0105). */
+  overpaid: number
+}
+
 /**
- * Whether a standing Gutschrift lowers this invoice.
+ * Splits the surplus of an invoice into the part a Gutschrift made and the part paid too much.
  *
- * <p>Asked where the invoice shows a surplus. A surplus out of a Gutschrift is no overpayment:
- * keeping it would be additional consideration that undoes the Gutschrift, and the customer
- * credit on 2030 is not the way back either, because no money arrived. It goes back as a
- * negative payment on the invoice (backend ADR-0155, ADR-0156).
+ * <p>A surplus out of a Gutschrift is no overpayment: keeping it would be additional
+ * consideration that undoes the Gutschrift, and the customer credit on 2030 is not the way
+ * back either, because no money arrived. It goes back as a negative payment on the invoice.
+ * What is left beyond the Gutschriften is money that did arrive, and it keeps the ways of an
+ * overpayment. The Gutschriften take their share first, at most what their lines still
+ * settle: 1’010.00 paid on 1’000.00 and 100.00 credited are 100.00 from the Gutschrift and
+ * 10.00 paid too much (backend ADR-0157).
  *
+ * <p>Worked out from the lines the server sends, not guessed: each line a Gutschrift wrote
+ * names it and carries its amount.
+ *
+ * @param surplus  what the invoice owes the customer, zero or more
  * @param payments the settlement lines of the invoice
- * @returns `true` if a line a Gutschrift wrote still counts
+ * @returns the two parts, in cents exact
  */
-export function hasStandingCreditNote(payments: readonly Payment[]): boolean {
-  return payments.some((payment) => payment.creditNoteId !== undefined && stillCounts(payment))
+export function surplusParts(surplus: number, payments: readonly Payment[]): SurplusParts {
+  const surplusCents = Math.max(0, Math.round(surplus * 100))
+  const creditedCents = payments
+    .filter((payment) => payment.creditNoteId !== undefined && stillCounts(payment))
+    .reduce((cents, payment) => cents + Math.round(payment.amount * 100), 0)
+  const fromCreditNotes = Math.min(surplusCents, Math.max(0, creditedCents))
+  return { fromCreditNotes: fromCreditNotes / 100, overpaid: (surplusCents - fromCreditNotes) / 100 }
 }

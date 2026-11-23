@@ -21,7 +21,7 @@ import {
   fetchOverpaymentAdvice,
   type OverpaymentAdvice,
   fetchPayments,
-  hasStandingCreditNote,
+  surplusParts,
   isReversibleOnItsOwn,
   openState,
   recordPayment,
@@ -201,8 +201,9 @@ export function DocumentReceivablePanel({
   const surplus = item === undefined || item.open >= 0 ? 0 : -item.open
 
   // A surplus out of a Gutschrift is the customer's money without any money having arrived:
-  // it is not kept and not moved to the customer credit, it is paid back (backend ADR-0156).
-  const surplusFromCreditNote = surplus > 0 && hasStandingCreditNote(rows)
+  // it is not kept and not moved to the customer credit, it is paid back. What arrived beyond
+  // that is an ordinary overpayment and keeps its three ways (backend ADR-0157).
+  const { fromCreditNotes: surplusFromCreditNote, overpaid } = surplusParts(surplus, rows)
 
   const openCreate = () => {
     record.reset()
@@ -214,7 +215,8 @@ export function DocumentReceivablePanel({
   // debit goes back today (backend ADR-0155).
   const openRefund = () => {
     record.reset()
-    setForm({ ...proposedForm(undefined, currency), amount: (-surplus).toFixed(2) })
+    setForm({ ...proposedForm(undefined, currency),
+      amount: (-surplusFromCreditNote).toFixed(2) })
     setRecording(true)
   }
 
@@ -283,7 +285,7 @@ export function DocumentReceivablePanel({
                 {state === 'settled' && <Badge tone="success">ausgeglichen</Badge>}
                 {state === 'credit' && (
                   <Badge tone="accent">
-                    {surplusFromCreditNote ? 'Guthaben aus Gutschrift' : 'überzahlt'}
+                    {overpaid > 0 ? 'überzahlt' : 'Guthaben aus Gutschrift'}
                   </Badge>
                 )}
               </div>
@@ -294,11 +296,11 @@ export function DocumentReceivablePanel({
         {/* Three ways out, and «stehen lassen» is the one that needs no click: until
             somebody keeps it the surplus belongs to the customer (OR Art. 62). Nothing here
             books by itself (backend ADR-0105). */}
-        {surplusFromCreditNote && (
+        {surplusFromCreditNote > 0 && (
           <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
             <p className="text-body">
               <span className="font-medium">
-                {formatAmount(surplus)} {currency} Guthaben aus Gutschrift.
+                {formatAmount(surplusFromCreditNote)} {currency} Guthaben aus Gutschrift.
               </span>{' '}
               Die Rechnung war bezahlt, als die Gutschrift sie gemindert hat; der Betrag gehört
               dem Kunden.
@@ -317,11 +319,11 @@ export function DocumentReceivablePanel({
           </div>
         )}
 
-        {surplus > 0 && !surplusFromCreditNote && (
+        {overpaid > 0 && (
           <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
             <p className="text-body">
               <span className="font-medium">
-                {formatAmount(surplus)} {currency} zu viel bezahlt.
+                {formatAmount(overpaid)} {currency} zu viel bezahlt.
               </span>{' '}
               Der Betrag bleibt als Guthaben des Kunden stehen, solange niemand etwas anderes
               entscheidet.
@@ -557,7 +559,8 @@ export function DocumentReceivablePanel({
         documentId={documentId}
         documentNumber={undefined}
         currency={currency}
-        openAmount={item?.open}
+        // Keeping is offered for what was paid too much, never for what a Gutschrift gave back.
+        openAmount={keepingSurplus ? -overpaid : item?.open}
         keepLimit={advice.data?.keepLimit}
         keepMaximum={advice.data?.keepMaximum}
         initialReason={keepingSurplus ? 'UEBERZAHLUNG' : undefined}

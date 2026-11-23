@@ -4,7 +4,7 @@ import {
   PAYMENT_KIND_ORDER,
   REDUCES_CONSIDERATION,
   openState,
-  hasStandingCreditNote,
+  surplusParts,
   isReversibleOnItsOwn,
   stillCounts,
 } from './receivable'
@@ -86,32 +86,50 @@ describe('isReversibleOnItsOwn', () => {
   })
 })
 
-describe('hasStandingCreditNote', () => {
-  /** Paid in full, then 125.00 credited: the surplus comes out of the Gutschrift. */
-  it('hasStandingCreditNoteTest', () => {
+describe('surplusParts', () => {
+  /** 1’010.00 paid on 1’000.00, then 100.00 credited: 100.00 and 10.00. */
+  it('surplusPartsTest', () => {
+    const payments = [line({ amount: 1010 }),
+      line({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 12 })]
+
+    expect(surplusParts(110, payments)).toEqual({ fromCreditNotes: 100, overpaid: 10 })
+  })
+
+  /** Paid in full, then 125.00 credited: all of it comes out of the Gutschrift. */
+  it('surplusPartsOutOfAGutschriftOnlyTest', () => {
     const payments = [line({ amount: 1250 }),
       line({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 12 })]
 
-    expect(hasStandingCreditNote(payments)).toBe(true)
+    expect(surplusParts(125, payments)).toEqual({ fromCreditNotes: 125, overpaid: 0 })
   })
 
-  it('hasStandingCreditNoteWithoutLinesTest', () => {
-    expect(hasStandingCreditNote([])).toBe(false)
+  /** Paid 900.00 on 1’000.00, then 150.00 credited: 50.00 over, all from the Gutschrift. */
+  it('surplusPartsSmallerThanTheGutschriftTest', () => {
+    const payments = [line({ amount: 900 }),
+      line({ id: 2, kind: 'CREDIT', amount: 150, creditNoteId: 12 })]
+
+    expect(surplusParts(50, payments)).toEqual({ fromCreditNotes: 50, overpaid: 0 })
   })
 
   /** An ordinary overpayment, no Gutschrift anywhere. */
-  it('hasStandingCreditNoteWithAnOverpaymentTest', () => {
-    expect(hasStandingCreditNote([line({ amount: 1260 })])).toBe(false)
+  it('surplusPartsWithAnOverpaymentOnlyTest', () => {
+    expect(surplusParts(0.4, [line({ amount: 1297.6 })])).toEqual({ fromCreditNotes: 0,
+      overpaid: 0.4 })
+  })
+
+  it('surplusPartsWithoutASurplusTest', () => {
+    expect(surplusParts(0, [])).toEqual({ fromCreditNotes: 0, overpaid: 0 })
   })
 
   /** The Gutschrift was reversed: its line and the counter line no longer count. */
-  it('hasStandingCreditNoteAfterItsStornoTest', () => {
+  it('surplusPartsAfterTheStornoOfTheGutschriftTest', () => {
     const payments = [
-      line({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 12, reversedByPaymentId: 3 }),
-      line({ id: 3, kind: 'CREDIT', amount: -125, reversesPaymentId: 2 }),
+      line({ amount: 1010 }),
+      line({ id: 2, kind: 'CREDIT', amount: 100, creditNoteId: 12, reversedByPaymentId: 3 }),
+      line({ id: 3, kind: 'CREDIT', amount: -100, reversesPaymentId: 2 }),
     ]
 
-    expect(hasStandingCreditNote(payments)).toBe(false)
+    expect(surplusParts(10, payments)).toEqual({ fromCreditNotes: 0, overpaid: 10 })
   })
 })
 

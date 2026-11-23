@@ -29,8 +29,8 @@ Stand der Module (in dieser Reihenfolge gebaut):
   liefert, und belegt jede Position mit dem Vorschlag des Backends vor, der angekreuzt die
   Rechnung exakt schliesst; Satz und Leistungsdatum kopiert das Backend. «Gutschrift» ist keine
   Ausgleichsart mehr im Zahlungsdialog. Ein Guthaben aus einer Gutschrift wird mit einer
-  negativen Zahlung zurückgezahlt, nicht einbehalten (ADR-0079, ADR-0080, Backend ADR-0155 und
-  ADR-0156)
+  negativen Zahlung zurückgezahlt, nicht einbehalten; ein gemischter Überschuss wird geteilt
+  (ADR-0079 bis ADR-0081, Backend ADR-0155 bis ADR-0157)
 - **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
   `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
   Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). Die Maske bietet nur
