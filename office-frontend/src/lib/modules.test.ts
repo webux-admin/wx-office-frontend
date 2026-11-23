@@ -58,6 +58,11 @@ describe('MODULE_NAMES', () => {
     expect(MODULE_NAMES.CONTRACT).toBe('Verträge')
     expect(MODULE_NAMES.SUBSCRIPTION).toBe('Abo-Lauf')
   })
+
+  /** The word of the screen, not the code: «Zeiterfassung» and not «Timetracking». */
+  it('moduleNamesCoverTimeTrackingTest', () => {
+    expect(MODULE_NAMES.TIMETRACKING).toBe('Zeiterfassung')
+  })
 })
 
 describe('runsModule', () => {

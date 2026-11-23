@@ -28,6 +28,7 @@ export type LicensedModuleCode =
   | 'PROJECT'
   | 'CONTRACT'
   | 'SUBSCRIPTION'
+  | 'TIMETRACKING'
 
 /**
  * What each module is called on screen.
@@ -47,6 +48,7 @@ export const MODULE_NAMES: Record<LicensedModuleCode, string> = {
   PROJECT: 'Projekte',
   CONTRACT: 'Verträge',
   SUBSCRIPTION: 'Abo-Lauf',
+  TIMETRACKING: 'Zeiterfassung',
 }
 
 /**

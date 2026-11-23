@@ -14,7 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatCount } from '../lib/format'
-import { PERMISSION_MODULES, labelOf, permissionAction } from '../lib/labels'
+import { PERMISSION_MODULES, labelOf, permissionAction, permissionHint } from '../lib/labels'
 import { rolesKey, rolesUrl } from '../lib/roles'
 import type { PermissionCatalogue, Role } from '../lib/types'
 
@@ -267,6 +267,7 @@ function Roles({ tenantId }: { tenantId: number }) {
                       <CheckboxField
                         key={code}
                         label={permissionAction(code)}
+                        hint={permissionHint(code)}
                         checked={permissions.includes(code)}
                         onChange={() => toggle(code)}
                       />

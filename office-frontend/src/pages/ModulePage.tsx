@@ -57,6 +57,9 @@ const CONSEQUENCES: Record<string, string> = {
     'Der Abo-Lauf lässt sich danach nicht mehr starten, und aus Verträgen entstehen keine ' +
     'Rechnungsentwürfe mehr. Was frühere Läufe erzeugt haben, bleibt erhalten — gelöscht ' +
     'wird nichts.',
+  TIMETRACKING:
+    'Zeiten lassen sich danach nicht mehr erfassen, ändern oder abrechnen. Erfasste Zeiten ' +
+    'bleiben lesbar — gelöscht wird nichts.',
 }
 
 /** The neutral sentence, for a module nobody wrote one for. */

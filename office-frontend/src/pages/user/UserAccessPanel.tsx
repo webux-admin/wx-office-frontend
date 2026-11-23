@@ -8,7 +8,7 @@ import { Panel } from '../../components/Panel'
 import { SelectField } from '../../components/SelectField'
 import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
-import { PERMISSION_MODULES, labelOf, permissionAction } from '../../lib/labels'
+import { PERMISSION_MODULES, labelOf, permissionAction, permissionHint } from '../../lib/labels'
 import type {
   PermissionCatalogue,
   Role,
@@ -195,6 +195,7 @@ export function UserAccessPanel({
                           <CheckboxField
                             key={code}
                             label={permissionAction(code)}
+                            hint={permissionHint(code)}
                             checked={direct.includes(code)}
                             onChange={() => togglePermission(code)}
                             disabled={setPermissions.isPending}

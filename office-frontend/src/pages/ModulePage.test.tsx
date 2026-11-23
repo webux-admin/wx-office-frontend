@@ -291,6 +291,47 @@ describe('ModulePage', () => {
     expect(container.textContent).not.toContain('nicht mehr per E-Mail versenden')
   })
 
+  it('modulePageListsTheTimeTrackingTest', async () => {
+    // Name and sentence come from the backend catalogue; the screen shows them as they are.
+    modules = [
+      outbox({
+        code: 'TIMETRACKING',
+        label: 'Zeiterfassung',
+        description: 'Zeiten erfassen, Projekten und Kunden zuordnen und als Rechnung abrechnen.',
+      }),
+    ]
+    await render()
+
+    expect(box('Zeiterfassung verwenden')?.checked).toBe(false)
+    expect(container.textContent).toContain(
+      'Zeiten erfassen, Projekten und Kunden zuordnen und als Rechnung abrechnen.',
+    )
+  })
+
+  it('modulePageSwitchesTheTimeTrackingOnTest', async () => {
+    modules = [outbox({ code: 'TIMETRACKING', label: 'Zeiterfassung' })]
+    await render()
+
+    await toggle('Zeiterfassung verwenden', true)
+    await click(button('Speichern'))
+
+    const put = written.find((entry) => entry.url.includes('/modules'))
+    expect(put?.body.modules).toEqual([{ code: 'TIMETRACKING', active: true }])
+  })
+
+  it('modulePageWarnsThatTrackedTimeStaysReadableTest', async () => {
+    modules = [
+      outbox({ code: 'TIMETRACKING', label: 'Zeiterfassung', active: true, usage: '12 Zeiteinträge' }),
+    ]
+    await render()
+
+    await toggle('Zeiterfassung verwenden', false)
+
+    expect(container.textContent).toContain('12 Zeiteinträge')
+    expect(container.textContent).toContain('Erfasste Zeiten bleiben lesbar')
+    expect(container.textContent).not.toContain('Was im Modul liegt, bleibt erhalten')
+  })
+
   it('modulePageWarnsThatContractsStayReadableTest', async () => {
     modules = [outbox({ code: 'CONTRACT', label: 'Verträge', active: true, usage: '3 Verträge' })]
     await render()

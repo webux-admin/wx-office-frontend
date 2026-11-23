@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PERMISSION_MODULES, labelOf, permissionAction } from './labels'
+import { PERMISSION_MODULES, labelOf, permissionAction, permissionHint } from './labels'
 
 describe('labelOf', () => {
   it('labelOfTest', () => {
@@ -8,6 +8,7 @@ describe('labelOf', () => {
     expect(labelOf(PERMISSION_MODULES, 'PROJECT')).toBe('Projekte')
     expect(labelOf(PERMISSION_MODULES, 'CONTRACT')).toBe('Verträge')
     expect(labelOf(PERMISSION_MODULES, 'SUBSCRIPTION')).toBe('Abo-Lauf')
+    expect(labelOf(PERMISSION_MODULES, 'TIMETRACKING')).toBe('Zeiterfassung')
   })
 
   it('labelOfWithoutValueTest', () => {
@@ -52,6 +53,7 @@ describe('PERMISSION_MODULES', () => {
       'PROJECT',
       'CONTRACT',
       'SUBSCRIPTION',
+      'TIMETRACKING',
       'USER',
       'REPORT',
     ]
@@ -113,8 +115,54 @@ describe('permissionAction', () => {
     expect(permissionAction('ACCOUNTING_CLOSE')).toBe('Abschliessen')
   })
 
+  /**
+   * Four rights, four different verbs: one's own times, everybody's, the times of others and
+   * billing (backend ADR-0159). A raw TIME_TRACK in the matrix is what this guards against.
+   */
+  it('permissionActionForTimeTrackingTest', () => {
+    expect(permissionAction('TIME_TRACK')).toBe('Erfassen')
+    expect(permissionAction('TIME_READ')).toBe('Lesen')
+    expect(permissionAction('TIME_WRITE')).toBe('Bearbeiten')
+    expect(permissionAction('TIME_BILL')).toBe('Abrechnen')
+  })
+
   it('permissionActionWithUnknownVerbTest', () => {
     expect(permissionAction('PARTNER_SOMETHING')).toBe('PARTNER_SOMETHING')
     expect(permissionAction('')).toBe('')
+  })
+})
+
+describe('permissionHint', () => {
+  it('permissionHintTest', () => {
+    // «Lesen» alone would read as «one's own times»; the line says whose they are.
+    expect(permissionHint('TIME_READ')).toBe(
+      'Die Zeiten aller Benutzer lesen, auswerten und exportieren.',
+    )
+  })
+
+  it('permissionHintForEveryTimeTrackingRightTest', () => {
+    for (const code of ['TIME_TRACK', 'TIME_READ', 'TIME_WRITE', 'TIME_BILL']) {
+      expect(permissionHint(code)).toMatch(/\S/)
+    }
+    expect(permissionHint('TIME_TRACK')).toContain('Eigene Zeiten')
+    expect(permissionHint('TIME_WRITE')).toContain('Zeiten anderer')
+  })
+
+  /** Billing writes an invoice draft: the line names the right it needs beside it. */
+  it('permissionHintForTimeBillNamesTheInvoiceRightTest', () => {
+    expect(permissionHint('TIME_BILL')).toContain('«Rechnungen: Bearbeiten»')
+  })
+
+  it('permissionHintWithoutLineTest', () => {
+    // A right whose verb says it all gets no line, so the matrix stays as short as it was.
+    expect(permissionHint('PARTNER_READ')).toBeUndefined()
+    expect(permissionHint('VAT_RATE_WRITE')).toBeUndefined()
+  })
+
+  it('permissionHintWithUnknownCodeTest', () => {
+    expect(permissionHint('')).toBeUndefined()
+    expect(permissionHint('TIME_SOMETHING')).toBeUndefined()
+    // Not a key of the object it is looked up in, whatever its prototype carries.
+    expect(permissionHint('toString')).toBeUndefined()
   })
 })

@@ -48,6 +48,7 @@ export const PERMISSION_MODULES: Record<string, string> = {
   CONTRACT: 'Verträge',
   // The run, not the contract: what is agreed lives in CONTRACT (backend ADR-0136).
   SUBSCRIPTION: 'Abo-Lauf',
+  TIMETRACKING: 'Zeiterfassung',
   USER: 'Benutzer',
   REPORT: 'Auswertungen',
 }
@@ -75,6 +76,10 @@ const PERMISSION_VERBS: Record<string, string> = {
   CLOSE: 'Abschliessen',
   VIEW: 'Ansehen',
   EXPORT: 'Exportieren',
+  // The time tracking: one's own times. The times of everybody are «Lesen», those of others
+  // «Bearbeiten» — the line under each right says so (see PERMISSION_HINTS).
+  TRACK: 'Erfassen',
+  BILL: 'Abrechnen',
 }
 
 /**
@@ -98,4 +103,31 @@ export function permissionAction(code: string): string {
   if (special) return special
   const verb = code.slice(code.lastIndexOf('_') + 1)
   return PERMISSION_VERBS[verb] ?? code
+}
+
+/**
+ * One line under a right in the permission matrix, for the rights whose verb alone would be
+ * read wrongly.
+ *
+ * <p>The time tracking is why it exists. Its «Lesen» means the times of everybody — one's own
+ * come with «Erfassen» —, its «Bearbeiten» the times of others, and «Abrechnen» does nothing
+ * without the right to write invoices. The times of others are personal data about how somebody
+ * works (OR Art. 328b, backend ADR-0159): whoever grants them should read what they grant.
+ */
+const PERMISSION_HINTS: Record<string, string> = {
+  TIME_TRACK: 'Eigene Zeiten erfassen, ändern und löschen, mit eigener Stoppuhr.',
+  TIME_READ: 'Die Zeiten aller Benutzer lesen, auswerten und exportieren.',
+  TIME_WRITE:
+    'Zeiten anderer erfassen und ändern, Projektbedingungen, Standardleistungen und Abrechnungstakt pflegen.',
+  TIME_BILL: 'Zeiten in Rechnungsentwürfe übernehmen, nur zusammen mit «Rechnungen: Bearbeiten».',
+}
+
+/**
+ * Says in one line what a right allows, where its verb does not.
+ *
+ * @param code a permission code such as `TIME_READ`
+ * @returns the German line, or `undefined` for a right whose verb says it all
+ */
+export function permissionHint(code: string): string | undefined {
+  return Object.hasOwn(PERMISSION_HINTS, code) ? PERMISSION_HINTS[code] : undefined
 }
