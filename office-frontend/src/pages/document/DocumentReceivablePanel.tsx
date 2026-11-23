@@ -21,6 +21,7 @@ import {
   fetchOverpaymentAdvice,
   type OverpaymentAdvice,
   fetchPayments,
+  isReversibleOnItsOwn,
   openState,
   recordPayment,
   reversePayment,
@@ -28,7 +29,11 @@ import {
 import { CUSTOMER_CREDIT_PATH } from '../../lib/customerCredit'
 import { openItemsKey } from '../../lib/openItem'
 import { useDebouncedValue } from '../../components/useDebouncedValue'
-import { receivableKey, salesDocumentListKey } from '../../lib/salesDocument'
+import {
+  CREDIT_NOTE_KIND,
+  receivableKey,
+  salesDocumentListKey,
+} from '../../lib/salesDocument'
 import { WriteOffDialog } from '../openitem/WriteOffDialog'
 import type { SalesDocumentKind } from '../../lib/salesDocument'
 import type { Payment, PaymentKind } from '../../lib/types'
@@ -637,6 +642,16 @@ function PaymentRow({
             <Badge tone="muted">aus Zahlungseingang</Badge>
           </span>
         )}
+        {/* A line a Gutschrift wrote leads to it: that is where it is taken back, with the
+            Storno of the Gutschrift (backend ADR-0155). */}
+        {payment.creditNoteId !== undefined && (
+          <Link
+            to={`${CREDIT_NOTE_KIND.path}/${payment.creditNoteId}`}
+            className="ml-2 text-small text-accent-text underline-offset-2 hover:underline"
+          >
+            Gutschrift öffnen
+          </Link>
+        )}
       </td>
       <td className="py-1.5 pr-4 text-right tabular-nums">
         <span className="grid">
@@ -659,7 +674,7 @@ function PaymentRow({
         {formatDateTime(payment.recordedAt)} · {payment.recordedBy}
       </td>
       <td className="py-1.5 text-right">
-        {mayRecord && !struck && (
+        {mayRecord && isReversibleOnItsOwn(payment) && (
           <Button variant="ghost" onClick={onReverse}>
             Stornieren
           </Button>

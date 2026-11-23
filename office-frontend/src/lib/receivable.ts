@@ -31,6 +31,10 @@ export const PAYMENT_KINDS: Record<PaymentKind, string> = {
  * rest a conversion leaves has to be closable, and neither of the two reduces the agreed
  * consideration (MWSTV Art. 45 and Art. 46, backend ADR-0106).
  *
+ * <p><b>`CREDIT` is not here either.</b> A Gutschrift is a document of its own, with a number, a
+ * reference to the invoice and its VAT at the rate of the invoice, written with «Gutschrift
+ * erstellen» on the invoice. The backend refuses the bare settlement line (backend ADR-0155).
+ *
  * <p><b>`ADVANCE_APPLIED` is deliberately not here.</b> It comes into being only through the
  * credit screen, where a customer credit is set against an invoice — never by somebody
  * choosing it in the payment dialog. Offering it would let a settlement claim a prepayment
@@ -39,7 +43,6 @@ export const PAYMENT_KINDS: Record<PaymentKind, string> = {
 export const PAYMENT_KIND_ORDER: PaymentKind[] = [
   'PAYMENT',
   'DISCOUNT',
-  'CREDIT',
   'ROUNDING',
   'BANK_CHARGE',
   'EXCHANGE_DIFFERENCE',
@@ -227,4 +230,17 @@ export function openState(open: number | undefined): 'open' | 'settled' | 'credi
  */
 export function stillCounts(payment: Payment): boolean {
   return payment.reversedByPaymentId === undefined && payment.reversesPaymentId === undefined
+}
+
+/**
+ * Whether a settlement line may be taken back on its own, in the register of the invoice.
+ *
+ * <p>Not a line a Gutschrift wrote: it goes back with the Storno of that Gutschrift, which also
+ * takes its booking back. Reversing the line alone would raise the open item while the
+ * Gutschrift stood (backend ADR-0155).
+ *
+ * @param payment the line
+ */
+export function isReversibleOnItsOwn(payment: Payment): boolean {
+  return stillCounts(payment) && payment.creditNoteId === undefined
 }

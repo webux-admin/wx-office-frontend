@@ -4,7 +4,7 @@ import { ErrorNotice, LoadingBlock } from '../../components/Notice'
 import { Panel } from '../../components/Panel'
 import { formatAmount, formatDate } from '../../lib/format'
 import { originState } from '../../lib/origin'
-import { salesDocumentFor } from '../../lib/salesDocument'
+import { documentKindFor } from '../../lib/salesDocument'
 import type { DocumentChainEntry, DocumentRelation } from '../../lib/types'
 import { chainEntryLabel, relationLabel } from './documentChain'
 
@@ -100,7 +100,7 @@ export function DocumentChainPanel({
  *
  * <p>A link, except for the document being shown: a row that leads back to the page it sits
  * on reads as if something else were behind it. A kind of document the frontend has no mask
- * for is not a link either — the Gutschrift is the one that has none.
+ * for is not a link either.
  */
 function ChainRow({
   entry,
@@ -113,7 +113,7 @@ function ChainRow({
   backTo: string
   backLabel: string
 }) {
-  const kind = salesDocumentFor(entry.category)
+  const kind = documentKindFor(entry.category)
   const body = (
     <>
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">

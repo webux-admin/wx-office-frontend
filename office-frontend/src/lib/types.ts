@@ -1758,6 +1758,13 @@ export type SalesDocument = {
   predecessorDocumentId?: number
   /** Its number as it was frozen at takeover. */
   predecessorDocumentNumber?: string
+  /**
+   * The invoice a Gutschrift credits; absent on every other document. Number and date are
+   * frozen copies, printed as «Gutschrift zu Rechnung … vom …» (backend ADR-0155).
+   */
+  creditedDocumentId?: number
+  creditedDocumentNumber?: string
+  creditedDocumentDate?: string
   partnerId: number
   partnerNumber?: string
   recipient?: DocumentParty
@@ -2485,9 +2492,90 @@ export type Payment = {
    * what they say they are (backend ADR-0103).
    */
   receiptId?: number
+  /**
+   * The Gutschrift that wrote this line. Such a line goes back only with the Storno of the
+   * Gutschrift, never on its own (backend ADR-0155).
+   */
+  creditNoteId?: number
   note?: string
   recordedAt: string
   recordedBy: string
+}
+
+/**
+ * One line of an invoice as a Gutschrift can take it, as `CreditableInvoiceDto.Line` sends it.
+ */
+export type CreditableLine = {
+  lineId: number
+  lineNumber: number
+  description: string
+  quantity: number
+  unit?: string
+  /** The price per unit as invoiced, before the line discount. */
+  unitPrice: number
+  /** Whether that price contains VAT; the Gutschrift line is written in the same basis. */
+  priceIncludesVat: boolean
+  vatRate: number
+  lineGross: number
+  /** What issued Gutschriften gave back on this line so far, including VAT. */
+  creditedGross: number
+  /** The price per unit that credits the whole line, its discount included. */
+  fullCreditUnitPrice: number
+}
+
+/** What is left to credit under one VAT category and rate. This is the limit that counts. */
+export type CreditableGroup = {
+  vatCategory: string
+  vatRate: number
+  invoiced: number
+  credited: number
+  remaining: number
+}
+
+/**
+ * What an invoice still has to give for a Gutschrift, as `CreditableInvoiceDto` sends it.
+ *
+ * <p>Every figure comes from the server; the dialog shows them and adds nothing up.
+ */
+export type CreditableInvoice = {
+  invoiceId: number
+  documentNumber: string
+  documentDate: string
+  currency: string
+  totalGross: number
+  credited: number
+  remaining: number
+  lines: CreditableLine[]
+  groups: CreditableGroup[]
+}
+
+/** One Gutschrift of an invoice, as the invoice lists it. */
+export type CreditNoteSummary = {
+  id: number
+  /** Absent while it is a draft. */
+  documentNumber?: string
+  documentDate: string
+  status: DocumentStatus
+  currency: string
+  totalGross: number
+}
+
+/** One line of a Gutschrift on the wire: which line of the invoice, how much, at what price. */
+export type CreditNoteLineBody = {
+  invoiceLineId: number
+  quantity: number
+  unitPrice: number
+  /** Left out to keep the text of the invoice line. */
+  description?: string
+}
+
+/** What `POST …/credit-notes` and `PUT /credit-notes/{id}` take. */
+export type CreditNoteBody = {
+  documentDate: string
+  headerText?: string
+  footerText?: string
+  reference?: string
+  lines: CreditNoteLineBody[]
 }
 
 /**

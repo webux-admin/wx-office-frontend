@@ -124,11 +124,12 @@ export const ORDER_KIND = kind('ORDER', '/auftraege', 'orders', 'Auftrag', 'Auft
   'masculine')
 
 /**
- * The kinds of document with a mask of their own, in the order a sale runs through them.
+ * The kinds of document with a list of their own, in the order a sale runs through them.
  *
  * <p>The Gutschrift is missing on purpose: it corrects an invoice instead of standing at a
- * step of the sale, and it is written from the invoice it reverses rather than from a list of
- * its own. It gets a mask when that way exists.
+ * step of the sale, and it is written from the invoice it credits rather than from a list of
+ * its own. It has a mask, {@link CREDIT_NOTE_KIND}, but no list and no «neu» (backend
+ * ADR-0047, ADR-0155).
  */
 export const SALES_DOCUMENT_KINDS: SalesDocumentKind[] = [
   OFFER_KIND,
@@ -140,13 +141,37 @@ export const SALES_DOCUMENT_KINDS: SalesDocumentKind[] = [
 ]
 
 /**
- * Looks a kind up by its category.
+ * The Gutschrift: a mask under `/gutschriften/:id`, reached from its invoice.
+ *
+ * <p>The same shape as the four, so the parts of the document mask that only ask for a
+ * resource and a right — the trail, the chain, the outbox — work for it unchanged. It is not
+ * in {@link SALES_DOCUMENT_KINDS}: there is no list behind `/gutschriften`, and a menu entry or
+ * a tile for it would lead nowhere.
+ */
+export const CREDIT_NOTE_KIND = kind('CREDIT_NOTE', '/gutschriften', 'credit-notes',
+  'Gutschrift', 'Gutschriften', 'feminine')
+
+/**
+ * Looks a kind up by its category, among the kinds with a list of their own.
+ *
+ * @param category the category, as the backend spells it
+ * @returns the kind, or `undefined` for a category without a list
+ */
+export function salesDocumentFor(category: DocumentCategory): SalesDocumentKind | undefined {
+  return SALES_DOCUMENT_KINDS.find((entry) => entry.category === category)
+}
+
+/**
+ * Looks up the mask one document of a category opens in — the Gutschrift included.
+ *
+ * <p>For a link to a single document: the chain, the outbox, the history of a partner. A list
+ * or a menu asks {@link salesDocumentFor}, because the Gutschrift has no list.
  *
  * @param category the category, as the backend spells it
  * @returns the kind, or `undefined` for a category without a mask
  */
-export function salesDocumentFor(category: DocumentCategory): SalesDocumentKind | undefined {
-  return SALES_DOCUMENT_KINDS.find((entry) => entry.category === category)
+export function documentKindFor(category: DocumentCategory): SalesDocumentKind | undefined {
+  return category === 'CREDIT_NOTE' ? CREDIT_NOTE_KIND : salesDocumentFor(category)
 }
 
 /** One document. */

@@ -18,7 +18,7 @@ import {
   outboxMessagesUrl,
   OUTBOX_RIGHTS,
 } from '../../lib/outbox'
-import { salesDocumentFor } from '../../lib/salesDocument'
+import { documentKindFor } from '../../lib/salesDocument'
 import type { DocumentCategory, OutboxMessage, OutboxSummary } from '../../lib/types'
 
 /**
@@ -200,15 +200,15 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * Where the document of a mail can be looked at.
  *
  * <p>Only for a mail that came from a document, and only for a category with a mask of its
- * own: the Gutschrift has none yet, and a link into a screen that is not there is worse than
- * no link.
+ * own — the Gutschrift included, which opens under its own address although it has no list. A
+ * link into a screen that is not there is worse than no link.
  *
  * @param message the mail
  * @returns route and wording, or undefined for a free mail and for a kind without a mask
  */
 function linkTo(message: OutboxMessage): { to: string; label: string } | undefined {
   if (message.sourceModule !== 'DOCUMENT' || message.sourceId === undefined) return undefined
-  const kind = salesDocumentFor(message.sourceKind as DocumentCategory)
+  const kind = documentKindFor(message.sourceKind as DocumentCategory)
   if (kind === undefined) return undefined
   return { to: `${kind.path}/${message.sourceId}`, label: `${kind.singular} öffnen` }
 }

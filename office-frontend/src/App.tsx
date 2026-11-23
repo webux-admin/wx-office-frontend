@@ -42,7 +42,7 @@ import {
 import { MATCH_RULE_PATH } from './lib/matching'
 import { CLEARING_PATH } from './lib/clearing'
 import { MAIL_TEMPLATE_PATH, OUTBOX_ACCOUNT_PATH, OUTBOX_PATH } from './lib/outbox'
-import { SALES_DOCUMENT_KINDS } from './lib/salesDocument'
+import { CREDIT_NOTE_KIND, SALES_DOCUMENT_KINDS } from './lib/salesDocument'
 import { LoginPage } from './pages/LoginPage'
 
 /**
@@ -83,6 +83,7 @@ const MasterDataPage = lazy(() => import('./pages/MasterDataPage').then((module)
 const NumberRangePage = lazy(() => import('./pages/NumberRangePage').then((module) => ({ default: module.NumberRangePage })))
 const SalesDocumentListPage = lazy(() => import('./pages/SalesDocumentListPage').then((module) => ({ default: module.SalesDocumentListPage })))
 const SalesDocumentPage = lazy(() => import('./pages/SalesDocumentPage').then((module) => ({ default: module.SalesDocumentPage })))
+const CreditNotePage = lazy(() => import('./pages/CreditNotePage').then((module) => ({ default: module.CreditNotePage })))
 const PartnerListPage = lazy(() => import('./pages/PartnerListPage').then((module) => ({ default: module.PartnerListPage })))
 const PartnerPage = lazy(() => import('./pages/PartnerPage').then((module) => ({ default: module.PartnerPage })))
 const ProjectListPage = lazy(() => import('./pages/ProjectListPage').then((module) => ({ default: module.ProjectListPage })))
@@ -205,6 +206,9 @@ export default function App() {
                     <Route path={`${kind.path}/:id`} element={<SalesDocumentPage kind={kind} />} />
                   </Fragment>
                 ))}
+                {/* The Gutschrift has a mask and no list: it is written from its invoice
+                    (backend ADR-0155). */}
+                <Route path={`${CREDIT_NOTE_KIND.path}/:id`} element={<CreditNotePage />} />
 
                 {/* Every maintained list is a screen of its own, so it can be linked and
                     bookmarked. The old collective address stays and points at the first one. */}

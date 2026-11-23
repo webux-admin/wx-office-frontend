@@ -22,7 +22,12 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Faktenzeile über den Registern, Reaktivieren steht im Kopf (ADR-0050)
 - **product** — Produkte, Preisgruppen, Kundenpreise
 - **document** — Offerte, Auftrag, Lieferschein, Rechnung: eine Liste und eine Maske je
-  Belegart, aus `lib/salesDocument.ts` erzeugt
+  Belegart, aus `lib/salesDocument.ts` erzeugt. Die **Gutschrift** hat eine Maske unter
+  `/gutschriften/:id`, aber keine Liste: sie entsteht im Register «Gutschriften» einer
+  ausgestellten Rechnung, in einem Dialog mit den Rechnungspositionen (Menge, Preis, eigene
+  Bezeichnung). Was die Rechnung je Satz noch hergibt, zeigt der Dialog so, wie `creditable` es
+  liefert; Satz und Leistungsdatum kopiert das Backend. «Gutschrift» ist keine Ausgleichsart mehr
+  im Zahlungsdialog (ADR-0079, Backend ADR-0155)
 - **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
   `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
   Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). Die Maske bietet nur

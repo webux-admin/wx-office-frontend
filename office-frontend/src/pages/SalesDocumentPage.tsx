@@ -37,6 +37,7 @@ import {
   OUTBOX_RIGHTS,
 } from '../lib/outbox'
 import {
+  CREDIT_NOTE_KIND,
   ORDER_KIND,
   offerTrackingKey,
   salesDocumentFor,
@@ -71,6 +72,8 @@ import { DocumentPrintouts } from './document/DocumentPrintouts'
 import { OfferReminders } from './document/OfferReminders'
 import { DocumentDunningPanel } from './document/DocumentDunningPanel'
 import { DocumentReceivablePanel } from './document/DocumentReceivablePanel'
+import { CreditNoteDialog } from './document/CreditNoteDialog'
+import { InvoiceCreditNotesPanel } from './document/InvoiceCreditNotesPanel'
 import { OfferTrackingPanel } from './document/OfferTrackingPanel'
 import { TakeoverDialog } from './document/TakeoverDialog'
 import { useOpenQuantities } from './document/useOpenQuantities'
@@ -85,7 +88,13 @@ import {
 } from './document/lineForm'
 
 /** The two registers of a mask whose kind is followed up (ADR-0010). */
-type DocumentTab = 'beleg' | 'nachfassen' | 'zahlungen' | 'mahnungen' | 'zusammenhaenge'
+type DocumentTab =
+  | 'beleg'
+  | 'nachfassen'
+  | 'zahlungen'
+  | 'mahnungen'
+  | 'gutschriften'
+  | 'zusammenhaenge'
 
 /**
  * Reads the register a link asked the mask to open on.
@@ -217,6 +226,7 @@ function DocumentMask({
   const [declineReason, setDeclineReason] = useState('')
   const [declineNote, setDeclineNote] = useState('')
   const [creatingOrder, setCreatingOrder] = useState(false)
+  const [crediting, setCrediting] = useState(false)
 
   // The mask instance survives a route change between the categories, so a leftover
   // 'nachfassen' from an offer would blank an order. Clamped rather than reset, because a
@@ -227,6 +237,7 @@ function DocumentMask({
     (tab === 'nachfassen' && !kind.tracking)
       || (tab === 'zahlungen' && (!kind.receivable || document.status === 'DRAFT'))
       || (tab === 'mahnungen' && (!kind.receivable || document.status === 'DRAFT'))
+      || (tab === 'gutschriften' && (!kind.receivable || document.status === 'DRAFT'))
       ? 'beleg'
       : tab
 
@@ -802,6 +813,13 @@ function DocumentMask({
             ...(kind.receivable && document.status !== 'DRAFT' && can('DUNNING_READ')
               ? [{ id: 'mahnungen' as const, label: 'Mahnungen' }]
               : []),
+            /* Where a Gutschrift starts: it has no list of its own and begins with the
+               invoice it credits (backend ADR-0155). A cancelled invoice keeps the register,
+               so the Gutschriften stornoed before it stay findable. */
+            ...(kind.receivable && document.status !== 'DRAFT'
+              && can(CREDIT_NOTE_KIND.rights.read)
+              ? [{ id: 'gutschriften' as const, label: 'Gutschriften' }]
+              : []),
             { id: 'zusammenhaenge', label: 'Zusammenhänge' },
           ]}
           active={activeTab}
@@ -998,6 +1016,20 @@ function DocumentMask({
             mayIssue={can('DUNNING_RUN')}
             mayWithdraw={can('DUNNING_WITHDRAW')}
             mayBlock={can('DUNNING_WRITE')}
+          />
+        )}
+
+        {kind.receivable && activeTab === 'gutschriften' && (
+          <InvoiceCreditNotesPanel
+            tenantId={tenantId}
+            invoiceId={document.id}
+            backTo={`${kind.path}/${document.id}`}
+            backLabel={document.documentNumber ?? kind.singular}
+            onCreate={
+              document.status === 'FINALISED' && can(CREDIT_NOTE_KIND.rights.write)
+                ? () => setCrediting(true)
+                : undefined
+            }
           />
         )}
 
@@ -1263,6 +1295,22 @@ function DocumentMask({
             {setOutcome.error !== null && <ErrorNotice error={setOutcome.error} />}
           </div>
         </Dialog>
+      )}
+
+      {kind.receivable && (
+        <CreditNoteDialog
+          tenantId={tenantId}
+          invoiceId={document.id}
+          open={crediting}
+          onClose={() => setCrediting(false)}
+          onSaved={(creditNote) => {
+            setCrediting(false)
+            void navigate(`${CREDIT_NOTE_KIND.path}/${creditNote.id}`, {
+              state: originState(`${kind.path}/${document.id}`,
+                document.documentNumber ?? kind.singular),
+            })
+          }}
+        />
       )}
 
       {kind.tracking && (

@@ -4,6 +4,7 @@ import {
   PAYMENT_KIND_ORDER,
   REDUCES_CONSIDERATION,
   openState,
+  isReversibleOnItsOwn,
   stillCounts,
 } from './receivable'
 import type { Payment, PaymentKind } from './types'
@@ -69,6 +70,21 @@ describe('stillCounts', () => {
   })
 })
 
+describe('isReversibleOnItsOwn', () => {
+  it('isReversibleOnItsOwnTest', () => {
+    expect(isReversibleOnItsOwn(line())).toBe(true)
+  })
+
+  /** It goes back with the Storno of the Gutschrift, never on its own (backend ADR-0155). */
+  it('isReversibleOnItsOwnOfACreditNoteLineTest', () => {
+    expect(isReversibleOnItsOwn(line({ kind: 'CREDIT', creditNoteId: 12 }))).toBe(false)
+  })
+
+  it('isReversibleOnItsOwnOfACounterLineTest', () => {
+    expect(isReversibleOnItsOwn(line({ id: 2, amount: -100, reversesPaymentId: 1 }))).toBe(false)
+  })
+})
+
 describe('the kind catalogue', () => {
   /**
    * Every kind has a name, or a settlement line would show up unnamed.
@@ -106,6 +122,11 @@ describe('the kind catalogue', () => {
     // And neither of the two newcomers ever became an Entgeltsminderung.
     expect(REDUCES_CONSIDERATION).not.toContain('BANK_CHARGE')
     expect(REDUCES_CONSIDERATION).not.toContain('EXCHANGE_DIFFERENCE')
+  })
+
+  /** A Gutschrift is a document of its own and no kind of payment (backend ADR-0155). */
+  it('paymentKindOrderWithoutCreditTest', () => {
+    expect(PAYMENT_KIND_ORDER).not.toContain('CREDIT')
   })
 
   it('paymentKindOrderStartsWithTheEverydayCaseTest', () => {

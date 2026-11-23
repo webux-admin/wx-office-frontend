@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CREDIT_NOTE_KIND,
   OFFER_KIND,
   ORDER_KIND,
   SALES_DOCUMENT_CACHE_ROOTS,
   SALES_DOCUMENT_KINDS,
+  documentKindFor,
   dueOfferRemindersKey,
   indefiniteArticle,
   newDocumentTitle,
@@ -131,9 +133,34 @@ describe('salesDocumentFor', () => {
     }
   })
 
-  /** The Gutschrift is a category of the backend, but it has no mask of its own. */
+  /** The Gutschrift is a category of the backend, but it has no list of its own. */
   it('salesDocumentForWithoutMaskTest', () => {
     expect(salesDocumentFor('CREDIT_NOTE')).toBeUndefined()
+  })
+})
+
+describe('documentKindFor', () => {
+  it('documentKindForTest', () => {
+    expect(documentKindFor('INVOICE')).toBe(salesDocumentFor('INVOICE'))
+  })
+
+  /** A link to one Gutschrift opens its mask, which has no list behind it (backend ADR-0155). */
+  it('documentKindForACreditNoteTest', () => {
+    expect(documentKindFor('CREDIT_NOTE')).toBe(CREDIT_NOTE_KIND)
+    expect(CREDIT_NOTE_KIND).toMatchObject({
+      path: '/gutschriften',
+      resource: 'credit-notes',
+      singular: 'Gutschrift',
+      gender: 'feminine',
+    })
+    expect(CREDIT_NOTE_KIND.rights.cancel).toBe('CREDIT_NOTE_CANCEL')
+  })
+
+  it('documentKindForEveryKindTest', () => {
+    for (const entry of SALES_DOCUMENT_KINDS) {
+      expect(documentKindFor(entry.category)).toBe(entry)
+    }
+    expect(SALES_DOCUMENT_KINDS).not.toContain(CREDIT_NOTE_KIND)
   })
 })
 
