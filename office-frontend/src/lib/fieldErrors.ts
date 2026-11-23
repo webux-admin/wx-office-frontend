@@ -96,3 +96,36 @@ export function prefixedErrors(errors: FieldErrors, prefix: string): FieldErrors
     Object.entries(errors).map(([field, message]) => [`${prefix}${field}`, message]),
   )
 }
+
+/**
+ * The first message per item of a list, by the index the backend names the item with.
+ *
+ * <p>A refused document names its position as `lines[2].serviceDateTo`. The index is what tells
+ * the mask which position the message belongs to, so `fieldErrorsOf`, which drops it, does not
+ * serve here.
+ *
+ * @param error what the request threw, anything at all
+ * @param list the name of the list, such as `lines`
+ * @returns the first message of each index that carries one
+ */
+export function listItemErrorsOf(error: unknown, list: string): ReadonlyMap<number, string> {
+  const result = new Map<number, string>()
+  if (!(error instanceof ApiError)) return result
+  const details = error.details
+  if (!details || typeof details !== 'object') return result
+  const entries = (details as { errors?: unknown }).errors
+  if (!Array.isArray(entries)) return result
+
+  const prefix = `${list}[`
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue
+    const { field, message } = entry as { field?: unknown; message?: unknown }
+    if (typeof field !== 'string' || typeof message !== 'string') continue
+    if (!field.startsWith(prefix)) continue
+    const close = field.indexOf(']', prefix.length)
+    const index = Number(field.slice(prefix.length, close))
+    if (close < 0 || !Number.isInteger(index) || !field.startsWith('.', close + 1)) continue
+    if (!result.has(index)) result.set(index, message)
+  }
+  return result
+}

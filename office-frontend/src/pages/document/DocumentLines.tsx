@@ -76,6 +76,7 @@ export function DocumentLines({
   openOfOwnLines,
   openOfPredecessorLines,
   shortfalls,
+  positionErrors,
 }: {
   tenantId: number
   /** Which of the four kinds of document this is, so that a way back leads to this one. */
@@ -111,6 +112,8 @@ export function DocumentLines({
    * and saying nothing is better than saying the wrong thing.
    */
   shortfalls?: readonly StockShortfall[]
+  /** The refusal of a position, by its printed position: the message stands in its row. */
+  positionErrors?: ReadonlyMap<number, string>
 }) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null)
   const [open, setOpen] = useState(false)
@@ -258,6 +261,7 @@ export function DocumentLines({
           openOfOwnLines={openOfOwnLines}
           openOfPredecessorLines={openOfPredecessorLines}
           shortfalls={byLineNumber}
+          positionErrors={positionErrors}
         />
 
         {error !== null && error !== undefined && (

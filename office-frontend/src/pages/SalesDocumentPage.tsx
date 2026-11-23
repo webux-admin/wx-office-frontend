@@ -13,6 +13,7 @@ import { TextField } from '../components/TextField'
 import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
+import { listItemErrorsOf } from '../lib/fieldErrors'
 import { showFile } from '../lib/files'
 import { formatDate } from '../lib/format'
 import {
@@ -527,6 +528,14 @@ function DocumentMask({
   // takes — long enough to open a dialog on a position that is about to be another line.
   const lineBusy = lineMutations.some((mutation) => mutation.isPending) || refreshing
   const lineError = lineMutations.map((mutation) => mutation.error).find((one) => one !== null)
+  // The issuing refuses a position by its index in the list (backend ADR-0132), so the message
+  // goes to the row of that position, not to the form.
+  const positionErrors = new Map(
+    [...listItemErrorsOf(finalise.error, 'lines')].flatMap(([index, message]) => {
+      const line = document.lines?.[index]
+      return line === undefined ? [] : [[line.lineNumber, message] as const]
+    }),
+  )
 
   /**
    * Starts a change to the positions, with a clean slate.
@@ -838,6 +847,7 @@ function DocumentMask({
           shortfalls={shortfalls}
           busy={lineBusy}
           error={lineError}
+          positionErrors={positionErrors}
           readOnlyNote={
             readOnlyNote === undefined
               ? undefined

@@ -115,6 +115,7 @@ export function LinesTable({
   openOfOwnLines,
   openOfPredecessorLines,
   shortfalls,
+  positionErrors,
 }: {
   tenantId: number
   document: SalesDocument
@@ -146,6 +147,11 @@ export function LinesTable({
    * a figure that matters on two lines out of twenty.
    */
   shortfalls?: ReadonlyMap<number, string>
+  /**
+   * The refusal of the issuing per printed position, for example a period over a VAT rate
+   * change. Stands in the row of that position, where the user can act on it.
+   */
+  positionErrors?: ReadonlyMap<number, string>
 }) {
   const { can } = useAuth()
   const runs = useRunsModule()
@@ -371,6 +377,7 @@ export function LinesTable({
                     : openOfPredecessorLines?.get(line.predecessorLineId)
                 }
                 shortfall={shortfalls?.get(line.lineNumber)}
+                refusal={positionErrors?.get(line.lineNumber)}
               />
               {actionsOf(line)}
             </tr>
@@ -470,6 +477,7 @@ function LineCells({
   open,
   openOfPredecessor,
   shortfall,
+  refusal,
 }: {
   line: DocumentLine
   units: readonly SelectableEntry[]
@@ -492,6 +500,8 @@ function LineCells({
   openOfPredecessor?: OpenLineQuantity
   /** Why this position is not covered by the stock, when it is not. */
   shortfall?: string
+  /** Why the issuing refused this position, when it did. */
+  refusal?: string
 }) {
   if (line.kind === 'COMMENT') {
     return (
@@ -554,6 +564,9 @@ function LineCells({
             </span>
           )}
         </span>
+        {refusal !== undefined && (
+          <span role="alert" className="block text-small text-danger">{refusal}</span>
+        )}
         {line.subtitle && <span className="block text-text-secondary">{line.subtitle}</span>}
         {line.note && (
           <span className="block whitespace-pre-line text-small text-text-secondary">

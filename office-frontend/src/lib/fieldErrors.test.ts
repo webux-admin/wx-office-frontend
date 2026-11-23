@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './api'
-import { fieldErrorsOf, isToldByFields, nestedErrors, prefixedErrors } from './fieldErrors'
+import {
+  fieldErrorsOf,
+  isToldByFields,
+  listItemErrorsOf,
+  nestedErrors,
+  prefixedErrors,
+} from './fieldErrors'
 
 /** A refusal as the client builds it from a 400 answer. */
 function refused(errors: unknown): ApiError {
@@ -118,5 +124,40 @@ describe('prefixedErrors', () => {
     const own = { town: 'Ort fehlt', name: 'Empfänger fehlt' }
 
     expect(nestedErrors(prefixedErrors(own, 'addresses.'), 'addresses.')).toEqual(own)
+  })
+})
+
+describe('listItemErrorsOf', () => {
+  it('listItemErrorsOfTest', () => {
+    const error = refused([
+      { field: 'lines[0].serviceDateTo', message: 'Position 1 läuft über einen Satzwechsel.' },
+      { field: 'lines[2].serviceDateTo', message: 'Position 3 läuft über einen Satzwechsel.' },
+    ])
+
+    expect(listItemErrorsOf(error, 'lines')).toEqual(
+      new Map([
+        [0, 'Position 1 läuft über einen Satzwechsel.'],
+        [2, 'Position 3 läuft über einen Satzwechsel.'],
+      ]),
+    )
+  })
+
+  it('listItemErrorsOfWithAnotherListTest', () => {
+    const error = refused([{ field: 'addresses[0].town', message: 'Darf nicht leer sein.' }])
+
+    expect(listItemErrorsOf(error, 'lines').size).toBe(0)
+  })
+
+  it('listItemErrorsOfWithoutErrorsTest', () => {
+    expect(listItemErrorsOf(new Error('netz weg'), 'lines').size).toBe(0)
+  })
+
+  it('listItemErrorsOfWithTheSameItemTwiceTest', () => {
+    const error = refused([
+      { field: 'lines[1].serviceDateTo', message: 'Erste Meldung.' },
+      { field: 'lines[1].serviceDateFrom', message: 'Zweite Meldung.' },
+    ])
+
+    expect(listItemErrorsOf(error, 'lines').get(1)).toBe('Erste Meldung.')
   })
 })

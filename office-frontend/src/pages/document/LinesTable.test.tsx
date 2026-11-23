@@ -160,6 +160,7 @@ const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }
 type OpenProps = {
   openOfOwnLines?: ReadonlyMap<number, OpenLineQuantity>
   openOfPredecessorLines?: ReadonlyMap<number, OpenLineQuantity>
+  positionErrors?: ReadonlyMap<number, string>
 }
 
 /** Draws the table, and draws it again when a test needs a second state. */
@@ -184,6 +185,7 @@ async function draw(
           onRemove={(one) => removed.push(one.lineNumber)}
           openOfOwnLines={open.openOfOwnLines}
           openOfPredecessorLines={open.openOfPredecessorLines}
+          positionErrors={open.positionErrors}
         />
       </QueryClientProvider>
       </AuthContext.Provider>,
@@ -353,6 +355,22 @@ describe('LinesTable', () => {
     await draw(order(LINES))
 
     expect(text()).not.toContain('Offen')
+  })
+
+  it('linesTableShowsTheRefusalInTheRowOfThePositionTest', async () => {
+    await draw(order(LINES), true, false, {
+      positionErrors: new Map([[3, 'Die Position 3 läuft über einen Wechsel des MWST-Satzes.']]),
+    })
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    expect(body.rows[2].querySelector('[role="alert"]')?.textContent).toContain('Position 3')
+    expect(body.rows[0].querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('linesTableShowsNoRefusalWithoutOnesTest', async () => {
+    await draw(order(LINES))
+
+    expect(container.querySelector('[role="alert"]')).toBeNull()
   })
 
   it('linesTableShowsWhatIsStillOpenPerPositionTest', async () => {
