@@ -26,7 +26,8 @@ function creditableLine(overrides: Partial<CreditableLine> = {}): CreditableLine
     vatRate: 8.1,
     lineGross: 1250,
     creditedGross: 0,
-    fullCreditUnitPrice: 1250,
+    proposedQuantity: 1,
+    proposedUnitPrice: 1250,
     ...overrides,
   }
 }
@@ -39,10 +40,11 @@ function creditable(overrides: Partial<CreditableInvoice> = {}): CreditableInvoi
     currency: 'CHF',
     totalGross: 1250,
     credited: 0,
+    writtenOff: 0,
     remaining: 1250,
     lines: [creditableLine(), creditableLine({ lineId: 32, lineNumber: 2,
       description: 'Material', quantity: 4, unitPrice: 25, lineGross: 100,
-      fullCreditUnitPrice: 25 })],
+      proposedQuantity: 4, proposedUnitPrice: 25 })],
     groups: [],
     ...overrides,
   }
@@ -96,6 +98,15 @@ describe('creditNoteRowsOf', () => {
 
   it('creditNoteRowsOfWithoutLinesTest', () => {
     expect(creditNoteRowsOf(creditable({ lines: [] }))).toEqual([])
+  })
+
+  /** 1’000 units whose rest does not divide: the server proposes one unit at the whole rest. */
+  it('creditNoteRowsOfWithAProposalOfOneUnitTest', () => {
+    const rows = creditNoteRowsOf(creditable({ lines: [creditableLine({ quantity: 1000,
+      unitPrice: 0.6667, lineGross: 666.7, proposedQuantity: 1, proposedUnitPrice: 600.03 })] }))
+
+    expect(rows[0].quantity).toBe('1')
+    expect(rows[0].unitPrice).toBe('600.03')
   })
 
   /** A draft being changed comes back with its own lines ticked, matched by invoice line. */
@@ -197,5 +208,18 @@ describe('creditableSentence', () => {
   it('creditableSentenceWhenNothingIsLeftTest', () => {
     expect(creditableSentence(creditable({ credited: 1250, remaining: 0 }))).toBe(
       'Rechnung RE-2026-0009 ist vollständig gutgeschrieben.')
+  })
+
+  it('creditableSentenceAfterAWriteOffTest', () => {
+    expect(creditableSentence(creditable({ writtenOff: 250, remaining: 1000 }))).toBe(
+      'Noch gutschreibbar: 1’000.00 CHF von 1’250.00 CHF; 250.00 CHF wurden ausgebucht oder'
+      + ' abgezogen')
+  })
+
+  /** After a bad debt over the whole invoice nothing is left, and it was not credited. */
+  it('creditableSentenceAfterAFullWriteOffTest', () => {
+    expect(creditableSentence(creditable({ writtenOff: 1250, remaining: 0 }))).toBe(
+      'Rechnung RE-2026-0009 gibt nichts mehr für eine Gutschrift her; 1’250.00 CHF wurden'
+      + ' ausgebucht oder abgezogen.')
   })
 })

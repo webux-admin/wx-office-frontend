@@ -174,6 +174,26 @@ function text(): string {
   return document.body.textContent ?? ''
 }
 
+/** One settlement line on the invoice, in francs and without a conversion. */
+function creditLine(over: Partial<Payment>): Payment {
+  return {
+    id: 1,
+    documentId: DOCUMENT,
+    kind: 'PAYMENT',
+    amount: 100,
+    currency: 'CHF',
+    valueDate: '2026-08-25',
+    originalAmount: over.amount ?? 100,
+    originalCurrency: 'CHF',
+    exchangeRate: 1,
+    exchangeRateUnit: 1,
+    source: 'MANUAL',
+    recordedAt: '2026-08-25T09:00:00Z',
+    recordedBy: 'muster',
+    ...over,
+  }
+}
+
 function button(label: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll('button')].find(
     (entry) => entry.textContent === label,
@@ -286,6 +306,48 @@ describe('DocumentReceivablePanel', () => {
 
     expect(text()).toContain('0.40 CHF zu viel bezahlt')
     expect(button('Einbehalten')).toBeUndefined()
+  })
+
+  /**
+   * <b>A surplus out of a Gutschrift is paid back, not kept.</b> Paid in full, then 125.00
+   * credited: no «Einbehalten», no «Zurückzahlen» over the customer credit, but a negative
+   * payment over the surplus (backend ADR-0155, ADR-0156).
+   */
+  it('documentReceivablePanelOffersTheRefundOfAGutschriftTest', async () => {
+    item = openItem({ totalGross: 1250, settled: 1375, open: -125 })
+    payments = [
+      creditLine({ id: 1, kind: 'PAYMENT', amount: 1250 }),
+      creditLine({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 21 }),
+    ]
+
+    await render()
+
+    expect(text()).toContain('125.00 CHF Guthaben aus Gutschrift')
+    expect(text()).not.toContain('zu viel bezahlt')
+    expect(button('Einbehalten')).toBeUndefined()
+    expect(text()).not.toContain('Zurückzahlen')
+
+    const refunds = [...document.querySelectorAll('button')]
+      .filter((entry) => entry.textContent === 'Zahlung erfassen')
+    await act(async () => {
+      refunds[refunds.length - 1].click()
+    })
+    await settle()
+
+    expect(field('Betrag')?.value).toBe('-125.00')
+  })
+
+  it('documentReceivablePanelHidesTheRefundWithoutTheRightTest', async () => {
+    item = openItem({ totalGross: 1250, settled: 1375, open: -125 })
+    payments = [
+      creditLine({ id: 1, kind: 'PAYMENT', amount: 1250 }),
+      creditLine({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 21 }),
+    ]
+
+    await render(false, false)
+
+    expect(text()).toContain('Guthaben aus Gutschrift')
+    expect(button('Zahlung erfassen')).toBeUndefined()
   })
 
   /** Nothing overpaid, nothing to decide: the notice stays away. */

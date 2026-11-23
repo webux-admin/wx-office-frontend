@@ -114,6 +114,7 @@ beforeEach(() => {
         amount: 1080.1,
         partner: 'Druckerei Meier AG',
         bookable: true,
+        label: 'Rechnung',
       },
       {
         sourceKind: 'DOCUMENT',
@@ -124,6 +125,7 @@ beforeEach(() => {
         partner: 'Muster AG',
         reason: 'Nicht nachbuchbar: Das Geschäftsjahr 2026 ist abgeschlossen.',
         bookable: false,
+        label: 'Rechnung',
       },
     ],
   }
@@ -418,7 +420,7 @@ describe('ReconciliationPage', () => {
     await click(boxLabelled('Rechnung RE-2026-0412 markieren'))
     await click(button('Nachbuchen (1)'))
 
-    expect(text()).toContain('1 Rechnung')
+    expect(text()).toContain('1 Beleg')
     expect(text()).toContain('Buchungsdatum ist jeweils das Belegdatum')
     expect(posted).toHaveLength(0)
 
@@ -429,6 +431,48 @@ describe('ReconciliationPage', () => {
     expect(posted[0].body).toEqual({ sources: [{ sourceKind: 'DOCUMENT', sourceId: 31 }] })
     expect(text()).toContain('1 gebucht, 0 übersprungen, 0 fehlgeschlagen.')
     expect(text()).toContain('2026-000118')
+  })
+
+  /**
+   * <b>A Gutschrift waits in the same list, named and with its minus.</b> The sum in the dialog
+   * is what the ticked records move on 1100 (backend ADR-0156).
+   */
+  it('reconciliationPageSumsAGutschriftWithItsSignTest', async () => {
+    pending = {
+      from: '2026-07-01',
+      total: 2,
+      rows: [
+        {
+          sourceKind: 'DOCUMENT',
+          sourceId: 31,
+          reference: 'RE-2026-0412',
+          day: '2026-08-18',
+          amount: 1080.1,
+          partner: 'Druckerei Meier AG',
+          bookable: true,
+          label: 'Rechnung',
+        },
+        {
+          sourceKind: 'DOCUMENT',
+          sourceId: 41,
+          reference: 'GS-2026-0003',
+          day: '2026-08-25',
+          amount: -125,
+          partner: 'Druckerei Meier AG',
+          bookable: true,
+          label: 'Gutschrift',
+        },
+      ],
+    }
+    await render(POSTER, '/buchhaltung/abstimmung?ansicht=nicht-gebucht')
+
+    expect(text()).toContain('Gutschrift')
+    await click(boxLabelled('Rechnung RE-2026-0412 markieren'))
+    await click(boxLabelled('Gutschrift GS-2026-0003 markieren'))
+    await click(button('Nachbuchen (2)'))
+
+    expect(text()).toContain('2 Belege')
+    expect(text()).toContain('zusammen 955.10 auf dem Sammelkonto')
   })
 
   /** Skipped and failed records stand in the result with their sentence. */

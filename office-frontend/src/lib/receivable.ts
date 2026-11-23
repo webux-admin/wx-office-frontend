@@ -244,3 +244,18 @@ export function stillCounts(payment: Payment): boolean {
 export function isReversibleOnItsOwn(payment: Payment): boolean {
   return stillCounts(payment) && payment.creditNoteId === undefined
 }
+
+/**
+ * Whether a standing Gutschrift lowers this invoice.
+ *
+ * <p>Asked where the invoice shows a surplus. A surplus out of a Gutschrift is no overpayment:
+ * keeping it would be additional consideration that undoes the Gutschrift, and the customer
+ * credit on 2030 is not the way back either, because no money arrived. It goes back as a
+ * negative payment on the invoice (backend ADR-0155, ADR-0156).
+ *
+ * @param payments the settlement lines of the invoice
+ * @returns `true` if a line a Gutschrift wrote still counts
+ */
+export function hasStandingCreditNote(payments: readonly Payment[]): boolean {
+  return payments.some((payment) => payment.creditNoteId !== undefined && stillCounts(payment))
+}

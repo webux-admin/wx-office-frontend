@@ -20,6 +20,7 @@ const CREDITABLE: CreditableInvoice = {
   currency: 'CHF',
   totalGross: 1250,
   credited: 0,
+  writtenOff: 0,
   remaining: 1250,
   lines: [
     {
@@ -33,11 +34,12 @@ const CREDITABLE: CreditableInvoice = {
       vatRate: 8.1,
       lineGross: 1250,
       creditedGross: 0,
-      fullCreditUnitPrice: 1250,
+      proposedQuantity: 1,
+      proposedUnitPrice: 1250,
     },
   ],
   groups: [{ vatCategory: 'STANDARD', vatRate: 8.1, invoiced: 1250, credited: 0,
-    remaining: 1250 }],
+    writtenOff: 0, remaining: 1250 }],
 }
 
 let container: HTMLDivElement

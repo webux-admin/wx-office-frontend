@@ -26,8 +26,11 @@ Stand der Module (in dieser Reihenfolge gebaut):
   `/gutschriften/:id`, aber keine Liste: sie entsteht im Register «Gutschriften» einer
   ausgestellten Rechnung, in einem Dialog mit den Rechnungspositionen (Menge, Preis, eigene
   Bezeichnung). Was die Rechnung je Satz noch hergibt, zeigt der Dialog so, wie `creditable` es
-  liefert; Satz und Leistungsdatum kopiert das Backend. «Gutschrift» ist keine Ausgleichsart mehr
-  im Zahlungsdialog (ADR-0079, Backend ADR-0155)
+  liefert, und belegt jede Position mit dem Vorschlag des Backends vor, der angekreuzt die
+  Rechnung exakt schliesst; Satz und Leistungsdatum kopiert das Backend. «Gutschrift» ist keine
+  Ausgleichsart mehr im Zahlungsdialog. Ein Guthaben aus einer Gutschrift wird mit einer
+  negativen Zahlung zurückgezahlt, nicht einbehalten (ADR-0079, ADR-0080, Backend ADR-0155 und
+  ADR-0156)
 - **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
   `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
   Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). Die Maske bietet nur

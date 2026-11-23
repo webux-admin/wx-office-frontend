@@ -35,7 +35,7 @@ import {
   fetchEntriesWithoutSource,
   fetchSourcesWithoutEntry,
   fiscalYearsKey,
-  invoiceCountText,
+  documentCountText,
   pendingSourceKey,
   pendingSourcesKey,
   reconciliationDetailKey,
@@ -391,6 +391,12 @@ function UnpostedRegister({
       header: 'Beleg',
       render: (source) => <span className="font-mono">{source.reference}</span>,
     },
+    {
+      key: 'label',
+      header: 'Art',
+      hideBelow: 'sm',
+      render: (source) => source.label ?? '–',
+    },
     { key: 'day', header: 'Datum', render: (source) => formatDate(source.day) },
     {
       key: 'partner',
@@ -427,7 +433,7 @@ function UnpostedRegister({
 
       <Panel
         padded={false}
-        title="Ausgestellte Rechnungen ohne Buchung"
+        title="Ausgestellte Belege ohne Buchung"
         action={
           mayRun ? (
             <Button onClick={() => setConfirming(true)} disabled={chosen.length === 0}>
@@ -438,8 +444,8 @@ function UnpostedRegister({
       >
         {total > rows.length && (
           <p className="px-5 pb-3 text-small text-text-secondary">
-            Angezeigt werden die neuesten {rows.length} von {total} Rechnungen. Nach dem Lauf rücken
-            die übrigen nach.
+            Angezeigt werden die neuesten {rows.length} von {total} Belegen. Nach dem Lauf rücken die
+            übrigen nach.
           </p>
         )}
         <DataTable
@@ -451,27 +457,28 @@ function UnpostedRegister({
           empty={
             <EmptyState
               title="Alles gebucht"
-              description="Seit dem Stichtag hat jede ausgestellte Rechnung ihre Buchung."
+              description="Seit dem Stichtag hat jeder ausgestellte Beleg seine Buchung."
             />
           }
           selected={mayRun ? selected : undefined}
           onSelectedChange={mayRun ? setSelected : undefined}
           selectableRow={(source) => source.bookable}
-          selectionLabel={(source) => `Rechnung ${source.reference} markieren`}
+          selectionLabel={(source) => `${source.label ?? 'Beleg'} ${source.reference} markieren`}
         />
       </Panel>
       <p className="text-small text-text-secondary">
-        Rechnungen vor dem Stichtag stehen hier nicht: diese Zeit wurde von Hand gebucht, dort wird
-        nichts nachgetragen. Gebucht wird jede Rechnung auf ihr Belegdatum; liegt es in einem
+        Belege vor dem Stichtag stehen hier nicht: diese Zeit wurde von Hand gebucht, dort wird
+        nichts nachgetragen. Gebucht wird jeder Beleg auf sein Belegdatum; liegt es in einem
         abgeschlossenen Jahr, steht der Grund in der Zeile, und die Buchung gehört als
-        Nachtragsbuchung ins laufende Jahr.
+        Nachtragsbuchung ins laufende Jahr. Der Betrag sagt, was der Beleg auf dem Sammelkonto
+        bewegt: eine Gutschrift steht mit Minus.
       </p>
 
       <Dialog
         open={confirming}
         onClose={() => setConfirming(false)}
         title="Nachbuchen"
-        description="Je Rechnung entsteht eine eigene Buchung in einer eigenen Transaktion."
+        description="Je Beleg entsteht eine eigene Buchung in einer eigenen Transaktion."
         footer={
           <>
             <Button variant="secondary" onClick={() => setConfirming(false)}>
@@ -489,16 +496,16 @@ function UnpostedRegister({
       >
         <div className="grid gap-2 text-body text-text-secondary">
           <p>
-            <strong className="text-text-primary">{invoiceCountText(chosen.length)}</strong>,
-            zusammen {formatAmount(chosenTotal(chosen))}.
+            <strong className="text-text-primary">{documentCountText(chosen.length)}</strong>,
+            zusammen {formatAmount(chosenTotal(chosen))} auf dem Sammelkonto.
           </p>
           <p>
-            Buchungsdatum ist jeweils das Belegdatum. Eine Rechnung, die inzwischen gebucht wurde
-            oder deren Periode gesperrt ist, wird übersprungen und mit dem Grund aufgeführt — die
+            Buchungsdatum ist jeweils das Belegdatum. Ein Beleg, der inzwischen gebucht wurde oder
+            dessen Periode gesperrt ist, wird übersprungen und mit dem Grund aufgeführt — die
             übrigen laufen trotzdem durch.
           </p>
           <p className="text-small text-text-tertiary">
-            Eine gebuchte Rechnung lässt sich danach nicht mehr zurückstellen; korrigiert wird über
+            Ein gebuchter Beleg lässt sich danach nicht mehr zurückstellen; korrigiert wird über
             Storno oder Gutschrift.
           </p>
           {run.error !== null && <ErrorNotice error={run.error} />}

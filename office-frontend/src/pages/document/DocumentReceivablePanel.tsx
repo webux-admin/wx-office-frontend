@@ -21,6 +21,7 @@ import {
   fetchOverpaymentAdvice,
   type OverpaymentAdvice,
   fetchPayments,
+  hasStandingCreditNote,
   isReversibleOnItsOwn,
   openState,
   recordPayment,
@@ -199,9 +200,21 @@ export function DocumentReceivablePanel({
   const state = openState(item?.open)
   const surplus = item === undefined || item.open >= 0 ? 0 : -item.open
 
+  // A surplus out of a Gutschrift is the customer's money without any money having arrived:
+  // it is not kept and not moved to the customer credit, it is paid back (backend ADR-0156).
+  const surplusFromCreditNote = surplus > 0 && hasStandingCreditNote(rows)
+
   const openCreate = () => {
     record.reset()
     setForm(proposedForm(item?.open, currency))
+    setRecording(true)
+  }
+
+  // The refund of a Gutschrift: a negative payment over the surplus, the way a returned direct
+  // debit goes back today (backend ADR-0155).
+  const openRefund = () => {
+    record.reset()
+    setForm({ ...proposedForm(undefined, currency), amount: (-surplus).toFixed(2) })
     setRecording(true)
   }
 
@@ -268,7 +281,11 @@ export function DocumentReceivablePanel({
                   <Badge tone="danger">{item.daysOverdue} Tage überfällig</Badge>
                 )}
                 {state === 'settled' && <Badge tone="success">ausgeglichen</Badge>}
-                {state === 'credit' && <Badge tone="accent">überzahlt</Badge>}
+                {state === 'credit' && (
+                  <Badge tone="accent">
+                    {surplusFromCreditNote ? 'Guthaben aus Gutschrift' : 'überzahlt'}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -277,7 +294,30 @@ export function DocumentReceivablePanel({
         {/* Three ways out, and «stehen lassen» is the one that needs no click: until
             somebody keeps it the surplus belongs to the customer (OR Art. 62). Nothing here
             books by itself (backend ADR-0105). */}
-        {surplus > 0 && (
+        {surplusFromCreditNote && (
+          <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
+            <p className="text-body">
+              <span className="font-medium">
+                {formatAmount(surplus)} {currency} Guthaben aus Gutschrift.
+              </span>{' '}
+              Die Rechnung war bezahlt, als die Gutschrift sie gemindert hat; der Betrag gehört
+              dem Kunden.
+            </p>
+            {mayRecord && (
+              <span className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={openRefund}>
+                  Zahlung erfassen
+                </Button>
+              </span>
+            )}
+            <p className="text-small text-text-secondary">
+              Zurückgezahlt wird mit einer negativen Zahlung auf diese Rechnung. Einbehalten lässt
+              sich eine Gutschrift nicht — wer sie nicht will, storniert sie.
+            </p>
+          </div>
+        )}
+
+        {surplus > 0 && !surplusFromCreditNote && (
           <div className="grid gap-2 rounded-[var(--radius-lg)] border border-line-subtle bg-sunken px-4 py-3">
             <p className="text-body">
               <span className="font-medium">

@@ -7,7 +7,7 @@ import {
   chosenSources,
   chosenTotal,
   fetchPendingSources,
-  invoiceCountText,
+  documentCountText,
   pendingSourceKey,
   runCatchUp,
   type PendingSource,
@@ -2478,10 +2478,15 @@ describe('the catch-up run', () => {
     expect(chosenTotal([])).toBe(0)
   })
 
-  it('invoiceCountTextTest', () => {
-    expect(invoiceCountText(12)).toBe('12 Rechnungen')
-    expect(invoiceCountText(1)).toBe('1 Rechnung')
-    expect(invoiceCountText(0)).toBe('0 Rechnungen')
+  /** A Gutschrift arrives with a minus and takes off what it takes off 1100. */
+  it('chosenTotalWithAGutschriftTest', () => {
+    expect(chosenTotal([row(1, 1250), row(2, -125)])).toBe(1125)
+  })
+
+  it('documentCountTextTest', () => {
+    expect(documentCountText(12)).toBe('12 Belege')
+    expect(documentCountText(1)).toBe('1 Beleg')
+    expect(documentCountText(0)).toBe('0 Belege')
   })
 
   it('catchUpResultTextTest', () => {

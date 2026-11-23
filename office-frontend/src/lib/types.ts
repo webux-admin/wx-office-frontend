@@ -2519,8 +2519,14 @@ export type CreditableLine = {
   lineGross: number
   /** What issued Gutschriften gave back on this line so far, including VAT. */
   creditedGross: number
-  /** The price per unit that credits the whole line, its discount included. */
-  fullCreditUnitPrice: number
+  /** The quantity the dialog starts with. One unit where what is left does not divide. */
+  proposedQuantity: number
+  /**
+   * The price per unit the dialog starts with. Ticked on every line, the proposals credit exactly
+   * what the invoice has left — after its discount, a rebate line, earlier Gutschriften and
+   * write-offs (backend ADR-0156). Zero where nothing is left on the line.
+   */
+  proposedUnitPrice: number
 }
 
 /** What is left to credit under one VAT category and rate. This is the limit that counts. */
@@ -2529,6 +2535,8 @@ export type CreditableGroup = {
   vatRate: number
   invoiced: number
   credited: number
+  /** What write-offs took off under this rate so far. */
+  writtenOff: number
   remaining: number
 }
 
@@ -2544,6 +2552,8 @@ export type CreditableInvoice = {
   currency: string
   totalGross: number
   credited: number
+  /** What write-offs and reductions without a rate (a discount typed in) took off so far. */
+  writtenOff: number
   remaining: number
   lines: CreditableLine[]
   groups: CreditableGroup[]

@@ -4,6 +4,7 @@ import {
   PAYMENT_KIND_ORDER,
   REDUCES_CONSIDERATION,
   openState,
+  hasStandingCreditNote,
   isReversibleOnItsOwn,
   stillCounts,
 } from './receivable'
@@ -82,6 +83,35 @@ describe('isReversibleOnItsOwn', () => {
 
   it('isReversibleOnItsOwnOfACounterLineTest', () => {
     expect(isReversibleOnItsOwn(line({ id: 2, amount: -100, reversesPaymentId: 1 }))).toBe(false)
+  })
+})
+
+describe('hasStandingCreditNote', () => {
+  /** Paid in full, then 125.00 credited: the surplus comes out of the Gutschrift. */
+  it('hasStandingCreditNoteTest', () => {
+    const payments = [line({ amount: 1250 }),
+      line({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 12 })]
+
+    expect(hasStandingCreditNote(payments)).toBe(true)
+  })
+
+  it('hasStandingCreditNoteWithoutLinesTest', () => {
+    expect(hasStandingCreditNote([])).toBe(false)
+  })
+
+  /** An ordinary overpayment, no Gutschrift anywhere. */
+  it('hasStandingCreditNoteWithAnOverpaymentTest', () => {
+    expect(hasStandingCreditNote([line({ amount: 1260 })])).toBe(false)
+  })
+
+  /** The Gutschrift was reversed: its line and the counter line no longer count. */
+  it('hasStandingCreditNoteAfterItsStornoTest', () => {
+    const payments = [
+      line({ id: 2, kind: 'CREDIT', amount: 125, creditNoteId: 12, reversedByPaymentId: 3 }),
+      line({ id: 3, kind: 'CREDIT', amount: -125, reversesPaymentId: 2 }),
+    ]
+
+    expect(hasStandingCreditNote(payments)).toBe(false)
   })
 })
 

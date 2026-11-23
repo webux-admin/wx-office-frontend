@@ -200,7 +200,10 @@ function CreditNoteMask({ tenantId, creditNote }: { tenantId: number; creditNote
                 Entwurf löschen
               </Button>
             )}
-          {editable && invoiceId !== undefined && (
+          {/* The dialog reads `creditable` of the invoice, and that endpoint asks for the read
+              right of the invoice as well. Without it the button would open a 403. */}
+          {editable && invoiceId !== undefined && invoiceKind !== undefined
+            && can(invoiceKind.rights.read) && (
             <Button variant="secondary" onClick={() => setEditing(true)}>
               Positionen bearbeiten…
             </Button>

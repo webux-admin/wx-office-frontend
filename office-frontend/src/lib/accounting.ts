@@ -1165,9 +1165,15 @@ export type UnpostedSource = {
   /** What it is called in the subsidiary ledger — a document number, a reference. */
   reference: string
   day: string
+  /**
+   * What it would book on the collective account: negative where it lowers it — a Gutschrift,
+   * the counter document of an invoice (backend ADR-0156).
+   */
   amount: number
   /** Whom it was issued to, as the record froze the name; absent where it names nobody. */
   partner?: string | null
+  /** What kind of record it is — «Rechnung», «Gutschrift», «Storno einer Rechnung». */
+  label?: string | null
 }
 
 /**
@@ -1345,15 +1351,19 @@ export function chosenSources(
 /**
  * The sum of what the ticked rows would book.
  *
- * <p>Added up in cents, so 0.1 + 0.2 is 0.30 and not 0.30000000000000004.
+ * <p>Added up in cents, so 0.1 + 0.2 is 0.30 and not 0.30000000000000004. The amounts carry
+ * their sign from the server, so a Gutschrift takes off what it takes off 1100.
  */
 export function chosenTotal(rows: readonly Pick<UnpostedSource, 'amount'>[]): number {
   return rows.reduce((cents, row) => cents + Math.round(row.amount * 100), 0) / 100
 }
 
-/** «1 Rechnung» or «12 Rechnungen» — the words on the button and in the dialog. */
-export function invoiceCountText(count: number): string {
-  return count === 1 ? '1 Rechnung' : `${count} Rechnungen`
+/**
+ * «1 Beleg» or «12 Belege» — the words on the button and in the dialog. Not «Rechnungen»: a
+ * Gutschrift and a counter document wait in the same list.
+ */
+export function documentCountText(count: number): string {
+  return count === 1 ? '1 Beleg' : `${count} Belege`
 }
 
 /** The one sentence above the three lists of a finished catch-up run. */

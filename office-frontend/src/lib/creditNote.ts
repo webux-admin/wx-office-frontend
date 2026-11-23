@@ -82,10 +82,11 @@ export type CreditNoteRow = {
 /**
  * The rows the dialog starts with.
  *
- * <p>For a new Gutschrift nothing is ticked, and each row offers the whole line: its quantity
- * and the price that credits it in full, its discount included. For a draft that is being
- * changed, the lines it already carries are ticked with what they say, matched by the invoice
- * line they came from.
+ * <p>For a new Gutschrift nothing is ticked, and each row offers the proposal of the server:
+ * what is left on the line, after the discount on the whole invoice, a rebate line, earlier
+ * Gutschriften and write-offs. Ticked on every row, the proposals credit exactly what the
+ * invoice has left (backend ADR-0156). For a draft that is being changed, the lines it already
+ * carries are ticked with what they say, matched by the invoice line they came from.
  *
  * @param creditable what the invoice still has to give
  * @param draft      the draft Gutschrift being changed, left out for a new one
@@ -101,16 +102,16 @@ export function creditNoteRowsOf(
       return {
         line,
         selected: false,
-        quantity: String(line.quantity),
-        unitPrice: String(line.fullCreditUnitPrice),
+        quantity: String(line.proposedQuantity),
+        unitPrice: String(line.proposedUnitPrice),
         description: '',
       }
     }
     return {
       line,
       selected: true,
-      quantity: String(taken.quantity ?? line.quantity),
-      unitPrice: String(taken.unitPrice ?? line.fullCreditUnitPrice),
+      quantity: String(taken.quantity ?? line.proposedQuantity),
+      unitPrice: String(taken.unitPrice ?? line.proposedUnitPrice),
       description: taken.description === line.description ? '' : (taken.description ?? ''),
     }
   })
@@ -186,13 +187,25 @@ export function creditNoteBodyOf(
 /**
  * The sentence above the rows: what the invoice still has to give, in its currency.
  *
+ * <p>A write-off lowers what may be credited as much as a Gutschrift does, so where one stands
+ * the sentence names it — otherwise «nothing left» would read as «credited in full» after a bad
+ * debt (backend ADR-0156).
+ *
  * @param creditable what the invoice still has to give
  * @returns for example «Noch gutschreibbar: 1’125.00 CHF von 1’250.00 CHF»
  */
 export function creditableSentence(creditable: CreditableInvoice): string {
+  const currency = creditable.currency
+  const writtenOff = creditable.writtenOff > 0
+    ? `${formatAmount(creditable.writtenOff)} ${currency} wurden ausgebucht oder abgezogen`
+    : undefined
   if (creditable.remaining <= 0) {
-    return `Rechnung ${creditable.documentNumber} ist vollständig gutgeschrieben.`
+    return writtenOff === undefined
+      ? `Rechnung ${creditable.documentNumber} ist vollständig gutgeschrieben.`
+      : `Rechnung ${creditable.documentNumber} gibt nichts mehr für eine Gutschrift her;`
+        + ` ${writtenOff}.`
   }
-  return `Noch gutschreibbar: ${formatAmount(creditable.remaining)} ${creditable.currency}`
-    + ` von ${formatAmount(creditable.totalGross)} ${creditable.currency}`
+  const sentence = `Noch gutschreibbar: ${formatAmount(creditable.remaining)} ${currency}`
+    + ` von ${formatAmount(creditable.totalGross)} ${currency}`
+  return writtenOff === undefined ? sentence : `${sentence}; ${writtenOff}`
 }
