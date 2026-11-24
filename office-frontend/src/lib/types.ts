@@ -5649,6 +5649,8 @@ export type TimeEntryState = 'OPEN' | 'NOT_BILLABLE'
 export type TimeEntry = {
   id: number
   userId: number
+  /** Absent where the tenant does not know the user any more. */
+  userName?: string | null
   /** ISO date, `yyyy-mm-dd`. */
   workDate: string
   /** As measured, 1 to 1440. */
@@ -5854,4 +5856,97 @@ export type TimerChangeRequest = TimerRequest & {
 export type TimerStopRequest = {
   /** The real end as an ISO instant, after the start and not after now. */
   correctedEnd?: string
+}
+
+// --- time tracking: terms and summaries (backend ADR-0162) ---------------------------
+
+/**
+ * How the time on a project is billed (`BillingMode`). A project nobody set terms for is billed
+ * `BY_EFFORT`.
+ */
+export type BillingMode = 'BY_EFFORT' | 'FIXED_PRICE' | 'NOT_BILLABLE'
+
+/**
+ * What the box «verrechenbar» shows for a target, and whether it may be switched on
+ * (`BillableDefault`). Names no rate, so whoever only records time may read it.
+ */
+export type TimeBillableDefault = {
+  /** What the box shows before the user touches it. */
+  billable: boolean
+  /** True when it cannot be switched on: the project is not billed, or the time is internal. */
+  locked: boolean
+  /** The tooltip of a locked box; absent while it is not locked. */
+  lockedReason?: string | null
+  /** The billing mode of the project; absent without a project. */
+  billingMode?: BillingMode | null
+}
+
+/** How the time on a project is billed, as the register «Zeiten» shows it (`ProjectTermsDto`). */
+export type ProjectTerms = {
+  projectId: number
+  billingMode: BillingMode
+  /** Per hour, four decimals; absent for none, so the price of the service applies. */
+  hourlyRate?: number | null
+  /** ISO 4217 code of the rate, the base currency of the tenant; absent exactly without a rate. */
+  currency?: string | null
+  /** What «verrechenbar» is for a new entry on the project. */
+  billableByDefault: boolean
+  /** False when a new entry on the project may not be billable. */
+  billableAllowed: boolean
+  /** How many entries are billable and not billed yet; a change of the mode leaves them. */
+  openEntries: number
+  /** Absent while nobody saved terms for the project, like the audit fields after it. */
+  createdAt?: string | null
+  createdBy?: string | null
+  changedAt?: string | null
+  changedBy?: string | null
+  /** The state to send back with a change; absent while nobody saved terms, and then none goes. */
+  lockVersion?: number | null
+}
+
+/**
+ * What changes the terms of a project (`ProjectTermsRequest`). No currency: the server saves the
+ * rate in the base currency of the tenant and refuses one that is sent.
+ */
+export type ProjectTermsRequest = {
+  billingMode: BillingMode
+  /** Per hour, at most four decimals, not negative; `null` for none. */
+  hourlyRate: number | null
+  /** As read; left out while the terms were never saved. */
+  lockVersion?: number
+}
+
+/**
+ * The minutes on a project or for a customer by state (`TimeSummaryDto`). The four states add up
+ * to `totalMinutes`; on a draft and invoiced stay 0 until billing exists (#127).
+ */
+export type TimeSummary = {
+  entries: number
+  totalMinutes: number
+  openEntries: number
+  openMinutes: number
+  inDraftMinutes: number
+  billedMinutes: number
+  notBillableMinutes: number
+}
+
+/** One row of the table «Standardleistung je Benutzer» (`UserDefaultDto`). */
+export type TimeUserDefault = {
+  userId: number
+  userName: string
+  /** False once the account was deactivated. */
+  userActive: boolean
+  /** The default service; absent for none. */
+  productId?: number | null
+  productNumber?: string | null
+  /** Absent without a default, or where the product is gone. */
+  serviceName?: string | null
+  /** True while the quick line suggests it; false without one, or for one gone or deactivated. */
+  serviceActive: boolean
+}
+
+/** What sets or removes the default service of a user (`UserDefaultRequest`). */
+export type TimeUserDefaultRequest = {
+  /** A product of the type service; `null` removes the default. */
+  productId: number | null
 }

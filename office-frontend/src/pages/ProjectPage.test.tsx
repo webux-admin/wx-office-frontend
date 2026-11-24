@@ -5,7 +5,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { Project, ProjectContact, ProjectCustomer, ProjectResponsible } from '../lib/types'
+import type {
+  Page,
+  Project,
+  ProjectContact,
+  ProjectCustomer,
+  ProjectResponsible,
+  ProjectTerms,
+  TimeEntry,
+  TimeSummary,
+} from '../lib/types'
 import { ProjectPage } from './ProjectPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -35,14 +44,44 @@ const STORED: Project = {
   status: 'OPEN',
 }
 
-function session(permissions: string[]): AuthState {
+/** The register «Zeiten» of the project: 12:30 hours, all of them open. */
+const SUMMARY: TimeSummary = {
+  entries: 5,
+  totalMinutes: 750,
+  openEntries: 5,
+  openMinutes: 750,
+  inDraftMinutes: 0,
+  billedMinutes: 0,
+  notBillableMinutes: 0,
+}
+const TERMS: ProjectTerms = {
+  projectId: 5,
+  billingMode: 'BY_EFFORT',
+  billableByDefault: true,
+  billableAllowed: true,
+  openEntries: 5,
+}
+const NO_ENTRIES: Page<TimeEntry> = {
+  content: [],
+  page: 0,
+  size: 50,
+  totalElements: 0,
+  totalPages: 0,
+  sort: '',
+}
+
+/** The rights and modules of somebody who keeps projects and reads the times of everybody. */
+const WITH_TIMES = ['PROJECT_READ', 'PROJECT_WRITE', 'TIME_READ']
+const TIME_MODULES = ['PROJECT', 'TIMETRACKING']
+
+function session(permissions: string[], modules = ['PROJECT']): AuthState {
   return {
     user: {
       userId: 1,
       username: 'muster',
       activeTenantId: TENANT,
       superuser: false,
-      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['PROJECT'] }],
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
       permissions,
     },
     loading: false,
@@ -63,6 +102,8 @@ let root: Root
 let written: { url: string; method: string; body: Record<string, unknown> }[]
 /** Every customer search the mask sent. */
 let searched: string[]
+/** What the next write answers instead of success, once. */
+let refusal: { status: number; body: unknown } | null
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -76,11 +117,17 @@ function json(body: unknown, status = 200) {
 function stubFetch() {
   written = []
   searched = []
+  refusal = null
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     if (method !== 'GET') {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
       written.push({ url, method, body })
+      if (refusal !== null) {
+        const { status, body: answer } = refusal
+        refusal = null
+        return json(answer, status)
+      }
       if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
       if (url.endsWith('/start')) return json({ ...STORED, status: 'ACTIVE' })
       return json({ ...STORED, ...body, id: 6, projectNumber: 'P-00006' }, method === 'POST' ? 201 : 200)
@@ -95,6 +142,9 @@ function stubFetch() {
     if (url.endsWith('/projects/5')) return json(STORED)
     if (url.endsWith('/projects/7')) return json({ ...STORED, id: 7, status: 'ARCHIVED' })
     if (url.endsWith('/projects/8')) return json({ ...STORED, id: 8, status: 'COMPLETED' })
+    if (/\/time-tracking\/projects\/\d+\/summary$/.test(url)) return json(SUMMARY)
+    if (/\/time-tracking\/projects\/\d+\/terms$/.test(url)) return json(TERMS)
+    if (url.startsWith('/api/tenants/1/time-entries?')) return json(NO_ENTRIES)
     return json([])
   })
 }
@@ -121,12 +171,16 @@ async function settle(ms = 300) {
   })
 }
 
-async function render(path: string, permissions = ['PROJECT_READ', 'PROJECT_WRITE']) {
+async function render(
+  path: string,
+  permissions = ['PROJECT_READ', 'PROJECT_WRITE'],
+  modules = ['PROJECT'],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <AuthContext.Provider value={session(permissions)}>
+        <AuthContext.Provider value={session(permissions, modules)}>
           <QueryClientProvider client={client}>
             <Routes>
               <Route path="/projekte/:id" element={<ProjectPage />} />
@@ -421,4 +475,114 @@ describe('ProjectPage', () => {
 
     expect(text()).not.toContain('Umbau Showroom')
   })
+
+  /** With the time tracking and TIME_READ a stored project has two registers. */
+  it('projectPageShowsTheRegistersTest', async () => {
+    await render('/projekte/5', WITH_TIMES, TIME_MODULES)
+
+    expect(registers()).toEqual(['Stammdaten', 'Zeiten'])
+    expect((control('Name') as HTMLInputElement).value).toBe('Umbau Showroom')
+  })
+
+  /** «Zeiten» shows the tiles of the project and leaves the base data. */
+  it('projectPageOpensTheTimesTest', async () => {
+    await render('/projekte/5', WITH_TIMES, TIME_MODULES)
+
+    await openRegister('Zeiten')
+
+    expect(text()).toContain('Offen verrechenbar')
+    expect(text()).toContain('12:30 Std.')
+    expect(text()).toContain('Nach Aufwand')
+    expect(container.querySelector('label')?.textContent).not.toBe('Name')
+  })
+
+  /** Without the module there is nothing to read, and no register strip at all. */
+  it('projectPageWithTheTimeTrackingOffTest', async () => {
+    await render('/projekte/5', WITH_TIMES, ['PROJECT'])
+
+    expect(registers()).toEqual([])
+    expect(text()).not.toContain('Zeiten')
+  })
+
+  /** Without TIME_READ the times of everybody are not the session's to see. */
+  it('projectPageWithoutTheRightToReadTimesTest', async () => {
+    await render('/projekte/5', ['PROJECT_READ', 'PROJECT_WRITE', 'TIME_TRACK'], TIME_MODULES)
+
+    expect(registers()).toEqual([])
+  })
+
+  /** A new project has no times yet, and no registers. */
+  it('projectPageWithoutRegistersOnANewProjectTest', async () => {
+    await render('/projekte/neu', WITH_TIMES, TIME_MODULES)
+
+    expect(registers()).toEqual([])
+  })
+
+  /** A project with times is not deleted: the dialog says why, in the backend's sentence. */
+  it('projectPageSaysWhyAProjectIsNotDeletedTest', async () => {
+    await render('/projekte/5')
+    refusal = {
+      status: 409,
+      body: {
+        detail:
+          'An diesem Projekt hängen 14 Zeiteinträge. Ein Projekt mit erfassten Zeiten wird abgeschlossen und archiviert statt gelöscht.',
+      },
+    }
+
+    await press('Löschen')
+    await press('Löschen')
+
+    expect(written).toEqual([{ url: '/api/tenants/1/projects/5', method: 'DELETE', body: {} }])
+    expect(document.body.textContent).toContain('An diesem Projekt hängen 14 Zeiteinträge.')
+    expect(text()).not.toContain('Liste')
+  })
+
+  /** Open billable hours keep a project from the archive; the sentence stands above the mask. */
+  it('projectPageSaysWhyAProjectIsNotArchivedTest', async () => {
+    await render('/projekte/8')
+    refusal = {
+      status: 409,
+      body: {
+        detail:
+          '12.50 Std. sind noch nicht abgerechnet. Erst abrechnen oder als nicht verrechenbar markieren, dann archivieren.',
+      },
+    }
+
+    await press('Archivieren')
+
+    expect(written).toEqual([{ url: '/api/tenants/1/projects/8/archive', method: 'POST', body: {} }])
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      '12.50 Std. sind noch nicht abgerechnet.',
+    )
+  })
+
+  /** The refusal is read where the step was pressed, on the register «Zeiten» as well. */
+  it('projectPageSaysWhyItIsNotArchivedOnTheTimesTest', async () => {
+    await render('/projekte/8', WITH_TIMES, TIME_MODULES)
+    await openRegister('Zeiten')
+    refusal = { status: 409, body: { detail: '12.50 Std. sind noch nicht abgerechnet.' } }
+
+    await press('Archivieren')
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      '12.50 Std. sind noch nicht abgerechnet.',
+    )
+    expect(text()).toContain('Offen verrechenbar')
+  })
 })
+
+/** The labels of the register strip, empty without one. */
+function registers(): string[] {
+  return [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent ?? '')
+}
+
+async function openRegister(label: string) {
+  const tab = [...container.querySelectorAll('[role="tab"]')].find(
+    (entry) => entry.textContent === label,
+  )
+  if (tab === undefined) throw new Error(`no register ${label}`)
+  await act(async () => {
+    ;(tab as HTMLElement).click()
+  })
+  await settle()
+}

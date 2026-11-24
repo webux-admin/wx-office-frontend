@@ -114,7 +114,12 @@ import {
 import { CONTRACT_MODULE, CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { SUBSCRIPTION_MODULE, SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
-import { TIMETRACKING_MODULE, TIMETRACKING_PATH, TIMETRACKING_RIGHTS } from '../lib/timetracking'
+import {
+  TIMETRACKING_MODULE,
+  TIMETRACKING_PATH,
+  TIMETRACKING_RIGHTS,
+  TIMETRACKING_SETTINGS_PATH,
+} from '../lib/timetracking'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -969,6 +974,25 @@ export const NAV_GROUPS: NavGroup[] = [
           // accounts and is chosen with `AccountSelect`, not maintained as a selection
           // list (backend ADR-0127). The endpoint goes on answering — ten-year-old documents
           // quote those codes — only the way into the menu is gone.
+        ],
+      },
+      {
+        // Here and not under «Systemeinstellungen», which the issue named: the default service
+        // of a user is read by the time tracking alone, and the sorting rule of ADR-0011 puts
+        // what one module reads into that module's folder. The switch sits on the head and on
+        // the child, as with the bookkeeping: nothing here has to survive it (frontend
+        // ADR-0084).
+        label: 'Zeiterfassung',
+        icon: Clock,
+        module: TIMETRACKING_MODULE,
+        children: [
+          {
+            label: 'Einstellungen',
+            icon: Clock,
+            href: TIMETRACKING_SETTINGS_PATH,
+            permission: TIMETRACKING_RIGHTS.write,
+            module: TIMETRACKING_MODULE,
+          },
         ],
       },
     ],

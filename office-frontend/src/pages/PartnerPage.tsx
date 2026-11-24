@@ -27,6 +27,7 @@ import { formatAmount } from '../lib/format'
 import { defaultCodeOf } from '../lib/masterData'
 import { runsModule } from '../lib/modules'
 import { PROJECT_MODULE, PROJECT_RIGHTS } from '../lib/project'
+import { TIMETRACKING_MODULE, TIMETRACKING_RIGHTS } from '../lib/timetracking'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { originOf } from '../lib/origin'
@@ -46,6 +47,7 @@ import { PartnerDunningPanel } from './partner/PartnerDunningPanel'
 import { PartnerHistory } from './partner/PartnerHistory'
 import { PartnerPrices } from './partner/PartnerPrices'
 import { PartnerProjects } from './partner/PartnerProjects'
+import { PartnerTimes } from './partner/PartnerTimes'
 import { usePartnerCredit } from './partner/usePartnerCredit'
 import {
   addressComplaints,
@@ -71,6 +73,7 @@ type Tab =
   | 'preise'
   | 'einstellungen'
   | 'projekte'
+  | 'zeiten'
   | 'verlauf'
 
 /** The fields of the create mask that can show a message of their own. */
@@ -553,6 +556,14 @@ function PartnerEditMask({
     can(PROJECT_RIGHTS.read) &&
     runsModule(user?.tenants, tenantId, PROJECT_MODULE)
 
+  // The times of everybody for this customer: personal data about how people work, so only with
+  // TIME_READ (OR Art. 328b). Under the switch of the time tracking, not of the projects — without
+  // projects, time is recorded on the customer itself (backend ADR-0160).
+  const showsTimes =
+    wording.role === 'customer' &&
+    can(TIMETRACKING_RIGHTS.read) &&
+    runsModule(user?.tenants, tenantId, TIMETRACKING_MODULE)
+
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'stammdaten', label: 'Stammdaten' },
     { id: 'adressen', label: 'Adressen', count: partner.addresses?.length ?? 0 },
@@ -566,6 +577,8 @@ function PartnerEditMask({
     // A project always belongs to a customer, never to a supplier (backend ADR-0129), and the
     // register needs the module switched on: without it there is no project list to read.
     ...(showsProjects ? [{ id: 'projekte' as Tab, label: 'Projekte' }] : []),
+    // Beside the projects: the time is what the work for the customer was recorded as.
+    ...(showsTimes ? [{ id: 'zeiten' as Tab, label: 'Zeiten' }] : []),
     // Last on purpose: the history is what happened, and one looks it up rather than works
     // in it. Only for a partner we sell to: it lists sales documents, and a supplier has none.
     ...(sellsToPartner ? [{ id: 'verlauf' as Tab, label: 'Verlauf' }] : []),
@@ -652,6 +665,8 @@ function PartnerEditMask({
         {tab === 'projekte' && showsProjects && (
           <PartnerProjects tenantId={tenantId} partnerId={partner.id} />
         )}
+
+        {tab === 'zeiten' && showsTimes && <PartnerTimes tenantId={tenantId} partnerId={partner.id} />}
 
         {/* No permission check: the server narrows the rows to what the reader may see and
             answers with an empty page when that is nothing. */}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DiscardQuestion } from '../components/Dialog'
@@ -26,8 +27,10 @@ import {
   continueEntryUrl,
   copyRequestOf,
   dayTotalText,
+  defaultServiceKey,
   emptyTimeEntryForm,
   entryTargetText,
+  fetchSuggestedService,
   formChanged,
   hasLaterWeek,
   hasLineInput,
@@ -36,6 +39,7 @@ import {
   nextEntryForm,
   recentTargetsKey,
   recentTargetsUrl,
+  recordOnTargetOf,
   startedText,
   timeEntriesKey,
   timeEntryComplaints,
@@ -49,6 +53,8 @@ import {
   toTimeEntryRequest,
   weekStep,
   withRecentTarget,
+  withSuggestedService,
+  withTarget,
   type SheetOwner,
   type TimeEntryForm,
 } from '../lib/timetracking'
@@ -62,6 +68,7 @@ import type {
 } from '../lib/types'
 import { addDays, dayTitle, mondayOf, weekDays, weekLabel } from '../lib/week'
 import { RecentChips } from '../timetracking/RecentChips'
+import { useBillableDefault } from '../timetracking/useBillableDefault'
 import { DayEntries } from './timetracking/DayEntries'
 import { TimeEntryLine } from './timetracking/TimeEntryLine'
 import { WeekBar } from './timetracking/WeekBar'
@@ -77,6 +84,11 @@ import { WeekBar } from './timetracking/WeekBar'
  * <p>With `TIME_READ` the same screen shows the week of a colleague, and with `TIME_WRITE` the
  * line records for them. Their times are personal data about how somebody works (OR Art. 328b),
  * which is why the choice appears only with the right — the backend refuses it anyway.
+ *
+ * <p>«Zeit erfassen» on a project opens this screen with the project in the quick line, its
+ * suggested service beside it and the focus on «Dauer». The default and the lock of
+ * «verrechenbar» come from the server for every target (#126, backend ADR-0162, frontend
+ * ADR-0084).
  */
 export function TimeEntryPage() {
   return (
@@ -135,9 +147,36 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
 
   // --- the line for a new entry ----------------------------------------------------
 
-  const [createForm, setCreateForm] = useState<TimeEntryForm>(emptyTimeEntryForm)
+  // «Zeit erfassen» on a project hands it over in the router state; read once, when the screen
+  // opens, so a later change of the line is not undone by it.
+  const location = useLocation()
+  const [handedOver] = useState(() => recordOnTargetOf(location.state))
+  const [createForm, setCreateForm] = useState<TimeEntryForm>(() =>
+    handedOver === null
+      ? emptyTimeEntryForm()
+      : withTarget(emptyTimeEntryForm(), handedOver, projectsOn),
+  )
   const createFormRef = useRef<HTMLFormElement>(null)
   const createDurationRef = useRef<HTMLInputElement>(null)
+  const createRule = useBillableDefault(tenantId, createForm.target, mayWrite)
+
+  // The service of a handed over project, as picking it from the list would suggest it: the one
+  // taken there last, else the user's default service (backend ADR-0162).
+  const handedOverService = useQuery({
+    queryKey: defaultServiceKey(tenantId, handedOver),
+    queryFn: () => fetchSuggestedService(tenantId, handedOver),
+    enabled: handedOver !== null,
+  })
+  const [suggestionTaken, setSuggestionTaken] = useState(false)
+  if (!suggestionTaken && handedOverService.data !== undefined) {
+    setSuggestionTaken(true)
+    setCreateForm((current) => withSuggestedService(current, handedOver, handedOverService.data))
+  }
+
+  // The project is chosen already; what is left to type is how long.
+  useEffect(() => {
+    if (handedOver !== null) createDurationRef.current?.focus()
+  }, [handedOver])
 
   const record = useMutation({
     mutationFn: (body: TimeEntryRequest) =>
@@ -149,7 +188,10 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
       createDurationRef.current?.focus()
     },
   })
-  const createChecks = useFieldErrors(() => timeEntryComplaints(createForm), record.error)
+  const createChecks = useFieldErrors(
+    () => timeEntryComplaints(createForm, createRule),
+    record.error,
+  )
 
   const submitCreate = () => {
     if (record.isPending) return
@@ -191,7 +233,8 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
       refresh()
     },
   })
-  const editChecks = useFieldErrors(() => timeEntryComplaints(editForm), change.error)
+  const editRule = useBillableDefault(tenantId, editForm.target, editing !== null)
+  const editChecks = useFieldErrors(() => timeEntryComplaints(editForm, editRule), change.error)
   const editDirty = editing !== null && formChanged(editForm, editing.initial)
 
   const openEdit = (entry: TimeEntry) => {
@@ -217,7 +260,13 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
     const { entry } = editing
     change.mutate({
       entry,
-      body: toTimeEntryRequest(editForm, reading.duration, entry.workDate, entry.lockVersion),
+      body: toTimeEntryRequest(
+        editForm,
+        reading.duration,
+        entry.workDate,
+        entry.lockVersion,
+        editRule,
+      ),
     })
   }
 
@@ -387,6 +436,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
                 form={createForm}
                 onChange={setCreateForm}
                 projectsOn={projectsOn}
+                billableDefault={createRule}
                 errors={lineErrors(createChecks.errors)}
                 busy={record.isPending}
                 suggestServices={owner === 'mine'}
@@ -472,6 +522,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
                       form={editForm}
                       onChange={setEditForm}
                       projectsOn={projectsOn}
+                      billableDefault={editRule}
                       errors={lineErrors(editChecks.errors)}
                       busy={change.isPending}
                       suggestServices={owner === 'mine'}

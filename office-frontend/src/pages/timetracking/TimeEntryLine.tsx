@@ -7,6 +7,7 @@ import {
   type TimeEntryForm,
   type TimeEntryLineField,
 } from '../../lib/timetracking'
+import type { TimeBillableDefault } from '../../lib/types'
 import { BillableField, ServiceField, TargetField } from '../../timetracking/AssignmentFields'
 import { enterSubmits } from '../../timetracking/enterSubmits'
 
@@ -37,12 +38,15 @@ export function TimeEntryLine({
   label,
   durationRef,
   formRef,
+  billableDefault,
 }: {
   tenantId: number
   form: TimeEntryForm
   onChange: (update: (current: TimeEntryForm) => TimeEntryForm) => void
   /** Whether the tenant runs the projects; without them the first field searches customers. */
   projectsOn: boolean
+  /** The default and lock of «verrechenbar» for the target, `undefined` while unknown. */
+  billableDefault: TimeBillableDefault | undefined
   /** The message for each field, already drawn from the line's own checks and the backend. */
   errors: Partial<Record<TimeEntryLineField, string>>
   /** True while the line is being saved; a second Enter then does nothing. */
@@ -124,7 +128,12 @@ export function TimeEntryLine({
 
       {/* The two cells without a label start where the inputs do. */}
       <div className="flex h-control items-center lg:mt-6">
-        <BillableField form={form} onChange={onChange} />
+        <BillableField
+          form={form}
+          onChange={onChange}
+          rule={billableDefault}
+          projectsOn={projectsOn}
+        />
       </div>
 
       <div className="flex items-center gap-2 lg:mt-6">

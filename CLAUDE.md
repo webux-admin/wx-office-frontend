@@ -82,7 +82,21 @@ Stand der Module (in dieser Reihenfolge gebaut):
   sekundengenauen `startedAt`, ohne Abfrage; beim Zurückkehren auf den Tab liest er Uhr und
   Einträge neu, und der Tab-Titel beginnt mit «▶ 0:42». Ab zwölf Stunden zeigt das Feld `notice`
   und ein echtes Ende, über 24 Stunden als Pflicht. «Fortsetzen» (▶) an jedem eigenen,
-  änderbaren Eintrag (ADR-0083, Backend ADR-0161)
+  änderbaren Eintrag (ADR-0083, Backend ADR-0161). «verrechenbar» nimmt in Schnellzeile und
+  Stoppuhr **Vorgabe und Sperre vom Server** (`lookups/default-billable`, `useBillableDefault`):
+  gesperrt heisst «nicht einschaltbar», mit `lockedReason` als Tooltip; ein Ja, das ein Eintrag
+  schon trägt, bleibt abwählbar; interne Zeit fragt nicht. Die Projektmaske hat bei
+  eingeschaltetem Modul und `TIME_READ` die Register **«Stammdaten» und «Zeiten»**: Kacheln
+  (Total, offen verrechenbar, im Entwurf, verrechnet, nicht verrechenbar, in Stunden der Uhr), die
+  Abrechnung — Abrechnungsart und Projektsatz, geändert in einem Dialog mit `TIME_WRITE` an einem
+  nicht archivierten Projekt, `lockVersion` nur, wenn vorhanden, der Hinweis auf die offenen
+  Einträge davor und danach — und die Liste aller Personen; «Zeit erfassen» öffnet «Meine Zeiten»
+  mit dem Projekt im Router-State (`recordOn`), nur mit `TIME_TRACK` auf offenen und aktiven
+  Projekten. Die Meldungen von Löschen und Archivieren stehen über den Registern. Am Kunden das
+  Register «Zeiten» nach «Projekte», mit Projektspalte. Die **Standardleistung je Benutzer** steht
+  unter Moduleinstellungen → Zeiterfassung → Einstellungen (`/zeiterfassung-einstellungen`,
+  `TIME_WRITE`), gewählt im Dialog mit der Schnellsuche der Leistungen (ADR-0084, Backend
+  ADR-0162)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

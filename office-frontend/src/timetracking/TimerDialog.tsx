@@ -52,6 +52,7 @@ import type {
 import { BillableField, ServiceField, TargetField } from './AssignmentFields'
 import { RecentChips } from './RecentChips'
 import { enterSubmits } from './enterSubmits'
+import { useBillableDefault } from './useBillableDefault'
 
 /** What the field shows of a stopwatch that runs; start and end come with it. */
 const RUNNING_FIELDS: readonly TimerField[] = ['target', 'service', 'description', 'start', 'end']
@@ -71,6 +72,10 @@ const END_REQUIRED_NOTICE =
  * fields filled in, its start, «Verwerfen», «Speichern» and «Stopp»; the focus is on «Stopp».
  * From twelve hours on the backend's notice stands above a field for the real end, which is
  * required after 24 hours (backend ADR-0161, frontend ADR-0083).
+ *
+ * <p>«verrechenbar» takes its default and its lock from the server for the target, like the quick
+ * line: on a project set to «Nicht verrechenbar» it cannot be switched on (backend ADR-0162,
+ * frontend ADR-0084).
  *
  * <p><b>The field follows the stopwatch.</b> Another device may start, change or stop it while
  * the field is open; each step that finds out reads it anew, and the field shows what runs now.
@@ -213,7 +218,8 @@ export function TimerDialog({
   // check asks only on the flag: after a refusal its sentence, which names the start, stands.
   const endRequired = (held?.endRequired ?? false) || tooLong
   const endAsked = held?.endRequired ?? false
-  const checks = useFieldErrors(() => timerComplaints(form, intent, endAsked), failure)
+  const rule = useBillableDefault(tenantId, form.target, open)
+  const checks = useFieldErrors(() => timerComplaints(form, intent, endAsked, rule), failure)
   const errors = timerErrors(checks.errors)
   const busy = start.isPending || change.isPending || stop.isPending
   const changed = timerChanged(form, initial)
@@ -227,7 +233,7 @@ export function TimerDialog({
     setRaceLost(false)
     setIntent(next)
     checks.check()
-    return Object.keys(timerComplaints(form, next, endAsked)).length === 0
+    return Object.keys(timerComplaints(form, next, endAsked, rule)).length === 0
   }
 
   const startNow = () => {
@@ -236,13 +242,15 @@ export function TimerDialog({
 
   const save = () => {
     if (held === null || !changed) return
-    if (attempt('change')) change.mutate(toTimerChangeRequest(form, initial, held.lockVersion))
+    if (attempt('change')) {
+      change.mutate(toTimerChangeRequest(form, initial, held.lockVersion, rule))
+    }
   }
 
   const stopNow = () => {
     if (held === null || !attempt('stop')) return
     stop.mutate({
-      changeBody: changed ? toTimerChangeRequest(form, initial, held.lockVersion) : null,
+      changeBody: changed ? toTimerChangeRequest(form, initial, held.lockVersion, rule) : null,
       stopBody: toTimerStopRequest(form),
     })
   }
@@ -365,7 +373,7 @@ export function TimerDialog({
             autoComplete="off"
             error={errors.description}
           />
-          <BillableField form={form} onChange={setForm} />
+          <BillableField form={form} onChange={setForm} rule={rule} projectsOn={projectsOn} />
 
           {running && (
             <div className="grid gap-4 sm:grid-cols-2">

@@ -14,6 +14,7 @@ import { useAuth } from '../auth/useAuth'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { formatDateTime } from '../lib/format'
+import { useRunsModule } from '../lib/modules'
 import { originOf } from '../lib/origin'
 import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
@@ -41,11 +42,21 @@ import {
   type ProjectForm,
   type ProjectStep,
 } from '../lib/project'
+import { TIMETRACKING_MODULE, TIMETRACKING_RIGHTS } from '../lib/timetracking'
 import type { Project, ProjectContact, ProjectCustomer, ProjectResponsible } from '../lib/types'
 import { PartnerQuickSearch } from './document/PartnerQuickSearch'
 import { partnerLabel, type CustomerHit, type CustomerSource } from './document/partnerSearch'
+import { ProjectTimes } from './project/ProjectTimes'
 
-/** One project, new or stored: its customer, the people on it, its period. */
+/** The registers of a stored project. */
+type Register = 'stammdaten' | 'zeiten'
+
+/**
+ * One project, new or stored: its customer, the people on it, its period.
+ *
+ * <p>A stored project gets the registers «Stammdaten» and «Zeiten» when the tenant runs the time
+ * tracking and the session holds `TIME_READ`; otherwise it has no register strip at all (#126).
+ */
 export function ProjectPage() {
   return (
     <RequireTenant permission={PROJECT_RIGHTS.read} module={PROJECT_MODULE}>
@@ -80,6 +91,7 @@ function ProjectLoader({ tenantId }: { tenantId: number }) {
 
 function ProjectMask({ tenantId, project }: { tenantId: number; project: Project | null }) {
   const { can } = useAuth()
+  const runs = useRunsModule()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const origin = originOf(useLocation().state, { from: PROJECT_PATH, label: 'Projekte' })
@@ -87,7 +99,12 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
   const [form, setForm] = useState<ProjectForm>(project ? toProjectForm(project) : emptyProjectForm())
   const [complaint, setComplaint] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [register, setRegister] = useState<Register>('stammdaten')
   const mayWrite = can(PROJECT_RIGHTS.write)
+  // The times belong to the time tracking: without its switch there is nothing to read, and
+  // without TIME_READ the times of everybody are not the session's to see (OR Art. 328b).
+  const showsTimes =
+    project !== null && runs(TIMETRACKING_MODULE) && can(TIMETRACKING_RIGHTS.read)
   // An archived project is read only, also for whoever may write: it is taken out of the
   // archive first, and the backend refuses a change before that with 409.
   const editable = mayWrite && (project === null || isProjectEditable(project.status))
@@ -130,12 +147,18 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
   const submit = () => {
     const problem = projectComplaint(form)
     setComplaint(problem)
-    if (!problem) save.mutate()
+    if (!problem) {
+      save.mutate()
+      return
+    }
+    // The complaint is about a field of the project; that register has to be open to fix it.
+    setRegister('stammdaten')
   }
-
 
   const dirty = JSON.stringify(form) !== JSON.stringify(project ? toProjectForm(project) : emptyProjectForm())
 
+  // Stands above the registers, not in one: a step is pressed in the header from either, and
+  // its refusal — «12.50 Std. sind noch nicht abgerechnet.» — must be read where it was pressed.
   const failure = save.error ?? step.error ?? (complaint === null ? null : new Error(complaint))
 
   return (
@@ -183,6 +206,18 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
       }
       dirty={dirty}
       onSubmit={editable && !save.isPending ? submit : undefined}
+      tabs={
+        showsTimes
+          ? {
+              items: [
+                { id: 'stammdaten', label: 'Stammdaten' },
+                { id: 'zeiten', label: 'Zeiten' },
+              ],
+              active: register,
+              onChange: setRegister,
+            }
+          : undefined
+      }
     >
       <>
         {failure !== null && (
@@ -198,83 +233,89 @@ function ProjectMask({ tenantId, project }: { tenantId: number; project: Project
           </p>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Panel title="Projekt">
-            <div className="grid gap-4">
-              <TextField
-                label="Name"
-                value={form.name}
-                onChange={(event) => set('name', event.target.value)}
-                maxLength={PROJECT_NAME_MAX_LENGTH}
-                disabled={!editable}
-                required
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField
-                  label="Start"
-                  type="date"
-                  value={form.startDate}
-                  onChange={(event) => set('startDate', event.target.value)}
-                  disabled={!editable}
-                />
-                <TextField
-                  label="Ende"
-                  type="date"
-                  value={form.endDate}
-                  onChange={(event) => set('endDate', event.target.value)}
-                  disabled={!editable}
-                  tooltip="Leer lassen, solange das Ende offen ist."
-                />
-              </div>
-              <TextAreaField
-                label="Beschreibung"
-                value={form.description}
-                onChange={(event) => set('description', event.target.value)}
-                maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-                rows={5}
-                disabled={!editable}
-              />
-            </div>
-          </Panel>
+        {register === 'zeiten' && showsTimes ? (
+          <ProjectTimes tenantId={tenantId} project={project} />
+        ) : (
+          <>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Panel title="Projekt">
+                <div className="grid gap-4">
+                  <TextField
+                    label="Name"
+                    value={form.name}
+                    onChange={(event) => set('name', event.target.value)}
+                    maxLength={PROJECT_NAME_MAX_LENGTH}
+                    disabled={!editable}
+                    required
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <TextField
+                      label="Start"
+                      type="date"
+                      value={form.startDate}
+                      onChange={(event) => set('startDate', event.target.value)}
+                      disabled={!editable}
+                    />
+                    <TextField
+                      label="Ende"
+                      type="date"
+                      value={form.endDate}
+                      onChange={(event) => set('endDate', event.target.value)}
+                      disabled={!editable}
+                      tooltip="Leer lassen, solange das Ende offen ist."
+                    />
+                  </div>
+                  <TextAreaField
+                    label="Beschreibung"
+                    value={form.description}
+                    onChange={(event) => set('description', event.target.value)}
+                    maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+                    rows={5}
+                    disabled={!editable}
+                  />
+                </div>
+              </Panel>
 
-          <Panel title="Beteiligte">
-            <div className="grid gap-4">
-              <CustomerChoice
-                tenantId={tenantId}
-                partnerId={form.partnerId}
-                knownName={project?.customerName ?? null}
-                disabled={!editable}
-                // Another customer has other people: a contact chosen for the last one would
-                // be refused by the backend, so it goes with the customer.
-                onChange={(partnerId) =>
-                  setForm((current) => ({ ...current, partnerId, contactPersonId: '' }))
-                }
-              />
-              <ContactChoice
-                tenantId={tenantId}
-                partnerId={form.partnerId}
-                contactPersonId={form.contactPersonId}
-                disabled={!editable}
-                onChange={(contactPersonId) => set('contactPersonId', contactPersonId)}
-              />
-              <ResponsibleChoice
-                tenantId={tenantId}
-                responsibleUserId={form.responsibleUserId}
-                storedUserId={project?.responsibleUserId ?? null}
-                disabled={!editable}
-                onChange={(responsibleUserId) => set('responsibleUserId', responsibleUserId)}
-              />
+              <Panel title="Beteiligte">
+                <div className="grid gap-4">
+                  <CustomerChoice
+                    tenantId={tenantId}
+                    partnerId={form.partnerId}
+                    knownName={project?.customerName ?? null}
+                    disabled={!editable}
+                    // Another customer has other people: a contact chosen for the last one would
+                    // be refused by the backend, so it goes with the customer.
+                    onChange={(partnerId) =>
+                      setForm((current) => ({ ...current, partnerId, contactPersonId: '' }))
+                    }
+                  />
+                  <ContactChoice
+                    tenantId={tenantId}
+                    partnerId={form.partnerId}
+                    contactPersonId={form.contactPersonId}
+                    disabled={!editable}
+                    onChange={(contactPersonId) => set('contactPersonId', contactPersonId)}
+                  />
+                  <ResponsibleChoice
+                    tenantId={tenantId}
+                    responsibleUserId={form.responsibleUserId}
+                    storedUserId={project?.responsibleUserId ?? null}
+                    disabled={!editable}
+                    onChange={(responsibleUserId) => set('responsibleUserId', responsibleUserId)}
+                  />
+                </div>
+              </Panel>
             </div>
-          </Panel>
-        </div>
 
-        {project && (
-          <p className="mt-6 text-small text-text-tertiary">
-            Angelegt {formatDateTime(project.createdAt)}
-            {project.createdBy ? ` von ${project.createdBy}` : ''}
-            {project.changedAt ? ` · geändert ${formatDateTime(project.changedAt)}` : ''}
-            {project.changedBy ? ` von ${project.changedBy}` : ''}
-          </p>
+            {project && (
+              <p className="mt-6 text-small text-text-tertiary">
+                Angelegt {formatDateTime(project.createdAt)}
+                {project.createdBy ? ` von ${project.createdBy}` : ''}
+                {project.changedAt ? ` · geändert ${formatDateTime(project.changedAt)}` : ''}
+                {project.changedBy ? ` von ${project.changedBy}` : ''}
+              </p>
+            )}
+          </>
         )}
       </>
 

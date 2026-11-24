@@ -1,14 +1,53 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './api'
 import { readDuration } from './duration'
 import { MODULE_NAMES } from './modules'
 import {
+  BILLING_MODES,
+  BILLING_MODE_HINTS,
+  BILLING_MODE_LABELS,
   TIMETRACKING_MODULE,
   TIMETRACKING_PATH,
   TIMETRACKING_RIGHTS,
+  TIMETRACKING_SETTINGS_PATH,
   TIME_ENTRY_STATE_LABELS,
   TIME_ENTRY_STATE_TONES,
+  billableDefaultKey,
+  billableDefaultUrl,
+  billableLocked,
+  billableTooltip,
   colleaguesUrl,
+  entryCountText,
+  entryProjectText,
+  entryUserText,
+  fetchSuggestedService,
+  hourlyRateText,
+  hoursText,
+  openEntriesStayText,
+  projectTargetOf,
+  projectTermsChanged,
+  projectTermsComplaints,
+  projectTermsKey,
+  projectTermsUrl,
+  rateFieldOf,
+  recordOnState,
+  recordOnTargetOf,
+  takesNewTime,
+  termsSavedText,
+  timeEntryListKey,
+  timeEntryListUrl,
+  timeSummaryFigures,
+  timeSummaryKey,
+  timeSummaryUrl,
+  timeTermsKey,
+  timeTrackingUrl,
+  toProjectTermsForm,
+  toProjectTermsRequest,
+  userDefaultState,
+  userDefaultUrl,
+  userDefaultsKey,
+  userDefaultsUrl,
   continueEntryUrl,
   copyRequestOf,
   dayTotalText,
@@ -76,7 +115,17 @@ import {
   type TimeEntryForm,
   type TimerForm,
 } from './timetracking'
-import type { RunningTimer, TimeEntry, TimeServiceChoice, TimeTargetChoice } from './types'
+import type {
+  Project,
+  ProjectTerms,
+  RunningTimer,
+  TimeBillableDefault,
+  TimeEntry,
+  TimeServiceChoice,
+  TimeSummary,
+  TimeTargetChoice,
+  TimeUserDefault,
+} from './types'
 
 const WEBSITE: TimeTargetChoice = {
   kind: 'PROJECT',
@@ -96,6 +145,28 @@ const MUSTER: TimeTargetChoice = {
 
 const CONCEPT: TimeServiceChoice = { productId: 31, productNumber: 'L-001', name: 'Konzeption' }
 const SUPPORT: TimeServiceChoice = { productId: 32, productNumber: 'L-002', name: 'Support' }
+
+/** What the server says about «verrechenbar» for a customer without a project. */
+const CUSTOMER_RULE: TimeBillableDefault = { billable: true, locked: false }
+
+/** … for a project billed by effort. */
+const BY_EFFORT_RULE: TimeBillableDefault = { billable: true, locked: false, billingMode: 'BY_EFFORT' }
+
+/** … for a project at a fixed price: no, but it may be ticked. */
+const FIXED_PRICE_RULE: TimeBillableDefault = {
+  billable: false,
+  locked: false,
+  billingMode: 'FIXED_PRICE',
+}
+
+/** … for a project that is not billed: no, and locked. */
+const LOCKED_RULE: TimeBillableDefault = {
+  billable: false,
+  locked: true,
+  lockedReason:
+    'Das Projekt P-00012 ist als «Nicht verrechenbar» vereinbart. Zeit darauf ist nie verrechenbar.',
+  billingMode: 'NOT_BILLABLE',
+}
 
 /** Two and a half hours on the website project, from eight to half past ten. */
 function entry(overrides: Partial<TimeEntry> = {}): TimeEntry {
@@ -170,6 +241,12 @@ describe('constants', () => {
 
   it('timetrackingPathTest', () => {
     expect(TIMETRACKING_PATH).toBe('/zeiten')
+  })
+
+  /** Named like the settings of the dunning, and apart from «Meine Zeiten». */
+  it('timetrackingSettingsPathTest', () => {
+    expect(TIMETRACKING_SETTINGS_PATH).toBe('/zeiterfassung-einstellungen')
+    expect(TIMETRACKING_SETTINGS_PATH.startsWith(TIMETRACKING_PATH)).toBe(false)
   })
 
   it('timetrackingRightsTest', () => {
@@ -251,6 +328,64 @@ describe('addresses', () => {
   it('colleaguesUrlTest', () => {
     expect(colleaguesUrl(1)).toBe('/api/tenants/1/time-entries/lookups/colleagues')
   })
+
+  it('billableDefaultUrlTest', () => {
+    expect(billableDefaultUrl(1, WEBSITE)).toBe(
+      '/api/tenants/1/time-entries/lookups/default-billable?projectId=12',
+    )
+    expect(billableDefaultUrl(1, MUSTER)).toBe(
+      '/api/tenants/1/time-entries/lookups/default-billable?partnerId=11',
+    )
+  })
+
+  it('billableDefaultUrlForInternalTimeTest', () => {
+    expect(billableDefaultUrl(1, null)).toBe('/api/tenants/1/time-entries/lookups/default-billable')
+  })
+
+  /** The terms, summaries and defaults live below the time tracking, not below the projects. */
+  it('timeTrackingUrlTest', () => {
+    expect(timeTrackingUrl(1)).toBe('/api/tenants/1/time-tracking')
+  })
+})
+
+describe('fetchSuggestedService', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function answer(status: number, body?: unknown) {
+    const requested: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      requested.push(url)
+      return Promise.resolve(
+        new Response(body === undefined ? null : JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+    return requested
+  }
+
+  it('fetchSuggestedServiceTest', async () => {
+    const requested = answer(200, CONCEPT)
+
+    await expect(fetchSuggestedService(1, WEBSITE)).resolves.toEqual(CONCEPT)
+    expect(requested).toEqual(['/api/tenants/1/time-entries/mine/default-service?projectId=12'])
+  })
+
+  /** 204 is «nothing to suggest»; a query may not hold undefined, so it is null. */
+  it('fetchSuggestedServiceWithoutSuggestionTest', async () => {
+    answer(204)
+
+    await expect(fetchSuggestedService(1, MUSTER)).resolves.toBeNull()
+  })
+
+  it('fetchSuggestedServiceWhenRefusedTest', async () => {
+    answer(409, { detail: 'Der Mandant betreibt die Zeiterfassung nicht.' })
+
+    await expect(fetchSuggestedService(1, WEBSITE)).rejects.toThrow(
+      'Der Mandant betreibt die Zeiterfassung nicht.',
+    )
+  })
 })
 
 describe('cache keys', () => {
@@ -283,6 +418,50 @@ describe('cache keys', () => {
   it('timeLookupsKeyTest', () => {
     expect(timeLookupsKey(1)).toEqual(['time-lookups', 1])
     expect(timeLookupsKey(1)[0]).not.toBe(timeEntriesKey(1)[0])
+  })
+
+  /** Saving terms refreshes the terms and the defaults of «verrechenbar» — and no entries. */
+  it('timeTermsKeyTest', () => {
+    const root = timeTermsKey(1)
+
+    expect(root).toEqual(['time-terms', 1])
+    expect(projectTermsKey(1, 12).slice(0, 2)).toEqual(root)
+    expect(billableDefaultKey(1, WEBSITE).slice(0, 2)).toEqual(root)
+    expect(root[0]).not.toBe(timeEntriesKey(1)[0])
+  })
+
+  it('billableDefaultKeyTest', () => {
+    expect(billableDefaultKey(1, WEBSITE)).toEqual(['time-terms', 1, 'default-billable', 'project-12'])
+    expect(billableDefaultKey(1, MUSTER)).not.toEqual(billableDefaultKey(1, WEBSITE))
+    expect(billableDefaultKey(1, null).at(-1)).toBe('internal')
+  })
+
+  it('projectTermsKeyTest', () => {
+    expect(projectTermsKey(1, 12)).toEqual(['time-terms', 1, 'project', 12])
+    expect(projectTermsKey(1, 12)).not.toEqual(projectTermsKey(2, 12))
+  })
+
+  /** A recorded entry refreshes the tiles and the lists of the registers too. */
+  it('timeSummaryKeyTest', () => {
+    const project = timeSummaryKey(1, { kind: 'PROJECT', projectId: 12 })
+    const customer = timeSummaryKey(1, { kind: 'CUSTOMER', partnerId: 12 })
+
+    expect(project.slice(0, 2)).toEqual(timeEntriesKey(1))
+    expect(project).not.toEqual(customer)
+  })
+
+  it('timeEntryListKeyTest', () => {
+    const first = timeEntryListKey(1, { kind: 'PROJECT', projectId: 12 }, 0)
+
+    expect(first.slice(0, 2)).toEqual(timeEntriesKey(1))
+    expect(first).not.toEqual(timeEntryListKey(1, { kind: 'PROJECT', projectId: 12 }, 1))
+    expect(first).not.toEqual(timeEntryListKey(1, { kind: 'CUSTOMER', partnerId: 12 }, 0))
+  })
+
+  /** Every user's default is kept apart from the entries; an entry changes none. */
+  it('userDefaultsKeyTest', () => {
+    expect(userDefaultsKey(1)).toEqual(['time-user-defaults', 1])
+    expect(userDefaultsKey(1)[0]).not.toBe(timeEntriesKey(1)[0])
   })
 })
 
@@ -658,6 +837,84 @@ describe('the quick line', () => {
     expect(effectiveBillable(form({ billable: true }))).toBe(false)
   })
 
+  /** Untouched, the box follows the billing mode the server names for the project. */
+  it('effectiveBillableFollowsTheBillingModeTest', () => {
+    expect(effectiveBillable(form({ target: WEBSITE }), BY_EFFORT_RULE)).toBe(true)
+    expect(effectiveBillable(form({ target: WEBSITE }), FIXED_PRICE_RULE)).toBe(false)
+    expect(effectiveBillable(form({ target: WEBSITE }), LOCKED_RULE)).toBe(false)
+  })
+
+  /** Ticked by hand, or held by a stored entry, the box says that and not the default. */
+  it('effectiveBillableTickedOnAFixedPriceProjectTest', () => {
+    expect(effectiveBillable(form({ target: WEBSITE, billable: true }), FIXED_PRICE_RULE)).toBe(true)
+    expect(effectiveBillable(form({ target: WEBSITE, billable: false }), BY_EFFORT_RULE)).toBe(false)
+  })
+
+  it('billableLockedTest', () => {
+    expect(billableLocked(form({ target: WEBSITE }), LOCKED_RULE)).toBe(true)
+  })
+
+  /** By effort and at a fixed price the box may be switched either way. */
+  it('billableLockedOnABilledProjectTest', () => {
+    expect(billableLocked(form({ target: WEBSITE }), BY_EFFORT_RULE)).toBe(false)
+    expect(billableLocked(form({ target: WEBSITE }), FIXED_PRICE_RULE)).toBe(false)
+    expect(billableLocked(form({ target: MUSTER }), CUSTOMER_RULE)).toBe(false)
+  })
+
+  /** Internal time is locked without an answer from the server. */
+  it('billableLockedForInternalTimeTest', () => {
+    expect(billableLocked(form())).toBe(true)
+  })
+
+  /** While the default is on its way the box stays open; the server decides anyway. */
+  it('billableLockedBeforeTheDefaultIsKnownTest', () => {
+    expect(billableLocked(form({ target: WEBSITE }))).toBe(false)
+  })
+
+  /**
+   * An entry billable before its project was set to «Nicht verrechenbar» shows yes and may be
+   * switched off; only switching on is locked (backend ADR-0162).
+   */
+  it('billableLockedKeepsAnEntrysYesTest', () => {
+    const opened = toTimeEntryForm(entry(), true)
+
+    expect(billableLocked(opened, LOCKED_RULE)).toBe(false)
+    expect(billableLocked({ ...opened, billable: false }, LOCKED_RULE)).toBe(true)
+  })
+
+  /** A locked box says the server's reason. */
+  it('billableTooltipTest', () => {
+    expect(billableTooltip(form({ target: WEBSITE }), LOCKED_RULE, true)).toBe(
+      'Das Projekt P-00012 ist als «Nicht verrechenbar» vereinbart. Zeit darauf ist nie verrechenbar.',
+    )
+  })
+
+  it('billableTooltipOfABilledProjectTest', () => {
+    expect(billableTooltip(form({ target: WEBSITE }), FIXED_PRICE_RULE, true)).toContain(
+      'Zusatzaufwand ausserhalb der Pauschale',
+    )
+    expect(billableTooltip(form({ target: WEBSITE }), BY_EFFORT_RULE, true)).toContain(
+      'Nach Aufwand',
+    )
+  })
+
+  it('billableTooltipOfACustomerTest', () => {
+    expect(billableTooltip(form({ target: MUSTER }), CUSTOMER_RULE, true)).toBe(
+      'Mit Kunde ist eine Zeit verrechenbar, ohne Kunde nie. Verrechenbar braucht eine Leistung.',
+    )
+    expect(billableTooltip(form({ target: WEBSITE }), undefined, true)).toContain('Mit Kunde')
+  })
+
+  /** Without projects there is no project to name. */
+  it('billableTooltipOfInternalTimeTest', () => {
+    expect(billableTooltip(form(), undefined, true)).toBe(
+      'Ohne Projekt oder Kunde ist eine Zeit intern und nie verrechenbar.',
+    )
+    expect(billableTooltip(form(), undefined, false)).toBe(
+      'Ohne Kunde ist eine Zeit intern und nie verrechenbar.',
+    )
+  })
+
   it('hasLineInputTest', () => {
     expect(hasLineInput(form({ duration: '1:30' }))).toBe(true)
     expect(hasLineInput(form({ description: 'Telefon' }))).toBe(true)
@@ -728,6 +985,16 @@ describe('timeEntryComplaints', () => {
 
   it('timeEntryComplaintsBillableWithoutServiceTest', () => {
     expect(timeEntryComplaints(form({ target: MUSTER, duration: '1:30' })).productId).toContain(
+      'Verrechenbar braucht eine Leistung',
+    )
+  })
+
+  /** On a fixed price project the box follows its no, so the hour needs no service. */
+  it('timeEntryComplaintsOnAFixedPriceProjectWithoutServiceTest', () => {
+    const line = form({ target: WEBSITE, duration: '1:30' })
+
+    expect(timeEntryComplaints(line, FIXED_PRICE_RULE)).toEqual({})
+    expect(timeEntryComplaints(line, BY_EFFORT_RULE).productId).toContain(
       'Verrechenbar braucht eine Leistung',
     )
   })
@@ -842,13 +1109,41 @@ describe('toTimeEntryRequest', () => {
     expect(toTimeEntryRequest(line, { minutes: 60 }, '2026-11-25').billable).toBe(false)
   })
 
-  /** A change always says «verrechenbar» and names the state it was made to. */
+  /** A change says «verrechenbar» as the box shows it and names the state it was made to. */
   it('toTimeEntryRequestForAChangeTest', () => {
     const line = form({ target: MUSTER, service: SUPPORT })
-    const request = toTimeEntryRequest(line, { minutes: 60 }, '2026-11-25', 3)
+    const request = toTimeEntryRequest(line, { minutes: 60 }, '2026-11-25', 3, CUSTOMER_RULE)
 
     expect(request.billable).toBe(true)
     expect(request.lockVersion).toBe(3)
+  })
+
+  /** Moved onto a fixed price project, the box follows its no — and so does the change. */
+  it('toTimeEntryRequestForAChangeOntoAFixedPriceProjectTest', () => {
+    const moved = withTarget(toTimeEntryForm(SUPPORT_HOUR, true), WEBSITE, true)
+
+    const request = toTimeEntryRequest(moved, { minutes: 60 }, '2026-11-25', 2, FIXED_PRICE_RULE)
+
+    expect(request.billable).toBe(false)
+  })
+
+  /** What the entry holds goes as it stands, whatever the default of the target is today. */
+  it('toTimeEntryRequestForAChangeKeepsTheEntrysValueTest', () => {
+    const opened = toTimeEntryForm(entry(), true)
+
+    const request = toTimeEntryRequest(opened, { minutes: 60 }, '2026-11-25', 3, LOCKED_RULE)
+
+    expect(request.billable).toBe(true)
+  })
+
+  /** A target chosen anew whose default is still on its way: the server takes the default. */
+  it('toTimeEntryRequestForAChangeBeforeTheDefaultIsKnownTest', () => {
+    const moved = withTarget(toTimeEntryForm(SUPPORT_HOUR, true), WEBSITE, true)
+
+    const request = toTimeEntryRequest(moved, { minutes: 60 }, '2026-11-25', 2)
+
+    expect(request.billable).toBeNull()
+    expect(request.lockVersion).toBe(2)
   })
 
   it('toTimeEntryRequestForAChangeToInternalTimeTest', () => {
@@ -1289,6 +1584,21 @@ describe('the stopwatch field', () => {
     expect(toTimerChangeRequest(internal, RUNNING, 4)).toEqual({ billable: false, lockVersion: 4 })
   })
 
+  /** The project chosen anew, «verrechenbar» follows its default: no at a fixed price. */
+  it('toTimerChangeRequestOntoAFixedPriceProjectTest', () => {
+    const chosen = withTarget(RUNNING, WEBSITE, true)
+
+    expect(toTimerChangeRequest(chosen, RUNNING, 4, FIXED_PRICE_RULE).billable).toBe(false)
+  })
+
+  /** Its default still on its way, «verrechenbar» stays out and the server takes the default. */
+  it('toTimerChangeRequestBeforeTheDefaultIsKnownTest', () => {
+    const moved = withTarget(RUNNING, MUSTER, true)
+
+    expect(toTimerChangeRequest(moved, RUNNING, 4)).not.toHaveProperty('billable')
+    expect(toTimerChangeRequest(moved, RUNNING, 4).partnerId).toBe(11)
+  })
+
   it('toTimerStopRequestTest', () => {
     expect(toTimerStopRequest({ ...RUNNING, endTime: '17:30' })).toEqual({
       correctedEnd: new Date(at(17, 30)).toISOString(),
@@ -1366,6 +1676,16 @@ describe('timerComplaints', () => {
   it('timerComplaintsOfANewStartTest', () => {
     expect(timerComplaints(timerForm(), 'start', true)).toEqual({})
   })
+
+  /** Stopped on a fixed price project untouched, the entry is not billable and needs no service. */
+  it('timerComplaintsOnAFixedPriceProjectTest', () => {
+    const noService = { ...RUNNING, service: null, serviceTerm: '', billable: null }
+
+    expect(timerComplaints(noService, 'stop', false, FIXED_PRICE_RULE)).toEqual({})
+    expect(timerComplaints(noService, 'stop', false, BY_EFFORT_RULE).productId).toContain(
+      'Verrechenbar braucht eine Leistung',
+    )
+  })
 })
 
 describe('stopwatch messages', () => {
@@ -1436,5 +1756,392 @@ describe('stopwatch messages', () => {
   it('isTimerTooLongWithSomethingElseTest', () => {
     expect(isTimerTooLong(new Error('Netz weg'))).toBe(false)
     expect(isTimerTooLong(null)).toBe(false)
+  })
+})
+
+// --- recording on a project ----------------------------------------------------------
+
+/** The project «Website» of Muster AG, as the project module sends it. */
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 12,
+    projectNumber: 'P-00012',
+    name: 'Website',
+    partnerId: 11,
+    customerName: 'Muster AG',
+    status: 'ACTIVE',
+    ...overrides,
+  }
+}
+
+describe('recording on a project', () => {
+  it('recordOnStateTest', () => {
+    expect(recordOnState(WEBSITE)).toEqual({ recordOn: WEBSITE })
+  })
+
+  /** What a link handed over comes back the same, a project and a customer alike. */
+  it('recordOnTargetOfTest', () => {
+    expect(recordOnTargetOf(recordOnState(WEBSITE))).toEqual(WEBSITE)
+    expect(recordOnTargetOf(recordOnState(MUSTER))).toEqual(MUSTER)
+  })
+
+  /** A project whose names are gone still names itself by its id; the names are absent. */
+  it('recordOnTargetOfWithoutNamesTest', () => {
+    expect(recordOnTargetOf({ recordOn: { kind: 'PROJECT', projectId: 12, partnerId: 11 } })).toEqual({
+      kind: 'PROJECT',
+      projectId: 12,
+      projectNumber: null,
+      projectName: null,
+      partnerId: 11,
+      customerName: null,
+    })
+  })
+
+  /** A screen opened without the state, or with the origin of a mask, starts empty. */
+  it('recordOnTargetOfWithoutStateTest', () => {
+    expect(recordOnTargetOf(null)).toBeNull()
+    expect(recordOnTargetOf(undefined)).toBeNull()
+    expect(recordOnTargetOf({ origin: { from: '/projekte', label: 'Projekte' } })).toBeNull()
+  })
+
+  /** Router state is not trusted: a broken target is no target. */
+  it('recordOnTargetOfWithABrokenTargetTest', () => {
+    expect(recordOnTargetOf({ recordOn: null })).toBeNull()
+    expect(recordOnTargetOf({ recordOn: 'P-00012' })).toBeNull()
+    expect(recordOnTargetOf({ recordOn: { kind: 'PROJECT', partnerId: 11 } })).toBeNull()
+    expect(recordOnTargetOf({ recordOn: { kind: 'PROJECT', projectId: '12', partnerId: 11 } })).toBeNull()
+    expect(recordOnTargetOf({ recordOn: { kind: 'CUSTOMER', partnerId: '11' } })).toBeNull()
+    expect(recordOnTargetOf({ recordOn: { kind: 'CONTRACT', partnerId: 11 } })).toBeNull()
+  })
+
+  it('projectTargetOfTest', () => {
+    expect(projectTargetOf(project())).toEqual(WEBSITE)
+  })
+
+  /** A customer gone since: the project still names itself, without the customer's name. */
+  it('projectTargetOfWithoutCustomerNameTest', () => {
+    expect(projectTargetOf(project({ customerName: undefined })).customerName).toBeNull()
+  })
+
+  it('takesNewTimeTest', () => {
+    expect(takesNewTime('OPEN')).toBe(true)
+    expect(takesNewTime('ACTIVE')).toBe(true)
+  })
+
+  /** Completed keeps its open times billable but takes no new ones; archived takes nothing. */
+  it('takesNewTimeOnACompletedProjectTest', () => {
+    expect(takesNewTime('COMPLETED')).toBe(false)
+    expect(takesNewTime('ARCHIVED')).toBe(false)
+  })
+})
+
+// --- the registers «Zeiten» ----------------------------------------------------------
+
+/** 42:30 hours on a project: 12 entries, 3 of them open. */
+const SUMMARY: TimeSummary = {
+  entries: 12,
+  totalMinutes: 2550,
+  openEntries: 3,
+  openMinutes: 750,
+  inDraftMinutes: 0,
+  billedMinutes: 0,
+  notBillableMinutes: 1800,
+}
+
+describe('the registers', () => {
+  it('timeSummaryUrlTest', () => {
+    expect(timeSummaryUrl(1, { kind: 'PROJECT', projectId: 12 })).toBe(
+      '/api/tenants/1/time-tracking/projects/12/summary',
+    )
+    expect(timeSummaryUrl(1, { kind: 'CUSTOMER', partnerId: 11 })).toBe(
+      '/api/tenants/1/time-tracking/customers/11/summary',
+    )
+  })
+
+  /** The page size of every list, the filter of the register, no sort: the server's own order. */
+  it('timeEntryListUrlTest', () => {
+    expect(timeEntryListUrl(1, { kind: 'PROJECT', projectId: 12 }, 0)).toBe(
+      '/api/tenants/1/time-entries?projectId=12&page=0&size=50',
+    )
+    expect(timeEntryListUrl(1, { kind: 'CUSTOMER', partnerId: 11 }, 2)).toBe(
+      '/api/tenants/1/time-entries?partnerId=11&page=2&size=50',
+    )
+  })
+
+  /** Five tiles in the order the work runs through, with the counts where they say something. */
+  it('timeSummaryFiguresTest', () => {
+    expect(timeSummaryFigures(SUMMARY)).toEqual([
+      { label: 'Total', minutes: 2550, entries: 12 },
+      { label: 'Offen verrechenbar', minutes: 750, entries: 3 },
+      { label: 'Im Entwurf', minutes: 0 },
+      { label: 'Verrechnet', minutes: 0 },
+      { label: 'Nicht verrechenbar', minutes: 1800 },
+    ])
+  })
+
+  /** A project without any time still has its five tiles, at nothing. */
+  it('timeSummaryFiguresWithoutEntriesTest', () => {
+    const empty: TimeSummary = {
+      entries: 0,
+      totalMinutes: 0,
+      openEntries: 0,
+      openMinutes: 0,
+      inDraftMinutes: 0,
+      billedMinutes: 0,
+      notBillableMinutes: 0,
+    }
+
+    expect(timeSummaryFigures(empty).map((figure) => figure.minutes)).toEqual([0, 0, 0, 0, 0])
+    expect(timeSummaryFigures(empty)[0].entries).toBe(0)
+  })
+
+  it('hoursTextTest', () => {
+    expect(hoursText(2550)).toBe('42:30 Std.')
+  })
+
+  it('hoursTextOfNothingTest', () => {
+    expect(hoursText(0)).toBe('0:00 Std.')
+    expect(hoursText(1)).toBe('0:01 Std.')
+  })
+
+  it('entryCountTextTest', () => {
+    expect(entryCountText(12)).toBe('12 Einträge')
+    expect(entryCountText(1204)).toBe('1’204 Einträge')
+  })
+
+  it('entryCountTextOfOneTest', () => {
+    expect(entryCountText(1)).toBe('1 Eintrag')
+    expect(entryCountText(0)).toBe('0 Einträge')
+  })
+
+  it('entryUserTextTest', () => {
+    expect(entryUserText(entry({ userName: 'Anna Muster' }))).toBe('Anna Muster')
+  })
+
+  /** A user the tenant does not know any more: the entry stays, named as such. */
+  it('entryUserTextOfAUserThatIsGoneTest', () => {
+    expect(entryUserText(entry({ userName: null }))).toBe('Benutzer nicht mehr vorhanden')
+    expect(entryUserText(entry())).toBe('Benutzer nicht mehr vorhanden')
+  })
+
+  it('entryProjectTextTest', () => {
+    expect(entryProjectText(entry())).toBe('P-00012 Website')
+  })
+
+  it('entryProjectTextWithoutProjectTest', () => {
+    expect(entryProjectText(SUPPORT_HOUR)).toBe('ohne Projekt')
+  })
+
+  it('entryProjectTextOfAProjectThatIsGoneTest', () => {
+    expect(entryProjectText(entry({ projectNumber: null, projectName: null }))).toBe(
+      'Projekt nicht mehr vorhanden',
+    )
+  })
+})
+
+// --- the terms of a project ----------------------------------------------------------
+
+/** Terms nobody saved: by effort, without a rate, and without a lockVersion. */
+const DEFAULT_TERMS: ProjectTerms = {
+  projectId: 12,
+  billingMode: 'BY_EFFORT',
+  billableByDefault: true,
+  billableAllowed: true,
+  openEntries: 3,
+}
+
+/** Terms saved once: a fixed price at 140.00 CHF. */
+const SAVED_TERMS: ProjectTerms = {
+  ...DEFAULT_TERMS,
+  billingMode: 'FIXED_PRICE',
+  hourlyRate: 140,
+  currency: 'CHF',
+  billableByDefault: false,
+  lockVersion: 2,
+}
+
+describe('the terms of a project', () => {
+  /** The three of the backend, in the order the choice shows them, each with a word and a hint. */
+  it('billingModesTest', () => {
+    expect(BILLING_MODES).toEqual(['BY_EFFORT', 'FIXED_PRICE', 'NOT_BILLABLE'])
+    expect(BILLING_MODE_LABELS).toEqual({
+      BY_EFFORT: 'Nach Aufwand',
+      FIXED_PRICE: 'Pauschal',
+      NOT_BILLABLE: 'Nicht verrechenbar',
+    })
+    expect(Object.keys(BILLING_MODE_HINTS)).toEqual(Object.keys(BILLING_MODE_LABELS))
+  })
+
+  it('projectTermsUrlTest', () => {
+    expect(projectTermsUrl(1, 12)).toBe('/api/tenants/1/time-tracking/projects/12/terms')
+  })
+
+  it('toProjectTermsFormTest', () => {
+    expect(toProjectTermsForm(SAVED_TERMS)).toEqual({ billingMode: 'FIXED_PRICE', hourlyRate: '140.00' })
+  })
+
+  it('toProjectTermsFormWithoutRateTest', () => {
+    expect(toProjectTermsForm(DEFAULT_TERMS)).toEqual({ billingMode: 'BY_EFFORT', hourlyRate: '' })
+  })
+
+  it('rateFieldOfTest', () => {
+    expect(rateFieldOf(140)).toBe('140.00')
+    expect(rateFieldOf(1250.5)).toBe('1250.50')
+  })
+
+  /** Up to four decimals stay, so nothing stored is cut off in the field. */
+  it('rateFieldOfWithFourDecimalsTest', () => {
+    expect(rateFieldOf(152.375)).toBe('152.375')
+    expect(rateFieldOf(152.3755)).toBe('152.3755')
+    expect(rateFieldOf(0)).toBe('0.00')
+  })
+
+  it('rateFieldOfWithoutRateTest', () => {
+    expect(rateFieldOf(null)).toBe('')
+    expect(rateFieldOf(undefined)).toBe('')
+  })
+
+  it('hourlyRateTextTest', () => {
+    expect(hourlyRateText(SAVED_TERMS)).toBe('140.00 CHF pro Stunde')
+    expect(hourlyRateText({ ...SAVED_TERMS, hourlyRate: 1250.5 })).toBe('1’250.50 CHF pro Stunde')
+  })
+
+  /** 0.00 is a rate — work that costs nothing on this project — not the absence of one. */
+  it('hourlyRateTextOfZeroTest', () => {
+    expect(hourlyRateText({ ...SAVED_TERMS, hourlyRate: 0 })).toBe('0.00 CHF pro Stunde')
+  })
+
+  it('hourlyRateTextWithoutRateTest', () => {
+    expect(hourlyRateText(DEFAULT_TERMS)).toBe('Preis der Leistung')
+  })
+
+  it('projectTermsComplaintsTest', () => {
+    expect(projectTermsComplaints({ billingMode: 'BY_EFFORT', hourlyRate: '140' })).toEqual({})
+    expect(projectTermsComplaints({ billingMode: 'BY_EFFORT', hourlyRate: '1’250,50' })).toEqual({})
+  })
+
+  /** Empty is no rate, and 0.00 is one: neither is a complaint. */
+  it('projectTermsComplaintsWithoutRateTest', () => {
+    expect(projectTermsComplaints({ billingMode: 'FIXED_PRICE', hourlyRate: '  ' })).toEqual({})
+    expect(projectTermsComplaints({ billingMode: 'FIXED_PRICE', hourlyRate: '0.00' })).toEqual({})
+  })
+
+  it('projectTermsComplaintsWithANegativeRateTest', () => {
+    expect(projectTermsComplaints({ billingMode: 'BY_EFFORT', hourlyRate: '-1' })).toEqual({
+      hourlyRate: 'Der Projektsatz darf nicht negativ sein. Leer heisst: der Preis der Leistung gilt.',
+    })
+  })
+
+  it('projectTermsComplaintsWithAnUnreadableRateTest', () => {
+    expect(projectTermsComplaints({ billingMode: 'BY_EFFORT', hourlyRate: '140 Fr.' }).hourlyRate).toBe(
+      'Einen Betrag eingeben, zum Beispiel 140.00, oder leer lassen.',
+    )
+  })
+
+  /** Saved once, the terms go back with the state they were read with; no currency, ever. */
+  it('toProjectTermsRequestTest', () => {
+    expect(
+      toProjectTermsRequest({ billingMode: 'BY_EFFORT', hourlyRate: '150.00' }, SAVED_TERMS),
+    ).toEqual({ billingMode: 'BY_EFFORT', hourlyRate: 150, lockVersion: 2 })
+  })
+
+  /** Terms nobody saved have no lockVersion, and none goes back (backend ADR-0162). */
+  it('toProjectTermsRequestOfTermsNeverSavedTest', () => {
+    expect(
+      toProjectTermsRequest({ billingMode: 'NOT_BILLABLE', hourlyRate: '' }, DEFAULT_TERMS),
+    ).toEqual({ billingMode: 'NOT_BILLABLE', hourlyRate: null })
+  })
+
+  it('toProjectTermsRequestWithAZeroRateTest', () => {
+    expect(
+      toProjectTermsRequest({ billingMode: 'BY_EFFORT', hourlyRate: '0' }, DEFAULT_TERMS).hourlyRate,
+    ).toBe(0)
+  })
+
+  it('projectTermsChangedTest', () => {
+    expect(projectTermsChanged({ billingMode: 'BY_EFFORT', hourlyRate: '140.00' }, SAVED_TERMS)).toBe(true)
+    expect(projectTermsChanged({ billingMode: 'FIXED_PRICE', hourlyRate: '150' }, SAVED_TERMS)).toBe(true)
+    expect(projectTermsChanged({ billingMode: 'FIXED_PRICE', hourlyRate: '' }, SAVED_TERMS)).toBe(true)
+    expect(projectTermsChanged({ billingMode: 'BY_EFFORT', hourlyRate: '0' }, DEFAULT_TERMS)).toBe(true)
+  })
+
+  /** «140» for a rate of 140.00 is the same rate. */
+  it('projectTermsChangedWithoutChangeTest', () => {
+    expect(projectTermsChanged(toProjectTermsForm(SAVED_TERMS), SAVED_TERMS)).toBe(false)
+    expect(projectTermsChanged({ billingMode: 'FIXED_PRICE', hourlyRate: '140' }, SAVED_TERMS)).toBe(false)
+    expect(projectTermsChanged({ billingMode: 'BY_EFFORT', hourlyRate: ' ' }, DEFAULT_TERMS)).toBe(false)
+  })
+
+  /** Something unreadable typed is a change, so saving can say what is wrong with it. */
+  it('projectTermsChangedWithAnUnreadableRateTest', () => {
+    expect(projectTermsChanged({ billingMode: 'BY_EFFORT', hourlyRate: 'abc' }, DEFAULT_TERMS)).toBe(true)
+  })
+
+  /** A new mode names the open billable entries it leaves as they are. */
+  it('termsSavedTextTest', () => {
+    expect(termsSavedText(DEFAULT_TERMS, { ...SAVED_TERMS, openEntries: 12 })).toBe(
+      'Gespeichert. Die Abrechnungsart gilt für neue Zeit: 12 offene verrechenbare Einträge bleiben, wie sie sind.',
+    )
+  })
+
+  it('termsSavedTextWithOneOpenEntryTest', () => {
+    expect(termsSavedText(DEFAULT_TERMS, { ...SAVED_TERMS, openEntries: 1 })).toBe(
+      'Gespeichert. Die Abrechnungsart gilt für neue Zeit: 1 offener verrechenbarer Eintrag bleibt, wie er ist.',
+    )
+  })
+
+  /** The same mode, or nothing open: there is nothing to say about the entries. */
+  it('termsSavedTextWithoutAnythingToSayTest', () => {
+    expect(termsSavedText(SAVED_TERMS, { ...SAVED_TERMS, hourlyRate: 150 })).toBe('Gespeichert.')
+    expect(termsSavedText(DEFAULT_TERMS, { ...SAVED_TERMS, openEntries: 0 })).toBe('Gespeichert.')
+  })
+
+  it('openEntriesStayTextTest', () => {
+    expect(openEntriesStayText(1204)).toBe('1’204 offene verrechenbare Einträge bleiben, wie sie sind.')
+    expect(openEntriesStayText(1)).toBe('1 offener verrechenbarer Eintrag bleibt, wie er ist.')
+  })
+})
+
+// --- the default service of every user -----------------------------------------------
+
+function userDefault(overrides: Partial<TimeUserDefault> = {}): TimeUserDefault {
+  return {
+    userId: 42,
+    userName: 'Beat Keller',
+    userActive: true,
+    productId: 31,
+    productNumber: 'L-001',
+    serviceName: 'Beratung Senior',
+    serviceActive: true,
+    ...overrides,
+  }
+}
+
+describe('the default service of every user', () => {
+  it('userDefaultsUrlTest', () => {
+    expect(userDefaultsUrl(1)).toBe('/api/tenants/1/time-tracking/user-defaults')
+  })
+
+  it('userDefaultUrlTest', () => {
+    expect(userDefaultUrl(1, 42)).toBe('/api/tenants/1/time-tracking/user-defaults/42')
+  })
+
+  it('userDefaultStateTest', () => {
+    expect(userDefaultState(userDefault())).toBe('ACTIVE')
+  })
+
+  it('userDefaultStateWithoutDefaultTest', () => {
+    const none = userDefault({ productId: null, productNumber: null, serviceName: null, serviceActive: false })
+
+    expect(userDefaultState(none)).toBe('NONE')
+  })
+
+  /** Deactivated since: still the default, but the quick line no longer suggests it. */
+  it('userDefaultStateOfADeactivatedServiceTest', () => {
+    expect(userDefaultState(userDefault({ serviceActive: false }))).toBe('INACTIVE')
+  })
+
+  it('userDefaultStateOfAProductThatIsGoneTest', () => {
+    expect(userDefaultState(userDefault({ serviceName: null, serviceActive: false }))).toBe('GONE')
   })
 })

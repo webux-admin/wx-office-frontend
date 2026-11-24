@@ -32,7 +32,7 @@ import { SECURITY_PATH } from './lib/loginPolicy'
 import { MODULE_PATH } from './lib/modules'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
 import { SUBSCRIPTION_PATH } from './lib/subscription'
-import { TIMETRACKING_PATH } from './lib/timetracking'
+import { TIMETRACKING_PATH, TIMETRACKING_SETTINGS_PATH } from './lib/timetracking'
 import { CUSTOMER_CREDIT_PATH } from './lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
 import {
@@ -93,6 +93,7 @@ const ContractListPage = lazy(() => import('./pages/ContractListPage').then((mod
 const ContractPage = lazy(() => import('./pages/ContractPage').then((module) => ({ default: module.ContractPage })))
 const SubscriptionRunPage = lazy(() => import('./pages/SubscriptionRunPage').then((module) => ({ default: module.SubscriptionRunPage })))
 const TimeEntryPage = lazy(() => import('./pages/TimeEntryPage').then((module) => ({ default: module.TimeEntryPage })))
+const TimeTrackingSettingsPage = lazy(() => import('./pages/TimeTrackingSettingsPage').then((module) => ({ default: module.TimeTrackingSettingsPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
 const PriceEntryPage = lazy(() => import('./pages/PriceEntryPage').then((module) => ({ default: module.PriceEntryPage })))
@@ -316,6 +317,7 @@ export default function App() {
 
                   <Route path="/lagerorte" element={<StockLocationListPage />} />
                   <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />
+                  <Route path={TIMETRACKING_SETTINGS_PATH} element={<TimeTrackingSettingsPage />} />
                 </Route>
 
                 <Route path="/profil" element={<ProfilePage />} />

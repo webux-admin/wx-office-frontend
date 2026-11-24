@@ -41,14 +41,14 @@ const STORED: Partner = {
   contacts: [{ id: 3, firstName: 'Eva', lastName: 'Huber', isPrimary: true }],
 }
 
-function session(permissions: string[]): AuthState {
+function session(permissions: string[], modules: string[] = []): AuthState {
   return {
     user: {
       userId: 1,
       username: 'muster',
       activeTenantId: TENANT,
       superuser: false,
-      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: [] }],
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
       permissions,
     },
     loading: false,
@@ -113,6 +113,20 @@ function stubFetch(stored: Partner) {
       return json([{ id: 1, code: 'CH', name: 'Schweiz', isDefault: true }])
     }
     if (url.endsWith(`/partners/${stored.id}`)) return json(stored)
+    if (url.endsWith(`/time-tracking/customers/${stored.id}/summary`)) {
+      return json({
+        entries: 2,
+        totalMinutes: 150,
+        openEntries: 1,
+        openMinutes: 90,
+        inDraftMinutes: 0,
+        billedMinutes: 0,
+        notBillableMinutes: 60,
+      })
+    }
+    if (url.startsWith('/api/tenants/1/time-entries?')) {
+      return json({ content: [], page: 0, size: 50, totalElements: 0, totalPages: 0, sort: '' })
+    }
     return json([])
   })
 }
@@ -138,13 +152,18 @@ async function settle(ms = 50) {
   })
 }
 
-async function render(path: string, stored: Partner = STORED, permissions = ALL_RIGHTS) {
+async function render(
+  path: string,
+  stored: Partner = STORED,
+  permissions = ALL_RIGHTS,
+  modules: string[] = [],
+) {
   stubFetch(stored)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <AuthContext.Provider value={session(permissions)}>
+        <AuthContext.Provider value={session(permissions, modules)}>
           <QueryClientProvider client={client}>
             <Routes>
               <Route path="/kunden/:id" element={<PartnerPage role="customer" />} />
@@ -459,4 +478,52 @@ describe('PartnerPage', () => {
     expect(() => button('Deaktivieren')).toThrow()
     expect(field('UID')?.disabled).toBe(true)
   })
+
+  /** A customer gets «Zeiten» right after «Projekte», with the module and TIME_READ. */
+  it('partnerPageShowsTheTimesOfACustomerTest', async () => {
+    await render(
+      '/kunden/7',
+      STORED,
+      [...ALL_RIGHTS, 'PROJECT_READ', 'TIME_READ'],
+      ['PROJECT', 'TIMETRACKING'],
+    )
+
+    const labels = tabLabels()
+    expect(labels.indexOf('Zeiten')).toBe(labels.indexOf('Projekte') + 1)
+    await click('Zeiten')
+    expect(container.textContent).toContain('Offen verrechenbar')
+  })
+
+  /** Without projects, time is recorded on the customer: the register stays. */
+  it('partnerPageShowsTheTimesWithoutProjectsTest', async () => {
+    await render('/kunden/7', STORED, [...ALL_RIGHTS, 'TIME_READ'], ['TIMETRACKING'])
+
+    expect(tabLabels()).toContain('Zeiten')
+    expect(tabLabels()).not.toContain('Projekte')
+  })
+
+  /** Without TIME_READ the times of everybody are not the session's to see. */
+  it('partnerPageHidesTheTimesWithoutTheReadRightTest', async () => {
+    await render('/kunden/7', STORED, [...ALL_RIGHTS, 'TIME_TRACK'], ['TIMETRACKING'])
+
+    expect(tabLabels()).not.toContain('Zeiten')
+  })
+
+  it('partnerPageHidesTheTimesWithTheModuleOffTest', async () => {
+    await render('/kunden/7', STORED, [...ALL_RIGHTS, 'TIME_READ'], [])
+
+    expect(tabLabels()).not.toContain('Zeiten')
+  })
+
+  /** A supplier is no customer of ours: no time is recorded for it. */
+  it('partnerPageHidesTheTimesForASupplierTest', async () => {
+    const supplier: Partner = { ...STORED, isCustomer: false, isSupplier: true }
+    await render('/lieferanten/7', supplier, [...ALL_RIGHTS, 'TIME_READ'], ['TIMETRACKING'])
+
+    expect(tabLabels()).not.toContain('Zeiten')
+  })
 })
+
+function tabLabels(): string[] {
+  return [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent ?? '')
+}

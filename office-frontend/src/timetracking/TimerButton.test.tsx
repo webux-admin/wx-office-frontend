@@ -148,6 +148,8 @@ let client: QueryClient
 let requests: { method: string; url: string; body: unknown }[]
 /** The stopwatch the server holds. */
 let running: RunningTimer | null
+/** Whether the project «Website» is set to «Nicht verrechenbar»; otherwise it is by effort. */
+let websiteNotBilled: boolean
 /** What the next request to this method and address answers instead, once. */
 let refusal: { method: string; url: string; status: number; body: unknown } | null
 
@@ -220,6 +222,20 @@ function serve(method: string, url: string, body: Record<string, unknown>): Prom
     const search = (query.get('search') ?? '').toLowerCase()
     return json([CONCEPT, SUPPORT].filter((service) => service.name.toLowerCase().includes(search)))
   }
+  if (path === `${BASE}/lookups/default-billable`) {
+    if (query.get('projectId') !== '12') return json({ billable: true, locked: false })
+    return json(
+      websiteNotBilled
+        ? {
+            billable: false,
+            locked: true,
+            lockedReason:
+              'Das Projekt P-00012 ist als «Nicht verrechenbar» vereinbart. Zeit darauf ist nie verrechenbar.',
+            billingMode: 'NOT_BILLABLE',
+          }
+        : { billable: true, locked: false, billingMode: 'BY_EFFORT' },
+    )
+  }
   return json({})
 }
 
@@ -239,6 +255,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(at(25, 10, 0))
   running = null
+  websiteNotBilled = false
   stubFetch()
   document.title = 'webux ERP'
   container = document.createElement('div')
@@ -787,5 +804,49 @@ describe('TimerButton', () => {
     await click(face())
 
     expect(control('Kunde')).toBeDefined()
+  })
+
+  /**
+   * On a project set to «Nicht verrechenbar» the box is locked with the server's reason, and a
+   * start leaves «verrechenbar» to the server, which starts it not billable.
+   */
+  it('timerButtonLocksBillableOnAProjectNotBilledTest', async () => {
+    websiteNotBilled = true
+    await render()
+    await click(face())
+
+    await type(control('Projekt oder Kunde'), 'Web', 250)
+    await press(control('Projekt oder Kunde'), 'Enter')
+
+    expect(control('verrechenbar').checked).toBe(false)
+    expect(control('verrechenbar').disabled).toBe(true)
+    expect(dialog()?.textContent).toContain('ist als «Nicht verrechenbar» vereinbart')
+    expect(requests.map((request) => request.url)).toContain(
+      `${BASE}/lookups/default-billable?projectId=12`,
+    )
+
+    await click(button('Start'))
+    expect(writes()[0].body).toEqual({ projectId: 12, productId: 31 })
+  })
+
+  /** A stopwatch billable before its project was set so keeps its yes, and may lose it. */
+  it('timerButtonKeepsTheYesOfAStopwatchOnAProjectNotBilledTest', async () => {
+    websiteNotBilled = true
+    running = timer()
+    await render()
+
+    await click(face())
+
+    expect(control('verrechenbar').checked).toBe(true)
+    expect(control('verrechenbar').disabled).toBe(false)
+  })
+
+  /** The field asks nothing about «verrechenbar» while it is shut. */
+  it('timerButtonAsksForNoDefaultWhileShutTest', async () => {
+    running = timer()
+
+    await render()
+
+    expect(requests.some((request) => request.url.includes('default-billable'))).toBe(false)
   })
 })

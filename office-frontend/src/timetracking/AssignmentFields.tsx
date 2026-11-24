@@ -4,9 +4,11 @@ import { CheckboxField } from '../components/CheckboxField'
 import { LookupField, MarkedText } from '../components/LookupField'
 import { api } from '../lib/api'
 import {
+  billableLocked,
+  billableTooltip,
   defaultServiceKey,
-  defaultServiceUrl,
   effectiveBillable,
+  fetchSuggestedService,
   serviceLookupUrl,
   targetKey,
   targetLookupUrl,
@@ -18,7 +20,7 @@ import {
   withTargetTerm,
   type AssignmentForm,
 } from '../lib/timetracking'
-import type { TimeServiceChoice, TimeTargetChoice } from '../lib/types'
+import type { TimeBillableDefault, TimeServiceChoice, TimeTargetChoice } from '../lib/types'
 
 /**
  * The fields the quick line and the stopwatch share: project or customer, service and
@@ -67,10 +69,7 @@ export function TargetField<F extends AssignmentForm>({
     void queryClient
       .fetchQuery({
         queryKey: defaultServiceKey(tenantId, target),
-        // 204 means «nothing to suggest»; a query may not hold undefined.
-        queryFn: async () =>
-          (await api.get<TimeServiceChoice | undefined>(defaultServiceUrl(tenantId, target))) ??
-          null,
+        queryFn: () => fetchSuggestedService(tenantId, target),
       })
       .then((service) => onChange((current) => withSuggestedService(current, target, service)))
       // A suggestion that cannot be read suggests nothing; the field stays as it is.
@@ -122,39 +121,91 @@ export function ServiceField<F extends AssignmentForm>({
   error,
 }: AssignmentFieldProps<F>) {
   return (
-    <LookupField<TimeServiceChoice>
-      label="Leistung"
+    <ServiceLookup
+      tenantId={tenantId}
       term={form.serviceTerm}
       onTerm={(term) => onChange((current) => withServiceTerm(current, term))}
       chosen={form.service !== null}
       onChoose={(service) => onChange((current) => withService(current, service))}
-      queryKey={[...timeLookupsKey(tenantId), 'services']}
-      load={(term) => api.get<TimeServiceChoice[]>(serviceLookupUrl(tenantId, term))}
-      keyOf={(service) => service.productId}
-      renderHit={(service, term) => <ServiceHit service={service} term={term} />}
-      listLabel="Leistungen"
-      emptyText="Es gibt noch keine aktive Leistung. Eine Leistung ist ein Produkt vom Typ Leistung."
-      failureText="Die Leistungen konnten nicht gelesen werden."
       error={error}
     />
   )
 }
 
-/** «verrechenbar»: on with a customer, off and locked without one. */
+/**
+ * The search over the active services, on its own: for a form that is not a quick line, such as
+ * the default service of a user. The same list and the same rows as «Leistung» in the quick line.
+ */
+export function ServiceLookup({
+  tenantId,
+  term,
+  onTerm,
+  chosen,
+  onChoose,
+  error,
+  label = 'Leistung',
+  inputRef,
+}: {
+  tenantId: number
+  /** What stands in the field, held by the caller. */
+  term: string
+  onTerm: (term: string) => void
+  /** True while the field names a service that was taken over. */
+  chosen: boolean
+  onChoose: (service: TimeServiceChoice) => void
+  error?: string
+  label?: string
+  /** Lets the caller put the focus here. */
+  inputRef?: Ref<HTMLInputElement>
+}) {
+  return (
+    <LookupField<TimeServiceChoice>
+      label={label}
+      term={term}
+      onTerm={onTerm}
+      chosen={chosen}
+      onChoose={onChoose}
+      queryKey={[...timeLookupsKey(tenantId), 'services']}
+      load={(search) => api.get<TimeServiceChoice[]>(serviceLookupUrl(tenantId, search))}
+      keyOf={(service) => service.productId}
+      renderHit={(service, search) => <ServiceHit service={service} term={search} />}
+      listLabel="Leistungen"
+      emptyText="Es gibt noch keine aktive Leistung. Eine Leistung ist ein Produkt vom Typ Leistung."
+      failureText="Die Leistungen konnten nicht gelesen werden."
+      error={error}
+      inputRef={inputRef}
+    />
+  )
+}
+
+/**
+ * «verrechenbar»: its default and its lock come from the server (`lookups/default-billable`).
+ * On a project the billing mode decides; on «Nicht verrechenbar» and for internal time the box
+ * cannot be switched on, and its tooltip says why (backend ADR-0162).
+ *
+ * @param rule the default of the server for the target, `undefined` while unknown: the box then
+ *   shows yes for a target and stays open, and the server applies its own default anyway
+ * @param projectsOn whether the tenant runs the projects, for the words of the tooltip
+ */
 export function BillableField<F extends AssignmentForm>({
   form,
   onChange,
-}: Pick<AssignmentFieldProps<F>, 'form' | 'onChange'>) {
+  rule,
+  projectsOn,
+}: Pick<AssignmentFieldProps<F>, 'form' | 'onChange'> & {
+  rule: TimeBillableDefault | undefined
+  projectsOn: boolean
+}) {
   return (
     <CheckboxField
       label="verrechenbar"
-      checked={effectiveBillable(form)}
-      disabled={form.target === null}
+      checked={effectiveBillable(form, rule)}
+      disabled={billableLocked(form, rule)}
       onChange={(event) => {
         const billable = event.target.checked
         onChange((current) => ({ ...current, billable }))
       }}
-      tooltip="Mit Kunde ist eine Zeit verrechenbar, ohne Kunde nie. Verrechenbar braucht eine Leistung."
+      tooltip={billableTooltip(form, rule, projectsOn)}
     />
   )
 }

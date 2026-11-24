@@ -1,18 +1,26 @@
 import type { BadgeTone } from '../components/Badge'
-import { ApiError } from './api'
+import { ApiError, api } from './api'
 import { formatDuration, formatDurationShort, readDuration, type Duration } from './duration'
 import { fieldErrorsOf, isToldByFields, type FieldErrors } from './fieldErrors'
-import { formatDateTime, isCompleteIsoDate, toIsoDate } from './format'
-import { listQuery } from './paging'
+import { formatCount, formatDateTime, isCompleteIsoDate, parseDecimal, toIsoDate } from './format'
+import { PAGE_SIZE, listQuery } from './paging'
 import { addDays, dayTitle, isWeekend, mondayOf } from './week'
 import type {
+  BillingMode,
+  Project,
+  ProjectStatus,
+  ProjectTerms,
+  ProjectTermsRequest,
   RunningTimer,
+  TimeBillableDefault,
   TimeEntry,
   TimeEntryRequest,
   TimeEntryState,
   TimeRecentTarget,
   TimeServiceChoice,
+  TimeSummary,
   TimeTargetChoice,
+  TimeUserDefault,
   TimerChangeRequest,
   TimerRequest,
   TimerStart,
@@ -32,6 +40,9 @@ export const TIMETRACKING_MODULE = 'TIMETRACKING'
 
 /** Path of «Meine Zeiten» within the application. */
 export const TIMETRACKING_PATH = '/zeiten'
+
+/** Path of the settings of the module: the default service of every user. */
+export const TIMETRACKING_SETTINGS_PATH = '/zeiterfassung-einstellungen'
 
 /**
  * The four rights of the module.
@@ -122,20 +133,52 @@ export function recentTargetsUrl(tenantId: number): string {
 }
 
 /**
- * The service the server suggests for a target: the one taken on it last.
+ * The service the server suggests for a target: the one taken on it last, else the default
+ * service of the user (backend ADR-0162).
  *
  * @param tenantId the tenant
  * @param target the project or customer; `null` for internal time
  * @returns address of the suggestion, which answers 204 where there is none
  */
 export function defaultServiceUrl(tenantId: number, target: TimeTargetChoice | null): string {
+  return `${timeEntriesUrl(tenantId)}/mine/default-service${targetQuery(target)}`
+}
+
+/**
+ * Reads the service the server suggests for a target.
+ *
+ * @param tenantId the tenant
+ * @param target the project or customer; `null` for internal time
+ * @returns the suggestion, `null` where the server has none (204)
+ * @throws ApiError when the server refuses to answer
+ */
+export async function fetchSuggestedService(
+  tenantId: number,
+  target: TimeTargetChoice | null,
+): Promise<TimeServiceChoice | null> {
+  return (await api.get<TimeServiceChoice | undefined>(defaultServiceUrl(tenantId, target))) ?? null
+}
+
+/**
+ * What the box «verrechenbar» shows for a target, and whether it is locked. A lookup with
+ * `TIME_TRACK`: it names no rate (backend ADR-0162).
+ *
+ * @param tenantId the tenant
+ * @param target the project or customer; `null` for internal time
+ * @returns address of the default
+ */
+export function billableDefaultUrl(tenantId: number, target: TimeTargetChoice | null): string {
+  return `${timeEntriesUrl(tenantId)}/lookups/default-billable${targetQuery(target)}`
+}
+
+/** `?projectId=` for a project, `?partnerId=` for a customer, nothing for internal time. */
+function targetQuery(target: TimeTargetChoice | null): string {
+  if (target === null) return ''
   const query =
-    target === null
-      ? ''
-      : target.kind === 'PROJECT'
-        ? listQuery({ projectId: target.projectId })
-        : listQuery({ partnerId: target.partnerId })
-  return `${timeEntriesUrl(tenantId)}/mine/default-service${query === '' ? '' : `?${query}`}`
+    target.kind === 'PROJECT'
+      ? listQuery({ projectId: target.projectId })
+      : listQuery({ partnerId: target.partnerId })
+  return query === '' ? '' : `?${query}`
 }
 
 /**
@@ -225,6 +268,32 @@ export function defaultServiceKey(
  */
 export function timeLookupsKey(tenantId: number): readonly unknown[] {
   return ['time-lookups', tenantId]
+}
+
+/**
+ * Key of what the terms of the projects decide.
+ *
+ * <p>Apart from {@link timeEntriesKey}: an entry changes no terms. A change of the terms
+ * refreshes the terms and the default of «verrechenbar» together, because the default follows
+ * the billing mode.
+ *
+ * @param tenantId the tenant
+ * @returns key the terms and the defaults of «verrechenbar» start with
+ */
+export function timeTermsKey(tenantId: number): readonly unknown[] {
+  return ['time-terms', tenantId]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param target the project or customer, `null` for internal time
+ * @returns key of the default of «verrechenbar» for that target
+ */
+export function billableDefaultKey(
+  tenantId: number,
+  target: TimeTargetChoice | null,
+): readonly unknown[] {
+  return [...timeTermsKey(tenantId), 'default-billable', target === null ? 'internal' : targetKey(target)]
 }
 
 // --- words -------------------------------------------------------------------------
@@ -559,12 +628,77 @@ export function nextEntryForm(form: TimeEntryForm): TimeEntryForm {
  * What the box «verrechenbar» shows.
  *
  * @param form the line or the stopwatch field
+ * @param rule the default of the server for the target (`lookups/default-billable`); absent
+ *   while it is on its way or could not be read
  * @returns false without project or customer — internal time is never billed —, otherwise what
- *          was ticked, or yes while nothing was
+ *          was ticked or the entry holds, else the default of the server: by the billing mode of
+ *          the project, yes for a customer. Yes while that default is not known yet
  */
-export function effectiveBillable(form: AssignmentForm): boolean {
+export function effectiveBillable(form: AssignmentForm, rule?: TimeBillableDefault): boolean {
   if (form.target === null) return false
-  return form.billable ?? true
+  return form.billable ?? rule?.billable ?? true
+}
+
+/**
+ * Whether the box «verrechenbar» is locked.
+ *
+ * <p>A lock means «cannot be switched on». A box that shows yes on a project that is no longer
+ * billed — an entry billable before its project was set to «Nicht verrechenbar» — may still be
+ * switched off, because the server lets that entry keep its yes (backend ADR-0162).
+ *
+ * @param form the line or the stopwatch field
+ * @param rule the default of the server for the target, absent while unknown
+ * @returns true for internal time, and where the server locks the target and the box shows no
+ */
+export function billableLocked(form: AssignmentForm, rule?: TimeBillableDefault): boolean {
+  if (form.target === null) return true
+  return rule?.locked === true && !effectiveBillable(form, rule)
+}
+
+/**
+ * The tooltip of the box «verrechenbar»: why it is locked, or what its default follows.
+ *
+ * <p>Internal time says it in its own words: the rule is fixed (backend ADR-0160), the screen
+ * asks no server for it, and without projects there is no project to name.
+ *
+ * @param form the line or the stopwatch field
+ * @param rule the default of the server for the target, absent while unknown
+ * @param projectsOn whether the tenant runs the projects
+ * @returns the reason of the server for a locked target, otherwise a sentence about the billing
+ *          mode of the project, about the customer, or about internal time
+ */
+export function billableTooltip(
+  form: AssignmentForm,
+  rule: TimeBillableDefault | undefined,
+  projectsOn: boolean,
+): string {
+  if (form.target === null) {
+    return projectsOn
+      ? 'Ohne Projekt oder Kunde ist eine Zeit intern und nie verrechenbar.'
+      : 'Ohne Kunde ist eine Zeit intern und nie verrechenbar.'
+  }
+  if (rule?.locked && rule.lockedReason) return rule.lockedReason
+  if (rule?.billingMode === 'FIXED_PRICE') {
+    return `Pauschal abgerechnet: verrechenbar nur für Zusatzaufwand ausserhalb der Pauschale. ${NEEDS_SERVICE}`
+  }
+  if (rule?.billingMode === 'BY_EFFORT') {
+    return `Nach Aufwand abgerechnet: jede Stunde ist verrechenbar. ${NEEDS_SERVICE}`
+  }
+  return `Mit Kunde ist eine Zeit verrechenbar, ohne Kunde nie. ${NEEDS_SERVICE}`
+}
+
+const NEEDS_SERVICE = 'Verrechenbar braucht eine Leistung.'
+
+/**
+ * What a change says about «verrechenbar»: what the box shows where that is known.
+ *
+ * <p>`null` only where the box follows a default the screen does not know yet — the target was
+ * chosen anew and its default is on its way. The server then takes the same default the box is
+ * about to show, instead of the browser guessing yes (backend ADR-0162).
+ */
+function changedBillable(form: AssignmentForm, rule?: TimeBillableDefault): boolean | null {
+  if (form.target === null) return false
+  return form.billable ?? rule?.billable ?? null
 }
 
 /**
@@ -594,14 +728,16 @@ export function formChanged(form: TimeEntryForm, initial: TimeEntryForm): boolea
  * time without anybody deciding so.
  *
  * @param form the line as filled in
+ * @param rule the default of «verrechenbar» for the target, absent while unknown: a fixed price
+ *   project asks no service while the box follows its no
  * @returns the complaints, empty when the line can be sent
  */
-export function timeEntryComplaints(form: TimeEntryForm): FieldErrors {
+export function timeEntryComplaints(form: TimeEntryForm, rule?: TimeBillableDefault): FieldErrors {
   const complaints: Record<string, string> = {}
   const reading = readDuration(form.duration)
   if (reading.state === 'empty') complaints.durationMinutes = 'Eine Dauer eingeben, zum Beispiel 1:30.'
   if (reading.state === 'refused') complaints.durationMinutes = reading.message
-  return { ...complaints, ...assignmentComplaints(form, true) }
+  return { ...complaints, ...assignmentComplaints(form, true, rule) }
 }
 
 /**
@@ -629,12 +765,14 @@ export function isToldByLine(error: unknown): boolean {
  *
  * <p>A range goes as `startTime` and `endTime`, a duration as `durationMinutes`; never both, so
  * they cannot disagree. A new entry leaves «verrechenbar» to the server while nobody touched the
- * box; a change always says it, because the entry has a value already.
+ * box; a change says what the box shows, because the entry has a value already — except where
+ * the target was chosen anew and its default is not known yet: then the server takes it.
  *
  * @param form the line, already free of complaints
  * @param duration what the duration field was read as
  * @param workDate the day, `yyyy-MM-dd`
  * @param lockVersion the state of the entry a change was made to; absent for a new entry
+ * @param rule the default of «verrechenbar» for the target of a change, absent while unknown
  * @returns the request body
  */
 export function toTimeEntryRequest(
@@ -642,6 +780,7 @@ export function toTimeEntryRequest(
   duration: Duration,
   workDate: string,
   lockVersion?: number,
+  rule?: TimeBillableDefault,
 ): TimeEntryRequest {
   const description = form.description.trim()
   const request: TimeEntryRequest = {
@@ -656,7 +795,7 @@ export function toTimeEntryRequest(
     billable: form.target === null ? null : form.billable,
   }
   if (lockVersion === undefined) return request
-  return { ...request, billable: effectiveBillable(form), lockVersion }
+  return { ...request, billable: changedBillable(form, rule), lockVersion }
 }
 
 /**
@@ -931,24 +1070,28 @@ export function toTimerRequest(form: AssignmentForm): TimerRequest {
 /**
  * What changes the running stopwatch.
  *
- * <p>Everything it runs on goes out, because a field left out is cleared; «verrechenbar» always
- * says its value. The start goes out only where it was changed, and then on the minute: left
- * out, the server keeps it to the second.
+ * <p>Everything it runs on goes out, because a field left out is cleared; «verrechenbar» says
+ * what the box shows. Only on a target chosen anew whose default is not known yet it stays out,
+ * and the server takes that default. The start goes out only where it was changed, and then on
+ * the minute: left out, the server keeps it to the second.
  *
  * @param form the field, already free of complaints
  * @param initial the field as the stopwatch was read
  * @param lockVersion the state of the stopwatch the change was made to
+ * @param rule the default of «verrechenbar» for the target, absent while unknown
  * @returns the request body
  */
 export function toTimerChangeRequest(
   form: TimerForm,
   initial: TimerForm,
   lockVersion: number,
+  rule?: TimeBillableDefault,
 ): TimerChangeRequest {
   const startedAt = startChanged(form, initial) ? instantOf(form.startDate, form.startTime) : null
+  const billable = changedBillable(form, rule)
   return {
     ...toTimerRequest(form),
-    billable: effectiveBillable(form),
+    ...(billable !== null ? { billable } : {}),
     ...(startedAt !== null ? { startedAt } : {}),
     lockVersion,
   }
@@ -987,14 +1130,16 @@ export function timerChanged(form: TimerForm, initial: TimerForm): boolean {
  * @param form the field as filled in
  * @param intent the step asked for
  * @param endRequired true where the stopwatch ran more than 24 hours, as the backend said
+ * @param rule the default of «verrechenbar» for the target, absent while unknown
  * @returns the complaints, empty when the step can be sent
  */
 export function timerComplaints(
   form: TimerForm,
   intent: TimerIntent,
   endRequired: boolean,
+  rule?: TimeBillableDefault,
 ): FieldErrors {
-  const complaints = assignmentComplaints(form, intent === 'stop')
+  const complaints = assignmentComplaints(form, intent === 'stop', rule)
   if (intent === 'start') return complaints
   if (instantOf(form.startDate, form.startTime) === null) {
     complaints.startedAt = 'Den Start mit Tag und Uhrzeit angeben.'
@@ -1142,14 +1287,18 @@ function assignmentFormOf(
  * A name typed into a list field and never taken over; and, where asked, billable without a
  * service — the backend's sentence word for word, so the same rule never says two things.
  */
-function assignmentComplaints(form: AssignmentForm, askService: boolean): Record<string, string> {
+function assignmentComplaints(
+  form: AssignmentForm,
+  askService: boolean,
+  rule?: TimeBillableDefault,
+): Record<string, string> {
   const complaints: Record<string, string> = {}
   if (form.target === null && form.targetTerm.trim() !== '') {
     complaints.projectId = 'Einen Treffer aus der Liste wählen oder das Feld leeren.'
   }
   if (form.service === null && form.serviceTerm.trim() !== '') {
     complaints.productId = 'Eine Leistung aus der Liste wählen oder das Feld leeren.'
-  } else if (askService && form.service === null && effectiveBillable(form)) {
+  } else if (askService && form.service === null && effectiveBillable(form, rule)) {
     complaints.productId =
       'Verrechenbar braucht eine Leistung, sonst entsteht kein Preis. Leistung wählen oder «verrechenbar» ausschalten.'
   }
@@ -1192,4 +1341,405 @@ function startChanged(form: TimerForm, initial: TimerForm): boolean {
 
 function twoDigits(value: number): string {
   return String(value).padStart(2, '0')
+}
+
+// --- recording on a project ----------------------------------------------------------
+
+/** The router state that opens «Meine Zeiten» with a target already in the quick line. */
+export type RecordOnState = { recordOn: TimeTargetChoice }
+
+/**
+ * @param target the project or customer the quick line opens on
+ * @returns the router state of the link to «Meine Zeiten»
+ */
+export function recordOnState(target: TimeTargetChoice): RecordOnState {
+  return { recordOn: target }
+}
+
+/**
+ * Reads back what «Meine Zeiten» was opened on — «Zeit erfassen» on a project.
+ *
+ * <p>Router state survives a reload and may stem from an older version of the application, so
+ * every field is checked rather than trusted, the way the origin of a mask is.
+ *
+ * @param state the router state, `location.state`
+ * @returns the target; `null` where the state names none, or one that cannot be read
+ */
+export function recordOnTargetOf(state: unknown): TimeTargetChoice | null {
+  if (typeof state !== 'object' || state === null || !('recordOn' in state)) return null
+  const target: unknown = state.recordOn
+  if (typeof target !== 'object' || target === null) return null
+  const kind: unknown = Reflect.get(target, 'kind')
+  const projectId: unknown = Reflect.get(target, 'projectId')
+  const partnerId: unknown = Reflect.get(target, 'partnerId')
+  if (typeof partnerId !== 'number') return null
+  const customerName = textOf(target, 'customerName')
+  if (kind === 'PROJECT' && typeof projectId === 'number') {
+    const projectNumber = textOf(target, 'projectNumber')
+    const projectName = textOf(target, 'projectName')
+    return { kind, projectId, projectNumber, projectName, partnerId, customerName }
+  }
+  if (kind === 'CUSTOMER') {
+    return { kind, partnerId, partnerNumber: textOf(target, 'partnerNumber'), customerName }
+  }
+  return null
+}
+
+function textOf(source: object, key: string): string | null {
+  const value: unknown = Reflect.get(source, key)
+  return typeof value === 'string' ? value : null
+}
+
+/**
+ * @param project a stored project
+ * @returns the project as the quick line names it, with its customer
+ */
+export function projectTargetOf(project: Project): TimeTargetChoice {
+  return {
+    kind: 'PROJECT',
+    projectId: project.id,
+    projectNumber: project.projectNumber,
+    projectName: project.name,
+    partnerId: project.partnerId,
+    customerName: project.customerName ?? null,
+  }
+}
+
+/**
+ * @param status where the project stands
+ * @returns true while it takes new time: open and active. A completed one keeps its open times
+ *          billable but takes no new ones (backend ADR-0160)
+ */
+export function takesNewTime(status: ProjectStatus): boolean {
+  return status === 'OPEN' || status === 'ACTIVE'
+}
+
+// --- the registers «Zeiten» ----------------------------------------------------------
+
+/** Whose times a register shows: those of one project, or all of a customer's, with and without one. */
+export type TimesOf = { kind: 'PROJECT'; projectId: number } | { kind: 'CUSTOMER'; partnerId: number }
+
+/**
+ * @param tenantId the tenant
+ * @returns address the terms, the summaries and the defaults of the users start with
+ */
+export function timeTrackingUrl(tenantId: number): string {
+  return `/api/tenants/${tenantId}/time-tracking`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param of the project or the customer
+ * @returns address of the minutes by state, over every user; needs `TIME_READ`
+ */
+export function timeSummaryUrl(tenantId: number, of: TimesOf): string {
+  return of.kind === 'PROJECT'
+    ? `${timeTrackingUrl(tenantId)}/projects/${of.projectId}/summary`
+    : `${timeTrackingUrl(tenantId)}/customers/${of.partnerId}/summary`
+}
+
+/**
+ * The entries of a project or a customer, of every user, one page at a time; the latest day
+ * first, in the order the server keeps.
+ *
+ * @param tenantId the tenant
+ * @param of the project or the customer
+ * @param page zero based
+ * @returns address of the page; needs `TIME_READ`
+ */
+export function timeEntryListUrl(tenantId: number, of: TimesOf, page: number): string {
+  const filter = of.kind === 'PROJECT' ? { projectId: of.projectId } : { partnerId: of.partnerId }
+  return `${timeEntriesUrl(tenantId)}?${listQuery({ ...filter, page, size: PAGE_SIZE })}`
+}
+
+/**
+ * Under {@link timeEntriesKey}, so a recorded, changed or stopped entry refreshes the tiles.
+ *
+ * @param tenantId the tenant
+ * @param of the project or the customer
+ * @returns key of the summary
+ */
+export function timeSummaryKey(tenantId: number, of: TimesOf): readonly unknown[] {
+  return [...timeEntriesKey(tenantId), 'summary', timesOfKey(of)]
+}
+
+/**
+ * @param tenantId the tenant
+ * @param of the project or the customer
+ * @param page zero based
+ * @returns key of one page of the list, under {@link timeEntriesKey} like the summary
+ */
+export function timeEntryListKey(tenantId: number, of: TimesOf, page: number): readonly unknown[] {
+  return [...timeEntriesKey(tenantId), 'list', timesOfKey(of), page]
+}
+
+function timesOfKey(of: TimesOf): string {
+  return of.kind === 'PROJECT' ? `project-${of.projectId}` : `customer-${of.partnerId}`
+}
+
+/** One tile of a register «Zeiten»: what it counts, its minutes and, where it says something, how many entries. */
+export type TimeSummaryFigure = {
+  label: string
+  minutes: number
+  entries?: number
+}
+
+/**
+ * The five tiles, in the order the work runs through: everything, still to bill, on a draft,
+ * billed, never billed. The last four add up to the first; the backend counts them.
+ *
+ * @param summary the summary as the backend sent it
+ * @returns the tiles; the count of entries goes with «Total» and «Offen verrechenbar»
+ */
+export function timeSummaryFigures(summary: TimeSummary): TimeSummaryFigure[] {
+  return [
+    { label: 'Total', minutes: summary.totalMinutes, entries: summary.entries },
+    { label: 'Offen verrechenbar', minutes: summary.openMinutes, entries: summary.openEntries },
+    { label: 'Im Entwurf', minutes: summary.inDraftMinutes },
+    { label: 'Verrechnet', minutes: summary.billedMinutes },
+    { label: 'Nicht verrechenbar', minutes: summary.notBillableMinutes },
+  ]
+}
+
+/**
+ * @param minutes how long, not negative
+ * @returns «42:30 Std.», «0:00 Std.»
+ */
+export function hoursText(minutes: number): string {
+  return `${formatDurationShort(minutes)} Std.`
+}
+
+/**
+ * @param count how many entries
+ * @returns «1 Eintrag», «1’204 Einträge», «0 Einträge»
+ */
+export function entryCountText(count: number): string {
+  return count === 1 ? '1 Eintrag' : `${formatCount(count)} Einträge`
+}
+
+/**
+ * @param entry the entry
+ * @returns the name of the person whose time it is, or that the tenant does not know them any more
+ */
+export function entryUserText(entry: TimeEntry): string {
+  return entry.userName ?? 'Benutzer nicht mehr vorhanden'
+}
+
+/**
+ * The project of an entry, for the column «Projekt» on the customer.
+ *
+ * @param entry the entry
+ * @returns «P-00012 Website», «ohne Projekt», or that the project is gone
+ */
+export function entryProjectText(entry: TimeEntry): string {
+  if (entry.projectId == null) return 'ohne Projekt'
+  return [entry.projectNumber, entry.projectName].filter(Boolean).join(' ') || PROJECT_GONE
+}
+
+// --- the terms of a project ----------------------------------------------------------
+
+/** The billing modes in the order the choice shows them. */
+export const BILLING_MODES: readonly BillingMode[] = ['BY_EFFORT', 'FIXED_PRICE', 'NOT_BILLABLE']
+
+/** What each billing mode is called (backend ADR-0162). */
+export const BILLING_MODE_LABELS: Record<BillingMode, string> = {
+  BY_EFFORT: 'Nach Aufwand',
+  FIXED_PRICE: 'Pauschal',
+  NOT_BILLABLE: 'Nicht verrechenbar',
+}
+
+/** What each billing mode means for new time, in the words of the choice. */
+export const BILLING_MODE_HINTS: Record<BillingMode, string> = {
+  BY_EFFORT: 'Jede Stunde wird verrechnet: neue Zeit ist verrechenbar.',
+  FIXED_PRICE:
+    'Der Preis ist pauschal vereinbart: neue Zeit ist nicht verrechenbar, ausser als Zusatzaufwand ausserhalb der Pauschale.',
+  NOT_BILLABLE: 'Nichts auf diesem Projekt wird verrechnet: neue Zeit lässt sich nicht als verrechenbar erfassen.',
+}
+
+/**
+ * Read with `TIME_READ` or `TIME_WRITE`, changed with `TIME_WRITE`.
+ *
+ * @param tenantId the tenant
+ * @param projectId the project
+ * @returns address of its billing mode and rate
+ */
+export function projectTermsUrl(tenantId: number, projectId: number): string {
+  return `${timeTrackingUrl(tenantId)}/projects/${projectId}/terms`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param projectId the project
+ * @returns key of its terms, under {@link timeTermsKey}
+ */
+export function projectTermsKey(tenantId: number, projectId: number): readonly unknown[] {
+  return [...timeTermsKey(tenantId), 'project', projectId]
+}
+
+/** The dialog «Abrechnung»: the mode, and the rate as typed. */
+export type ProjectTermsForm = {
+  billingMode: BillingMode
+  /** As typed: «140», «140.00», «1’250.50»; empty for none. */
+  hourlyRate: string
+}
+
+/**
+ * @param terms the terms as the backend sent them
+ * @returns the dialog filled in with them
+ */
+export function toProjectTermsForm(terms: ProjectTerms): ProjectTermsForm {
+  return { billingMode: terms.billingMode, hourlyRate: rateFieldOf(terms.hourlyRate) }
+}
+
+/**
+ * A rate as it stands in a field: two decimals, up to four where the rate has them.
+ *
+ * @param rate the rate, absent for none
+ * @returns «140.00», «152.375», empty for none
+ */
+export function rateFieldOf(rate: number | null | undefined): string {
+  if (rate === null || rate === undefined) return ''
+  return rate.toFixed(4).replace(/(\.\d{2}\d*?)0+$/, '$1')
+}
+
+const RATE = new Intl.NumberFormat('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+
+/**
+ * @param terms the terms as the backend sent them
+ * @returns «140.00 CHF pro Stunde», «0.00 CHF pro Stunde», or «Preis der Leistung» without a rate
+ */
+export function hourlyRateText(terms: ProjectTerms): string {
+  if (terms.hourlyRate === null || terms.hourlyRate === undefined) return 'Preis der Leistung'
+  const currency = terms.currency ? ` ${terms.currency}` : ''
+  return `${RATE.format(terms.hourlyRate)}${currency} pro Stunde`
+}
+
+/** The backend's sentence, word for word, so the same rule never says two things. */
+const NEGATIVE_RATE = 'Der Projektsatz darf nicht negativ sein. Leer heisst: der Preis der Leistung gilt.'
+
+/**
+ * What is wrong with the dialog before it is sent, by the field of the request.
+ *
+ * <p>The rate is checked as far as the field can say: a number, and not below zero. Decimals and
+ * size the backend checks, with its own sentence at the same field.
+ *
+ * @param form the dialog as filled in
+ * @returns the complaints, empty when it can be sent
+ */
+export function projectTermsComplaints(form: ProjectTermsForm): FieldErrors {
+  if (form.hourlyRate.trim() === '') return {}
+  const rate = parseDecimal(form.hourlyRate)
+  if (rate === null) {
+    return { hourlyRate: 'Einen Betrag eingeben, zum Beispiel 140.00, oder leer lassen.' }
+  }
+  return rate < 0 ? { hourlyRate: NEGATIVE_RATE } : {}
+}
+
+/**
+ * What the dialog sends.
+ *
+ * <p>`lockVersion` goes back exactly when the terms came with one: terms nobody saved have none,
+ * and the server refuses one there (backend ADR-0162). No currency: the server sets it.
+ *
+ * @param form the dialog, already free of complaints
+ * @param terms the terms the dialog was opened on
+ * @returns the request body
+ */
+export function toProjectTermsRequest(form: ProjectTermsForm, terms: ProjectTerms): ProjectTermsRequest {
+  const request: ProjectTermsRequest = {
+    billingMode: form.billingMode,
+    hourlyRate: parseDecimal(form.hourlyRate),
+  }
+  return terms.lockVersion === null || terms.lockVersion === undefined
+    ? request
+    : { ...request, lockVersion: terms.lockVersion }
+}
+
+/**
+ * @param form the dialog as it stands
+ * @param terms the terms it was opened on
+ * @returns true when saving would change something; «140» for a rate of 140.00 changes nothing
+ */
+export function projectTermsChanged(form: ProjectTermsForm, terms: ProjectTerms): boolean {
+  if (form.billingMode !== terms.billingMode) return true
+  if (form.hourlyRate.trim() === '') return terms.hourlyRate != null
+  const rate = parseDecimal(form.hourlyRate)
+  // Something unreadable is typed: that is a change, and saving says what is wrong with it.
+  return rate === null || rate !== (terms.hourlyRate ?? null)
+}
+
+/**
+ * What saving the terms did, in one sentence.
+ *
+ * <p>A new billing mode applies to new time only. The entries already recorded keep their
+ * «verrechenbar», and the sentence says how many open ones that concerns, so whoever wants them
+ * otherwise changes them knowingly (backend ADR-0162).
+ *
+ * @param before the terms the dialog was opened on
+ * @param after the terms as the backend stored them
+ * @returns «Gespeichert.», after a new mode with the open billable entries that stay
+ */
+export function termsSavedText(before: ProjectTerms, after: ProjectTerms): string {
+  if (before.billingMode === after.billingMode || after.openEntries === 0) return 'Gespeichert.'
+  return `Gespeichert. Die Abrechnungsart gilt für neue Zeit: ${openEntriesStayText(after.openEntries)}`
+}
+
+/**
+ * @param count how many open billable entries a new billing mode leaves as they are, at least one
+ * @returns «1 offener verrechenbarer Eintrag bleibt, wie er ist.», «12 offene verrechenbare
+ *          Einträge bleiben, wie sie sind.»
+ */
+export function openEntriesStayText(count: number): string {
+  return count === 1
+    ? '1 offener verrechenbarer Eintrag bleibt, wie er ist.'
+    : `${formatCount(count)} offene verrechenbare Einträge bleiben, wie sie sind.`
+}
+
+// --- the default service of every user -----------------------------------------------
+
+/**
+ * @param tenantId the tenant
+ * @returns address of every user with their default service; needs `TIME_WRITE`
+ */
+export function userDefaultsUrl(tenantId: number): string {
+  return `${timeTrackingUrl(tenantId)}/user-defaults`
+}
+
+/**
+ * @param tenantId the tenant
+ * @param userId whose default
+ * @returns address that sets it, or removes it with `productId: null`
+ */
+export function userDefaultUrl(tenantId: number, userId: number): string {
+  return `${userDefaultsUrl(tenantId)}/${userId}`
+}
+
+/**
+ * Apart from {@link timeEntriesKey}: an entry changes no default.
+ *
+ * @param tenantId the tenant
+ * @returns key of the table «Standardleistung je Benutzer»
+ */
+export function userDefaultsKey(tenantId: number): readonly unknown[] {
+  return ['time-user-defaults', tenantId]
+}
+
+/**
+ * Where the default service of a user stands.
+ *
+ * - `NONE`: no default.
+ * - `ACTIVE`: the quick line suggests it.
+ * - `INACTIVE`: deactivated since; the quick line no longer suggests it.
+ * - `GONE`: the product no longer exists.
+ */
+export type UserDefaultState = 'NONE' | 'ACTIVE' | 'INACTIVE' | 'GONE'
+
+/**
+ * @param row one row of the table as the backend sent it
+ * @returns where its default stands
+ */
+export function userDefaultState(row: TimeUserDefault): UserDefaultState {
+  if (row.productId == null) return 'NONE'
+  if (row.serviceName == null) return 'GONE'
+  return row.serviceActive ? 'ACTIVE' : 'INACTIVE'
 }

@@ -48,7 +48,11 @@ import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
 import { CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
-import { TIMETRACKING_PATH, TIMETRACKING_RIGHTS } from '../lib/timetracking'
+import {
+  TIMETRACKING_PATH,
+  TIMETRACKING_RIGHTS,
+  TIMETRACKING_SETTINGS_PATH,
+} from '../lib/timetracking'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -208,6 +212,56 @@ describe('NAV_GROUPS', () => {
     const entries = visible.flatMap((group) => flattenNav(group.entries))
 
     expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_PATH)
+  })
+
+  /**
+   * The default service of every user is read by the time tracking alone, so by ADR-0011 it is a
+   * module setting, in a folder of its own — not under «Systemeinstellungen».
+   */
+  it('navGroupsHoldTheTimeTrackingSettingsTest', () => {
+    const module = NAV_GROUPS.find((group) => group.title === 'Moduleinstellungen')
+    const folder = module?.entries.find((node) => isFolder(node) && node.label === 'Zeiterfassung')
+    if (!folder || !isFolder(folder)) throw new Error('folder missing')
+
+    expect(folder.module).toBe('TIMETRACKING')
+    expect(folder.children).toEqual([
+      expect.objectContaining({
+        label: 'Einstellungen',
+        href: TIMETRACKING_SETTINGS_PATH,
+        permission: TIMETRACKING_RIGHTS.write,
+        module: 'TIMETRACKING',
+      }),
+    ])
+    const system = NAV_GROUPS.find((group) => group.title === 'Systemeinstellungen')
+    expect(flattenNav(system?.entries ?? []).map((entry) => entry.href)).not.toContain(
+      TIMETRACKING_SETTINGS_PATH,
+    )
+  })
+
+  /** TIME_TRACK and TIME_READ are not enough: keeping the defaults needs TIME_WRITE. */
+  it('visibleNavGroupsHidesTheTimeTrackingSettingsWithoutTheWriteRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== TIMETRACKING_RIGHTS.write,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_SETTINGS_PATH)
+    expect(entries.map((entry) => entry.href)).toContain(TIMETRACKING_PATH)
+  })
+
+  it('visibleNavGroupsHidesTheTimeTrackingSettingsWithTheModuleOffTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'TIMETRACKING')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_SETTINGS_PATH)
+  })
+
+  /** The folder is the register strip of the settings screen. */
+  it('folderForHoldsTheTimeTrackingSettingsTest', () => {
+    expect(folderFor(TIMETRACKING_SETTINGS_PATH, () => true, () => true)?.label).toBe(
+      'Zeiterfassung',
+    )
   })
 
   it('navGroupsCoverTheContractListTest', () => {

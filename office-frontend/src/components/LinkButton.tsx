@@ -24,8 +24,12 @@ export function LinkButton({
   children,
 }: {
   to: string
-  /** Names the current screen as the one a mask behind this link returns to. */
-  state?: OriginState
+  /**
+   * The router state the screen behind the link reads: mostly the origin, which names the
+   * current screen as the one a mask returns to; or a record the screen opens its form on. The
+   * screen checks what it reads — router state survives reloads and is not trusted.
+   */
+  state?: OriginState | object
   variant?: Variant
   className?: string
   children: ReactNode

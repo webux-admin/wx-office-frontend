@@ -6,7 +6,9 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
 import type {
+  BillingMode,
   RunningTimer,
+  TimeBillableDefault,
   TimeColleague,
   TimeEntry,
   TimeRecentTarget,
@@ -193,6 +195,22 @@ let requests: { method: string; url: string; body: Record<string, unknown> }[]
 let writeFailure: { status: number; body: unknown } | null
 /** Whether the sheet answers with an error. */
 let sheetFails: boolean
+/** How the project «Website» is billed, as the lookup of «verrechenbar» answers. */
+let websiteMode: BillingMode
+
+/** The answer of `lookups/default-billable` for the project «Website». */
+function websiteDefault(): TimeBillableDefault {
+  if (websiteMode === 'NOT_BILLABLE') {
+    return {
+      billable: false,
+      locked: true,
+      lockedReason:
+        'Das Projekt P-00012 ist als «Nicht verrechenbar» vereinbart. Zeit darauf ist nie verrechenbar.',
+      billingMode: websiteMode,
+    }
+  }
+  return { billable: websiteMode === 'BY_EFFORT', locked: false, billingMode: websiteMode }
+}
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -212,6 +230,7 @@ function stubFetch() {
   requests = []
   writeFailure = null
   sheetFails = false
+  websiteMode = 'BY_EFFORT'
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
@@ -247,6 +266,11 @@ function stubFetch() {
     }
     if (url.startsWith(`${BASE}/lookups/services`)) return json([CONCEPT, SUPPORT])
     if (url.startsWith(`${BASE}/lookups/colleagues`)) return json(COLLEAGUES)
+    if (url.startsWith(`${BASE}/lookups/default-billable`)) {
+      return query.get('projectId') === null
+        ? json({ billable: true, locked: false })
+        : json(websiteDefault())
+    }
     return json([])
   })
 }
@@ -280,11 +304,15 @@ async function settle(ms = 0) {
 
 const TRACKER = ['TIME_TRACK']
 
-async function render(permissions = TRACKER, modules?: string[]) {
+/**
+ * @param state the router state the screen is opened with, such as the project «Zeit erfassen»
+ *   hands over
+ */
+async function render(permissions = TRACKER, modules?: string[], state?: unknown) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={['/zeiten']}>
+      <MemoryRouter initialEntries={[{ pathname: '/zeiten', state }]}>
         <AuthContext.Provider value={session(permissions, modules)}>
           <QueryClientProvider client={client}>
             <TimeEntryPage />
@@ -853,5 +881,110 @@ describe('TimeEntryPage', () => {
 
     expect(text()).toContain('Modul nicht eingeschaltet')
     expect(requests).toEqual([])
+  })
+
+  /**
+   * «Zeit erfassen» on a project: the project stands in the line, its suggested service — the
+   * user's default service where nothing was taken there yet — beside it, the focus on «Dauer».
+   */
+  it('timeEntryPageOpensOnAHandedOverProjectTest', async () => {
+    await render(TRACKER, undefined, { recordOn: WEBSITE })
+
+    expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
+    expect(control('Leistung').value).toBe('Konzeption')
+    expect(document.activeElement).toBe(control('Dauer'))
+    expect(requests.map((request) => request.url)).toContain(
+      `${BASE}/mine/default-service?projectId=12`,
+    )
+
+    await type(control('Dauer'), '2h')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({ projectId: 12, productId: 31, durationMinutes: 120 })
+  })
+
+  /** A state that is no project — an origin, an older version — opens the empty line. */
+  it('timeEntryPageWithoutAHandedOverProjectTest', async () => {
+    await render(TRACKER, undefined, { recordOn: { kind: 'PROJECT' } })
+
+    expect(control('Projekt oder Kunde').value).toBe('')
+    expect(requests.some((request) => request.url.includes('/default-service'))).toBe(false)
+  })
+
+  /** «verrechenbar» asks the server for the project chosen, and follows its billing mode. */
+  it('timeEntryPageAsksForTheDefaultOfBillableTest', async () => {
+    websiteMode = 'FIXED_PRICE'
+    await render()
+
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+
+    expect(requests.map((request) => request.url)).toContain(
+      `${BASE}/lookups/default-billable?projectId=12`,
+    )
+    expect(control('verrechenbar').checked).toBe(false)
+    expect(control('verrechenbar').disabled).toBe(false)
+    expect(text()).toContain('Zusatzaufwand ausserhalb der Pauschale')
+  })
+
+  /** At a fixed price, extra work may still be ticked as billable, and goes out as ticked. */
+  it('timeEntryPageTicksExtraWorkOnAFixedPriceProjectTest', async () => {
+    websiteMode = 'FIXED_PRICE'
+    await render()
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+
+    await click(control('verrechenbar'))
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({ projectId: 12, billable: true })
+  })
+
+  /** At a fixed price and untouched, no service is asked for: the hour is not billable. */
+  it('timeEntryPageRecordsWithoutServiceAtAFixedPriceTest', async () => {
+    websiteMode = 'FIXED_PRICE'
+    await render()
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+    await type(control('Leistung'), '')
+
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(control('Leistung').getAttribute('aria-invalid')).toBeNull()
+    expect(writes()[0].body).toMatchObject({ projectId: 12, productId: null, billable: null })
+  })
+
+  /** «Nicht verrechenbar» locks the box, and its tooltip says why in the server's words. */
+  it('timeEntryPageLocksBillableOnAProjectNotBilledTest', async () => {
+    websiteMode = 'NOT_BILLABLE'
+    await render()
+
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+
+    expect(control('verrechenbar').checked).toBe(false)
+    expect(control('verrechenbar').disabled).toBe(true)
+    expect(text()).toContain('Das Projekt P-00012 ist als «Nicht verrechenbar» vereinbart.')
+  })
+
+  /**
+   * An entry billable before its project was set to «Nicht verrechenbar» keeps its yes: the box
+   * shows it and may be switched off, and a change of the text sends it as it stands.
+   */
+  it('timeEntryPageKeepsTheYesOfAnEntryOnAProjectNotBilledTest', async () => {
+    websiteMode = 'NOT_BILLABLE'
+    await render()
+
+    await click(row('Wireframes').querySelector('button') as HTMLButtonElement)
+    const editing = line('Eintrag bearbeiten')
+    expect(control('verrechenbar', editing).checked).toBe(true)
+    expect(control('verrechenbar', editing).disabled).toBe(false)
+
+    await type(control('Text', editing), 'Wireframes, zweite Runde')
+    await press(control('Text', editing), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({ projectId: 12, billable: true })
   })
 })
