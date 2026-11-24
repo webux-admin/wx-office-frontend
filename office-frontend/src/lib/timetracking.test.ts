@@ -58,6 +58,7 @@ import {
   emptyTimerForm,
   emptyTimeEntryForm,
   entryServiceText,
+  entryStateText,
   entryTargetText,
   formChanged,
   hasLaterWeek,
@@ -258,10 +259,61 @@ describe('constants', () => {
     })
   })
 
-  /** Both states the backend sends today have a word and a tone. */
+  /** Every state the backend sends has a word and a tone; billing brought two (#127). */
   it('timeEntryStateLabelsTest', () => {
-    expect(TIME_ENTRY_STATE_LABELS).toEqual({ OPEN: 'offen', NOT_BILLABLE: 'nicht verrechenbar' })
+    expect(TIME_ENTRY_STATE_LABELS).toEqual({
+      OPEN: 'offen',
+      IN_DRAFT: 'im Entwurf',
+      BILLED: 'verrechnet',
+      NOT_BILLABLE: 'nicht verrechenbar',
+    })
     expect(Object.keys(TIME_ENTRY_STATE_TONES)).toEqual(Object.keys(TIME_ENTRY_STATE_LABELS))
+  })
+
+  /** Billed work reads as done, a draft waits quietly, open work stands out. */
+  it('timeEntryStateTonesTest', () => {
+    expect(TIME_ENTRY_STATE_TONES).toEqual({
+      OPEN: 'accent',
+      IN_DRAFT: 'neutral',
+      BILLED: 'success',
+      NOT_BILLABLE: 'muted',
+    })
+  })
+})
+
+describe('entryStateText', () => {
+  const billed: TimeEntry = {
+    id: 5,
+    userId: 1,
+    workDate: '2026-11-03',
+    durationMinutes: 150,
+    billable: true,
+    state: 'BILLED',
+    editable: false,
+    documentId: 42,
+    documentNumber: 'RE-2026-0042',
+    lockVersion: 1,
+  }
+
+  /** A billed entry names its invoice. */
+  it('entryStateTextTest', () => {
+    expect(entryStateText(billed)).toBe('verrechnet RE-2026-0042')
+  })
+
+  /** On a draft the number is not named, even where a draft issued once still carries one. */
+  it('entryStateTextOnADraftTest', () => {
+    expect(entryStateText({ ...billed, state: 'IN_DRAFT' })).toBe('im Entwurf')
+  })
+
+  it('entryStateTextOfAnOpenEntryTest', () => {
+    expect(entryStateText({ ...billed, state: 'OPEN', documentId: null, documentNumber: null })).toBe(
+      'offen',
+    )
+  })
+
+  /** Billed without a number is not expected, and reads as billed all the same. */
+  it('entryStateTextWithoutANumberTest', () => {
+    expect(entryStateText({ ...billed, documentNumber: null })).toBe('verrechnet')
   })
 })
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Plus, Rows3 } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
@@ -77,6 +77,7 @@ export function DocumentLines({
   openOfPredecessorLines,
   shortfalls,
   positionErrors,
+  moreWays,
 }: {
   tenantId: number
   /** Which of the four kinds of document this is, so that a way back leads to this one. */
@@ -114,6 +115,12 @@ export function DocumentLines({
   shortfalls?: readonly StockShortfall[]
   /** The refusal of a position, by its printed position: the message stands in its row. */
   positionErrors?: ReadonlyMap<number, string>
+  /**
+   * Further ways to add positions that another module brings, such as «Zeiten übernehmen» on an
+   * invoice draft. Drawn beside the three buttons, and like them only while the document can be
+   * changed.
+   */
+  moreWays?: ReactNode
 }) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null)
   const [open, setOpen] = useState(false)
@@ -214,6 +221,7 @@ export function DocumentLines({
                 <Rows3 size={15} aria-hidden />
                 Zeile einfügen
               </Button>
+              {moreWays}
             </div>
           ) : undefined
         }

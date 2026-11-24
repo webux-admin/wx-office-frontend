@@ -1,0 +1,268 @@
+// @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../auth/authContext'
+import type { TimeWorklistLine } from '../lib/types'
+import { TimeBillingWorklistPage } from './TimeBillingWorklistPage'
+
+// React refuses to run act() without this flag; jsdom has no bundler that would set it.
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const WORKLIST_URL = '/api/tenants/1/time-tracking/billing/worklist'
+
+function line(overrides: Partial<TimeWorklistLine>): TimeWorklistLine {
+  return {
+    partnerId: 11,
+    customerName: 'Muster AG',
+    projectId: 51,
+    projectNumber: 'P-00012',
+    projectName: 'Website',
+    openEntries: 3,
+    openMinutes: 580,
+    billedMinutes: 585,
+    estimatedAmount: 1560,
+    currency: 'CHF',
+    oldestWorkDate: '2026-11-03',
+    ...overrides,
+  }
+}
+
+const WEBSITE = line({})
+const MUSTER_ALONE = line({
+  projectId: null,
+  projectNumber: null,
+  projectName: null,
+  openEntries: 1,
+  openMinutes: 30,
+  billedMinutes: 30,
+  estimatedAmount: 80,
+  oldestWorkDate: '2026-11-28',
+})
+
+function session(permissions: string[], modules = ['TIMETRACKING', 'PROJECT']): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'anna',
+      activeTenantId: 1,
+      superuser: false,
+      tenants: [{ id: 1, code: 'WX', name: 'Webux', isDefault: true, modules }],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
+let container: HTMLDivElement
+let root: Root
+let requested: string[]
+let lines: TimeWorklistLine[]
+let fails: boolean
+
+function json(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }),
+  )
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 10, 30, 10, 0))
+  requested = []
+  lines = [WEBSITE, MUSTER_ALONE]
+  fails = false
+  vi.stubGlobal('fetch', (url: string) => {
+    requested.push(url)
+    if (url.startsWith(WORKLIST_URL)) {
+      return fails ? json({ detail: 'Das Backend meldet einen Fehler.' }, 500) : json(lines)
+    }
+    return json({ detail: 'unbekannt' }, 404)
+  })
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  container.remove()
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+/** Where «Abrechnen» led, and what it handed over. */
+function Landed() {
+  const location = useLocation()
+  return (
+    <p data-testid="landed">
+      {location.pathname} {JSON.stringify(location.state)}
+    </p>
+  )
+}
+
+async function settle() {
+  for (let round = 0; round < 4; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+}
+
+async function render(permissions = ['TIME_BILL', 'PROJECT_READ'], modules?: string[]) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={['/zeiten-abrechnen']}>
+        <AuthContext.Provider value={session(permissions, modules)}>
+          <QueryClientProvider client={client}>
+            <Routes>
+              <Route path="/zeiten-abrechnen" element={<TimeBillingWorklistPage />} />
+              <Route path="/zeiten-abrechnen/*" element={<Landed />} />
+            </Routes>
+          </QueryClientProvider>
+        </AuthContext.Provider>
+      </MemoryRouter>,
+    )
+  })
+  await settle()
+}
+
+const text = () => container.textContent ?? ''
+const rows = () => [...container.querySelectorAll('tbody tr')] as HTMLElement[]
+
+function billLink(row: HTMLElement): HTMLAnchorElement {
+  const found = [...row.querySelectorAll('a')].find((link) => link.textContent?.startsWith('Abrechnen'))
+  if (found === undefined) throw new Error('no link Abrechnen')
+  return found
+}
+
+describe('TimeBillingWorklistPage', () => {
+  /** One row per project and one per customer without project, up to today. */
+  it('timeBillingWorklistPageListsWhatIsOpenTest', async () => {
+    await render()
+
+    expect(requested).toEqual([`${WORKLIST_URL}?until=2026-11-30`])
+    expect(container.querySelector('h1')?.textContent).toBe('Zeiten abrechnen')
+    expect(rows()).toHaveLength(2)
+    expect(rows()[0].textContent).toContain('Muster AG')
+    expect(rows()[0].textContent).toContain('P-00012 Website')
+    expect(rows()[0].textContent).toContain('9:40')
+    expect(rows()[0].textContent).toContain('→ 9:45')
+    expect(rows()[0].textContent).toContain('1’560.00 CHF')
+    expect(rows()[0].textContent).toContain('03.11.2026')
+    expect(rows()[1].textContent).toContain('ohne Projekt')
+    expect(rows()[1].textContent).not.toContain('→')
+  })
+
+  /** Another day asks anew. */
+  it('timeBillingWorklistPageAsksForAnotherDayTest', async () => {
+    await render()
+
+    await act(async () => {
+      const caption = [...container.querySelectorAll('label')].find((entry) => entry.textContent?.trim() === 'Stichtag')
+      const field = document.getElementById(caption?.htmlFor ?? '') as HTMLInputElement
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, '2026-10-31')
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await settle()
+
+    expect(requested.at(-1)).toBe(`${WORKLIST_URL}?until=2026-10-31`)
+  })
+
+  /** «Abrechnen» of a project opens its mask with the day and the way back. */
+  it('timeBillingWorklistPageOpensAProjectTest', async () => {
+    await render()
+
+    await act(async () => {
+      billLink(rows()[0]).click()
+    })
+
+    expect(container.querySelector('[data-testid="landed"]')?.textContent).toBe(
+      '/zeiten-abrechnen/projekt/51 {"origin":{"from":"/zeiten-abrechnen","label":"Zeiten abrechnen"},"billing":{"until":"2026-11-30","withoutProject":false}}',
+    )
+  })
+
+  /** The row «ohne Projekt» opens the customer, ticking only its time without a project. */
+  it('timeBillingWorklistPageOpensTheCustomerAloneTest', async () => {
+    await render()
+
+    await act(async () => {
+      billLink(rows()[1]).click()
+    })
+
+    expect(container.querySelector('[data-testid="landed"]')?.textContent).toContain(
+      '/zeiten-abrechnen/kunde/11 ',
+    )
+    expect(container.querySelector('[data-testid="landed"]')?.textContent).toContain(
+      '"withoutProject":true',
+    )
+  })
+
+  /** The project links to its mask with PROJECT_READ; without it, it is only a name. */
+  it('timeBillingWorklistPageLinksTheProjectTest', async () => {
+    await render()
+    expect([...rows()[0].querySelectorAll('a')].map((link) => link.getAttribute('href'))).toContain(
+      '/projekte/51',
+    )
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await render(['TIME_BILL'])
+    expect([...rows()[0].querySelectorAll('a')].map((link) => link.getAttribute('href'))).not.toContain(
+      '/projekte/51',
+    )
+  })
+
+  /** Without projects there is no column for them. */
+  it('timeBillingWorklistPageWithoutProjectsTest', async () => {
+    lines = [MUSTER_ALONE]
+
+    await render(['TIME_BILL'], ['TIMETRACKING'])
+
+    expect(container.querySelector('thead')?.textContent).not.toContain('Projekt')
+  })
+
+  it('timeBillingWorklistPageWithNothingOpenTest', async () => {
+    lines = []
+
+    await render()
+
+    expect(text()).toContain('Nichts abzurechnen')
+    expect(text()).toContain('Bis 30.11.2026 liegt keine offene verrechenbare Zeit.')
+  })
+
+  it('timeBillingWorklistPageWhenItCannotBeReadTest', async () => {
+    fails = true
+
+    await render()
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Das Backend meldet einen Fehler.',
+    )
+  })
+
+  it('timeBillingWorklistPageWithoutTheBillRightTest', async () => {
+    await render(['TIME_READ'])
+
+    expect(text()).toContain('Keine Berechtigung')
+    expect(requested).toEqual([])
+  })
+
+  it('timeBillingWorklistPageWithTheModuleOffTest', async () => {
+    await render(['TIME_BILL'], ['PROJECT'])
+
+    expect(text()).toContain('Modul nicht eingeschaltet')
+    expect(requested).toEqual([])
+  })
+})

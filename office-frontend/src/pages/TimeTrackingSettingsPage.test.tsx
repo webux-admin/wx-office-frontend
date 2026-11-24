@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { TimeServiceChoice, TimeUserDefault } from '../lib/types'
+import type { TimeBillingSettings, TimeServiceChoice, TimeUserDefault } from '../lib/types'
 import { TimeTrackingSettingsPage } from './TimeTrackingSettingsPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -13,6 +13,7 @@ import { TimeTrackingSettingsPage } from './TimeTrackingSettingsPage'
 
 const TENANT = 1
 const DEFAULTS_URL = '/api/tenants/1/time-tracking/user-defaults'
+const SETTINGS_URL = '/api/tenants/1/time-tracking/settings'
 
 const SENIOR: TimeServiceChoice = { productId: 31, productNumber: 'L-001', name: 'Beratung Senior' }
 const JUNIOR: TimeServiceChoice = { productId: 32, productNumber: 'L-002', name: 'Beratung Junior' }
@@ -66,6 +67,9 @@ let rows: TimeUserDefault[]
 let readFails: boolean
 /** What the next write answers instead of success, once. */
 let refusal: { status: number; body: unknown } | null
+/** The billing increment as the backend holds it. */
+let increment: TimeBillingSettings
+let incrementFails: boolean
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -78,10 +82,24 @@ beforeEach(() => {
   rows = [ANNA, BEAT, CARLA]
   readFails = false
   refusal = null
+  increment = { billingIncrementMinutes: 15, changedAt: '2026-11-20T09:30:00Z', changedBy: 'admin' }
+  incrementFails = false
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
     requests.push({ method, url, body })
+    if (url === SETTINGS_URL) {
+      if (method === 'GET') {
+        return incrementFails ? json({ detail: 'Der Takt lässt sich nicht lesen.' }, 500) : json(increment)
+      }
+      if (refusal !== null) {
+        const { status, body: answer } = refusal
+        refusal = null
+        return json(answer, status)
+      }
+      increment = { billingIncrementMinutes: body.billingIncrementMinutes, changedAt: '2026-11-24T10:00:00Z', changedBy: 'anna' }
+      return json(increment)
+    }
     if (method === 'PUT') {
       if (refusal !== null) {
         const { status, body: answer } = refusal
@@ -328,5 +346,105 @@ describe('TimeTrackingSettingsPage', () => {
 
     expect(text()).toContain('Modul nicht eingeschaltet')
     expect(requests).toEqual([])
+  })
+
+  // --- the billing increment (#127, backend ADR-0163) ------------------------------
+
+  const incrementField = () => control('Abrechnungstakt') as unknown as HTMLSelectElement
+  /** The «Speichern» of the increment, which stands outside any dialog. */
+  const saveIncrement = () =>
+    [...container.querySelectorAll('section button')].find(
+      (entry) => entry.textContent?.trim() === 'Speichern',
+    )
+
+  async function chooseIncrement(value: string) {
+    await act(async () => {
+      const select = incrementField()
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+  }
+
+  /** The increment as stored, the six choices, and the sentence of the issue. */
+  it('timeTrackingSettingsPageShowsTheIncrementTest', async () => {
+    await render()
+
+    expect(incrementField().value).toBe('15')
+    expect([...incrementField().options].map((option) => option.textContent)).toEqual([
+      'kein Takt',
+      '5 Minuten',
+      '6 Minuten',
+      '10 Minuten',
+      '15 Minuten',
+      '30 Minuten',
+    ])
+    expect(text()).toContain('Gerundet wird nur die Menge auf der Rechnung, die erfasste Zeit bleibt.')
+    expect(text()).toContain('von admin')
+    expect((saveIncrement() as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('timeTrackingSettingsPageSavesTheIncrementTest', async () => {
+    await render()
+
+    await chooseIncrement('6')
+    await click(saveIncrement())
+
+    expect(writes()).toEqual([
+      { method: 'PUT', url: SETTINGS_URL, body: { billingIncrementMinutes: 6 } },
+    ])
+    expect(incrementField().value).toBe('6')
+    expect(text()).toContain('Abrechnungstakt gespeichert: 6 Minuten.')
+  })
+
+  /** No increment is 1, as the backend spells it. */
+  it('timeTrackingSettingsPageSavesNoIncrementTest', async () => {
+    await render()
+
+    await chooseIncrement('1')
+    await click(saveIncrement())
+
+    expect(writes()).toEqual([
+      { method: 'PUT', url: SETTINGS_URL, body: { billingIncrementMinutes: 1 } },
+    ])
+    expect(text()).toContain('Abrechnungstakt gespeichert: kein Takt.')
+  })
+
+  /** An increment nobody saved yet is 1, and the page says no more about it. */
+  it('timeTrackingSettingsPageWithAnIncrementNeverSavedTest', async () => {
+    increment = { billingIncrementMinutes: 1 }
+
+    await render()
+
+    expect(incrementField().value).toBe('1')
+    expect(text()).not.toContain('Geändert')
+  })
+
+  it('timeTrackingSettingsPageShowsARefusedIncrementAtTheFieldTest', async () => {
+    await render()
+    refusal = {
+      status: 400,
+      body: {
+        detail: 'Der Abrechnungstakt 7 gibt es nicht.',
+        errors: [{ field: 'billingIncrementMinutes', message: 'Der Abrechnungstakt 7 gibt es nicht.' }],
+      },
+    }
+
+    await chooseIncrement('30')
+    await click(saveIncrement())
+
+    expect(incrementField().getAttribute('aria-invalid')).toBe('true')
+    expect(text()).toContain('Der Abrechnungstakt 7 gibt es nicht.')
+  })
+
+  it('timeTrackingSettingsPageWhenTheIncrementCannotBeReadTest', async () => {
+    incrementFails = true
+
+    await render()
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Der Takt lässt sich nicht lesen.',
+    )
+    expect(text()).toContain('Standardleistung je Benutzer')
   })
 })

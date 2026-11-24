@@ -5633,12 +5633,12 @@ export type SubscriptionAcknowledgementBody = {
 
 /**
  * Where a time entry stands, as `TimeEntryState` of the backend spells it. Worked out by the
- * backend, never stored.
+ * backend from the active billing row, never stored (backend ADR-0163).
  *
- * <p>Billing (#127) brings `IN_DRAFT` and `BILLED`. Each then needs one label and one tone in
- * `lib/timetracking.ts`, and the compiler asks for both there.
+ * <p>`IN_DRAFT` stands on an invoice draft, `BILLED` on an issued invoice; both can only be read.
+ * Each state needs one label and one tone in `lib/timetracking.ts`, and the compiler asks for both.
  */
-export type TimeEntryState = 'OPEN' | 'NOT_BILLABLE'
+export type TimeEntryState = 'OPEN' | 'IN_DRAFT' | 'BILLED' | 'NOT_BILLABLE'
 
 /**
  * One time entry with the names of what it refers to (`TimeEntryDto`).
@@ -5672,10 +5672,14 @@ export type TimeEntry = {
   description?: string | null
   billable: boolean
   state: TimeEntryState
-  /** `false` while the entry can only be read. */
+  /** `false` while the entry can only be read: billed, or on a project that can only be read. */
   editable: boolean
   /** Why it can only be read; the same sentence a change or a delete is refused with. */
   readOnlyReason?: string | null
+  /** The invoice it stands on, a draft or an issued one; absent while it stands on none. */
+  documentId?: number | null
+  /** The number of that invoice; absent on a draft that was never issued. */
+  documentNumber?: string | null
   createdAt?: string | null
   createdBy?: string | null
   changedAt?: string | null
@@ -5918,7 +5922,7 @@ export type ProjectTermsRequest = {
 
 /**
  * The minutes on a project or for a customer by state (`TimeSummaryDto`). The four states add up
- * to `totalMinutes`; on a draft and invoiced stay 0 until billing exists (#127).
+ * to `totalMinutes`: open, on a draft, invoiced, not billable (backend ADR-0163).
  */
 export type TimeSummary = {
   entries: number
@@ -5949,4 +5953,201 @@ export type TimeUserDefault = {
 export type TimeUserDefaultRequest = {
   /** A product of the type service; `null` removes the default. */
   productId: number | null
+}
+
+// --- time tracking: billing (backend ADR-0163) ----------------------------------------
+
+/** How the billed entries become lines of the invoice (`BillingGrouping`). */
+export type TimeBillingGrouping = 'BY_SERVICE' | 'BY_ENTRY'
+
+/** Where the rate of a line came from (`RateOrigin`). */
+export type TimeRateOrigin =
+  | 'PROJECT_RATE'
+  | 'CUSTOMER_PRICE'
+  | 'PRICE_GROUP'
+  | 'DEFAULT_PRICE_GROUP'
+  | 'BASE_PRICE'
+
+/** Why a chosen entry does not go onto the invoice (`BillingSkipReason`). */
+export type TimeSkipReason =
+  | 'NOT_OPEN'
+  | 'PROJECT_NOT_BILLED'
+  | 'RATE_CURRENCY'
+  | 'UNIT_NOT_HOURS'
+  | 'NO_VAT_RATE'
+  | 'TAX_LIABILITY_STARTS'
+
+/**
+ * One row of the worklist «Abrechnen» (`WorklistLineDto`): a customer without project, or one
+ * project, with its open billable time up to the day.
+ */
+export type TimeWorklistLine = {
+  partnerId: number
+  /** Absent where the customer no longer exists. */
+  customerName?: string | null
+  /** Absent for the time of the customer without a project. */
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  openEntries: number
+  /** As measured. */
+  openMinutes: number
+  /** What an invoice would charge, each entry rounded up to the billing increment. */
+  billedMinutes: number
+  /** An estimate to the Rappen: the rate of each service on the latest day of its entries. */
+  estimatedAmount: number
+  /** ISO 4217 code of the estimate. */
+  currency: string
+  /** ISO date of the oldest open entry. */
+  oldestWorkDate: string
+}
+
+/**
+ * What the screen «Zeiten abrechnen» sends, for the preview and for writing the draft alike
+ * (`BillRequest`). No amount, no rate, no minutes: the server works them out every time.
+ */
+export type TimeBillingRequest = {
+  /** The customer; left out with a project, whose customer it is. */
+  partnerId?: number
+  /** The project; left out to bill the customer with and without projects. */
+  projectId?: number
+  /** The last day, `yyyy-mm-dd`; left out for today. */
+  until?: string
+  /** The entries ticked; left out for every open one up to the day. */
+  entryIds?: number[]
+  /** Left out for `BY_SERVICE`. */
+  grouping?: TimeBillingGrouping
+  /** An invoice draft of the customer to add to; left out for a new one. */
+  documentId?: number
+}
+
+/** An open entry in the list with the ticks (`BillingCandidateDto`). */
+export type TimeBillingCandidate = {
+  entryId: number
+  /** ISO date. */
+  workDate: string
+  userId: number
+  /** For this screen only, never on the invoice; absent where the user is gone. */
+  userName?: string | null
+  projectId?: number | null
+  projectNumber?: string | null
+  productId?: number | null
+  serviceName?: string | null
+  /** As measured. */
+  durationMinutes: number
+  /** What the invoice would charge, rounded up to the increment. */
+  billedMinutes: number
+  description?: string | null
+  /** Whether it was ticked in the request this preview answers. */
+  selected: boolean
+}
+
+/** One line of the preview, as it will stand on the invoice (`BillingLineDto`). */
+export type TimeBillingLine = {
+  productId: number
+  /** The text of the line. */
+  serviceName: string
+  /** The second line; absent for none. */
+  subtitle?: string | null
+  /** The entries of the line, one per row; absent for none. */
+  note?: string | null
+  /** ISO date of the first day. */
+  serviceDateFrom: string
+  /** ISO date of the last day; absent for one day. */
+  serviceDateTo?: string | null
+  /** Hours, two decimals. */
+  quantity: number
+  /** The rate per hour. */
+  unitPrice: number
+  priceIncludesVat: boolean
+  rateOrigin: TimeRateOrigin
+  /** The price group of the rate; absent for another origin. */
+  priceGroupName?: string | null
+  /** In per cent. */
+  vatRate: number
+  /** Quantity times rate, to the Rappen. */
+  amount: number
+  entryIds: number[]
+}
+
+/** A chosen entry that does not go onto the invoice (`SkippedEntryDto`). */
+export type TimeSkippedEntry = {
+  entryId: number
+  reason: TimeSkipReason
+  /** The reason as a sentence. */
+  message: string
+}
+
+/** What billing would write; nothing is written (`BillingPreviewDto`). */
+export type TimeBillingPreview = {
+  partnerId: number
+  customerName: string
+  /** Absent when billed by customer. */
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** ISO date of the last day. */
+  until: string
+  grouping: TimeBillingGrouping
+  /** The draft the lines would go onto; absent for a new one. */
+  documentId?: number | null
+  /** Its number; absent unless it was issued once. */
+  documentNumber?: string | null
+  /** ISO 4217 code of the invoice. */
+  currency: string
+  /** The language of its texts; absent for none. */
+  language?: string | null
+  /** 1 for none, else 5, 6, 10, 15 or 30. */
+  billingIncrementMinutes: number
+  /** The header of a new draft; absent for none. */
+  headerText?: string | null
+  /** Every open entry up to the day, the ticked ones marked. */
+  candidates: TimeBillingCandidate[]
+  lines: TimeBillingLine[]
+  /** The ticked entries that would not go onto the invoice. */
+  skipped: TimeSkippedEntry[]
+  /** The sum of the lines this billing writes, as quoted; other lines of a draft are not in it. */
+  totalAmount: number
+  /** The same without VAT, before a discount on the whole draft. */
+  totalNet: number
+  /**
+   * Whether the tenant is registered for VAT, as the draft takes it. When false the draft charges
+   * no VAT, a line shows no rate, and `totalNet` equals `totalAmount`.
+   */
+  vatLiable: boolean
+}
+
+/** What writing the draft produced (`BillingResultDto`). */
+export type TimeBillingResult = {
+  documentId: number
+  /** True when this billing wrote the draft, false when it added to one. */
+  newDraft: boolean
+  currency: string
+  /** Totals of the whole draft. */
+  totalNet: number
+  totalVat: number
+  totalGross: number
+  /** How many lines this billing wrote. */
+  lines: number
+  billedEntryIds: number[]
+  skipped: TimeSkippedEntry[]
+}
+
+/** The billing increment of a tenant (`BillingSettingsDto`). */
+export type TimeBillingSettings = {
+  /** 1 for none, or 5, 6, 10, 15 or 30. */
+  billingIncrementMinutes: number
+  /** Absent while it was never saved, like `changedBy`. */
+  changedAt?: string | null
+  changedBy?: string | null
+}
+
+/** What changes the billing increment (`BillingSettingsRequest`). */
+export type TimeBillingSettingsRequest = {
+  billingIncrementMinutes: number
+}
+
+/** The entries to take off the invoice draft they stand on (`ReleaseRequest`). */
+export type TimeReleaseRequest = {
+  entryIds: number[]
 }

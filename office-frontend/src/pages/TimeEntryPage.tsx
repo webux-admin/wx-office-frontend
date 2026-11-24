@@ -19,9 +19,11 @@ import { api } from '../lib/api'
 import { formatDuration, formatDurationShort, readDuration } from '../lib/duration'
 import { toIsoDate } from '../lib/format'
 import { useRunsModule } from '../lib/modules'
+import { originState } from '../lib/origin'
 import { PROJECT_MODULE } from '../lib/project'
 import {
   TIMETRACKING_MODULE,
+  TIMETRACKING_PATH,
   TIMETRACKING_RIGHTS,
   colleaguesUrl,
   continueEntryUrl,
@@ -69,9 +71,13 @@ import type {
 import { addDays, dayTitle, mondayOf, weekDays, weekLabel } from '../lib/week'
 import { RecentChips } from '../timetracking/RecentChips'
 import { useBillableDefault } from '../timetracking/useBillableDefault'
+import { useReleaseFromDraft } from '../timetracking/useReleaseFromDraft'
 import { DayEntries } from './timetracking/DayEntries'
 import { TimeEntryLine } from './timetracking/TimeEntryLine'
 import { WeekBar } from './timetracking/WeekBar'
+
+/** Where an invoice opened from a badge leads back to. */
+const INVOICE_ORIGIN = originState(TIMETRACKING_PATH, 'Meine Zeiten')
 
 /**
  * «Meine Zeiten»: a week bar, the quick line, and the entries of the chosen day.
@@ -89,6 +95,10 @@ import { WeekBar } from './timetracking/WeekBar'
  * suggested service beside it and the focus on «Dauer». The default and the lock of
  * «verrechenbar» come from the server for every target (#126, backend ADR-0162, frontend
  * ADR-0084).
+ *
+ * <p>A billed entry can only be read: its badge leads to the draft or the invoice with
+ * `INVOICE_READ`, and one on a draft offers «Vom Entwurf lösen» with `TIME_BILL` (#127, backend
+ * ADR-0163, frontend ADR-0085).
  */
 export function TimeEntryPage() {
   return (
@@ -324,6 +334,9 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
     onError: () => void queryClient.invalidateQueries({ queryKey: timerKey(tenantId) }),
   })
 
+  // «Vom Entwurf lösen» with TIME_BILL, for an entry whose position left its draft (#127).
+  const release = useReleaseFromDraft(tenantId, setStatus)
+
   const [deleting, setDeleting] = useState<TimeEntry | null>(null)
   const remove = useMutation({
     mutationFn: (entry: TimeEntry) => api.delete<void>(timeEntryUrl(tenantId, owner, entry.id)),
@@ -456,10 +469,18 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
             </div>
           </Panel>
         ) : (
-          <p className="rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-body text-text-secondary">
-            Diese Zeiten lassen sich nur lesen. Zum Erfassen und Ändern für andere fehlt das Recht{' '}
-            <span className="font-mono text-small">{TIMETRACKING_RIGHTS.write}</span>.
-          </p>
+          <>
+            <p className="rounded-[var(--radius-md)] border border-line-subtle bg-surface px-4 py-3 text-body text-text-secondary">
+              Diese Zeiten lassen sich nur lesen. Zum Erfassen und Ändern für andere fehlt das Recht{' '}
+              <span className="font-mono text-small">{TIMETRACKING_RIGHTS.write}</span>.
+            </p>
+            {/* «Vom Entwurf lösen» goes with TIME_BILL, also on times that can only be read. */}
+            {status !== null && (
+              <p role="status" aria-live="polite" className="text-small text-text-secondary">
+                {status}
+              </p>
+            )}
+          </>
         )}
 
         {copy.error !== null && <ErrorNotice error={copy.error} />}
@@ -511,6 +532,12 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
                 remove.reset()
                 setDeleting(entry)
               }}
+              mayRelease={release.mayRelease}
+              onRelease={(entry) => {
+                setStatus(null)
+                release.ask(entry)
+              }}
+              invoiceOrigin={INVOICE_ORIGIN}
               editor={
                 editing !== null && (
                   <div className="grid gap-3">
@@ -561,6 +588,8 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
           </p>
         )}
       </ConfirmDialog>
+
+      {release.question}
 
       <DiscardQuestion
         open={pendingLeave !== null}

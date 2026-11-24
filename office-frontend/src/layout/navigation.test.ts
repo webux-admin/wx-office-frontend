@@ -53,6 +53,7 @@ import {
   TIMETRACKING_RIGHTS,
   TIMETRACKING_SETTINGS_PATH,
 } from '../lib/timetracking'
+import { TIME_BILLING_PATH } from '../lib/timeBilling'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -174,17 +175,65 @@ describe('NAV_GROUPS', () => {
     const times = allEntries().filter((entry) => entry.href === TIMETRACKING_PATH)
 
     expect(times).toHaveLength(1)
-    expect(times[0].label).toBe('Zeiten')
+    expect(times[0].label).toBe('Meine Zeiten')
     expect(times[0].permission).toBe(TIMETRACKING_RIGHTS.track)
     expect(times[0].module).toBe('TIMETRACKING')
   })
 
-  /** On the top level and right after the projects, as #124 places it. */
+  /**
+   * Since #127 «Zeiten» is a folder right after the projects: «Meine Zeiten» first, which the
+   * folder head opens, then «Abrechnen».
+   */
   it('navGroupsPutTheTimesBesideTheProjectsTest', () => {
     const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
-    const hrefs = (sales?.entries ?? []).map((entry) => (isFolder(entry) ? null : entry.href))
+    const entries = sales?.entries ?? []
+    const projects = entries.findIndex((entry) => !isFolder(entry) && entry.href === PROJECT_PATH)
+    const times = entries[projects + 1]
+    if (times === undefined || !isFolder(times)) throw new Error('folder «Zeiten» missing')
 
-    expect(hrefs.indexOf(TIMETRACKING_PATH)).toBe(hrefs.indexOf(PROJECT_PATH) + 1)
+    expect(times.label).toBe('Zeiten')
+    expect(times.module).toBe('TIMETRACKING')
+    expect(times.children.map((child) => child.href)).toEqual([TIMETRACKING_PATH, TIME_BILLING_PATH])
+  })
+
+  /** The worklist goes with TIME_BILL, under the switch of the time tracking (backend ADR-0163). */
+  it('navGroupsCoverTheBillingWorklistTest', () => {
+    const billing = allEntries().filter((entry) => entry.href === TIME_BILLING_PATH)
+
+    expect(billing).toHaveLength(1)
+    expect(billing[0].label).toBe('Abrechnen')
+    expect(billing[0].permission).toBe(TIMETRACKING_RIGHTS.bill)
+    expect(billing[0].module).toBe('TIMETRACKING')
+  })
+
+  /** Whoever bills and records nothing sees the folder with «Abrechnen» alone. */
+  it('visibleNavGroupsShowsTheBillingWithoutTheTrackRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== TIMETRACKING_RIGHTS.track,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).toContain(TIME_BILLING_PATH)
+    expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_PATH)
+  })
+
+  it('visibleNavGroupsHidesTheBillingWithoutTheBillRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== TIMETRACKING_RIGHTS.bill,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(TIME_BILLING_PATH)
+    expect(entries.map((entry) => entry.href)).toContain(TIMETRACKING_PATH)
+  })
+
+  /** The folder is the register strip of both screens, and the billing mask is no sibling. */
+  it('folderForHoldsTheTimesTest', () => {
+    expect(folderFor(TIMETRACKING_PATH, () => true, () => true)?.label).toBe('Zeiten')
+    expect(folderFor(TIME_BILLING_PATH, () => true, () => true)?.label).toBe('Zeiten')
+    expect(folderFor(`${TIME_BILLING_PATH}/kunde/11`, () => true, () => true)).toBeNull()
   })
 
   it('visibleNavGroupsHidesTheTimesWithoutTheModuleTest', () => {

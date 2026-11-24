@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Plus } from 'lucide-react'
+import { Check, Plus, ReceiptText } from 'lucide-react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { DialogCancelButton } from '../../components/DialogCancelButton'
@@ -14,7 +14,9 @@ import { useAuth } from '../../auth/useAuth'
 import { api } from '../../lib/api'
 import { isToldByFields } from '../../lib/fieldErrors'
 import { formatDateTime } from '../../lib/format'
-import { isProjectEditable } from '../../lib/project'
+import { originState } from '../../lib/origin'
+import { PROJECT_PATH, isProjectEditable } from '../../lib/project'
+import { billingHandoverState, timeBillingPathOf } from '../../lib/timeBilling'
 import {
   BILLING_MODES,
   BILLING_MODE_HINTS,
@@ -49,12 +51,20 @@ import { TimeSummaryFacts } from '../../timetracking/TimeSummaryFacts'
  * changed in a dialog of their own and saved on their own, without closing the mask.
  *
  * <p>«Zeit erfassen» opens «Meine Zeiten» with the project in the quick line — with `TIME_TRACK`,
- * and only while the project takes new time. «Abrechnen» follows with #127.
+ * and only while the project takes new time. «Abrechnen» opens the billing of the project with
+ * `TIME_BILL`, in every status: a completed project is still billed (backend ADR-0163, frontend
+ * ADR-0085).
  */
 export function ProjectTimes({ tenantId, project }: { tenantId: number; project: Project }) {
   const { can } = useAuth()
   const of: TimesOf = { kind: 'PROJECT', projectId: project.id }
   const mayRecord = can(TIMETRACKING_RIGHTS.track) && takesNewTime(project.status)
+  const mayBill = can(TIMETRACKING_RIGHTS.bill)
+  // The billing mask and an invoice opened from a badge lead back to this project.
+  const back = originState(
+    `${PROJECT_PATH}/${project.id}`,
+    `${project.projectNumber} ${project.name}`,
+  )
   const record = (label: string) => (
     <LinkButton
       to={TIMETRACKING_PATH}
@@ -74,11 +84,28 @@ export function ProjectTimes({ tenantId, project }: { tenantId: number; project:
         title="Einträge"
         description="Die Zeiten aller Personen auf diesem Projekt, der späteste Tag zuerst."
         padded={false}
-        action={mayRecord ? record('Zeit erfassen') : undefined}
+        action={
+          mayRecord || mayBill ? (
+            <span className="flex flex-wrap justify-end gap-2">
+              {mayBill && (
+                <LinkButton
+                  to={timeBillingPathOf(of)}
+                  state={billingHandoverState({}, back.origin)}
+                  variant="secondary"
+                >
+                  <ReceiptText size={15} aria-hidden />
+                  Abrechnen
+                </LinkButton>
+              )}
+              {mayRecord && record('Zeit erfassen')}
+            </span>
+          ) : undefined
+        }
       >
         <TimeEntryTable
           tenantId={tenantId}
           of={of}
+          origin={back}
           showsProject={false}
           empty={
             <EmptyState

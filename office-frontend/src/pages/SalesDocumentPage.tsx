@@ -58,6 +58,7 @@ import type {
 } from '../lib/types'
 import { CatalogueSelect } from '../masterdata/CatalogueSelect'
 import { useCatalogueLabel } from '../masterdata/useMasterData'
+import { TimeTakeover } from '../timetracking/TimeTakeover'
 import { ChangeAddressDialog } from './document/ChangeAddressDialog'
 import { ChangePartnerDialog } from './document/ChangePartnerDialog'
 import { SendDocumentDialog } from './document/SendDocumentDialog'
@@ -866,6 +867,13 @@ function DocumentMask({
           busy={lineBusy}
           error={lineError}
           positionErrors={positionErrors}
+          moreWays={
+            // Only an invoice draft takes time: the billing writes Rechnungen and no other kind
+            // (backend ADR-0163). The button decides itself on switch, rights and open time.
+            kind.category === 'INVOICE' ? (
+              <TimeTakeover tenantId={tenantId} document={document} onTaken={refresh} />
+            ) : undefined
+          }
           readOnlyNote={
             readOnlyNote === undefined
               ? undefined

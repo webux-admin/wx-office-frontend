@@ -41,7 +41,7 @@ export const TIMETRACKING_MODULE = 'TIMETRACKING'
 /** Path of «Meine Zeiten» within the application. */
 export const TIMETRACKING_PATH = '/zeiten'
 
-/** Path of the settings of the module: the default service of every user. */
+/** Path of the settings of the module: the default service of every user and the increment. */
 export const TIMETRACKING_SETTINGS_PATH = '/zeiterfassung-einstellungen'
 
 /**
@@ -61,13 +61,33 @@ export const TIMETRACKING_RIGHTS = {
 /** What each state is called beside an entry. */
 export const TIME_ENTRY_STATE_LABELS: Record<TimeEntryState, string> = {
   OPEN: 'offen',
+  IN_DRAFT: 'im Entwurf',
+  BILLED: 'verrechnet',
   NOT_BILLABLE: 'nicht verrechenbar',
 }
 
-/** Work still to be billed stands out; what is never billed steps back. */
+/**
+ * Work still to be billed stands out, billed work reads as done, what is on a draft waits
+ * quietly in between, and what is never billed steps back.
+ */
 export const TIME_ENTRY_STATE_TONES: Record<TimeEntryState, BadgeTone> = {
   OPEN: 'accent',
+  IN_DRAFT: 'neutral',
+  BILLED: 'success',
   NOT_BILLABLE: 'muted',
+}
+
+/**
+ * What the badge of an entry says: its state, and for a billed one the invoice it is on.
+ *
+ * @param entry the entry
+ * @returns «verrechnet RE-2026-0042», «im Entwurf», «offen», «nicht verrechenbar»; a billed entry
+ *          without a number reads «verrechnet»
+ */
+export function entryStateText(entry: TimeEntry): string {
+  const label = TIME_ENTRY_STATE_LABELS[entry.state]
+  if (entry.state !== 'BILLED' || !entry.documentNumber) return label
+  return `${label} ${entry.documentNumber}`
 }
 
 /** Longest text the backend takes. */

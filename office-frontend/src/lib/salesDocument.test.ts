@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CREDIT_NOTE_KIND,
+  INVOICE_KIND,
   OFFER_KIND,
   ORDER_KIND,
   SALES_DOCUMENT_CACHE_ROOTS,
@@ -161,6 +162,13 @@ describe('documentKindFor', () => {
       expect(documentKindFor(entry.category)).toBe(entry)
     }
     expect(SALES_DOCUMENT_KINDS).not.toContain(CREDIT_NOTE_KIND)
+  })
+
+  /** The time billing names the Rechnung itself; it is the one in the table, not a copy. */
+  it('documentKindForTheNamedInvoiceTest', () => {
+    expect(documentKindFor('INVOICE')).toBe(INVOICE_KIND)
+    expect(INVOICE_KIND).toMatchObject({ path: '/rechnungen', resource: 'invoices', receivable: true })
+    expect(INVOICE_KIND.rights.write).toBe('INVOICE_WRITE')
   })
 })
 

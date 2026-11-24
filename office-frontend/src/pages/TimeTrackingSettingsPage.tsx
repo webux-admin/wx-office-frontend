@@ -6,12 +6,22 @@ import { Button } from '../components/Button'
 import { DataTable, type Column } from '../components/DataTable'
 import { Dialog } from '../components/Dialog'
 import { DialogCancelButton } from '../components/DialogCancelButton'
-import { EmptyState, ErrorNotice } from '../components/Notice'
+import { EmptyState, ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
+import { SelectField } from '../components/SelectField'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { fieldErrorsOf, isToldByFields } from '../lib/fieldErrors'
+import { formatDateTime } from '../lib/format'
+import {
+  BILLING_INCREMENTS,
+  billingIncrementLabel,
+  incrementSavedText,
+  timeBillingKey,
+  timeTrackingSettingsKey,
+  timeTrackingSettingsUrl,
+} from '../lib/timeBilling'
 import {
   TIMETRACKING_MODULE,
   TIMETRACKING_RIGHTS,
@@ -20,25 +30,144 @@ import {
   userDefaultsKey,
   userDefaultsUrl,
 } from '../lib/timetracking'
-import type { TimeServiceChoice, TimeUserDefault, TimeUserDefaultRequest } from '../lib/types'
+import type {
+  TimeBillingSettings,
+  TimeBillingSettingsRequest,
+  TimeServiceChoice,
+  TimeUserDefault,
+  TimeUserDefaultRequest,
+} from '../lib/types'
 import { ServiceLookup } from '../timetracking/AssignmentFields'
 
 /**
- * «Zeiterfassung» under the module settings: the default service of every user.
+ * «Zeiterfassung» under the module settings: the billing increment and the default service of
+ * every user.
  *
- * <p>The default service is what the quick line suggests on a project or customer where the
- * user has taken nothing yet. «Beratung Senior» for one person and «Beratung Junior» for another
- * gives each their own rate through the price of the service, without a third place for prices
- * (backend ADR-0162). The billing interval follows on this page with #127.
+ * <p>The increment rounds up each entry on the invoice only; the entry keeps the time as
+ * measured (#122, Entscheid 10, backend ADR-0163). The default service is what the quick line
+ * suggests on a project or customer where the user has taken nothing yet. «Beratung Senior» for
+ * one person and «Beratung Junior» for another gives each their own rate through the price of the
+ * service, without a third place for prices (backend ADR-0162).
  *
- * <p>With `TIME_WRITE`: the table names every user of the tenant, and keeping the defaults is
- * part of keeping the times of others.
+ * <p>With `TIME_WRITE`: the table names every user of the tenant, and keeping the defaults and the
+ * increment is part of keeping the times of others.
  */
 export function TimeTrackingSettingsPage() {
   return (
     <RequireTenant permission={TIMETRACKING_RIGHTS.write} module={TIMETRACKING_MODULE}>
-      {(tenantId) => <UserDefaults tenantId={tenantId} />}
+      {(tenantId) => (
+        <>
+          <PageHeader
+            title="Zeiterfassung"
+            subtitle="Was für die Zeiten aller Benutzer gilt: wie sie verrechnet werden und welche Leistung «Meine Zeiten» vorschlägt."
+          />
+          <div className="grid gap-4 px-8 pb-12">
+            <BillingIncrement tenantId={tenantId} />
+            <UserDefaults tenantId={tenantId} />
+          </div>
+        </>
+      )}
     </RequireTenant>
+  )
+}
+
+/**
+ * The billing increment: none, or 5, 6, 10, 15 or 30 minutes, saved on its own.
+ *
+ * <p>Held as typed until it is saved; a stored increment read anew — after a refusal, or a change
+ * by somebody else — fills the choice again.
+ */
+function BillingIncrement({ tenantId }: { tenantId: number }) {
+  const queryClient = useQueryClient()
+  const settings = useQuery({
+    queryKey: timeTrackingSettingsKey(tenantId),
+    queryFn: () => api.get<TimeBillingSettings>(timeTrackingSettingsUrl(tenantId)),
+  })
+  const stored = settings.data?.billingIncrementMinutes
+  const [chosen, setChosen] = useState<number | null>(null)
+  const [shownStored, setShownStored] = useState(stored)
+  if (stored !== shownStored) {
+    setShownStored(stored)
+    setChosen(null)
+  }
+  const [status, setStatus] = useState<string | null>(null)
+  const value = chosen ?? stored
+
+  const save = useMutation({
+    mutationFn: (body: TimeBillingSettingsRequest) =>
+      api.put<TimeBillingSettings>(timeTrackingSettingsUrl(tenantId), body),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(timeTrackingSettingsKey(tenantId), saved)
+      // The worklist and every preview count the rounded minutes anew.
+      void queryClient.invalidateQueries({ queryKey: timeBillingKey(tenantId) })
+      setStatus(incrementSavedText(saved))
+    },
+    onError: () =>
+      void queryClient.invalidateQueries({ queryKey: timeTrackingSettingsKey(tenantId) }),
+  })
+
+  const changed = value !== undefined && value !== stored
+  const fieldError = fieldErrorsOf(save.error).billingIncrementMinutes
+
+  return (
+    <Panel
+      title="Abrechnungstakt"
+      description="Gerundet wird nur die Menge auf der Rechnung, die erfasste Zeit bleibt."
+    >
+      {settings.isPending ? (
+        <LoadingBlock label="Abrechnungstakt wird geladen" />
+      ) : settings.isError ? (
+        <ErrorNotice error={settings.error} />
+      ) : (
+        <div className="grid gap-3">
+          {save.error !== null && fieldError === undefined && <ErrorNotice error={save.error} />}
+          <div className="flex flex-wrap items-end gap-3">
+            <SelectField
+              label="Abrechnungstakt"
+              value={value === undefined ? '' : String(value)}
+              onChange={(event) => {
+                save.reset()
+                setStatus(null)
+                setChosen(Number(event.target.value))
+              }}
+              error={fieldError}
+              tooltip="Jeder Eintrag wird einzeln auf den Takt aufgerundet: 7 Minuten bei 15 werden 15. Wer anders verrechnen will als gemessen, ändert die Menge im Entwurf."
+              className="sm:w-column-xl"
+            >
+              {BILLING_INCREMENTS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {billingIncrementLabel(minutes)}
+                </option>
+              ))}
+            </SelectField>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (value !== undefined) save.mutate({ billingIncrementMinutes: value })
+              }}
+              busy={save.isPending}
+              disabled={!changed}
+            >
+              Speichern
+            </Button>
+          </div>
+          {settings.data.changedAt && (
+            <p className="text-small text-text-tertiary">
+              Geändert {formatDateTime(settings.data.changedAt)}
+              {settings.data.changedBy ? ` von ${settings.data.changedBy}` : ''}
+            </p>
+          )}
+          <p role="status" aria-live="polite" className="text-small text-text-secondary">
+            {status !== null && (
+              <span className="inline-flex items-center gap-1.5">
+                <Check size={13} className="text-accent-text" aria-hidden />
+                {status}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+    </Panel>
   )
 }
 
@@ -137,12 +266,7 @@ function UserDefaults({ tenantId }: { tenantId: number }) {
 
   return (
     <>
-      <PageHeader
-        title="Zeiterfassung"
-        subtitle="Was für die Zeiten aller Benutzer gilt. Der Abrechnungstakt folgt mit dem Abrechnen."
-      />
-
-      <div className="grid gap-4 px-8 pb-12">
+      <div className="grid gap-4">
         {change.error !== null && choosing === null && <ErrorNotice error={change.error} />}
 
         <Panel

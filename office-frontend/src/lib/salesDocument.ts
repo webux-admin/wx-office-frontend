@@ -124,6 +124,13 @@ export const ORDER_KIND = kind('ORDER', '/auftraege', 'orders', 'Auftrag', 'Auft
   'masculine')
 
 /**
+ * The Rechnung, named on its own for the time billing: it writes Rechnungsentwürfe and no other
+ * kind, lists the drafts of a customer and leads to the one it wrote (backend ADR-0163).
+ */
+export const INVOICE_KIND = kind('INVOICE', '/rechnungen', 'invoices', 'Rechnung', 'Rechnungen',
+  'feminine', false, true)
+
+/**
  * The kinds of document with a list of their own, in the order a sale runs through them.
  *
  * <p>The Gutschrift is missing on purpose: it corrects an invoice instead of standing at a
@@ -136,8 +143,7 @@ export const SALES_DOCUMENT_KINDS: SalesDocumentKind[] = [
   ORDER_KIND,
   kind('DELIVERY_NOTE', '/lieferscheine', 'delivery-notes', 'Lieferschein', 'Lieferscheine',
     'masculine'),
-  kind('INVOICE', '/rechnungen', 'invoices', 'Rechnung', 'Rechnungen', 'feminine', false,
-    true),
+  INVOICE_KIND,
 ]
 
 /**

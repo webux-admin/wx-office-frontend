@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import { OFFER_KIND, ORDER_KIND } from '../lib/salesDocument'
+import { INVOICE_KIND, OFFER_KIND, ORDER_KIND } from '../lib/salesDocument'
 import type {
   DocumentChainEntry,
   OfferOutcome,
@@ -14,6 +14,7 @@ import type {
   SalesDocument,
   StockCheck,
   StockReversalLine,
+  TimeWorklistLine,
 } from '../lib/types'
 import { SalesDocumentPage } from './SalesDocumentPage'
 
@@ -128,6 +129,20 @@ function issued(category: 'OFFER' | 'ORDER'): SalesDocument {
 /** What the order endpoint answers; a test that cares about stock sets its own. */
 let orderState: SalesDocument | null = null
 
+/** An invoice draft of Muster AG, for «Zeiten übernehmen». */
+function invoiceDraft(): SalesDocument {
+  return {
+    ...issued('ORDER'),
+    category: 'INVOICE',
+    status: 'DRAFT',
+    documentNumber: undefined,
+    finalisedAt: undefined,
+  }
+}
+
+/** What the worklist of the time billing answers for the customer of the draft. */
+let worklistState: TimeWorklistLine[] = []
+
 /** What the reopen preview answers. */
 let reversalState: StockReversalLine[] = []
 
@@ -240,6 +255,8 @@ function stubFetch() {
     if (url.includes('/finalise')) return json(orderState ?? issued('ORDER'))
     if (url.includes('/offers/42')) return json(issued('OFFER'))
     if (url.includes('/orders/42')) return json(orderState ?? issued('ORDER'))
+    if (url.includes('/invoices/42')) return json(invoiceDraft())
+    if (url.includes('/time-tracking/billing/worklist')) return json(worklistState)
     return json([])
   })
 }
@@ -248,6 +265,7 @@ beforeEach(() => {
   sessionState = SESSION
   previewState = { status: 200, body: PREVIEW }
   dispatchedState = []
+  worklistState = []
   stubFetch()
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -280,6 +298,7 @@ async function render(path: string, state?: unknown): Promise<void> {
             <Routes>
               <Route path="/offerten/:id" element={<SalesDocumentPage kind={OFFER_KIND} />} />
               <Route path="/auftraege/:id" element={<SalesDocumentPage kind={ORDER_KIND} />} />
+              <Route path="/rechnungen/:id" element={<SalesDocumentPage kind={INVOICE_KIND} />} />
             </Routes>
           </QueryClientProvider>
         </AuthContext.Provider>
@@ -945,5 +964,50 @@ describe('SalesDocumentPage', () => {
 
     expect(text()).toContain('Bitte an die Administration wenden')
     expect(text()).not.toContain('Systemeinstellungen → Postausgang')
+  })
+
+  // --- «Zeiten übernehmen» on an invoice draft (#127, frontend ADR-0085) -----------
+
+  /** With the module, TIME_BILL and INVOICE_WRITE the draft offers the open time of its customer. */
+  it('salesDocumentPageOffersTimesOnAnInvoiceDraftTest', async () => {
+    sessionState = sessionWith(['INVOICE_READ', 'INVOICE_WRITE', 'TIME_BILL'], ['TIMETRACKING'])
+    worklistState = [
+      {
+        partnerId: 3,
+        customerName: 'Muster AG',
+        openEntries: 3,
+        openMinutes: 750,
+        billedMinutes: 750,
+        estimatedAmount: 2000,
+        currency: 'CHF',
+        oldestWorkDate: '2026-11-03',
+      },
+    ]
+
+    await render('/rechnungen/42')
+
+    expect(sent.some((entry) => entry.url.includes('/time-tracking/billing/worklist?') && entry.url.includes('partnerId=3'))).toBe(true)
+    expect(buttonNamed('Zeiten übernehmen (12:30 Std.)')).toBeDefined()
+  })
+
+  /** Without TIME_BILL nothing is asked, and the positions offer their three ways only. */
+  it('salesDocumentPageOffersNoTimesWithoutTheBillRightTest', async () => {
+    sessionState = sessionWith(['INVOICE_READ', 'INVOICE_WRITE'], ['TIMETRACKING'])
+
+    await render('/rechnungen/42')
+
+    expect(text()).toContain('Aus Katalog')
+    expect(text()).not.toContain('Zeiten übernehmen')
+    expect(sent.some((entry) => entry.url.includes('/time-tracking/'))).toBe(false)
+  })
+
+  /** Another kind of document takes no time, even with every right. */
+  it('salesDocumentPageOffersNoTimesOnAnOrderTest', async () => {
+    sessionState = sessionWith([...PERMISSIONS, 'TIME_BILL', 'INVOICE_WRITE'], ['TIMETRACKING'])
+    orderState = { ...issued('ORDER'), status: 'DRAFT', documentNumber: undefined }
+
+    await render('/auftraege/42')
+
+    expect(sent.some((entry) => entry.url.includes('/time-tracking/'))).toBe(false)
   })
 })

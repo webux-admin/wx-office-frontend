@@ -17,7 +17,7 @@ import type { TimeSummary } from '../lib/types'
  * in hours of the clock.
  *
  * <p>The minutes are the backend's, counted over every user; the screen adds nothing up
- * (backend ADR-0162). On a draft and billed stay at 0:00 until billing exists (#127).
+ * (backend ADR-0162). On a draft and billed come from the billing rows (backend ADR-0163).
  *
  * @param of the project or the customer whose times are counted
  */

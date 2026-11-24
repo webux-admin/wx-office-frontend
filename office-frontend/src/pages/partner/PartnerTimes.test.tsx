@@ -2,8 +2,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../../auth/authContext'
 import type { Page, TimeEntry, TimeSummary } from '../../lib/types'
 import { PartnerTimes } from './PartnerTimes'
 
@@ -48,6 +49,28 @@ const ON_PROJECT = entry({
 })
 const WITHOUT_PROJECT = entry({ id: 6, userName: 'Beat Keller', description: 'Ticket 4711' })
 
+function session(permissions: string[]): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'anna',
+      activeTenantId: 1,
+      superuser: false,
+      tenants: [{ id: 1, code: 'WX', name: 'Webux', isDefault: true, modules: ['TIMETRACKING'] }],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
 let container: HTMLDivElement
 let root: Root
 let requested: string[]
@@ -90,14 +113,24 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-async function render() {
+/** What the billing mask was opened with, so the hand-over can be read. */
+function HandedOver() {
+  return <p data-testid="handed-over">{JSON.stringify(useLocation().state)}</p>
+}
+
+async function render(permissions = ['TIME_READ']) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={['/kunden/11']}>
-        <QueryClientProvider client={client}>
-          <PartnerTimes tenantId={1} partnerId={11} />
-        </QueryClientProvider>
+        <AuthContext.Provider value={session(permissions)}>
+          <QueryClientProvider client={client}>
+            <Routes>
+              <Route path="/kunden/11" element={<PartnerTimes tenantId={1} partnerId={11} />} />
+              <Route path="/zeiten-abrechnen/kunde/11" element={<HandedOver />} />
+            </Routes>
+          </QueryClientProvider>
+        </AuthContext.Provider>
       </MemoryRouter>,
     )
   })
@@ -107,6 +140,10 @@ async function render() {
 }
 
 const rows = () => [...container.querySelectorAll('tbody tr')].map((row) => row.textContent ?? '')
+
+function link(label: string): HTMLAnchorElement | undefined {
+  return [...container.querySelectorAll('a')].find((entry) => entry.textContent?.trim() === label)
+}
 
 describe('PartnerTimes', () => {
   /** The summary and the list of the customer, with and without a project. */
@@ -146,5 +183,28 @@ describe('PartnerTimes', () => {
     await render()
 
     expect(container.textContent).toContain('Noch keine Zeiten')
+  })
+
+  /** «Abrechnen» opens the billing of the customer and names the customer as the way back. */
+  it('partnerTimesOpensTheBillingTest', async () => {
+    await render(['TIME_READ', 'TIME_BILL'])
+
+    const bill = link('Abrechnen')
+    expect(bill?.getAttribute('href')).toBe('/zeiten-abrechnen/kunde/11')
+    await act(async () => {
+      bill?.click()
+    })
+
+    const state = JSON.parse(
+      container.querySelector('[data-testid="handed-over"]')?.textContent ?? '{}',
+    )
+    expect(state.origin).toEqual({ from: '/kunden/11', label: 'Kunde' })
+    expect(state.billing).toEqual({ until: null, withoutProject: false })
+  })
+
+  it('partnerTimesWithoutTheBillRightTest', async () => {
+    await render()
+
+    expect(link('Abrechnen')).toBeUndefined()
   })
 })

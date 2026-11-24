@@ -1,16 +1,12 @@
-import { CopyPlus, Lock, Play, Trash2 } from 'lucide-react'
+import { CopyPlus, Play, Trash2, Unlink } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Badge } from '../../components/Badge'
 import { IconButton } from '../../components/IconButton'
+import { Tooltip } from '../../components/Tooltip'
 import { formatDurationShort } from '../../lib/duration'
-import {
-  TIME_ENTRY_STATE_LABELS,
-  TIME_ENTRY_STATE_TONES,
-  entryServiceText,
-  entryTargetText,
-  timeRangeText,
-} from '../../lib/timetracking'
+import type { OriginState } from '../../lib/origin'
+import { entryServiceText, entryTargetText, timeRangeText } from '../../lib/timetracking'
 import type { TimeEntry } from '../../lib/types'
+import { TimeEntryStateBadge } from '../../timetracking/TimeEntryStateBadge'
 
 /** The columns of a row from the width of a tablet on; below it the cells wrap. */
 const ROW_LAYOUT =
@@ -21,8 +17,12 @@ const ROW_LAYOUT =
  *
  * <p>A click on a row opens it in the same line form it was recorded in, right where it stands.
  * «Fortsetzen» starts the stopwatch on the same work, «Auf heute kopieren» writes the same work
- * again for today, «Löschen» asks first. An entry that can only be read says why, in the
- * backend's sentence, and offers neither (backend ADR-0160, ADR-0161).
+ * again for today, «Löschen» asks first. An entry that can only be read — billed, or on a project
+ * that can only be read — offers neither change nor delete; a lock says why, in the backend's
+ * sentence (backend ADR-0160, ADR-0161, ADR-0163).
+ *
+ * <p>An entry on an invoice links its badge to the invoice, and one on a draft offers «Vom
+ * Entwurf lösen» where the session may (frontend ADR-0085).
  *
  * @param editingId the entry open in the line form, if any
  * @param editor the line form for that entry, drawn in place of its row
@@ -31,6 +31,8 @@ const ROW_LAYOUT =
  * @param onContinue starts the stopwatch on an entry; absent where the times are somebody
  *   else's, because the stopwatch is one's own
  * @param continuingId the entry the stopwatch is being started on
+ * @param onRelease takes an entry off its draft; offered only where `mayRelease` says so
+ * @param invoiceOrigin where the invoice behind a badge leads back to
  */
 export function DayEntries({
   entries,
@@ -43,6 +45,9 @@ export function DayEntries({
   onCopy,
   onContinue,
   onDelete,
+  mayRelease,
+  onRelease,
+  invoiceOrigin,
 }: {
   entries: readonly TimeEntry[]
   editingId: number | null
@@ -54,6 +59,9 @@ export function DayEntries({
   onCopy: (entry: TimeEntry) => void
   onContinue?: (entry: TimeEntry) => void
   onDelete: (entry: TimeEntry) => void
+  mayRelease: (entry: TimeEntry) => boolean
+  onRelease: (entry: TimeEntry) => void
+  invoiceOrigin?: OriginState
 }) {
   return (
     <ul aria-label="Einträge des Tages">
@@ -78,6 +86,8 @@ export function DayEntries({
               onCopy={onCopy}
               onContinue={onContinue}
               onDelete={onDelete}
+              onRelease={mayRelease(entry) ? onRelease : undefined}
+              invoiceOrigin={invoiceOrigin}
             />
           )}
         </li>
@@ -95,6 +105,8 @@ function EntryRow({
   onCopy,
   onContinue,
   onDelete,
+  onRelease,
+  invoiceOrigin,
 }: {
   entry: TimeEntry
   mayWrite: boolean
@@ -104,6 +116,9 @@ function EntryRow({
   onCopy: (entry: TimeEntry) => void
   onContinue?: (entry: TimeEntry) => void
   onDelete: (entry: TimeEntry) => void
+  /** Absent where the entry stands on no draft or the session may not take it off. */
+  onRelease?: (entry: TimeEntry) => void
+  invoiceOrigin?: OriginState
 }) {
   const changeable = mayWrite && entry.editable
   const short = `${formatDurationShort(entry.durationMinutes)} ${entryTargetText(entry)}`
@@ -120,9 +135,11 @@ function EntryRow({
       <span className="min-w-0 text-text-secondary max-md:empty:hidden md:truncate">
         {entry.description ?? ''}
       </span>
-      <Badge tone={TIME_ENTRY_STATE_TONES[entry.state]}>{TIME_ENTRY_STATE_LABELS[entry.state]}</Badge>
+      {/* Inside the row button no link can live; an entry that opens is never on an invoice. */}
+      <TimeEntryStateBadge entry={entry} linked={!changeable} origin={invoiceOrigin} />
     </>
   )
+  const locked = !entry.editable && Boolean(entry.readOnlyReason)
 
   return (
     <div className="px-5 py-3">
@@ -139,9 +156,14 @@ function EntryRow({
         ) : (
           <div className={`${ROW_LAYOUT} text-body`}>{cells}</div>
         )}
-        {mayWrite && (
+        {(mayWrite || onRelease || locked) && (
           <div className="flex shrink-0 items-center gap-0.5">
-            {onContinue && entry.editable && (
+            {onRelease && (
+              <IconButton label={`${short} vom Entwurf lösen`} onClick={() => onRelease(entry)}>
+                <Unlink size={15} aria-hidden />
+              </IconButton>
+            )}
+            {mayWrite && onContinue && entry.editable && (
               <IconButton
                 label={`${short} fortsetzen`}
                 onClick={() => onContinue(entry)}
@@ -150,27 +172,29 @@ function EntryRow({
                 <Play size={15} aria-hidden />
               </IconButton>
             )}
-            <IconButton
-              label={`${short} auf heute kopieren`}
-              onClick={() => onCopy(entry)}
-              disabled={copying}
-            >
-              <CopyPlus size={15} aria-hidden />
-            </IconButton>
-            {entry.editable && (
+            {mayWrite && (
+              <IconButton
+                label={`${short} auf heute kopieren`}
+                onClick={() => onCopy(entry)}
+                disabled={copying}
+              >
+                <CopyPlus size={15} aria-hidden />
+              </IconButton>
+            )}
+            {mayWrite && entry.editable && (
               <IconButton label={`${short} löschen`} tone="danger" onClick={() => onDelete(entry)}>
                 <Trash2 size={15} aria-hidden />
               </IconButton>
             )}
+            {/* In place of change and delete: why the entry can only be read. */}
+            {locked && (
+              <span className="grid size-icon-button place-items-center">
+                <Tooltip icon="lock" label={`${short}: gesperrt`} text={entry.readOnlyReason} />
+              </span>
+            )}
           </div>
         )}
       </div>
-      {!entry.editable && entry.readOnlyReason && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-small text-text-secondary">
-          <Lock size={12} aria-hidden />
-          {entry.readOnlyReason}
-        </p>
-      )}
     </div>
   )
 }

@@ -33,6 +33,11 @@ import { MODULE_PATH } from './lib/modules'
 import { OPEN_ITEM_PATH, WRITE_OFF_RUN_PATH } from './lib/openItem'
 import { SUBSCRIPTION_PATH } from './lib/subscription'
 import { TIMETRACKING_PATH, TIMETRACKING_SETTINGS_PATH } from './lib/timetracking'
+import {
+  TIME_BILLING_CUSTOMER_ROUTE,
+  TIME_BILLING_PATH,
+  TIME_BILLING_PROJECT_ROUTE,
+} from './lib/timeBilling'
 import { CUSTOMER_CREDIT_PATH } from './lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
 import {
@@ -93,6 +98,8 @@ const ContractListPage = lazy(() => import('./pages/ContractListPage').then((mod
 const ContractPage = lazy(() => import('./pages/ContractPage').then((module) => ({ default: module.ContractPage })))
 const SubscriptionRunPage = lazy(() => import('./pages/SubscriptionRunPage').then((module) => ({ default: module.SubscriptionRunPage })))
 const TimeEntryPage = lazy(() => import('./pages/TimeEntryPage').then((module) => ({ default: module.TimeEntryPage })))
+const TimeBillingWorklistPage = lazy(() => import('./pages/TimeBillingWorklistPage').then((module) => ({ default: module.TimeBillingWorklistPage })))
+const TimeBillingPage = lazy(() => import('./pages/TimeBillingPage').then((module) => ({ default: module.TimeBillingPage })))
 const TimeTrackingSettingsPage = lazy(() => import('./pages/TimeTrackingSettingsPage').then((module) => ({ default: module.TimeTrackingSettingsPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
@@ -180,7 +187,16 @@ export default function App() {
                 <Route path="/lieferanten/:id" element={<PartnerPage role="supplier" />} />
                 <Route path="/projekte" element={<ProjectListPage />} />
                 <Route path="/projekte/:id" element={<ProjectPage />} />
-                <Route path={TIMETRACKING_PATH} element={<TimeEntryPage />} />
+                {/* The billing mask of one project or customer: a detail address, so it gets
+                    no register strip, like a mask opened from a list. */}
+                <Route
+                  path={TIME_BILLING_PROJECT_ROUTE}
+                  element={<TimeBillingPage target="PROJECT" />}
+                />
+                <Route
+                  path={TIME_BILLING_CUSTOMER_ROUTE}
+                  element={<TimeBillingPage target="CUSTOMER" />}
+                />
                 <Route path="/vertraege" element={<ContractListPage />} />
                 <Route path="/vertraege/:id" element={<ContractPage />} />
                 <Route path={SUBSCRIPTION_PATH} element={<SubscriptionRunPage />} />
@@ -314,6 +330,11 @@ export default function App() {
                   <Route path={WRITE_OFF_ACCOUNTS_PATH} element={<WriteOffAccountPage />} />
                   <Route path={FISCAL_YEARS_PATH} element={<FiscalYearPage />} />
                   <Route path={ACCOUNTING_SETTINGS_PATH} element={<AccountingStatePage />} />
+
+                  {/* «Meine Zeiten» and «Abrechnen» sit in the folder «Zeiten» since #127, so
+                      the folder is their register strip. */}
+                  <Route path={TIMETRACKING_PATH} element={<TimeEntryPage />} />
+                  <Route path={TIME_BILLING_PATH} element={<TimeBillingWorklistPage />} />
 
                   <Route path="/lagerorte" element={<StockLocationListPage />} />
                   <Route path="/produkt-freifelder" element={<ProductFreeFieldPage />} />

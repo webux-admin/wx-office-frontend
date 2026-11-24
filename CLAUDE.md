@@ -63,7 +63,7 @@ Stand der Module (in dieser Reihenfolge gebaut):
   React liegt in `src/printlayout/`, keine Zeichen- oder Drag-Bibliothek (ADR-0078, Backend
   ADR-0152)
 - **timetracking** — «Meine Zeiten» unter `/zeiten`, hinter dem Modulschalter `TIMETRACKING` und
-  `TIME_TRACK`, im Menü nach «Projekte». Eine Wochenleiste nach ISO-Woche mit Tages- und
+  `TIME_TRACK`, im Menü im Ordner «Zeiten» nach «Projekte». Eine Wochenleiste nach ISO-Woche mit Tages- und
   Wochensumme, wie das Backend sie liefert; Tage nach heute sind nicht wählbar. Darunter die
   **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
   ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
@@ -96,7 +96,21 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Register «Zeiten» nach «Projekte», mit Projektspalte. Die **Standardleistung je Benutzer** steht
   unter Moduleinstellungen → Zeiterfassung → Einstellungen (`/zeiterfassung-einstellungen`,
   `TIME_WRITE`), gewählt im Dialog mit der Schnellsuche der Leistungen (ADR-0084, Backend
-  ADR-0162)
+  ADR-0162). **Abrechnen** (#127): der Ordner «Zeiten» hält «Meine Zeiten» und «Abrechnen»
+  (`/zeiten-abrechnen`, `TIME_BILL`, neben `/zeiten` und nicht darunter), den Arbeitsvorrat mit
+  Stichtag je Kunde ohne Projekt und je Projekt. Die Maske `/zeiten-abrechnen/projekt/:id` oder
+  `…/kunde/:id` hat Stichtag, Gruppierung und Ziel («Neue Rechnung» oder ein Entwurf des Kunden,
+  mit `INVOICE_READ`), die Einträge mit Häkchen und die Vorschau mit der Herkunft des Satzes als
+  Badge, Übersprungenem mit Grund und «Total netto»; jede Änderung fragt die Vorschau neu, die
+  Maske rechnet nichts nach, und alle Häkchen heisst: `entryIds` geht nicht mit. «Rechnungsentwurf
+  erstellen» (`TIME_BILL` und `INVOICE_WRITE`) führt auf den Entwurf; eine 409 mit `entryIds` liest
+  neu und nennt die Einträge mit den Worten der Liste. Auf einem Rechnungsentwurf steht im Panel
+  «Positionen» «Zeiten übernehmen (12:30 Std.)», in Stunden der Uhr, wenn der Arbeitsvorrat mit
+  `partnerId` offene Zeit nennt; er öffnet dieselbe Maske im Dialog mit dem Entwurf als festem
+  Ziel. Die Badges «im Entwurf» und «verrechnet RE-…» führen mit `INVOICE_READ` auf den Beleg,
+  gesperrte Einträge haben statt Bearbeiten und Löschen ein Schloss mit `readOnlyReason`, «Vom
+  Entwurf lösen» steht mit `TIME_BILL` je Eintrag, «Abrechnen» auf den Registern, und der
+  Abrechnungstakt steht in den Einstellungen der Zeiterfassung (ADR-0085, Backend ADR-0163)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

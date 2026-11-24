@@ -103,6 +103,35 @@ const ARCHIVED = entry({
   readOnlyReason: 'Das Projekt P-00003 ist archiviert. Seine Zeiten lassen sich nur noch lesen.',
 })
 
+/** On a draft invoice since #127: locked, linked to its draft, and to be taken off with TIME_BILL. */
+const DRAFTED = entry({
+  id: 10,
+  durationMinutes: 70,
+  projectId: 12,
+  projectNumber: 'P-00012',
+  projectName: 'Website',
+  partnerId: 11,
+  customerName: 'Muster AG',
+  productId: 31,
+  serviceName: 'Konzeption',
+  description: 'Review mit Kunde',
+  billable: true,
+  state: 'IN_DRAFT',
+  editable: false,
+  readOnlyReason: 'Der Eintrag steht auf einem Rechnungsentwurf und lässt sich nicht ändern.',
+  documentId: 77,
+})
+/** On an issued invoice: locked, and its badge names the invoice. */
+const INVOICED = entry({
+  ...DRAFTED,
+  id: 11,
+  description: 'Konzept abgenommen',
+  state: 'BILLED',
+  readOnlyReason: 'Der Eintrag ist mit der Rechnung RE-2026-0042 verrechnet und lässt sich nicht ändern.',
+  documentId: 78,
+  documentNumber: 'RE-2026-0042',
+})
+
 /** The week of the sketch in #124: Monday to Wednesday worked, 22:25 in all. */
 function week(entries: TimeEntry[], userId = 1, userName = 'Anna Muster'): TimeSheet {
   const days = ['23', '24', '25', '26', '27', '28', '29'].map((day) => `2026-11-${day}`)
@@ -197,6 +226,8 @@ let writeFailure: { status: number; body: unknown } | null
 let sheetFails: boolean
 /** How the project «Website» is billed, as the lookup of «verrechenbar» answers. */
 let websiteMode: BillingMode
+/** Entries on invoices a test adds to Wednesday. */
+let billedEntries: TimeEntry[]
 
 /** The answer of `lookups/default-billable` for the project «Website». */
 function websiteDefault(): TimeBillableDefault {
@@ -231,6 +262,7 @@ function stubFetch() {
   writeFailure = null
   sheetFails = false
   websiteMode = 'BY_EFFORT'
+  billedEntries = []
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
@@ -239,6 +271,14 @@ function stubFetch() {
     if (method !== 'GET') {
       if (writeFailure !== null) return json(writeFailure.body, writeFailure.status)
       if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url.endsWith('/time-tracking/billing/release')) {
+        const ids = body.entryIds as number[]
+        return json(
+          billedEntries
+            .filter((one) => ids.includes(one.id))
+            .map((one) => ({ ...one, state: 'OPEN', editable: true, readOnlyReason: null, documentId: null })),
+        )
+      }
       if (url.endsWith('/continue')) {
         return json({ timer: CONTINUED, started: true, stoppedEntries: [] }, 201)
       }
@@ -252,7 +292,7 @@ function stubFetch() {
       if (sheetFails) return json({ detail: 'Das Backend meldet einen Fehler.' }, 500)
       if (query.get('from') !== '2026-11-23') return json(week([]))
       return url.includes('/sheet?') ? json(week([TICKET], 42, 'Beat Keller')) : json(
-        week([ARCHIVED, TUESDAY, WIREFRAMES, TICKET, TRAINING]),
+        week([ARCHIVED, TUESDAY, WIREFRAMES, TICKET, TRAINING, ...billedEntries]),
       )
     }
     if (url.startsWith(`${BASE}/mine/recent`)) return json(RECENT)
@@ -986,5 +1026,102 @@ describe('TimeEntryPage', () => {
     await press(control('Text', editing), 'Enter')
 
     expect(writes()[0].body).toMatchObject({ projectId: 12, billable: true })
+  })
+
+  // --- billed entries (#127, backend ADR-0163) -------------------------------------
+
+  /** On a draft: the badge leads to the draft with INVOICE_READ, and back to «Meine Zeiten». */
+  it('timeEntryPageLinksAnEntryOnADraftTest', async () => {
+    billedEntries = [DRAFTED]
+
+    await render(['TIME_TRACK', 'INVOICE_READ'])
+
+    const badge = [...row('Review mit Kunde').querySelectorAll('a')].find(
+      (link) => link.textContent === 'im Entwurf',
+    )
+    expect(badge?.getAttribute('href')).toBe('/rechnungen/77')
+    expect(badge?.getAttribute('title')).toBe('Rechnungsentwurf öffnen')
+  })
+
+  /** Billed: the badge names the invoice, and links it only with INVOICE_READ. */
+  it('timeEntryPageNamesTheInvoiceOfABilledEntryTest', async () => {
+    billedEntries = [INVOICED]
+
+    await render()
+
+    expect(row('Konzept abgenommen').textContent).toContain('verrechnet RE-2026-0042')
+    expect(row('Konzept abgenommen').querySelector('a')).toBeNull()
+  })
+
+  /** A billed entry offers neither change nor delete; a lock says why instead. */
+  it('timeEntryPageLocksABilledEntryTest', async () => {
+    billedEntries = [INVOICED]
+
+    await render()
+
+    const billed = row('Konzept abgenommen')
+    expect(billed.textContent).not.toContain('Bearbeiten:')
+    expect(billed.querySelector('button[aria-label$="löschen"]')).toBeNull()
+    expect(billed.querySelector('button[aria-label$="fortsetzen"]')).toBeNull()
+    const lock = billed.querySelector('button[aria-label$="gesperrt"]')
+    expect(lock).not.toBeNull()
+    const reason = document.getElementById(lock?.getAttribute('aria-describedby') ?? '')
+    expect(reason?.textContent).toBe(
+      'Der Eintrag ist mit der Rechnung RE-2026-0042 verrechnet und lässt sich nicht ändern.',
+    )
+  })
+
+  /** «Vom Entwurf lösen» asks first, then takes the entry off and says so. */
+  it('timeEntryPageReleasesAnEntryFromItsDraftTest', async () => {
+    billedEntries = [DRAFTED]
+    await render(['TIME_TRACK', 'TIME_BILL'])
+
+    await click(button('1:10 P-00012 Website · Muster AG vom Entwurf lösen'))
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Das geht nur, wenn seine Position im Entwurf schon entfernt ist',
+    )
+    await click(button('Lösen'))
+
+    expect(writes()).toEqual([
+      {
+        method: 'POST',
+        url: '/api/tenants/1/time-tracking/billing/release',
+        body: { entryIds: [10] },
+      },
+    ])
+    expect(text()).toContain('Vom Entwurf gelöst: 1 Eintrag, wieder offen.')
+  })
+
+  /** The position still stands on the draft: the backend's sentence stands in the question. */
+  it('timeEntryPageShowsARefusedReleaseTest', async () => {
+    billedEntries = [DRAFTED]
+    await render(['TIME_TRACK', 'TIME_BILL'])
+    writeFailure = {
+      status: 409,
+      body: {
+        detail: 'Die Position steht noch auf dem Entwurf. Erst die Position entfernen, dann lösen.',
+        entryIds: [10],
+      },
+    }
+
+    await click(button('1:10 P-00012 Website · Muster AG vom Entwurf lösen'))
+    await click(button('Lösen'))
+
+    expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain(
+      'Die Position steht noch auf dem Entwurf.',
+    )
+  })
+
+  /** TIME_TRACK alone does not take an entry off its draft, nor does an entry billed already. */
+  it('timeEntryPageOffersNoReleaseWithoutTheBillRightTest', async () => {
+    billedEntries = [DRAFTED, INVOICED]
+    await render()
+    expect(row('Review mit Kunde').querySelector('button[aria-label$="vom Entwurf lösen"]')).toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await render(['TIME_TRACK', 'TIME_BILL'])
+    expect(row('Review mit Kunde').querySelector('button[aria-label$="vom Entwurf lösen"]')).not.toBeNull()
+    expect(row('Konzept abgenommen').querySelector('button[aria-label$="vom Entwurf lösen"]')).toBeNull()
   })
 })

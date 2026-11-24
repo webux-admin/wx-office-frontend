@@ -189,6 +189,7 @@ async function render(permissions = ['TIME_READ'], project: Project = WEBSITE) {
             <Routes>
               <Route path="/projekte/12" element={<ProjectTimes tenantId={TENANT} project={project} />} />
               <Route path="/zeiten" element={<HandedOver />} />
+              <Route path="/zeiten-abrechnen/projekt/12" element={<HandedOver />} />
             </Routes>
           </QueryClientProvider>
         </AuthContext.Provider>
@@ -470,5 +471,79 @@ describe('ProjectTimes', () => {
     await render(['TIME_READ'])
 
     expect(text()).not.toContain('Zeit erfassen')
+  })
+
+  // --- billing (#127, frontend ADR-0085) --------------------------------------------
+
+  /** «Abrechnen» opens the billing of the project and names the project as the way back. */
+  it('projectTimesOpensTheBillingTest', async () => {
+    await render(['TIME_READ', 'TIME_BILL'])
+    const link = [...container.querySelectorAll('a')].find((entry) => entry.textContent === 'Abrechnen')
+    expect(link?.getAttribute('href')).toBe('/zeiten-abrechnen/projekt/12')
+
+    await act(async () => {
+      link?.click()
+    })
+
+    expect(JSON.parse(container.querySelector('[data-testid="handed-over"]')?.textContent ?? '{}')).toEqual({
+      origin: { from: '/projekte/12', label: 'P-00012 Website' },
+      billing: { until: null, withoutProject: false },
+    })
+  })
+
+  /** A completed project is billed still: it takes no new time, but its open time is billable. */
+  it('projectTimesBillsACompletedProjectTest', async () => {
+    await render(['TIME_READ', 'TIME_TRACK', 'TIME_BILL'], { ...WEBSITE, status: 'COMPLETED' })
+
+    expect(text()).toContain('Abrechnen')
+    expect(text()).not.toContain('Zeit erfassen')
+  })
+
+  it('projectTimesOffersNoBillingWithoutTheBillRightTest', async () => {
+    await render(['TIME_READ', 'TIME_TRACK'])
+
+    expect([...container.querySelectorAll('a')].map((entry) => entry.textContent)).not.toContain('Abrechnen')
+  })
+
+  /** A billed entry in the list: its badge leads to the invoice with INVOICE_READ, back to here. */
+  it('projectTimesLinksABilledEntryTest', async () => {
+    entries = [
+      {
+        ...WIREFRAMES,
+        state: 'BILLED',
+        editable: false,
+        readOnlyReason: 'Der Eintrag ist mit der Rechnung RE-2026-0042 verrechnet und lässt sich nicht ändern.',
+        documentId: 78,
+        documentNumber: 'RE-2026-0042',
+      },
+    ]
+
+    await render(['TIME_READ', 'INVOICE_READ'])
+
+    const badge = [...container.querySelectorAll('tbody a')].find(
+      (entry) => entry.textContent === 'verrechnet RE-2026-0042',
+    )
+    expect(badge?.getAttribute('href')).toBe('/rechnungen/78')
+    expect(container.querySelector('tbody button[aria-label$="gesperrt"]')).not.toBeNull()
+  })
+
+  /** An entry on a draft can be taken off it here too, with TIME_BILL. */
+  it('projectTimesReleasesAnEntryFromItsDraftTest', async () => {
+    entries = [{ ...WIREFRAMES, state: 'IN_DRAFT', editable: false, documentId: 77 }]
+    await render(['TIME_READ', 'TIME_BILL'])
+
+    const release = container.querySelector<HTMLButtonElement>(
+      'tbody button[aria-label="2:30 vom 25.11.2026 vom Entwurf lösen"]',
+    )
+    expect(release).not.toBeNull()
+    await act(async () => {
+      release?.click()
+    })
+    await settle()
+    await press('Lösen')
+
+    expect(writes()).toEqual([
+      { method: 'POST', url: '/api/tenants/1/time-tracking/billing/release', body: { entryIds: [5] } },
+    ])
   })
 })

@@ -120,6 +120,7 @@ import {
   TIMETRACKING_RIGHTS,
   TIMETRACKING_SETTINGS_PATH,
 } from '../lib/timetracking'
+import { TIME_BILLING_PATH } from '../lib/timeBilling'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -441,15 +442,32 @@ export const NAV_GROUPS: NavGroup[] = [
         module: PROJECT_MODULE,
       },
       // Beside the projects, because time is what the work on a project — or for a customer
-      // without one — is recorded as, and later billed from. On TIME_TRACK: everybody records
-      // their own time. Under its own switch and not under the projects': without projects, time
-      // is recorded on customers (backend ADR-0159, ADR-0160).
+      // without one — is recorded as, and billed from. Under its own switch and not under the
+      // projects': without projects, time is recorded on customers (backend ADR-0159, ADR-0160).
+      //
+      // A folder since #127: «Meine Zeiten» on TIME_TRACK — everybody records their own time,
+      // and it is what the folder head opens — and «Abrechnen» on TIME_BILL, the worklist the
+      // invoices from time start at (backend ADR-0163, frontend ADR-0085).
       {
         label: 'Zeiten',
         icon: Clock,
-        href: TIMETRACKING_PATH,
-        permission: TIMETRACKING_RIGHTS.track,
         module: TIMETRACKING_MODULE,
+        children: [
+          {
+            label: 'Meine Zeiten',
+            icon: Clock,
+            href: TIMETRACKING_PATH,
+            permission: TIMETRACKING_RIGHTS.track,
+            module: TIMETRACKING_MODULE,
+          },
+          {
+            label: 'Abrechnen',
+            icon: ReceiptText,
+            href: TIME_BILLING_PATH,
+            permission: TIMETRACKING_RIGHTS.bill,
+            module: TIMETRACKING_MODULE,
+          },
+        ],
       },
       // Beside the projects: both are what is agreed with a customer, and a contract is what
       // the recurring invoices will come from. Under the module switch, like the projects
