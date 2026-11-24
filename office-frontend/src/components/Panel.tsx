@@ -11,6 +11,7 @@ export function Panel({
   description,
   action,
   padded = true,
+  clipped = true,
   children,
   className = '',
 }: {
@@ -20,12 +21,17 @@ export function Panel({
   action?: ReactNode
   /** Off for a panel holding a table, which brings its own spacing. */
   padded?: boolean
+  /**
+   * Off for a panel whose fields open a list over its lower edge, such as a type-ahead in a
+   * single line of fields: clipped, the list would end at the border of the panel.
+   */
+  clipped?: boolean
   children: ReactNode
   className?: string
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-[var(--radius-lg)] border border-line-subtle bg-surface ${className}`}
+      className={`${clipped ? 'overflow-hidden ' : ''}rounded-[var(--radius-lg)] border border-line-subtle bg-surface ${className}`}
     >
       {title && (
         <header className="flex items-start justify-between gap-4 border-b border-line-subtle px-5 py-3.5">

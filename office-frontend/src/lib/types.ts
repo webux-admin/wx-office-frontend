@@ -5628,3 +5628,150 @@ export type SubscriptionAcknowledgementBody = {
   reason: SubscriptionAcknowledgementReason
   note?: string
 }
+
+// --- time tracking (backend ADR-0160) -----------------------------------------------
+
+/**
+ * Where a time entry stands, as `TimeEntryState` of the backend spells it. Worked out by the
+ * backend, never stored.
+ *
+ * <p>Billing (#127) brings `IN_DRAFT` and `BILLED`. Each then needs one label and one tone in
+ * `lib/timetracking.ts`, and the compiler asks for both there.
+ */
+export type TimeEntryState = 'OPEN' | 'NOT_BILLABLE'
+
+/**
+ * One time entry with the names of what it refers to (`TimeEntryDto`).
+ *
+ * <p>A name is absent when the thing it names no longer exists, while the id stays, so a screen
+ * can tell «nothing chosen» from «chosen, but gone».
+ */
+export type TimeEntry = {
+  id: number
+  userId: number
+  /** ISO date, `yyyy-mm-dd`. */
+  workDate: string
+  /** As measured, 1 to 1440. */
+  durationMinutes: number
+  /** `HH:mm`, absent without a range. */
+  startTime?: string | null
+  /** `HH:mm`, absent without a range; `00:00` is midnight at the end of the day. */
+  endTime?: string | null
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** The customer; with a project the one of the project. */
+  partnerId?: number | null
+  customerName?: string | null
+  /** The service, a product of the type service. */
+  productId?: number | null
+  productNumber?: string | null
+  serviceName?: string | null
+  description?: string | null
+  billable: boolean
+  state: TimeEntryState
+  /** `false` while the entry can only be read. */
+  editable: boolean
+  /** Why it can only be read; the same sentence a change or a delete is refused with. */
+  readOnlyReason?: string | null
+  createdAt?: string | null
+  createdBy?: string | null
+  changedAt?: string | null
+  changedBy?: string | null
+  /** The state to send back with a change; a stored entry always has one. */
+  lockVersion: number
+}
+
+/** The minutes of one day, for the week bar (`DayTotalDto`). */
+export type TimeDayTotal = {
+  /** ISO date, `yyyy-mm-dd`. */
+  date: string
+  /** The sum of the entries of the day, 0 for a day without. */
+  totalMinutes: number
+}
+
+/** The times of one user over a range of days (`TimeSheetDto`). */
+export type TimeSheet = {
+  userId: number
+  /** Absent where the tenant does not know the user any more. */
+  userName?: string | null
+  from: string
+  to: string
+  /** The minutes of the whole range; for a week, the week total. */
+  totalMinutes: number
+  /** One total for every day of the range, days without entries included. */
+  days: TimeDayTotal[]
+  /** By day, start time and the order they were recorded in. */
+  entries: TimeEntry[]
+}
+
+/**
+ * What the quick line sends, for a `POST` as well as for a `PUT` (`TimeEntryRequest`).
+ *
+ * <p>The duration comes as `durationMinutes` or as `startTime` and `endTime`. With a project
+ * `partnerId` stays out: the customer is the one of the project, set by the server.
+ */
+export type TimeEntryRequest = {
+  workDate: string
+  durationMinutes: number | null
+  startTime: string | null
+  endTime: string | null
+  projectId: number | null
+  partnerId: number | null
+  productId: number | null
+  description: string | null
+  /** `null` for the default: yes with a customer, no without. A `PUT` always says it. */
+  billable: boolean | null
+  /** On a `PUT`, the state the change was made to; ignored on a `POST`. */
+  lockVersion?: number | null
+}
+
+/**
+ * A project or a customer time can be recorded on (`TargetChoice`): one list for one picker.
+ *
+ * <p>A project names its customer, because an entry on a project is an entry for that customer.
+ */
+export type TimeTargetChoice = {
+  kind: 'PROJECT' | 'CUSTOMER'
+  /** Absent for a customer. */
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** The customer; for a project the customer of the project. */
+  partnerId: number
+  /** Only for a customer. */
+  partnerNumber?: string | null
+  /** Absent where the customer no longer exists. */
+  customerName?: string | null
+}
+
+/** A service a time entry can name (`ServiceChoice`). */
+export type TimeServiceChoice = {
+  productId: number
+  productNumber?: string | null
+  name: string
+}
+
+/** A user of the tenant whose times can be looked at (`Colleague`). */
+export type TimeColleague = {
+  userId: number
+  name: string
+  /** `false` once the account was deactivated; the times stay. */
+  active: boolean
+}
+
+/**
+ * One chip «Zuletzt» (`RecentTarget`): a combination of project, customer and service recorded
+ * on lately. Every part may be missing; none at all is internal time.
+ */
+export type TimeRecentTarget = {
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** For a project, the customer the project names today. */
+  partnerId?: number | null
+  customerName?: string | null
+  productId?: number | null
+  productNumber?: string | null
+  serviceName?: string | null
+}

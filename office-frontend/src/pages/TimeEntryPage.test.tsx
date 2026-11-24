@@ -1,0 +1,774 @@
+// @vitest-environment jsdom
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthContext, type AuthState } from '../auth/authContext'
+import type {
+  TimeColleague,
+  TimeEntry,
+  TimeRecentTarget,
+  TimeServiceChoice,
+  TimeSheet,
+  TimeTargetChoice,
+} from '../lib/types'
+import { TimeEntryPage } from './TimeEntryPage'
+
+// React refuses to run act() without this flag; jsdom has no bundler that would set it.
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const TENANT = 1
+const BASE = '/api/tenants/1/time-entries'
+
+const WEBSITE: TimeTargetChoice = {
+  kind: 'PROJECT',
+  projectId: 12,
+  projectNumber: 'P-00012',
+  projectName: 'Website',
+  partnerId: 11,
+  customerName: 'Muster AG',
+}
+const MUSTER: TimeTargetChoice = {
+  kind: 'CUSTOMER',
+  partnerId: 11,
+  partnerNumber: 'K-00011',
+  customerName: 'Muster AG',
+}
+const CONCEPT: TimeServiceChoice = { productId: 31, productNumber: 'L-001', name: 'Konzeption' }
+const SUPPORT: TimeServiceChoice = { productId: 32, productNumber: 'L-002', name: 'Support' }
+
+function entry(overrides: Partial<TimeEntry>): TimeEntry {
+  return {
+    id: 1,
+    userId: 1,
+    workDate: '2026-11-25',
+    durationMinutes: 60,
+    billable: false,
+    state: 'NOT_BILLABLE',
+    editable: true,
+    lockVersion: 0,
+    ...overrides,
+  }
+}
+
+const WIREFRAMES = entry({
+  id: 5,
+  durationMinutes: 150,
+  startTime: '08:00',
+  endTime: '10:30',
+  projectId: 12,
+  projectNumber: 'P-00012',
+  projectName: 'Website',
+  partnerId: 11,
+  customerName: 'Muster AG',
+  productId: 31,
+  productNumber: 'L-001',
+  serviceName: 'Konzeption',
+  description: 'Wireframes',
+  billable: true,
+  state: 'OPEN',
+  lockVersion: 1,
+})
+const TICKET = entry({
+  id: 6,
+  durationMinutes: 60,
+  partnerId: 11,
+  customerName: 'Muster AG',
+  productId: 32,
+  productNumber: 'L-002',
+  serviceName: 'Support',
+  description: 'Ticket 4711',
+  billable: true,
+  state: 'OPEN',
+  lockVersion: 2,
+})
+const TRAINING = entry({ id: 7, durationMinutes: 180, description: 'Weiterbildung' })
+const TUESDAY = entry({ id: 8, workDate: '2026-11-24', durationMinutes: 490, description: 'Workshop' })
+const ARCHIVED = entry({
+  id: 9,
+  workDate: '2026-11-23',
+  durationMinutes: 465,
+  projectId: 3,
+  projectNumber: 'P-00003',
+  projectName: 'Altbau',
+  partnerId: 11,
+  customerName: 'Muster AG',
+  billable: true,
+  state: 'OPEN',
+  editable: false,
+  readOnlyReason: 'Das Projekt P-00003 ist archiviert. Seine Zeiten lassen sich nur noch lesen.',
+})
+
+/** The week of the sketch in #124: Monday to Wednesday worked, 22:25 in all. */
+function week(entries: TimeEntry[], userId = 1, userName = 'Anna Muster'): TimeSheet {
+  const days = ['23', '24', '25', '26', '27', '28', '29'].map((day) => `2026-11-${day}`)
+  const totals = days.map((date) => ({
+    date,
+    totalMinutes: entries
+      .filter((one) => one.workDate === date)
+      .reduce((sum, one) => sum + one.durationMinutes, 0),
+  }))
+  return {
+    userId,
+    userName,
+    from: days[0],
+    to: days[6],
+    totalMinutes: totals.reduce((sum, total) => sum + total.totalMinutes, 0),
+    days: totals,
+    entries,
+  }
+}
+
+const RECENT: TimeRecentTarget[] = [
+  {
+    projectId: 12,
+    projectNumber: 'P-00012',
+    projectName: 'Website',
+    partnerId: 11,
+    customerName: 'Muster AG',
+    productId: 31,
+    productNumber: 'L-001',
+    serviceName: 'Konzeption',
+  },
+  { partnerId: 11, customerName: 'Muster AG', productId: 32, serviceName: 'Support' },
+  {},
+]
+
+const COLLEAGUES: TimeColleague[] = [
+  { userId: 1, name: 'Anna Muster', active: true },
+  { userId: 42, name: 'Beat Keller', active: true },
+  { userId: 43, name: 'Carla Frei', active: false },
+]
+
+function session(permissions: string[], modules = ['TIMETRACKING', 'PROJECT']): AuthState {
+  return {
+    user: {
+      userId: 1,
+      username: 'anna',
+      activeTenantId: TENANT,
+      superuser: false,
+      tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules }],
+      permissions,
+    },
+    loading: false,
+    signIn: () => Promise.reject(new Error('nicht gebraucht')),
+    completeSecondFactor: () => Promise.reject(new Error('nicht gebraucht')),
+    sendSecondFactorCode: () => Promise.resolve(),
+    adoptSession: () => {},
+    signOut: () => Promise.resolve(),
+    switchTenant: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    can: (permission: string) => permissions.includes(permission),
+  }
+}
+
+let container: HTMLDivElement
+let root: Root
+/** Every request the screen sent: method, address and body. */
+let requests: { method: string; url: string; body: Record<string, unknown> }[]
+/** What the next write answers instead of success. */
+let writeFailure: { status: number; body: unknown } | null
+/** Whether the sheet answers with an error. */
+let sheetFails: boolean
+
+function json(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }),
+  )
+}
+
+function matches(target: TimeTargetChoice, search: string): boolean {
+  const text = [target.projectNumber, target.projectName, target.partnerNumber, target.customerName]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return text.includes(search.toLowerCase())
+}
+
+function stubFetch() {
+  requests = []
+  writeFailure = null
+  sheetFails = false
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+    requests.push({ method, url, body })
+    const query = new URL(url, 'http://localhost').searchParams
+    if (method !== 'GET') {
+      if (writeFailure !== null) return json(writeFailure.body, writeFailure.status)
+      if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
+      if (method === 'PUT') return json({ ...TICKET, ...body, lockVersion: 3 })
+      return json(
+        entry({ ...body, id: 99, durationMinutes: body.durationMinutes ?? 90, lockVersion: 0 }),
+        201,
+      )
+    }
+    if (url.startsWith(`${BASE}/mine?`) || url.startsWith(`${BASE}/sheet?`)) {
+      if (sheetFails) return json({ detail: 'Das Backend meldet einen Fehler.' }, 500)
+      if (query.get('from') !== '2026-11-23') return json(week([]))
+      return url.includes('/sheet?') ? json(week([TICKET], 42, 'Beat Keller')) : json(
+        week([ARCHIVED, TUESDAY, WIREFRAMES, TICKET, TRAINING]),
+      )
+    }
+    if (url.startsWith(`${BASE}/mine/recent`)) return json(RECENT)
+    if (url.startsWith(`${BASE}/mine/default-service`)) {
+      return query.get('projectId') === '12'
+        ? json(CONCEPT)
+        : Promise.resolve(new Response(null, { status: 204 }))
+    }
+    if (url.startsWith(`${BASE}/lookups/targets`)) {
+      return json([WEBSITE, MUSTER].filter((target) => matches(target, query.get('search') ?? '')))
+    }
+    if (url.startsWith(`${BASE}/lookups/services`)) return json([CONCEPT, SUPPORT])
+    if (url.startsWith(`${BASE}/lookups/colleagues`)) return json(COLLEAGUES)
+    return json([])
+  })
+}
+
+beforeEach(() => {
+  // Only the date is ours: Wednesday, 25 November 2026. The timers stay real for the debounce.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 10, 25, 10, 0))
+  stubFetch()
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => root.unmount())
+  container.remove()
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+/** Lets timers run out and answers arrive; 0 for a field without a type-ahead. */
+async function settle(ms = 0) {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms))
+  })
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+const TRACKER = ['TIME_TRACK']
+
+async function render(permissions = TRACKER, modules?: string[]) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={['/zeiten']}>
+        <AuthContext.Provider value={session(permissions, modules)}>
+          <QueryClientProvider client={client}>
+            <TimeEntryPage />
+          </QueryClientProvider>
+        </AuthContext.Provider>
+      </MemoryRouter>,
+    )
+  })
+  await settle()
+}
+
+const text = () => container.textContent ?? ''
+
+/** The line for a new entry, or the line open in a row. */
+function line(name: 'Neuer Eintrag' | 'Eintrag bearbeiten' = 'Neuer Eintrag'): HTMLFormElement {
+  const form = container.querySelector(`form[aria-label="${name}"]`)
+  if (form === null) throw new Error(`no form ${name}`)
+  return form as HTMLFormElement
+}
+
+/** The control a label points at, inside one line. */
+function control(label: string, scope: ParentNode = line()): HTMLInputElement {
+  const caption = [...scope.querySelectorAll('label')].find((entry) => entry.textContent === label)
+  const found = caption ? document.getElementById(caption.htmlFor) : null
+  if (found === null) throw new Error(`no field labelled ${label}`)
+  return found as HTMLInputElement
+}
+
+async function type(input: HTMLInputElement, value: string, wait = 0) {
+  await act(async () => {
+    input.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await settle(wait)
+}
+
+async function press(target: Element, key: string) {
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+  })
+  await settle()
+}
+
+async function click(element: Element) {
+  await act(async () => {
+    ;(element as HTMLElement).click()
+  })
+  await settle()
+}
+
+function button(label: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button')].filter(
+    (entry) => entry.textContent?.trim() === label || entry.getAttribute('aria-label') === label,
+  )
+  const last = found.at(-1)
+  if (last === undefined) throw new Error(`no button ${label}`)
+  return last
+}
+
+function day(title: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('nav[aria-label="Tage der Woche"] button')].find(
+    (entry) => entry.getAttribute('aria-label')?.startsWith(title),
+  )
+  if (found === undefined) throw new Error(`no day ${title}`)
+  return found as HTMLButtonElement
+}
+
+/** The rows of the day list, as their text. */
+const rows = () =>
+  [...container.querySelectorAll('ul[aria-label="Einträge des Tages"] > li')].map(
+    (row) => row.textContent ?? '',
+  )
+
+function row(containing: string): HTMLElement {
+  const found = [...container.querySelectorAll('ul[aria-label="Einträge des Tages"] > li')].find(
+    (entry) => entry.textContent?.includes(containing),
+  )
+  if (found === undefined) throw new Error(`no row ${containing}`)
+  return found as HTMLElement
+}
+
+const writes = () => requests.filter((request) => request.method !== 'GET')
+
+describe('TimeEntryPage', () => {
+  it('timeEntryPageShowsTheWeekTest', async () => {
+    await render()
+
+    expect(container.querySelector('h1')?.textContent).toBe('Meine Zeiten')
+    expect(text()).toContain('KW 48 · 23.–29. Nov. 2026')
+    expect(requests[0].url).toBe(`${BASE}/mine?from=2026-11-23&to=2026-11-29`)
+    expect(day('Montag').textContent).toBe('Mo 23.7:45')
+    expect(day('Mittwoch').getAttribute('aria-label')).toBe('Mittwoch, 25. November: 6 Std. 30 Min.')
+    expect(day('Mittwoch').getAttribute('aria-pressed')).toBe('true')
+    expect(day('Donnerstag').textContent).toBe('Do 26.0:00')
+    expect(day('Samstag').textContent).toBe('Sa 28.–')
+    expect(container.querySelector('nav[aria-label="Tage der Woche"]')?.textContent).toContain(
+      'Woche22:25',
+    )
+  })
+
+  it('timeEntryPageListsTheChosenDayTest', async () => {
+    await render()
+
+    expect(text()).toContain('Mittwoch, 25. November')
+    expect(rows()).toHaveLength(3)
+    expect(row('Wireframes').textContent).toContain('08:00–10:30')
+    expect(row('Wireframes').textContent).toContain('P-00012 Website · Muster AG')
+    expect(row('Wireframes').textContent).toContain('offen')
+    expect(row('Weiterbildung').textContent).toContain('intern')
+    expect(row('Weiterbildung').textContent).toContain('nicht verrechenbar')
+  })
+
+  /** A day after today cannot be chosen, and neither can the week after this one. */
+  it('timeEntryPageKeepsTheFutureShutTest', async () => {
+    await render()
+
+    expect(day('Donnerstag').disabled).toBe(true)
+    expect(day('Dienstag').disabled).toBe(false)
+    expect(button('Nächste Woche').disabled).toBe(true)
+    expect(button('Heute').disabled).toBe(true)
+  })
+
+  it('timeEntryPageGoesToTheWeekBeforeTest', async () => {
+    await render()
+
+    await click(button('Vorherige Woche'))
+
+    expect(requests.at(-1)?.url).toBe(`${BASE}/mine?from=2026-11-16&to=2026-11-22`)
+    expect(text()).toContain('KW 47 · 16.–22. Nov. 2026')
+    expect(text()).toContain('Mittwoch, 18. November')
+    expect(text()).toContain('Keine Zeiten an diesem Tag')
+    expect(button('Nächste Woche').disabled).toBe(false)
+
+    await click(button('Heute'))
+    expect(text()).toContain('KW 48 · 23.–29. Nov. 2026')
+  })
+
+  it('timeEntryPageChoosesADayTest', async () => {
+    await render()
+
+    await click(day('Dienstag'))
+
+    expect(text()).toContain('Dienstag, 24. November')
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toContain('Workshop')
+    expect(container.querySelector('form[aria-label="Neuer Eintrag"]')?.closest('section')?.textContent).toContain(
+      'Erfassen für Dienstag, 24. November',
+    )
+  })
+
+  /**
+   * The issue's core: a project, its suggested service, a duration, a text, Enter. Project and
+   * service stay, the focus goes back to the duration for the next entry.
+   */
+  it('timeEntryPageRecordsWithEnterTest', async () => {
+    await render()
+
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+    expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
+    expect(control('Leistung').value).toBe('Konzeption')
+
+    await type(control('Dauer'), '1:30')
+    expect(text()).toContain('= 1 Std. 30 Min.')
+    await type(control('Text'), 'Wireframes')
+    await press(control('Text'), 'Enter')
+
+    expect(writes()).toEqual([
+      {
+        method: 'POST',
+        url: `${BASE}/mine`,
+        body: {
+          workDate: '2026-11-25',
+          durationMinutes: 90,
+          startTime: null,
+          endTime: null,
+          projectId: 12,
+          partnerId: null,
+          productId: 31,
+          description: 'Wireframes',
+          billable: null,
+        },
+      },
+    ])
+    expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
+    expect(control('Leistung').value).toBe('Konzeption')
+    expect(control('Dauer').value).toBe('')
+    expect(control('Text').value).toBe('')
+    expect(document.activeElement).toBe(control('Dauer'))
+    expect(text()).toContain('Gespeichert: 1 Std. 30 Min. am Mittwoch, 25. November.')
+  })
+
+  /** A range goes as its two times; a duration as minutes alone. */
+  it('timeEntryPageRecordsARangeTest', async () => {
+    await render()
+
+    await type(control('Dauer'), '9-10:30')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({
+      durationMinutes: null,
+      startTime: '09:00',
+      endTime: '10:30',
+      projectId: null,
+      partnerId: null,
+      billable: null,
+    })
+  })
+
+  it('timeEntryPageRefusesAnUnreadableDurationTest', async () => {
+    await render()
+
+    await type(control('Dauer'), '23-1')
+    expect(text()).toContain('über Mitternacht')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()).toEqual([])
+    expect(control('Dauer').getAttribute('aria-invalid')).toBe('true')
+  })
+
+  /** A name typed and never taken would make the hour internal; the line says so instead. */
+  it('timeEntryPageRefusesATargetNotTakenTest', async () => {
+    await render()
+
+    await type(control('Projekt oder Kunde'), 'muster', 260)
+    await press(control('Projekt oder Kunde'), 'Escape')
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()).toEqual([])
+    expect(text()).toContain('Einen Treffer aus der Liste wählen oder das Feld leeren.')
+  })
+
+  it('timeEntryPageFillsTheLineFromARecentChipTest', async () => {
+    await render()
+
+    await click(button('P-00012 Website · Konzeption'))
+
+    expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
+    expect(control('Leistung').value).toBe('Konzeption')
+    expect(document.activeElement).toBe(control('Dauer'))
+
+    await type(control('Dauer'), '2h')
+    await press(control('Dauer'), 'Enter')
+    expect(writes()[0].body).toMatchObject({ projectId: 12, productId: 31, durationMinutes: 120 })
+  })
+
+  /** Billable with a customer and no service is named at the service before anything is sent. */
+  it('timeEntryPageAsksForAServiceWhenBillableTest', async () => {
+    await render()
+
+    await type(control('Projekt oder Kunde'), 'K-00011', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+    expect(control('verrechenbar').checked).toBe(true)
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()).toEqual([])
+    expect(text()).toContain('Verrechenbar braucht eine Leistung.')
+
+    await click(control('verrechenbar'))
+    await press(control('Dauer'), 'Enter')
+    expect(writes()[0].body).toMatchObject({ partnerId: 11, projectId: null, billable: false })
+  })
+
+  /** Internal time is never billable, so the box is off and cannot be ticked. */
+  it('timeEntryPageKeepsInternalTimeUnbillableTest', async () => {
+    await render()
+
+    expect(control('verrechenbar').checked).toBe(false)
+    expect(control('verrechenbar').disabled).toBe(true)
+  })
+
+  it('timeEntryPageEmptiesTheLineWithEscapeTest', async () => {
+    await render()
+    await click(button('P-00012 Website · Konzeption'))
+
+    await press(document.body, 'Escape')
+
+    expect(control('Projekt oder Kunde').value).toBe('')
+    expect(control('Leistung').value).toBe('')
+  })
+
+  /** Typed duration or text is work; Escape asks before throwing it away. */
+  it('timeEntryPageAsksBeforeEmptyingTypedWorkTest', async () => {
+    await render()
+    await type(control('Dauer'), '1:30')
+
+    await press(document.body, 'Escape')
+
+    expect(document.body.textContent).toContain('Änderungen verwerfen?')
+    expect(control('Dauer').value).toBe('1:30')
+    await click(button('Verwerfen'))
+    expect(control('Dauer').value).toBe('')
+  })
+
+  /** A refusal about one field stands at that field, and not a second time above the line. */
+  it('timeEntryPageShowsTheBackendMessageAtTheFieldTest', async () => {
+    await render()
+    writeFailure = {
+      status: 400,
+      body: {
+        detail: 'Muster AG ist deaktiviert.',
+        errors: [{ field: 'partnerId', message: 'Muster AG ist deaktiviert.' }],
+      },
+    }
+
+    await click(button('Muster AG · Support'))
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(control('Projekt oder Kunde').getAttribute('aria-invalid')).toBe('true')
+    expect(text().split('Muster AG ist deaktiviert.')).toHaveLength(2)
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  /** A refusal of the entry as a whole stands above the line. */
+  it('timeEntryPageShowsAConflictAboveTheLineTest', async () => {
+    await render()
+    writeFailure = {
+      status: 409,
+      body: { detail: 'Der Mandant betreibt die Zeiterfassung nicht.' },
+    }
+
+    await type(control('Dauer'), '1')
+    await press(control('Dauer'), 'Enter')
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Der Mandant betreibt die Zeiterfassung nicht.',
+    )
+    expect(control('Dauer').value).toBe('1')
+  })
+
+  it('timeEntryPageEditsAnEntryInItsRowTest', async () => {
+    await render()
+
+    await click(row('Ticket 4711').querySelector('button') as HTMLButtonElement)
+    const editing = line('Eintrag bearbeiten')
+    expect(control('Projekt oder Kunde', editing).value).toBe('Muster AG (ohne Projekt)')
+    expect(control('Dauer', editing).value).toBe('1:00')
+    expect(document.activeElement).toBe(control('Dauer', editing))
+
+    await type(control('Dauer', editing), '1:15')
+    await press(control('Dauer', editing), 'Enter')
+
+    expect(writes()).toEqual([
+      {
+        method: 'PUT',
+        url: `${BASE}/mine/6`,
+        body: {
+          workDate: '2026-11-25',
+          durationMinutes: 75,
+          startTime: null,
+          endTime: null,
+          projectId: null,
+          partnerId: 11,
+          productId: 32,
+          description: 'Ticket 4711',
+          billable: true,
+          lockVersion: 2,
+        },
+      },
+    ])
+    expect(container.querySelector('form[aria-label="Eintrag bearbeiten"]')).toBeNull()
+  })
+
+  /** «Abbrechen» on a changed row asks first, then closes it without a request. */
+  it('timeEntryPageCancelsAChangeInItsRowTest', async () => {
+    await render()
+    await click(row('Ticket 4711').querySelector('button') as HTMLButtonElement)
+    await type(control('Dauer', line('Eintrag bearbeiten')), '2')
+
+    await click(button('Abbrechen'))
+    expect(document.body.textContent).toContain('Änderungen verwerfen?')
+    await click(button('Verwerfen'))
+
+    expect(container.querySelector('form[aria-label="Eintrag bearbeiten"]')).toBeNull()
+    expect(writes()).toEqual([])
+  })
+
+  it('timeEntryPageCopiesToTodayTest', async () => {
+    await render()
+    await click(day('Dienstag'))
+
+    await click(button('8:10 intern auf heute kopieren'))
+
+    expect(writes()).toEqual([
+      {
+        method: 'POST',
+        url: `${BASE}/mine`,
+        body: {
+          workDate: '2026-11-25',
+          durationMinutes: 490,
+          startTime: null,
+          endTime: null,
+          projectId: null,
+          partnerId: null,
+          productId: null,
+          description: 'Workshop',
+          billable: false,
+        },
+      },
+    ])
+    expect(text()).toContain('Auf heute kopiert:')
+  })
+
+  it('timeEntryPageDeletesAfterAskingTest', async () => {
+    await render()
+
+    await click(button('3:00 intern löschen'))
+    expect(document.body.textContent).toContain('Zeiteintrag löschen?')
+    expect(writes()).toEqual([])
+
+    await click(button('Löschen'))
+
+    expect(writes()).toEqual([{ method: 'DELETE', url: `${BASE}/mine/7`, body: {} }])
+    expect(text()).toContain('Gelöscht: 3 Std., intern.')
+  })
+
+  /** An entry that can only be read says why, and offers neither change nor delete. */
+  it('timeEntryPageShowsWhyAnEntryIsReadOnlyTest', async () => {
+    await render()
+    await click(day('Montag'))
+
+    const archived = row('Altbau')
+    expect(archived.textContent).toContain('Seine Zeiten lassen sich nur noch lesen.')
+    expect(archived.querySelector('button[aria-label$="löschen"]')).toBeNull()
+    expect(archived.textContent).not.toContain('Bearbeiten:')
+  })
+
+  /** With the projects off the field searches customers and says so. */
+  it('timeEntryPageWithoutProjectsTest', async () => {
+    await render(TRACKER, ['TIMETRACKING'])
+
+    expect(control('Kunde')).toBeDefined()
+    expect(text()).not.toContain('Projekt oder Kunde')
+  })
+
+  it('timeEntryPageWhenTheWeekCannotBeReadTest', async () => {
+    sheetFails = true
+
+    await render()
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Das Backend meldet einen Fehler.',
+    )
+  })
+
+  /** Without TIME_READ there is no «Zeiten von …», and nobody else's times are asked for. */
+  it('timeEntryPageWithoutReadRightTest', async () => {
+    await render()
+
+    expect(text()).not.toContain('Zeiten von')
+    expect(requests.some((request) => request.url.includes('/colleagues'))).toBe(false)
+  })
+
+  /** With TIME_READ alone the week of a colleague is read, and nothing is offered to change. */
+  it('timeEntryPageShowsTheWeekOfAColleagueTest', async () => {
+    await render(['TIME_TRACK', 'TIME_READ'])
+    const owner = control('Zeiten von', container)
+    expect([...(owner as unknown as HTMLSelectElement).options].map((option) => option.text)).toEqual([
+      'Anna Muster (ich)',
+      'Beat Keller',
+      'Carla Frei (deaktiviert)',
+    ])
+
+    await act(async () => {
+      owner.value = '42'
+      owner.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+
+    expect(requests.at(-1)?.url).toBe(`${BASE}/sheet?userId=42&from=2026-11-23&to=2026-11-29`)
+    expect(container.querySelector('h1')?.textContent).toBe('Zeiten von Beat Keller')
+    expect(container.querySelector('form[aria-label="Neuer Eintrag"]')).toBeNull()
+    expect(text()).toContain('TIME_WRITE')
+    expect(row('Ticket 4711').querySelector('button')).toBeNull()
+  })
+
+  /** With TIME_WRITE the line records for the colleague, without the chips of one's own. */
+  it('timeEntryPageRecordsForAColleagueTest', async () => {
+    await render(['TIME_TRACK', 'TIME_READ', 'TIME_WRITE'])
+    const owner = control('Zeiten von', container)
+    await act(async () => {
+      owner.value = '42'
+      owner.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+
+    expect(text()).not.toContain('Zuletzt:')
+    await type(control('Dauer'), '2h')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].url).toBe(`${BASE}?userId=42`)
+    expect(writes()[0].body).toMatchObject({ durationMinutes: 120, workDate: '2026-11-25' })
+  })
+
+  it('timeEntryPageWithoutTrackRightTest', async () => {
+    await render(['TIME_READ'])
+
+    expect(text()).toContain('Keine Berechtigung')
+    expect(requests).toEqual([])
+  })
+
+  it('timeEntryPageWithTheModuleOffTest', async () => {
+    await render(TRACKER, ['PROJECT'])
+
+    expect(text()).toContain('Modul nicht eingeschaltet')
+    expect(requests).toEqual([])
+  })
+})

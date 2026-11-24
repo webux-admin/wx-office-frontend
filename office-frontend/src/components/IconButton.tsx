@@ -11,12 +11,15 @@ export function IconButton({
   label,
   onClick,
   tone = 'neutral',
+  disabled = false,
   children,
 }: {
   /** What the button does to which row, for example «Adresse Hauptsitz entfernen». */
   label: string
   onClick: () => void
   tone?: 'neutral' | 'danger'
+  /** Shows the button without letting it act, for a step that leads nowhere right now. */
+  disabled?: boolean
   /** The icon. */
   children: ReactNode
 }) {
@@ -24,9 +27,10 @@ export function IconButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className={`grid size-icon-button place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors ${
+      className={`grid size-icon-button place-items-center rounded-[var(--radius-sm)] text-text-tertiary transition-colors disabled:pointer-events-none disabled:opacity-40 ${
         tone === 'danger'
           ? 'hover:bg-danger/12 hover:text-danger'
           : 'hover:bg-sunken hover:text-text-primary'

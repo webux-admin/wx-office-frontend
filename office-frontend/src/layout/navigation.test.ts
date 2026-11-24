@@ -48,6 +48,7 @@ import { PAYMENT_RECEIPT_PATH } from '../lib/paymentReceipt'
 import { CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
+import { TIMETRACKING_PATH, TIMETRACKING_RIGHTS } from '../lib/timetracking'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -162,6 +163,51 @@ describe('NAV_GROUPS', () => {
 
     expect(entries.map((entry) => entry.href)).not.toContain(PROJECT_PATH)
     expect(entries.map((entry) => entry.href)).toContain('/kunden')
+  })
+
+  /** Everybody records their own time: TIME_TRACK, under the switch of the time tracking. */
+  it('navGroupsCoverTheTimeSheetTest', () => {
+    const times = allEntries().filter((entry) => entry.href === TIMETRACKING_PATH)
+
+    expect(times).toHaveLength(1)
+    expect(times[0].label).toBe('Zeiten')
+    expect(times[0].permission).toBe(TIMETRACKING_RIGHTS.track)
+    expect(times[0].module).toBe('TIMETRACKING')
+  })
+
+  /** On the top level and right after the projects, as #124 places it. */
+  it('navGroupsPutTheTimesBesideTheProjectsTest', () => {
+    const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
+    const hrefs = (sales?.entries ?? []).map((entry) => (isFolder(entry) ? null : entry.href))
+
+    expect(hrefs.indexOf(TIMETRACKING_PATH)).toBe(hrefs.indexOf(PROJECT_PATH) + 1)
+  })
+
+  it('visibleNavGroupsHidesTheTimesWithoutTheModuleTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'TIMETRACKING')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_PATH)
+    expect(entries.map((entry) => entry.href)).toContain(PROJECT_PATH)
+  })
+
+  /** Two switches: without projects, time is recorded on customers and the entry stays. */
+  it('visibleNavGroupsKeepsTheTimesWithoutTheProjectsTest', () => {
+    const visible = visibleNavGroups(() => true, (module) => module !== 'PROJECT')
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).toContain(TIMETRACKING_PATH)
+  })
+
+  /** TIME_READ alone is the times of others; the screen is «Meine Zeiten» and needs TIME_TRACK. */
+  it('visibleNavGroupsHidesTheTimesWithoutTheTrackRightTest', () => {
+    const visible = visibleNavGroups(
+      (permission) => permission !== TIMETRACKING_RIGHTS.track,
+      () => true,
+    )
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+
+    expect(entries.map((entry) => entry.href)).not.toContain(TIMETRACKING_PATH)
   })
 
   it('navGroupsCoverTheContractListTest', () => {

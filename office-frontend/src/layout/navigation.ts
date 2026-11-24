@@ -1,5 +1,6 @@
 import {
   Archive,
+  Clock,
   FolderKanban,
   Repeat,
   ScrollText,
@@ -113,6 +114,7 @@ import {
 import { CONTRACT_MODULE, CONTRACT_PATH, CONTRACT_RIGHTS } from '../lib/contract'
 import { SUBSCRIPTION_MODULE, SUBSCRIPTION_PATH, SUBSCRIPTION_RIGHTS } from '../lib/subscription'
 import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
+import { TIMETRACKING_MODULE, TIMETRACKING_PATH, TIMETRACKING_RIGHTS } from '../lib/timetracking'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -432,6 +434,17 @@ export const NAV_GROUPS: NavGroup[] = [
         href: PROJECT_PATH,
         permission: PROJECT_RIGHTS.read,
         module: PROJECT_MODULE,
+      },
+      // Beside the projects, because time is what the work on a project — or for a customer
+      // without one — is recorded as, and later billed from. On TIME_TRACK: everybody records
+      // their own time. Under its own switch and not under the projects': without projects, time
+      // is recorded on customers (backend ADR-0159, ADR-0160).
+      {
+        label: 'Zeiten',
+        icon: Clock,
+        href: TIMETRACKING_PATH,
+        permission: TIMETRACKING_RIGHTS.track,
+        module: TIMETRACKING_MODULE,
       },
       // Beside the projects: both are what is agreed with a customer, and a contract is what
       // the recurring invoices will come from. Under the module switch, like the projects

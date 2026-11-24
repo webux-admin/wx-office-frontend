@@ -62,6 +62,17 @@ Stand der Module (in dieser Reihenfolge gebaut):
   QR-Zahlteil ist gesperrt — unten auf der letzten Seite oder auf eigener Seite. Das Modell ohne
   React liegt in `src/printlayout/`, keine Zeichen- oder Drag-Bibliothek (ADR-0078, Backend
   ADR-0152)
+- **timetracking** — «Meine Zeiten» unter `/zeiten`, hinter dem Modulschalter `TIMETRACKING` und
+  `TIME_TRACK`, im Menü nach «Projekte». Eine Wochenleiste nach ISO-Woche mit Tages- und
+  Wochensumme, wie das Backend sie liefert; Tage nach heute sind nicht wählbar. Darunter die
+  **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
+  ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
+  Feld, Projekt und Leistung bleiben stehen, der Fokus springt auf «Dauer». Die Dauer liest
+  `lib/duration.ts` (`1:30`, `1.5`, `90m`, `2h 15m`, `9-10:30`), ein Bereich geht als Von–Bis
+  hinaus, eine Dauer als Minuten. Chips «Zuletzt» und die Vorgabe der Leistung kommen vom
+  Backend; die Liste des Tages öffnet einen Eintrag in derselben Zeile, kopiert auf heute ohne
+  Von–Bis und löscht mit Rückfrage. «Zeiten von …» nur mit `TIME_READ`, schreibend nur mit
+  `TIME_WRITE` (ADR-0082, Backend ADR-0160)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 
