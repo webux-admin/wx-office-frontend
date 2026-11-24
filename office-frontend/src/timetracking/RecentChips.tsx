@@ -1,5 +1,5 @@
-import { recentTargetLabel } from '../../lib/timetracking'
-import type { TimeRecentTarget } from '../../lib/types'
+import { recentTargetLabel } from '../lib/timetracking'
+import type { TimeRecentTarget } from '../lib/types'
 
 /**
  * The chips «Zuletzt»: what was recorded on lately, one click from the next entry.

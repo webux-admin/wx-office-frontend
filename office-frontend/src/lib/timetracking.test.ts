@@ -9,26 +9,37 @@ import {
   TIME_ENTRY_STATE_LABELS,
   TIME_ENTRY_STATE_TONES,
   colleaguesUrl,
+  continueEntryUrl,
   copyRequestOf,
   dayTotalText,
   defaultServiceKey,
   defaultServiceUrl,
   durationFieldOf,
   effectiveBillable,
+  emptyTimerForm,
   emptyTimeEntryForm,
   entryServiceText,
   entryTargetText,
   formChanged,
   hasLaterWeek,
   hasLineInput,
+  instantOf,
+  isTimerTooLong,
+  isToldByTimer,
   isToldByLine,
   lineErrors,
+  localDateOf,
+  localTimeOf,
+  minutesSince,
+  msUntilNextMinute,
   nextEntryForm,
   recentTargetLabel,
   recentTargetsKey,
   recentTargetsUrl,
   sameTarget,
   serviceLookupUrl,
+  startedText,
+  stoppedText,
   targetKey,
   targetLabel,
   targetLookupUrl,
@@ -40,8 +51,21 @@ import {
   timeRangeText,
   timeSheetKey,
   timeSheetUrl,
+  timerChanged,
+  timerComplaints,
+  timerErrors,
+  timerKey,
+  timerSinceText,
+  timerStopUrl,
+  timerTabTitle,
+  timerText,
+  timerUrl,
   toTimeEntryForm,
   toTimeEntryRequest,
+  toTimerChangeRequest,
+  toTimerForm,
+  toTimerRequest,
+  toTimerStopRequest,
   weekStep,
   withRecentTarget,
   withService,
@@ -50,8 +74,9 @@ import {
   withTarget,
   withTargetTerm,
   type TimeEntryForm,
+  type TimerForm,
 } from './timetracking'
-import type { TimeEntry, TimeServiceChoice, TimeTargetChoice } from './types'
+import type { RunningTimer, TimeEntry, TimeServiceChoice, TimeTargetChoice } from './types'
 
 const WEBSITE: TimeTargetChoice = {
   kind: 'PROJECT',
@@ -869,5 +894,547 @@ describe('copyRequestOf', () => {
       description: 'Weiterbildung',
       billable: false,
     })
+  })
+})
+
+// --- the stopwatch -----------------------------------------------------------------
+
+/** A moment on Wednesday, 25 November 2026, on the clock of this browser. */
+function at(hours: number, minutes: number, seconds = 0): number {
+  return new Date(2026, 10, 25, hours, minutes, seconds).getTime()
+}
+
+/** Started at 09:15:20, to the second, on the website project. */
+const STARTED = new Date(at(9, 15, 20)).toISOString()
+
+function timer(overrides: Partial<RunningTimer> = {}): RunningTimer {
+  return {
+    id: 3,
+    userId: 1,
+    startedAt: STARTED,
+    projectId: 12,
+    projectNumber: 'P-00012',
+    projectName: 'Website',
+    partnerId: 11,
+    customerName: 'Muster AG',
+    productId: 31,
+    productNumber: 'L-001',
+    serviceName: 'Konzeption',
+    description: 'Wireframes',
+    billable: true,
+    elapsedMinutes: 42,
+    longRunning: false,
+    endRequired: false,
+    lockVersion: 4,
+    ...overrides,
+  }
+}
+
+/** A stopwatch on nothing: internal time. */
+const INTERNAL = timer({
+  projectId: null,
+  projectNumber: null,
+  projectName: null,
+  partnerId: null,
+  customerName: null,
+  productId: null,
+  productNumber: null,
+  serviceName: null,
+  description: null,
+  billable: false,
+})
+
+function timerForm(overrides: Partial<TimerForm> = {}): TimerForm {
+  return { ...emptyTimerForm(), ...overrides }
+}
+
+/** The field of the running website stopwatch, as it opens. */
+const RUNNING = toTimerForm(timer(), true)
+
+describe('stopwatch addresses', () => {
+  it('timerUrlTest', () => {
+    expect(timerUrl(1)).toBe('/api/tenants/1/time-entries/mine/timer')
+  })
+
+  it('timerStopUrlTest', () => {
+    expect(timerStopUrl(1)).toBe('/api/tenants/1/time-entries/mine/timer/stop')
+  })
+
+  it('continueEntryUrlTest', () => {
+    expect(continueEntryUrl(1, 5)).toBe('/api/tenants/1/time-entries/mine/5/continue')
+  })
+
+  it('timerKeyTest', () => {
+    expect(timerKey(7)).toEqual(['time-timer', 7])
+  })
+
+  /** A change of an entry invalidates the entries, and that must not read the stopwatch anew. */
+  it('timerKeyApartFromTheEntriesTest', () => {
+    expect(timerKey(7).slice(0, timeEntriesKey(7).length)).not.toEqual(timeEntriesKey(7))
+  })
+})
+
+describe('minutesSince', () => {
+  it('minutesSinceTest', () => {
+    expect(minutesSince(STARTED, at(9, 57, 50))).toBe(42)
+  })
+
+  /** The start is to the second: the minute turns at 20 seconds, not at the full minute. */
+  it('minutesSinceTurnsAtTheSecondOfTheStartTest', () => {
+    expect(minutesSince(STARTED, at(9, 16, 19))).toBe(0)
+    expect(minutesSince(STARTED, at(9, 16, 20))).toBe(1)
+  })
+
+  it('minutesSinceAtTheStartTest', () => {
+    expect(minutesSince(STARTED, at(9, 15, 20))).toBe(0)
+  })
+
+  /** A browser clock behind the server's would count below zero. */
+  it('minutesSinceBeforeTheStartTest', () => {
+    expect(minutesSince(STARTED, at(9, 14))).toBe(0)
+  })
+
+  it('minutesSinceAfterADayTest', () => {
+    expect(minutesSince(STARTED, at(9, 15, 20) + 26 * 3_600_000)).toBe(1560)
+  })
+
+  /** Real minutes: 01:30 CET to 03:30 CEST on 29 March 2026 are one hour, as the stop counts. */
+  it('minutesSinceOverTheChangeOfTheClocksTest', () => {
+    expect(minutesSince('2026-03-29T00:30:00Z', Date.parse('2026-03-29T01:30:00Z'))).toBe(60)
+  })
+
+  it('minutesSinceWithAnUnreadableStartTest', () => {
+    expect(minutesSince('gestern', at(9, 15))).toBe(0)
+  })
+})
+
+describe('msUntilNextMinute', () => {
+  it('msUntilNextMinuteTest', () => {
+    expect(msUntilNextMinute(STARTED, at(9, 57, 50))).toBe(30_000)
+  })
+
+  it('msUntilNextMinuteRightAtATurnTest', () => {
+    expect(msUntilNextMinute(STARTED, at(9, 16, 20))).toBe(60_000)
+  })
+
+  it('msUntilNextMinuteAtTheStartTest', () => {
+    expect(msUntilNextMinute(STARTED, at(9, 15, 20))).toBe(60_000)
+  })
+
+  it('msUntilNextMinuteBeforeTheStartTest', () => {
+    expect(msUntilNextMinute(STARTED, at(9, 15, 15))).toBe(65_000)
+  })
+
+  it('msUntilNextMinuteWithAnUnreadableStartTest', () => {
+    expect(msUntilNextMinute('gestern', at(9, 15))).toBe(60_000)
+  })
+})
+
+describe('stopwatch words', () => {
+  it('timerTextTest', () => {
+    expect(timerText(timer(), 42)).toBe('0:42 · P-00012 Website · Konzeption')
+  })
+
+  it('timerTextOfInternalTimeTest', () => {
+    expect(timerText(INTERNAL, 65)).toBe('1:05 · intern')
+  })
+
+  it('timerTextAfterADayTest', () => {
+    expect(timerText(timer({ productId: null, serviceName: null }), 1560)).toBe(
+      '26:00 · P-00012 Website',
+    )
+  })
+
+  it('timerTabTitleTest', () => {
+    expect(timerTabTitle(42, 'webux ERP')).toBe('▶ 0:42 · webux ERP')
+  })
+
+  it('timerTabTitleAtTheStartTest', () => {
+    expect(timerTabTitle(0, 'webux ERP')).toBe('▶ 0:00 · webux ERP')
+  })
+
+  it('timerSinceTextTest', () => {
+    expect(timerSinceText(STARTED, '2026-11-25')).toBe('Läuft seit 09:15')
+  })
+
+  it('timerSinceTextOfAnEarlierDayTest', () => {
+    const text = timerSinceText(STARTED, '2026-11-26')
+
+    expect(text).toContain('25.11.2026')
+    expect(text).toContain('09:15')
+  })
+
+  it('stoppedTextTest', () => {
+    expect(stoppedText([entry({ durationMinutes: 90 })])).toBe(
+      'Angehalten: 1 Std. 30 Min., P-00012 Website · Muster AG.',
+    )
+  })
+
+  /** Over midnight the stop writes one entry per day, and the sentence names each. */
+  it('stoppedTextOverMidnightTest', () => {
+    const before = entry({ id: 8, workDate: '2026-11-24', durationMinutes: 10 })
+    const after = entry({ id: 9, workDate: '2026-11-25', durationMinutes: 20 })
+
+    expect(stoppedText([before, after])).toBe(
+      'Angehalten und auf 2 Tage verteilt: 10 Min. am Dienstag, 24. November; 20 Min. am Mittwoch, 25. November.',
+    )
+  })
+
+  it('stoppedTextWithoutEntriesTest', () => {
+    expect(stoppedText([])).toBe('Angehalten.')
+  })
+
+  it('stoppedTextWithALeadTest', () => {
+    expect(stoppedText([TRAINING], 'Vorige Stoppuhr angehalten')).toBe(
+      'Vorige Stoppuhr angehalten: 3 Std., intern.',
+    )
+  })
+
+  it('startedTextTest', () => {
+    expect(startedText({ timer: timer(), started: true, stoppedEntries: [] })).toBe(
+      'Stoppuhr läuft: P-00012 Website · Konzeption.',
+    )
+  })
+
+  /** A start while another one ran stops that one first; the sentence says what it became. */
+  it('startedTextAfterAnotherOneTest', () => {
+    expect(startedText({ timer: INTERNAL, started: true, stoppedEntries: [SUPPORT_HOUR] })).toBe(
+      'Stoppuhr läuft: intern. Vorige Stoppuhr angehalten: 1 Std., Muster AG.',
+    )
+  })
+
+  it('startedTextWhenAnotherDeviceWasFasterTest', () => {
+    expect(startedText({ timer: timer(), started: false, stoppedEntries: [] })).toBe(
+      'Auf einem anderen Gerät wurde gleichzeitig eine Stoppuhr gestartet. Sie läuft: P-00012 Website · Konzeption.',
+    )
+  })
+})
+
+describe('local day and time', () => {
+  it('localDateOfTest', () => {
+    expect(localDateOf(STARTED)).toBe('2026-11-25')
+  })
+
+  it('localDateOfJustAfterMidnightTest', () => {
+    expect(localDateOf(new Date(at(0, 5)).toISOString())).toBe('2026-11-25')
+  })
+
+  it('localTimeOfTest', () => {
+    expect(localTimeOf(STARTED)).toBe('09:15')
+  })
+
+  /** The seconds go; the field shows hours and minutes. */
+  it('localTimeOfDropsTheSecondsTest', () => {
+    expect(localTimeOf(new Date(at(23, 59, 59)).toISOString())).toBe('23:59')
+  })
+
+  it('instantOfTest', () => {
+    expect(instantOf('2026-11-25', '09:15')).toBe(new Date(at(9, 15)).toISOString())
+  })
+
+  it('instantOfWithOneDigitHoursTest', () => {
+    expect(instantOf('2026-11-25', ' 9:05 ')).toBe(new Date(at(9, 5)).toISOString())
+  })
+
+  it('instantOfAtMidnightTest', () => {
+    expect(instantOf('2026-11-25', '00:00')).toBe(new Date(at(0, 0)).toISOString())
+  })
+
+  it('instantOfWithoutTimeTest', () => {
+    expect(instantOf('2026-11-25', '')).toBeNull()
+  })
+
+  it('instantOfWithoutDayTest', () => {
+    expect(instantOf('', '09:15')).toBeNull()
+    expect(instantOf('2026-11', '09:15')).toBeNull()
+  })
+
+  it('instantOfWithATimeThatDoesNotExistTest', () => {
+    expect(instantOf('2026-11-25', '24:00')).toBeNull()
+    expect(instantOf('2026-11-25', '9:60')).toBeNull()
+    expect(instantOf('2026-11-25', '9.15')).toBeNull()
+  })
+
+  it('instantOfWithADayThatDoesNotExistTest', () => {
+    expect(instantOf('2026-02-31', '09:15')).toBeNull()
+  })
+})
+
+describe('the stopwatch field', () => {
+  it('emptyTimerFormTest', () => {
+    const { duration, ...shared } = emptyTimeEntryForm()
+
+    expect(duration).toBe('')
+    expect(emptyTimerForm()).toEqual({
+      ...shared,
+      startDate: '',
+      startTime: '',
+      endDate: '',
+      endTime: '',
+    })
+  })
+
+  it('toTimerFormTest', () => {
+    expect(toTimerForm(timer(), true)).toEqual({
+      targetTerm: 'P-00012 Website · Muster AG',
+      target: WEBSITE,
+      serviceTerm: 'Konzeption',
+      service: CONCEPT,
+      servicePicked: true,
+      description: 'Wireframes',
+      billable: true,
+      startDate: '2026-11-25',
+      startTime: '09:15',
+      endDate: '2026-11-25',
+      endTime: '',
+    })
+  })
+
+  it('toTimerFormOfInternalTimeTest', () => {
+    const field = toTimerForm(INTERNAL, true)
+
+    expect(field.target).toBeNull()
+    expect(field.targetTerm).toBe('')
+    expect(field.service).toBeNull()
+    expect(field.description).toBe('')
+    expect(effectiveBillable(field)).toBe(false)
+  })
+
+  it('toTimerFormWithAServiceThatIsGoneTest', () => {
+    expect(toTimerForm(timer({ serviceName: null }), true).serviceTerm).toBe(
+      'Leistung nicht mehr vorhanden',
+    )
+  })
+
+  it('toTimerFormWithoutProjectsTest', () => {
+    const customer = timer({ projectId: null, projectNumber: null, projectName: null })
+
+    expect(toTimerForm(customer, false).targetTerm).toBe('Muster AG')
+  })
+
+  /** The shared helpers keep what only the stopwatch has. */
+  it('withRecentTargetOnTheStopwatchTest', () => {
+    const changed = withRecentTarget(RUNNING, { partnerId: 11, customerName: 'Muster AG' }, true)
+
+    expect(changed.target).toEqual({ kind: 'CUSTOMER', partnerId: 11, customerName: 'Muster AG' })
+    expect(changed.startTime).toBe('09:15')
+  })
+
+  it('toTimerRequestTest', () => {
+    expect(toTimerRequest(RUNNING)).toEqual({
+      projectId: 12,
+      productId: 31,
+      description: 'Wireframes',
+      billable: true,
+    })
+  })
+
+  /** An empty field starts on internal time, and nothing else goes out. */
+  it('toTimerRequestOfInternalTimeTest', () => {
+    expect(toTimerRequest(timerForm())).toEqual({})
+  })
+
+  it('toTimerRequestForACustomerTest', () => {
+    expect(toTimerRequest(timerForm({ target: MUSTER, service: SUPPORT }))).toEqual({
+      partnerId: 11,
+      productId: 32,
+    })
+  })
+
+  /** Untouched, «verrechenbar» stays with the server; ticked off, it says so. */
+  it('toTimerRequestNotBillableTest', () => {
+    expect(toTimerRequest(timerForm({ target: MUSTER, billable: false }))).toEqual({
+      partnerId: 11,
+      billable: false,
+    })
+  })
+
+  it('toTimerRequestWithBlankTextTest', () => {
+    expect(toTimerRequest(timerForm({ description: '   ' }))).toEqual({})
+  })
+
+  /** The start is left out while unchanged, so the server keeps it to the second. */
+  it('toTimerChangeRequestTest', () => {
+    const changed = withService(RUNNING, SUPPORT)
+
+    expect(toTimerChangeRequest(changed, RUNNING, 4)).toEqual({
+      projectId: 12,
+      productId: 32,
+      description: 'Wireframes',
+      billable: true,
+      lockVersion: 4,
+    })
+  })
+
+  /** A changed start goes out on the minute, as the field shows it. */
+  it('toTimerChangeRequestWithAnEarlierStartTest', () => {
+    const earlier = { ...RUNNING, startTime: '08:50' }
+
+    expect(toTimerChangeRequest(earlier, RUNNING, 4).startedAt).toBe(
+      new Date(at(8, 50)).toISOString(),
+    )
+  })
+
+  /** A field left out is cleared: internal time says so in full. */
+  it('toTimerChangeRequestToInternalTimeTest', () => {
+    const internal = {
+      ...RUNNING,
+      targetTerm: '',
+      target: null,
+      serviceTerm: '',
+      service: null,
+      description: '',
+    }
+
+    expect(toTimerChangeRequest(internal, RUNNING, 4)).toEqual({ billable: false, lockVersion: 4 })
+  })
+
+  it('toTimerStopRequestTest', () => {
+    expect(toTimerStopRequest({ ...RUNNING, endTime: '17:30' })).toEqual({
+      correctedEnd: new Date(at(17, 30)).toISOString(),
+    })
+  })
+
+  it('toTimerStopRequestWithoutEndTest', () => {
+    expect(toTimerStopRequest(RUNNING)).toEqual({})
+  })
+
+  it('toTimerStopRequestWithAnUnreadableEndTest', () => {
+    expect(toTimerStopRequest({ ...RUNNING, endDate: '', endTime: '17:30' })).toEqual({})
+  })
+
+  it('timerChangedTest', () => {
+    expect(timerChanged(withService(RUNNING, SUPPORT), RUNNING)).toBe(true)
+  })
+
+  it('timerChangedWithoutChangeTest', () => {
+    expect(timerChanged(RUNNING, RUNNING)).toBe(false)
+  })
+
+  it('timerChangedByTheStartTest', () => {
+    expect(timerChanged({ ...RUNNING, startTime: '08:50' }, RUNNING)).toBe(true)
+  })
+
+  /** The real end is not part of the stopwatch; typing it changes nothing to save. */
+  it('timerChangedByTheEndTest', () => {
+    expect(timerChanged({ ...RUNNING, endTime: '17:30' }, RUNNING)).toBe(false)
+  })
+})
+
+describe('timerComplaints', () => {
+  it('timerComplaintsTest', () => {
+    expect(timerComplaints(RUNNING, 'stop', false)).toEqual({})
+  })
+
+  /** The stopwatch may start billable without a service; the stop asks for one. */
+  it('timerComplaintsBillableWithoutServiceTest', () => {
+    const customer = { target: MUSTER, targetTerm: 'Muster AG (ohne Projekt)' }
+    const noService = { ...RUNNING, ...customer, service: null, serviceTerm: '' }
+
+    expect(timerComplaints(timerForm(customer), 'start', false)).toEqual({})
+    expect(timerComplaints(noService, 'change', false)).toEqual({})
+    expect(timerComplaints(noService, 'stop', false).productId).toContain(
+      'Verrechenbar braucht eine Leistung',
+    )
+  })
+
+  it('timerComplaintsWithATargetNotTakenTest', () => {
+    expect(timerComplaints(timerForm({ targetTerm: 'Muster' }), 'start', false)).toEqual({
+      projectId: 'Einen Treffer aus der Liste wählen oder das Feld leeren.',
+    })
+  })
+
+  it('timerComplaintsWithoutStartTest', () => {
+    expect(timerComplaints({ ...RUNNING, startTime: '' }, 'change', false)).toEqual({
+      startedAt: 'Den Start mit Tag und Uhrzeit angeben.',
+    })
+  })
+
+  /** After 24 hours the stop needs the real end. */
+  it('timerComplaintsWithoutTheRequiredEndTest', () => {
+    expect(timerComplaints(RUNNING, 'stop', true).correctedEnd).toContain('echte Ende')
+    expect(timerComplaints({ ...RUNNING, endTime: '17:30' }, 'stop', true)).toEqual({})
+  })
+
+  it('timerComplaintsWithAnUnreadableEndTest', () => {
+    expect(timerComplaints({ ...RUNNING, endDate: '', endTime: '17:30' }, 'stop', false)).toEqual({
+      correctedEnd: 'Das Ende mit Tag und Uhrzeit angeben.',
+    })
+  })
+
+  /** Start and end belong to a stopwatch that runs; a new start asks about neither. */
+  it('timerComplaintsOfANewStartTest', () => {
+    expect(timerComplaints(timerForm(), 'start', true)).toEqual({})
+  })
+})
+
+describe('stopwatch messages', () => {
+  it('timerErrorsTest', () => {
+    const errors = {
+      partnerId: 'Kunde fehlt.',
+      productId: 'Leistung fehlt.',
+      correctedEnd: 'Zukunft.',
+      startedAt: 'Zukunft!',
+    }
+
+    expect(timerErrors(errors)).toEqual({
+      target: 'Kunde fehlt.',
+      service: 'Leistung fehlt.',
+      end: 'Zukunft.',
+      start: 'Zukunft!',
+    })
+  })
+
+  it('timerErrorsWithNothingTest', () => {
+    expect(timerErrors({ lockVersion: 'Stand fehlt.' })).toEqual({})
+  })
+
+  it('isToldByTimerTest', () => {
+    const atService = new ApiError(400, 'Keine Leistung.', {
+      errors: [{ field: 'productId', message: 'Keine Leistung.' }],
+    })
+
+    expect(isToldByTimer(atService, ['target', 'service'])).toBe(true)
+  })
+
+  /** The field of the real end stands only while a stopwatch runs. */
+  it('isToldByTimerWithAFieldNotShownTest', () => {
+    const atEnd = new ApiError(400, 'Zukunft.', {
+      errors: [{ field: 'correctedEnd', message: 'Zukunft.' }],
+    })
+
+    expect(isToldByTimer(atEnd, ['target', 'service', 'description'])).toBe(false)
+    expect(isToldByTimer(atEnd, ['end'])).toBe(true)
+  })
+
+  it('isToldByTimerWithoutFieldTest', () => {
+    expect(isToldByTimer(new ApiError(409, 'Geändert.'), ['target', 'end'])).toBe(false)
+  })
+
+  it('isTimerTooLongTest', () => {
+    const tooLong = new ApiError(409, 'Länger als 24 Stunden.', {
+      startedAt: STARTED,
+      errors: [{ field: 'correctedEnd', message: 'Länger als 24 Stunden.' }],
+    })
+
+    expect(isTimerTooLong(tooLong)).toBe(true)
+  })
+
+  /** Changed on another device, or the module switched off: 409 too, without a field. */
+  it('isTimerTooLongWithAnotherConflictTest', () => {
+    expect(isTimerTooLong(new ApiError(409, 'Auf einem anderen Gerät geändert.'))).toBe(false)
+  })
+
+  it('isTimerTooLongWithAnEndInTheFutureTest', () => {
+    const future = new ApiError(400, 'Zukunft.', {
+      errors: [{ field: 'correctedEnd', message: 'Zukunft.' }],
+    })
+
+    expect(isTimerTooLong(future)).toBe(false)
+  })
+
+  it('isTimerTooLongWithSomethingElseTest', () => {
+    expect(isTimerTooLong(new Error('Netz weg'))).toBe(false)
+    expect(isTimerTooLong(null)).toBe(false)
   })
 })

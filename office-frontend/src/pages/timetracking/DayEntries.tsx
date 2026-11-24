@@ -1,4 +1,4 @@
-import { CopyPlus, Lock, Trash2 } from 'lucide-react'
+import { CopyPlus, Lock, Play, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '../../components/Badge'
 import { IconButton } from '../../components/IconButton'
@@ -20,14 +20,17 @@ const ROW_LAYOUT =
  * The entries of one day, the way the week bar chose it.
  *
  * <p>A click on a row opens it in the same line form it was recorded in, right where it stands.
- * «Auf heute kopieren» writes the same work again for today, «Löschen» asks first. An entry
- * that can only be read says why, in the backend's sentence, and offers neither (backend
- * ADR-0160).
+ * «Fortsetzen» starts the stopwatch on the same work, «Auf heute kopieren» writes the same work
+ * again for today, «Löschen» asks first. An entry that can only be read says why, in the
+ * backend's sentence, and offers neither (backend ADR-0160, ADR-0161).
  *
  * @param editingId the entry open in the line form, if any
  * @param editor the line form for that entry, drawn in place of its row
  * @param mayWrite whether this session may change these times at all
  * @param copyingId the entry a copy is on its way for
+ * @param onContinue starts the stopwatch on an entry; absent where the times are somebody
+ *   else's, because the stopwatch is one's own
+ * @param continuingId the entry the stopwatch is being started on
  */
 export function DayEntries({
   entries,
@@ -35,8 +38,10 @@ export function DayEntries({
   editor,
   mayWrite,
   copyingId,
+  continuingId,
   onEdit,
   onCopy,
+  onContinue,
   onDelete,
 }: {
   entries: readonly TimeEntry[]
@@ -44,8 +49,10 @@ export function DayEntries({
   editor: ReactNode
   mayWrite: boolean
   copyingId: number | null
+  continuingId: number | null
   onEdit: (entry: TimeEntry) => void
   onCopy: (entry: TimeEntry) => void
+  onContinue?: (entry: TimeEntry) => void
   onDelete: (entry: TimeEntry) => void
 }) {
   return (
@@ -66,8 +73,10 @@ export function DayEntries({
               entry={entry}
               mayWrite={mayWrite}
               copying={copyingId === entry.id}
+              continuing={continuingId === entry.id}
               onEdit={onEdit}
               onCopy={onCopy}
+              onContinue={onContinue}
               onDelete={onDelete}
             />
           )}
@@ -81,15 +90,19 @@ function EntryRow({
   entry,
   mayWrite,
   copying,
+  continuing,
   onEdit,
   onCopy,
+  onContinue,
   onDelete,
 }: {
   entry: TimeEntry
   mayWrite: boolean
   copying: boolean
+  continuing: boolean
   onEdit: (entry: TimeEntry) => void
   onCopy: (entry: TimeEntry) => void
+  onContinue?: (entry: TimeEntry) => void
   onDelete: (entry: TimeEntry) => void
 }) {
   const changeable = mayWrite && entry.editable
@@ -128,6 +141,15 @@ function EntryRow({
         )}
         {mayWrite && (
           <div className="flex shrink-0 items-center gap-0.5">
+            {onContinue && entry.editable && (
+              <IconButton
+                label={`${short} fortsetzen`}
+                onClick={() => onContinue(entry)}
+                disabled={continuing}
+              >
+                <Play size={15} aria-hidden />
+              </IconButton>
+            )}
             <IconButton
               label={`${short} auf heute kopieren`}
               onClick={() => onCopy(entry)}

@@ -23,6 +23,7 @@ import {
   TIMETRACKING_MODULE,
   TIMETRACKING_RIGHTS,
   colleaguesUrl,
+  continueEntryUrl,
   copyRequestOf,
   dayTotalText,
   emptyTimeEntryForm,
@@ -35,6 +36,7 @@ import {
   nextEntryForm,
   recentTargetsKey,
   recentTargetsUrl,
+  startedText,
   timeEntriesKey,
   timeEntryComplaints,
   timeEntryUrl,
@@ -42,6 +44,7 @@ import {
   timeLookupsKey,
   timeSheetKey,
   timeSheetUrl,
+  timerKey,
   toTimeEntryForm,
   toTimeEntryRequest,
   weekStep,
@@ -55,10 +58,11 @@ import type {
   TimeEntryRequest,
   TimeRecentTarget,
   TimeSheet,
+  TimerStart,
 } from '../lib/types'
 import { addDays, dayTitle, mondayOf, weekDays, weekLabel } from '../lib/week'
+import { RecentChips } from '../timetracking/RecentChips'
 import { DayEntries } from './timetracking/DayEntries'
-import { RecentChips } from './timetracking/RecentChips'
 import { TimeEntryLine } from './timetracking/TimeEntryLine'
 import { WeekBar } from './timetracking/WeekBar'
 
@@ -67,7 +71,8 @@ import { WeekBar } from './timetracking/WeekBar'
  *
  * <p>Recording costs no more than a note on paper: project or customer, service, duration, text
  * and Enter. Project and service stay for the next entry, and the focus goes back to the
- * duration (#124, backend ADR-0160, frontend ADR-0082).
+ * duration (#124, backend ADR-0160, frontend ADR-0082). «Fortsetzen» at an own entry starts the
+ * stopwatch on the same work (#125, backend ADR-0161, frontend ADR-0083).
  *
  * <p>With `TIME_READ` the same screen shows the week of a colleague, and with `TIME_WRITE` the
  * line records for them. Their times are personal data about how somebody works (OR Art. 328b),
@@ -256,6 +261,20 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
     },
   })
 
+  // «Fortsetzen» starts one's own stopwatch, so the button in the sidebar shows it at once; a
+  // stopwatch that ran is turned into entries, which this week may show.
+  const resume = useMutation({
+    mutationFn: (entry: TimeEntry) => api.post<TimerStart>(continueEntryUrl(tenantId, entry.id)),
+    onSuccess: (start) => {
+      queryClient.setQueryData(timerKey(tenantId), start.timer)
+      setStatus(startedText(start))
+      refresh()
+    },
+    // Refused because the stopwatch that runs could not be stopped: read it anew, its state
+    // is what the refusal is about.
+    onError: () => void queryClient.invalidateQueries({ queryKey: timerKey(tenantId) }),
+  })
+
   const [deleting, setDeleting] = useState<TimeEntry | null>(null)
   const remove = useMutation({
     mutationFn: (entry: TimeEntry) => api.delete<void>(timeEntryUrl(tenantId, owner, entry.id)),
@@ -394,6 +413,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
         )}
 
         {copy.error !== null && <ErrorNotice error={copy.error} />}
+        {resume.error !== null && <ErrorNotice error={resume.error} />}
 
         <Panel
           title={dayTitle(day)}
@@ -426,8 +446,17 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
               editingId={editingId}
               mayWrite={mayWrite}
               copyingId={copy.isPending ? (copy.variables?.id ?? null) : null}
+              continuingId={resume.isPending ? (resume.variables?.id ?? null) : null}
               onEdit={(entry) => leaveEdit(() => openEdit(entry))}
               onCopy={(entry) => copy.mutate(entry)}
+              onContinue={
+                owner === 'mine'
+                  ? (entry) => {
+                      resume.reset()
+                      resume.mutate(entry)
+                    }
+                  : undefined
+              }
               onDelete={(entry) => {
                 remove.reset()
                 setDeleting(entry)

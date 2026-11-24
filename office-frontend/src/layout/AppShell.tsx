@@ -18,6 +18,7 @@ import { BrandMark } from '../components/BrandMark'
 import { useAuth } from '../auth/useAuth'
 import { initialsOf } from '../lib/format'
 import { runsModule } from '../lib/modules'
+import { TimerButton } from '../timetracking/TimerButton'
 import { useNavCounters } from './useNavCounters'
 import {
   flattenNav,
@@ -62,16 +63,18 @@ export function AppShell() {
   if (narrow) {
     return (
       <div className="flex min-h-screen flex-col bg-canvas">
-        <div className="sticky top-0 z-30 flex items-center border-b border-line-subtle bg-canvas px-4 py-3">
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-line-subtle bg-canvas px-4 py-3">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-expanded={drawerOpen}
-            className="inline-flex h-control items-center gap-2 rounded-[var(--radius-md)] border border-line px-3 text-body"
+            className="inline-flex h-control shrink-0 items-center gap-2 rounded-[var(--radius-md)] border border-line px-3 text-body"
           >
             <Menu size={16} aria-hidden />
             Navigation
           </button>
+          {/* The stopwatch has to be stoppable on the phone without opening the menu first. */}
+          <TimerButton place="bar" />
         </div>
         {drawerOpen && (
           <>
@@ -140,7 +143,8 @@ function Sidebar({
         overlay ? 'fixed inset-y-0 left-0 z-50 shadow-xl' : 'sticky top-0 z-20 shrink-0'
       }`}
     >
-      <SidebarHeader collapsed={collapsed} onToggle={onToggle} />
+      {/* The drawer of a phone leaves the stopwatch out: the bar above the page has it. */}
+      <SidebarHeader collapsed={collapsed} onToggle={onToggle} withTimer={!overlay} />
 
       <nav
         className={`mt-2 flex-1 overflow-y-auto overflow-x-hidden pb-4 ${collapsed ? 'px-2' : 'px-3'}`}
@@ -235,29 +239,35 @@ function Sidebar({
  * <p>The fold control sits here rather than at the foot because that is where people look
  * for it, and because it belongs to the thing it folds. Folded it moves under the mark,
  * since a 64 pixel rail has no second column.
+ *
+ * <p>The stopwatch sits under both, on every page and always in the same spot; folded it is a
+ * symbol with its time in the tooltip (frontend ADR-0083).
  */
 function SidebarHeader({
   collapsed,
   onToggle,
+  withTimer,
 }: {
   collapsed: boolean
   onToggle: () => void
+  withTimer: boolean
 }) {
   return (
-    <div
-      className={`flex gap-1 ${collapsed ? 'flex-col items-center p-2' : 'items-center p-3 pb-2'}`}
-    >
-      <TenantSwitcher collapsed={collapsed} />
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
-        title={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-inverse-muted transition-colors hover:bg-ink-hover hover:text-text-inverse"
-      >
-        {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-      </button>
+    <div className={collapsed ? 'flex flex-col items-center p-2' : 'p-3 pb-2'}>
+      <div className={`flex gap-1 ${collapsed ? 'flex-col items-center' : 'items-center'}`}>
+        <TenantSwitcher collapsed={collapsed} />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+          title={collapsed ? 'Navigation ausklappen' : 'Navigation einklappen'}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-inverse-muted transition-colors hover:bg-ink-hover hover:text-text-inverse"
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      </div>
+      {withTimer && <TimerButton place={collapsed ? 'rail' : 'sidebar'} />}
     </div>
   )
 }

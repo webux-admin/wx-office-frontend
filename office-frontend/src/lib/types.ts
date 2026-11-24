@@ -5775,3 +5775,83 @@ export type TimeRecentTarget = {
   productNumber?: string | null
   serviceName?: string | null
 }
+
+/**
+ * The running stopwatch of the signed in user (`RunningTimerDto`, backend ADR-0161).
+ *
+ * <p>The screen counts on from `startedAt` itself; `elapsedMinutes` and the three flags say how
+ * long it ran when the answer was made. A name is absent when the thing it names no longer
+ * exists, while its id stays.
+ */
+export type RunningTimer = {
+  id: number
+  userId: number
+  /** ISO instant, to the second; the stop counts the real seconds from here. */
+  startedAt: string
+  projectId?: number | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** The customer; with a project the one of the project. */
+  partnerId?: number | null
+  customerName?: string | null
+  /** The service, a product of the type service. */
+  productId?: number | null
+  productNumber?: string | null
+  serviceName?: string | null
+  description?: string | null
+  billable: boolean
+  /** Whole minutes since the start, when the answer was made. */
+  elapsedMinutes: number
+  /** True from twelve hours on: the screen shows `notice` before it stops. */
+  longRunning: boolean
+  /** True after more than 24 hours: stopping needs the real end. */
+  endRequired: boolean
+  /** The sentence to show before stopping; absent before twelve hours. */
+  notice?: string | null
+  /** The state to send back with a change. */
+  lockVersion: number
+}
+
+/**
+ * The answer to a start of the stopwatch and to «Fortsetzen» (`TimerStartDto`).
+ *
+ * <p>`started` is false when another device started one at the same moment; `timer` is then
+ * that one. `stoppedEntries` are what the stopwatch that ran before was turned into.
+ */
+export type TimerStart = {
+  timer: RunningTimer
+  started: boolean
+  /** The earliest first; empty when no stopwatch ran. */
+  stoppedEntries: TimeEntry[]
+}
+
+/**
+ * What starts the stopwatch (`TimerRequest`). Every field may be left out; `{}` starts it on
+ * internal time. With a project `partnerId` stays out: the customer is the project's.
+ */
+export type TimerRequest = {
+  projectId?: number
+  partnerId?: number
+  productId?: number
+  description?: string
+  /** Left out for the default: yes with a customer, no without. */
+  billable?: boolean
+}
+
+/**
+ * What changes the running stopwatch (`TimerChangeRequest`).
+ *
+ * <p>A field left out is cleared, not kept — except `startedAt`, which left out keeps the start.
+ */
+export type TimerChangeRequest = TimerRequest & {
+  /** The new start, an ISO instant not after now. */
+  startedAt?: string
+  /** The state of the stopwatch the change was made to, as read. */
+  lockVersion: number
+}
+
+/** What may go with a stop (`TimerStopRequest`); empty stops it now. */
+export type TimerStopRequest = {
+  /** The real end as an ISO instant, after the start and not after now. */
+  correctedEnd?: string
+}

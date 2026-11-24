@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
 import type {
+  RunningTimer,
   TimeColleague,
   TimeEntry,
   TimeRecentTarget,
@@ -135,6 +136,27 @@ const RECENT: TimeRecentTarget[] = [
   {},
 ]
 
+/** The stopwatch «Fortsetzen» starts on the wireframes. */
+const CONTINUED: RunningTimer = {
+  id: 3,
+  userId: 1,
+  startedAt: '2026-11-25T09:00:00Z',
+  projectId: 12,
+  projectNumber: 'P-00012',
+  projectName: 'Website',
+  partnerId: 11,
+  customerName: 'Muster AG',
+  productId: 31,
+  productNumber: 'L-001',
+  serviceName: 'Konzeption',
+  description: 'Wireframes',
+  billable: true,
+  elapsedMinutes: 0,
+  longRunning: false,
+  endRequired: false,
+  lockVersion: 0,
+}
+
 const COLLEAGUES: TimeColleague[] = [
   { userId: 1, name: 'Anna Muster', active: true },
   { userId: 42, name: 'Beat Keller', active: true },
@@ -198,6 +220,9 @@ function stubFetch() {
     if (method !== 'GET') {
       if (writeFailure !== null) return json(writeFailure.body, writeFailure.status)
       if (method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url.endsWith('/continue')) {
+        return json({ timer: CONTINUED, started: true, stoppedEntries: [] }, 201)
+      }
       if (method === 'PUT') return json({ ...TICKET, ...body, lockVersion: 3 })
       return json(
         entry({ ...body, id: 99, durationMinutes: body.durationMinutes ?? 90, lockVersion: 0 }),
@@ -678,6 +703,64 @@ describe('TimeEntryPage', () => {
 
     expect(writes()).toEqual([{ method: 'DELETE', url: `${BASE}/mine/7`, body: {} }])
     expect(text()).toContain('Gelöscht: 3 Std., intern.')
+  })
+
+  /** «Fortsetzen» starts the stopwatch on the same work and reads the week anew. */
+  it('timeEntryPageContinuesAnEntryTest', async () => {
+    await render()
+    const sheetReads = requests.filter((request) => request.url.startsWith(`${BASE}/mine?`)).length
+
+    await click(button('2:30 P-00012 Website · Muster AG fortsetzen'))
+
+    expect(writes()).toEqual([{ method: 'POST', url: `${BASE}/mine/5/continue`, body: {} }])
+    expect(text()).toContain('Stoppuhr läuft: P-00012 Website · Konzeption.')
+    expect(requests.filter((request) => request.url.startsWith(`${BASE}/mine?`)).length).toBe(
+      sheetReads + 1,
+    )
+  })
+
+  /** A project completed since takes no new time; the backend's sentence says so. */
+  it('timeEntryPageShowsWhyAnEntryCannotBeContinuedTest', async () => {
+    await render()
+    writeFailure = {
+      status: 400,
+      body: {
+        detail: 'Das Projekt P-00012 ist abgeschlossen und nimmt keine neue Zeit an.',
+        errors: [
+          {
+            field: 'projectId',
+            message: 'Das Projekt P-00012 ist abgeschlossen und nimmt keine neue Zeit an.',
+          },
+        ],
+      },
+    }
+
+    await click(button('2:30 P-00012 Website · Muster AG fortsetzen'))
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Das Projekt P-00012 ist abgeschlossen',
+    )
+  })
+
+  it('timeEntryPageContinuesNoReadOnlyEntryTest', async () => {
+    await render()
+    await click(day('Montag'))
+
+    expect(row('Altbau').querySelector('button[aria-label$="fortsetzen"]')).toBeNull()
+  })
+
+  /** The stopwatch is one's own: the week of a colleague offers no «Fortsetzen». */
+  it('timeEntryPageContinuesNothingOfAColleagueTest', async () => {
+    await render(['TIME_TRACK', 'TIME_READ', 'TIME_WRITE'])
+    const owner = control('Zeiten von', container)
+    await act(async () => {
+      owner.value = '42'
+      owner.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+
+    expect(row('Ticket 4711').querySelector('button[aria-label$="auf heute kopieren"]')).not.toBeNull()
+    expect(row('Ticket 4711').querySelector('button[aria-label$="fortsetzen"]')).toBeNull()
   })
 
   /** An entry that can only be read says why, and offers neither change nor delete. */

@@ -72,7 +72,17 @@ Stand der Module (in dieser Reihenfolge gebaut):
   hinaus, eine Dauer als Minuten. Chips «Zuletzt» und die Vorgabe der Leistung kommen vom
   Backend; die Liste des Tages öffnet einen Eintrag in derselben Zeile, kopiert auf heute ohne
   Von–Bis und löscht mit Rückfrage. «Zeiten von …» nur mit `TIME_READ`, schreibend nur mit
-  `TIME_WRITE` (ADR-0082, Backend ADR-0160)
+  `TIME_WRITE` (ADR-0082, Backend ADR-0160). Die **Stoppuhr** steht als `TimerButton` im Kopf der
+  Seitenleiste, eingeklappt als Symbol mit Tooltip, auf dem Telefon in der Leiste neben
+  «Navigation» — nur mit Schalter und `TIME_TRACK`: «▶ Zeit starten» oder «■ 0:42 · P-00012
+  Website · Konzeption». Ein Klick öffnet ein Feld mit denselben Bausteinen wie die Schnellzeile
+  (`src/timetracking/`: Ziel, Leistung, «verrechenbar», «Zuletzt»), «Start» ohne Uhr, sonst
+  «Verwerfen» mit Rückfrage, «Speichern» über `PUT` (auch den Start rückwärts) und «Stopp», das
+  zuerst speichert; der Fokus steht auf «Stopp». Die Zeit rechnet der Browser aus dem
+  sekundengenauen `startedAt`, ohne Abfrage; beim Zurückkehren auf den Tab liest er Uhr und
+  Einträge neu, und der Tab-Titel beginnt mit «▶ 0:42». Ab zwölf Stunden zeigt das Feld `notice`
+  und ein echtes Ende, über 24 Stunden als Pflicht. «Fortsetzen» (▶) an jedem eigenen,
+  änderbaren Eintrag (ADR-0083, Backend ADR-0161)
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

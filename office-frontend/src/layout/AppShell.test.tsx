@@ -67,11 +67,42 @@ function stubViewport(wide: boolean) {
   }))
 }
 
-async function render() {
+/** A session that tracks time: the module runs and the user holds `TIME_TRACK`. */
+const TRACKING: AuthState = {
+  ...SESSION,
+  user: SESSION.user && {
+    ...SESSION.user,
+    tenants: [{ id: TENANT, code: 'WX', name: 'Webux', isDefault: true, modules: ['TIMETRACKING'] }],
+    permissions: ['TIME_TRACK'],
+  },
+  can: (permission: string) => permission === 'TIME_TRACK',
+}
+
+/** No stopwatch runs: the backend answers 204. */
+function stubNoStopwatch() {
+  vi.stubGlobal('fetch', (url: string) =>
+    Promise.resolve(
+      url.endsWith('/time-entries/mine/timer')
+        ? new Response(null, { status: 204 })
+        : new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    ),
+  )
+}
+
+/** The stopwatch button, found by what it says or what it is called. */
+function stopwatchButtons(): HTMLButtonElement[] {
+  return [...container.querySelectorAll('button')].filter(
+    (entry) =>
+      entry.textContent?.trim() === 'Zeit starten' ||
+      entry.getAttribute('aria-label') === 'Zeit starten',
+  )
+}
+
+async function render(session: AuthState = SESSION) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   await act(async () => {
     root.render(
-      <AuthContext.Provider value={SESSION}>
+      <AuthContext.Provider value={session}>
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={['/']}>
             <Routes>
@@ -171,5 +202,54 @@ describe('AppShell', () => {
 
     expect(sidebar()).not.toBeNull()
     expect(menuButton()).toBeUndefined()
+  })
+
+  /** The stopwatch stands in the head of the sidebar, on every page. */
+  it('appShellShowsTheStopwatchInTheSidebarTest', async () => {
+    stubViewport(true)
+    stubNoStopwatch()
+
+    await render(TRACKING)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    const [stopwatch] = stopwatchButtons()
+    expect(stopwatch?.closest('aside')).not.toBeNull()
+    expect(stopwatchButtons()).toHaveLength(1)
+  })
+
+  /** On a phone it stands in the bar beside the menu, and the drawer does not repeat it. */
+  it('appShellShowsTheStopwatchInTheBarOfAPhoneTest', async () => {
+    stubViewport(false)
+    stubNoStopwatch()
+    await render(TRACKING)
+
+    await act(async () => {
+      menuButton()?.click()
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    const [stopwatch] = stopwatchButtons()
+    expect(stopwatch?.closest('aside')).toBeNull()
+    expect(stopwatch?.parentElement).toBe(menuButton()?.parentElement)
+    expect(stopwatchButtons()).toHaveLength(1)
+  })
+
+  /** Without the right or the module there is no stopwatch, and nothing is asked. */
+  it('appShellWithoutTheStopwatchTest', async () => {
+    stubViewport(true)
+    const requests: string[] = []
+    vi.stubGlobal('fetch', (url: string) => {
+      requests.push(url)
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+
+    await render()
+
+    expect(stopwatchButtons()).toHaveLength(0)
+    expect(requests.some((url) => url.includes('/timer'))).toBe(false)
   })
 })

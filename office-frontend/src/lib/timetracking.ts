@@ -1,15 +1,22 @@
 import type { BadgeTone } from '../components/Badge'
-import { formatDurationShort, readDuration, type Duration } from './duration'
-import { isToldByFields, type FieldErrors } from './fieldErrors'
+import { ApiError } from './api'
+import { formatDuration, formatDurationShort, readDuration, type Duration } from './duration'
+import { fieldErrorsOf, isToldByFields, type FieldErrors } from './fieldErrors'
+import { formatDateTime, isCompleteIsoDate, toIsoDate } from './format'
 import { listQuery } from './paging'
-import { addDays, isWeekend, mondayOf } from './week'
+import { addDays, dayTitle, isWeekend, mondayOf } from './week'
 import type {
+  RunningTimer,
   TimeEntry,
   TimeEntryRequest,
   TimeEntryState,
   TimeRecentTarget,
   TimeServiceChoice,
   TimeTargetChoice,
+  TimerChangeRequest,
+  TimerRequest,
+  TimerStart,
+  TimerStopRequest,
 } from './types'
 
 /**
@@ -287,9 +294,9 @@ export function entryServiceText(entry: TimeEntry): string {
 }
 
 /**
- * What a chip «Zuletzt» says.
+ * What a chip «Zuletzt» says, and the running stopwatch the same way.
  *
- * @param recent one combination recorded on lately
+ * @param recent one combination recorded on lately, or the stopwatch
  * @returns «P-00012 Website · Konzeption», «Muster AG · Support», «intern» or
  *          «intern · Administration»
  */
@@ -378,10 +385,10 @@ function endOfRange(endTime: string): string {
 // --- the quick line ----------------------------------------------------------------
 
 /**
- * The quick line as it lives in the browser: what stands in each field, and what was taken over
- * from a list.
+ * What the quick line and the stopwatch field both hold: on what and for whom the time is, as it
+ * lives in the browser — what stands in each field, and what was taken over from a list.
  */
-export type TimeEntryForm = {
+export type AssignmentForm = {
   /** What stands in the field «Projekt oder Kunde». */
   targetTerm: string
   /** The project or customer taken from the list; `null` for internal time or while typing. */
@@ -391,11 +398,15 @@ export type TimeEntryForm = {
   service: TimeServiceChoice | null
   /** True once the service was chosen by hand, so a suggestion no longer replaces it. */
   servicePicked: boolean
-  /** The duration as typed: «1:30», «90m», «9-10:30». */
-  duration: string
   description: string
   /** `null` while the box follows the default: with a customer yes, without no. */
   billable: boolean | null
+}
+
+/** The quick line: what an entry is for, and how long it took. */
+export type TimeEntryForm = AssignmentForm & {
+  /** The duration as typed: «1:30», «90m», «9-10:30». */
+  duration: string
 }
 
 /** The fields of the quick line a message can stand at. */
@@ -433,29 +444,18 @@ export function emptyTimeEntryForm(): TimeEntryForm {
  * @returns the line; «verrechenbar» stands as the entry has it
  */
 export function toTimeEntryForm(entry: TimeEntry, projectsOn: boolean): TimeEntryForm {
-  const target = targetOf(entry)
-  const service = serviceOf(entry)
-  return {
-    targetTerm: target === null ? '' : targetLabel(target, projectsOn),
-    target,
-    serviceTerm: service?.name ?? '',
-    service,
-    servicePicked: service !== null,
-    duration: durationFieldOf(entry),
-    description: entry.description ?? '',
-    billable: entry.billable,
-  }
+  return { ...assignmentFormOf(entry, projectsOn), duration: durationFieldOf(entry) }
 }
 
 /**
  * Typing into the field «Projekt oder Kunde» gives the chosen target up, so the field never
  * shows one name while the line holds another. «verrechenbar» goes back to its default.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @param term what stands in the field now
- * @returns the changed line
+ * @returns the changed form
  */
-export function withTargetTerm(form: TimeEntryForm, term: string): TimeEntryForm {
+export function withTargetTerm<F extends AssignmentForm>(form: F, term: string): F {
   if (form.target === null) return { ...form, targetTerm: term }
   return { ...form, targetTerm: term, target: null, billable: null }
 }
@@ -463,38 +463,38 @@ export function withTargetTerm(form: TimeEntryForm, term: string): TimeEntryForm
 /**
  * Takes a project or customer over from the list. «verrechenbar» follows the new target.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @param target what was taken
  * @param projectsOn whether the tenant runs the projects
- * @returns the changed line
+ * @returns the changed form
  */
-export function withTarget(
-  form: TimeEntryForm,
+export function withTarget<F extends AssignmentForm>(
+  form: F,
   target: TimeTargetChoice,
   projectsOn: boolean,
-): TimeEntryForm {
+): F {
   return { ...form, target, targetTerm: targetLabel(target, projectsOn), billable: null }
 }
 
 /**
  * Typing into the field «Leistung» gives the chosen service up and counts as a choice by hand.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @param term what stands in the field now
- * @returns the changed line
+ * @returns the changed form
  */
-export function withServiceTerm(form: TimeEntryForm, term: string): TimeEntryForm {
+export function withServiceTerm<F extends AssignmentForm>(form: F, term: string): F {
   return { ...form, serviceTerm: term, service: null, servicePicked: true }
 }
 
 /**
  * Takes a service over from the list, by hand.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @param service what was taken
- * @returns the changed line
+ * @returns the changed form
  */
-export function withService(form: TimeEntryForm, service: TimeServiceChoice): TimeEntryForm {
+export function withService<F extends AssignmentForm>(form: F, service: TimeServiceChoice): F {
   return { ...form, service, serviceTerm: service.name, servicePicked: true }
 }
 
@@ -504,16 +504,16 @@ export function withService(form: TimeEntryForm, service: TimeServiceChoice): Ti
  * <p>Only while the line still names that target, and only over a service that was not chosen
  * by hand: the answer arrives after the click, and a choice made in between wins.
  *
- * @param form the line as it stands when the answer arrives
+ * @param form the line or the stopwatch field as it stands when the answer arrives
  * @param target the target the suggestion was asked for
  * @param service the suggestion, `null` where there is none
- * @returns the line, with the suggestion where it applies
+ * @returns the form, with the suggestion where it applies
  */
-export function withSuggestedService(
-  form: TimeEntryForm,
+export function withSuggestedService<F extends AssignmentForm>(
+  form: F,
   target: TimeTargetChoice | null,
   service: TimeServiceChoice | null,
-): TimeEntryForm {
+): F {
   if (service === null || form.servicePicked || !sameTarget(form.target, target)) return form
   return { ...form, service, serviceTerm: service.name }
 }
@@ -521,16 +521,16 @@ export function withSuggestedService(
 /**
  * Fills the line from a chip «Zuletzt»: project or customer and service, as recorded lately.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @param recent the chip
  * @param projectsOn whether the tenant runs the projects
- * @returns the line with target and service of the chip; duration and text stay
+ * @returns the form with target and service of the chip; duration, start and text stay
  */
-export function withRecentTarget(
-  form: TimeEntryForm,
+export function withRecentTarget<F extends AssignmentForm>(
+  form: F,
   recent: TimeRecentTarget,
   projectsOn: boolean,
-): TimeEntryForm {
+): F {
   const target = targetOf(recent)
   const service = serviceOf(recent)
   return {
@@ -558,11 +558,11 @@ export function nextEntryForm(form: TimeEntryForm): TimeEntryForm {
 /**
  * What the box «verrechenbar» shows.
  *
- * @param form the line
+ * @param form the line or the stopwatch field
  * @returns false without project or customer — internal time is never billed —, otherwise what
  *          was ticked, or yes while nothing was
  */
-export function effectiveBillable(form: TimeEntryForm): boolean {
+export function effectiveBillable(form: AssignmentForm): boolean {
   if (form.target === null) return false
   return form.billable ?? true
 }
@@ -601,17 +601,7 @@ export function timeEntryComplaints(form: TimeEntryForm): FieldErrors {
   const reading = readDuration(form.duration)
   if (reading.state === 'empty') complaints.durationMinutes = 'Eine Dauer eingeben, zum Beispiel 1:30.'
   if (reading.state === 'refused') complaints.durationMinutes = reading.message
-  if (form.target === null && form.targetTerm.trim() !== '') {
-    complaints.projectId = 'Einen Treffer aus der Liste wählen oder das Feld leeren.'
-  }
-  if (form.service === null && form.serviceTerm.trim() !== '') {
-    complaints.productId = 'Eine Leistung aus der Liste wählen oder das Feld leeren.'
-  } else if (form.service === null && effectiveBillable(form)) {
-    // The backend's sentence, word for word: the same rule must not say two different things.
-    complaints.productId =
-      'Verrechenbar braucht eine Leistung, sonst entsteht kein Preis. Leistung wählen oder «verrechenbar» ausschalten.'
-  }
-  return complaints
+  return { ...complaints, ...assignmentComplaints(form, true) }
 }
 
 /**
@@ -622,12 +612,7 @@ export function timeEntryComplaints(form: TimeEntryForm): FieldErrors {
  * @returns the first message for each field of the line
  */
 export function lineErrors(errors: FieldErrors): Partial<Record<TimeEntryLineField, string>> {
-  const result: Partial<Record<TimeEntryLineField, string>> = {}
-  for (const [field, names] of Object.entries(LINE_FIELDS) as [TimeEntryLineField, readonly string[]][]) {
-    const message = names.map((name) => errors[name]).find((entry) => entry !== undefined)
-    if (message !== undefined) result[field] = message
-  }
-  return result
+  return errorsByField(errors, LINE_FIELDS)
 }
 
 /**
@@ -697,6 +682,406 @@ export function copyRequestOf(entry: TimeEntry, workDate: string): TimeEntryRequ
   }
 }
 
+// --- the stopwatch -----------------------------------------------------------------
+
+/**
+ * @param tenantId the tenant
+ * @returns address of one's own stopwatch: read, start, change and discard. There is no address
+ *          for somebody else's — what a colleague does right now is nobody's business
+ *          (backend ADR-0161)
+ */
+export function timerUrl(tenantId: number): string {
+  return `${timeEntriesUrl(tenantId)}/mine/timer`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address that stops one's own stopwatch and writes its entries
+ */
+export function timerStopUrl(tenantId: number): string {
+  return `${timerUrl(tenantId)}/stop`
+}
+
+/**
+ * «Fortsetzen»: the stopwatch starts on what an own entry was worked on.
+ *
+ * @param tenantId the tenant
+ * @param entryId an own entry
+ * @returns address of that start
+ */
+export function continueEntryUrl(tenantId: number, entryId: number): string {
+  return `${timeEntriesUrl(tenantId)}/mine/${entryId}/continue`
+}
+
+/**
+ * Key of the running stopwatch.
+ *
+ * <p>Apart from {@link timeEntriesKey} on purpose: changing an entry leaves the stopwatch alone,
+ * while every start, stop and discard refreshes the entries as well.
+ *
+ * @param tenantId the tenant
+ * @returns key of one's own stopwatch
+ */
+export function timerKey(tenantId: number): readonly unknown[] {
+  return ['time-timer', tenantId]
+}
+
+const MINUTE_MILLISECONDS = 60_000
+
+/**
+ * How long the stopwatch runs, as its button shows it.
+ *
+ * <p>Counted in the browser from `startedAt`, so the button needs no request to go on counting
+ * (backend ADR-0161). Real seconds, like the stop: on the day the clocks change, 01:30 to 03:30
+ * reads one hour, as it is written.
+ *
+ * @param startedAt the start, an ISO instant to the second
+ * @param now the moment, in milliseconds since the epoch
+ * @returns the whole minutes since the start, rounded down; 0 before the start — a browser clock
+ *          behind the server's — and for a start that cannot be read
+ */
+export function minutesSince(startedAt: string, now: number): number {
+  const start = Date.parse(startedAt)
+  if (Number.isNaN(start) || now <= start) return 0
+  return Math.floor((now - start) / MINUTE_MILLISECONDS)
+}
+
+/**
+ * When the count of a stopwatch goes up next. The start is to the second, so the minutes turn
+ * over at the second of the start and not at the full minute of the clock.
+ *
+ * @param startedAt the start, an ISO instant
+ * @param now the moment, in milliseconds since the epoch
+ * @returns milliseconds until the next whole minute since the start, 1 to 60’000; before the
+ *          start, until the first one; a full minute for a start that cannot be read
+ */
+export function msUntilNextMinute(startedAt: string, now: number): number {
+  const start = Date.parse(startedAt)
+  if (Number.isNaN(start)) return MINUTE_MILLISECONDS
+  if (now < start) return start - now + MINUTE_MILLISECONDS
+  return MINUTE_MILLISECONDS - ((now - start) % MINUTE_MILLISECONDS)
+}
+
+/**
+ * What the running stopwatch says on its button: the time and what it runs on, the way a chip
+ * «Zuletzt» names it.
+ *
+ * @param timer the running stopwatch
+ * @param minutes how long it runs
+ * @returns «0:42 · P-00012 Website · Konzeption», «1:05 · intern»
+ */
+export function timerText(timer: RunningTimer, minutes: number): string {
+  return `${formatDurationShort(minutes)} · ${recentTargetLabel(timer)}`
+}
+
+/**
+ * The title of the browser tab while the stopwatch runs, so the time can be read from any tab.
+ *
+ * @param minutes how long it runs
+ * @param title the title the tab had before, which comes back with the stop
+ * @returns «▶ 0:42 · webux ERP»
+ */
+export function timerTabTitle(minutes: number, title: string): string {
+  return `▶ ${formatDurationShort(minutes)} · ${title}`
+}
+
+/**
+ * Since when the stopwatch runs, for the head of its field.
+ *
+ * @param startedAt the start, an ISO instant
+ * @param today the day it is, `yyyy-MM-dd`
+ * @returns «Läuft seit 09:15», on an earlier day «Läuft seit 24.11.2026, 09:15»
+ */
+export function timerSinceText(startedAt: string, today: string): string {
+  if (localDateOf(startedAt) === today) return `Läuft seit ${localTimeOf(startedAt)}`
+  return `Läuft seit ${formatDateTime(startedAt)}`
+}
+
+/**
+ * @param instant an ISO instant
+ * @returns its day as the clock of this browser reads it, `yyyy-MM-dd`
+ */
+export function localDateOf(instant: string): string {
+  return toIsoDate(new Date(instant))
+}
+
+/**
+ * @param instant an ISO instant
+ * @returns its time of day as the clock of this browser reads it, `HH:mm`; the seconds go
+ */
+export function localTimeOf(instant: string): string {
+  const moment = new Date(instant)
+  return `${twoDigits(moment.getHours())}:${twoDigits(moment.getMinutes())}`
+}
+
+/**
+ * A day and a time of day as somebody typed them, as the instant the backend takes.
+ *
+ * <p>Read on the clock of this browser: the time people type is the one they see. On the minute,
+ * because that is what a field of hours and minutes says.
+ *
+ * @param date the day, `yyyy-MM-dd`
+ * @param time the time of day, `HH:mm` or `H:mm`
+ * @returns the ISO instant; `null` while day or time is incomplete, or for a day or time that
+ *          does not exist, such as 31 February or 24:00
+ */
+export function instantOf(date: string, time: string): string | null {
+  if (!isCompleteIsoDate(date)) return null
+  const clock = /^(\d{1,2}):(\d{2})$/.exec(time.trim())
+  if (clock === null) return null
+  const [year, month, day] = date.split('-').map(Number)
+  const hours = Number(clock[1])
+  const minutes = Number(clock[2])
+  if (hours > 23 || minutes > 59) return null
+  const moment = new Date(year, month - 1, day, hours, minutes)
+  if (moment.getMonth() !== month - 1 || moment.getDate() !== day) return null
+  return moment.toISOString()
+}
+
+/**
+ * The stopwatch field: what the stopwatch runs on, its start, and the real end of one that ran
+ * long.
+ */
+export type TimerForm = AssignmentForm & {
+  /** Day of the start, `yyyy-MM-dd`; empty while nothing runs. */
+  startDate: string
+  /** Time of the start, `HH:mm`; empty while nothing runs. */
+  startTime: string
+  /** Day of the real end, set to the day of the start. */
+  endDate: string
+  /** Time of the real end; empty stops now. */
+  endTime: string
+}
+
+/** What the stopwatch field is asked to do: start one, change the running one, or stop it. */
+export type TimerIntent = 'start' | 'change' | 'stop'
+
+/** The fields of the stopwatch field a message can stand at. */
+export type TimerField = 'target' | 'service' | 'description' | 'start' | 'end'
+
+/** Which field of the request each field of the stopwatch answers for (backend ADR-0132). */
+const TIMER_FIELDS: Record<TimerField, readonly string[]> = {
+  target: ['projectId', 'partnerId'],
+  service: ['productId'],
+  description: ['description'],
+  start: ['startedAt'],
+  end: ['correctedEnd'],
+}
+
+/**
+ * @returns the field for a new start: nothing chosen, nothing typed
+ */
+export function emptyTimerForm(): TimerForm {
+  return {
+    targetTerm: '',
+    target: null,
+    serviceTerm: '',
+    service: null,
+    servicePicked: false,
+    description: '',
+    billable: null,
+    startDate: '',
+    startTime: '',
+    endDate: '',
+    endTime: '',
+  }
+}
+
+/**
+ * The field filled in with the running stopwatch, to change or stop it.
+ *
+ * @param timer the stopwatch as the backend sent it
+ * @param projectsOn whether the tenant runs the projects
+ * @returns the field; the start on the minute as this browser's clock reads it, the real end
+ *          empty on the day of the start
+ */
+export function toTimerForm(timer: RunningTimer, projectsOn: boolean): TimerForm {
+  const startDate = localDateOf(timer.startedAt)
+  return {
+    ...assignmentFormOf(timer, projectsOn),
+    startDate,
+    startTime: localTimeOf(timer.startedAt),
+    endDate: startDate,
+    endTime: '',
+  }
+}
+
+/**
+ * What starts the stopwatch.
+ *
+ * <p>Only what was chosen goes out, so `{}` starts it on internal time. «verrechenbar» goes out
+ * only where somebody ticked the box: otherwise the server keeps its default, which from #126 on
+ * follows the project.
+ *
+ * @param form the field, already free of complaints
+ * @returns the request body; never a field the backend does not know
+ */
+export function toTimerRequest(form: AssignmentForm): TimerRequest {
+  const description = form.description.trim()
+  const projectId = form.target?.kind === 'PROJECT' ? form.target.projectId : null
+  return {
+    ...(projectId != null ? { projectId } : {}),
+    ...(form.target?.kind === 'CUSTOMER' ? { partnerId: form.target.partnerId } : {}),
+    ...(form.service !== null ? { productId: form.service.productId } : {}),
+    ...(description !== '' ? { description } : {}),
+    ...(form.target !== null && form.billable !== null ? { billable: form.billable } : {}),
+  }
+}
+
+/**
+ * What changes the running stopwatch.
+ *
+ * <p>Everything it runs on goes out, because a field left out is cleared; «verrechenbar» always
+ * says its value. The start goes out only where it was changed, and then on the minute: left
+ * out, the server keeps it to the second.
+ *
+ * @param form the field, already free of complaints
+ * @param initial the field as the stopwatch was read
+ * @param lockVersion the state of the stopwatch the change was made to
+ * @returns the request body
+ */
+export function toTimerChangeRequest(
+  form: TimerForm,
+  initial: TimerForm,
+  lockVersion: number,
+): TimerChangeRequest {
+  const startedAt = startChanged(form, initial) ? instantOf(form.startDate, form.startTime) : null
+  return {
+    ...toTimerRequest(form),
+    billable: effectiveBillable(form),
+    ...(startedAt !== null ? { startedAt } : {}),
+    lockVersion,
+  }
+}
+
+/**
+ * What goes with a stop.
+ *
+ * @param form the field
+ * @returns the real end where a time was typed; otherwise nothing, and the stopwatch stops now
+ */
+export function toTimerStopRequest(form: TimerForm): TimerStopRequest {
+  if (form.endTime.trim() === '') return {}
+  const correctedEnd = instantOf(form.endDate, form.endTime)
+  return correctedEnd === null ? {} : { correctedEnd }
+}
+
+/**
+ * @param form the field as it stands
+ * @param initial the field as the stopwatch was read, or empty for a new start
+ * @returns true when saving would change something; the real end is no change of the stopwatch
+ */
+export function timerChanged(form: TimerForm, initial: TimerForm): boolean {
+  return assignmentSnapshot(form) !== assignmentSnapshot(initial) || startChanged(form, initial)
+}
+
+/**
+ * What is wrong with the stopwatch field for what it is asked to do, by the field of the request.
+ *
+ * <p>A name typed and never taken over is refused for every step, as on the quick line. The
+ * stopwatch may run billable without a service — whoever starts it because the phone rings knows
+ * the service later (backend ADR-0161) —, so that is asked at the stop only, in the backend's
+ * sentence. The start must be a whole moment; the real end only where a time was typed or the
+ * backend requires one.
+ *
+ * @param form the field as filled in
+ * @param intent the step asked for
+ * @param endRequired true where the stopwatch ran more than 24 hours, as the backend said
+ * @returns the complaints, empty when the step can be sent
+ */
+export function timerComplaints(
+  form: TimerForm,
+  intent: TimerIntent,
+  endRequired: boolean,
+): FieldErrors {
+  const complaints = assignmentComplaints(form, intent === 'stop')
+  if (intent === 'start') return complaints
+  if (instantOf(form.startDate, form.startTime) === null) {
+    complaints.startedAt = 'Den Start mit Tag und Uhrzeit angeben.'
+  }
+  if (intent !== 'stop') return complaints
+  const endTyped = form.endTime.trim() !== ''
+  if (endTyped && instantOf(form.endDate, form.endTime) === null) {
+    complaints.correctedEnd = 'Das Ende mit Tag und Uhrzeit angeben.'
+  }
+  if (!endTyped && endRequired) {
+    complaints.correctedEnd = 'Die Stoppuhr läuft länger als 24 Stunden. Zum Anhalten das echte Ende angeben.'
+  }
+  return complaints
+}
+
+/**
+ * The messages of the stopwatch field, by its fields: its own and those the backend named a
+ * field of the request for.
+ *
+ * @param errors the messages by field of the request
+ * @returns the first message for each field of the stopwatch
+ */
+export function timerErrors(errors: FieldErrors): Partial<Record<TimerField, string>> {
+  return errorsByField(errors, TIMER_FIELDS)
+}
+
+/**
+ * @param error what a request of the stopwatch threw
+ * @param shown the fields on screen; start and end stand there only while a stopwatch runs
+ * @returns true when every message of it stands at a shown field, so a notice above would only
+ *          repeat it
+ */
+export function isToldByTimer(error: unknown, shown: readonly TimerField[]): boolean {
+  return isToldByFields(error, shown.flatMap((field) => TIMER_FIELDS[field]))
+}
+
+/**
+ * Whether a refusal says that the stopwatch ran more than 24 hours.
+ *
+ * <p>That 409 names the field of the real end (backend ADR-0161); the other ones — changed on
+ * another device, the module switched off — name no field.
+ *
+ * @param error what a request threw
+ * @returns true for that refusal only
+ */
+export function isTimerTooLong(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false
+  return fieldErrorsOf(error).correctedEnd !== undefined
+}
+
+/**
+ * What a stop wrote, in one sentence.
+ *
+ * @param entries the entries the backend wrote, the earliest first: one, or one per day
+ * @param lead what the sentence starts with
+ * @returns «Angehalten: 1 Std. 30 Min., P-00012 Website · Muster AG.»; over midnight «Angehalten
+ *          und auf 2 Tage verteilt: 10 Min. am Montag, 23. November; 20 Min. am Dienstag, 24.
+ *          November.»; «Angehalten.» without entries
+ */
+export function stoppedText(entries: readonly TimeEntry[], lead = 'Angehalten'): string {
+  if (entries.length === 0) return `${lead}.`
+  if (entries.length === 1) {
+    return `${lead}: ${formatDuration(entries[0].durationMinutes)}, ${entryTargetText(entries[0])}.`
+  }
+  const days = entries.map(
+    (entry) => `${formatDuration(entry.durationMinutes)} am ${dayTitle(entry.workDate)}`,
+  )
+  return `${lead} und auf ${entries.length} Tage verteilt: ${days.join('; ')}.`
+}
+
+/**
+ * What a start or «Fortsetzen» did, in one or two sentences.
+ *
+ * @param start the answer of the backend
+ * @returns «Stoppuhr läuft: P-00012 Website · Konzeption.», with what the stopwatch before was
+ *          turned into; or that another device started one at the same moment
+ */
+export function startedText(start: TimerStart): string {
+  const subject = recentTargetLabel(start.timer)
+  if (!start.started) {
+    return `Auf einem anderen Gerät wurde gleichzeitig eine Stoppuhr gestartet. Sie läuft: ${subject}.`
+  }
+  const running = `Stoppuhr läuft: ${subject}.`
+  if (start.stoppedEntries.length === 0) return running
+  return `${running} ${stoppedText(start.stoppedEntries, 'Vorige Stoppuhr angehalten')}`
+}
+
 /** What an entry and a chip «Zuletzt» both say about what the time was worked on. */
 type Assignment = Pick<
   TimeRecentTarget,
@@ -735,15 +1120,76 @@ function serviceOf(source: Assignment): TimeServiceChoice | null {
   }
 }
 
-/** What saving would send, without what only steers the line. */
-function snapshotOf(form: TimeEntryForm): string {
+/** The fields both forms share, filled in from an entry or from the running stopwatch. */
+function assignmentFormOf(
+  source: Assignment & { description?: string | null; billable: boolean },
+  projectsOn: boolean,
+): AssignmentForm {
+  const target = targetOf(source)
+  const service = serviceOf(source)
+  return {
+    targetTerm: target === null ? '' : targetLabel(target, projectsOn),
+    target,
+    serviceTerm: service?.name ?? '',
+    service,
+    servicePicked: service !== null,
+    description: source.description ?? '',
+    billable: source.billable,
+  }
+}
+
+/**
+ * A name typed into a list field and never taken over; and, where asked, billable without a
+ * service — the backend's sentence word for word, so the same rule never says two things.
+ */
+function assignmentComplaints(form: AssignmentForm, askService: boolean): Record<string, string> {
+  const complaints: Record<string, string> = {}
+  if (form.target === null && form.targetTerm.trim() !== '') {
+    complaints.projectId = 'Einen Treffer aus der Liste wählen oder das Feld leeren.'
+  }
+  if (form.service === null && form.serviceTerm.trim() !== '') {
+    complaints.productId = 'Eine Leistung aus der Liste wählen oder das Feld leeren.'
+  } else if (askService && form.service === null && effectiveBillable(form)) {
+    complaints.productId =
+      'Verrechenbar braucht eine Leistung, sonst entsteht kein Preis. Leistung wählen oder «verrechenbar» ausschalten.'
+  }
+  return complaints
+}
+
+/** The first message for each field of a form, by the fields of the request it answers for. */
+function errorsByField<K extends string>(
+  errors: FieldErrors,
+  fields: Record<K, readonly string[]>,
+): Partial<Record<K, string>> {
+  const result: Partial<Record<K, string>> = {}
+  for (const [field, names] of Object.entries(fields) as [K, readonly string[]][]) {
+    const message = names.map((name) => errors[name]).find((entry) => entry !== undefined)
+    if (message !== undefined) result[field] = message
+  }
+  return result
+}
+
+/** What saving would send of the shared fields, without what only steers the form. */
+function assignmentSnapshot(form: AssignmentForm): string {
   return JSON.stringify([
     form.targetTerm,
     form.target === null ? null : targetKey(form.target),
     form.serviceTerm,
     form.service?.productId ?? null,
-    form.duration.trim(),
     form.description.trim(),
     effectiveBillable(form),
   ])
+}
+
+/** What saving the line would send. */
+function snapshotOf(form: TimeEntryForm): string {
+  return JSON.stringify([assignmentSnapshot(form), form.duration.trim()])
+}
+
+function startChanged(form: TimerForm, initial: TimerForm): boolean {
+  return form.startDate !== initial.startDate || form.startTime.trim() !== initial.startTime
+}
+
+function twoDigits(value: number): string {
+  return String(value).padStart(2, '0')
 }
