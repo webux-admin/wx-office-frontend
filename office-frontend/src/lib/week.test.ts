@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   addDays,
   dayTitle,
+  firstOfMonth,
   isWeekend,
   isoWeek,
+  lastOfMonth,
   mondayOf,
+  monthTitle,
   shortDayLabel,
   weekDays,
   weekLabel,
@@ -176,5 +179,49 @@ describe('isWeekend', () => {
   it('isWeekendOnAWorkdayTest', () => {
     expect(isWeekend('2026-11-23')).toBe(false)
     expect(isWeekend('2026-11-27')).toBe(false)
+  })
+})
+
+describe('monthTitle', () => {
+  it('monthTitleTest', () => {
+    expect(monthTitle('2026-11')).toBe('November 2026')
+  })
+
+  it('monthTitleAtTheEndsOfTheYearTest', () => {
+    expect(monthTitle('2028-01')).toBe('Januar 2028')
+    expect(monthTitle('2026-12')).toBe('Dezember 2026')
+  })
+
+  /** A value that is no month is shown as it came rather than as a wrong month. */
+  it('monthTitleOfNoMonthTest', () => {
+    expect(monthTitle('2026-13')).toBe('2026-13')
+    expect(monthTitle('2026-W53')).toBe('2026-W53')
+    expect(monthTitle('')).toBe('')
+  })
+})
+
+describe('firstOfMonth', () => {
+  it('firstOfMonthTest', () => {
+    expect(firstOfMonth('2026-11-24')).toBe('2026-11-01')
+  })
+
+  it('firstOfMonthOnTheFirstAndTheLastTest', () => {
+    expect(firstOfMonth('2026-11-01')).toBe('2026-11-01')
+    expect(firstOfMonth('2026-12-31')).toBe('2026-12-01')
+  })
+})
+
+describe('lastOfMonth', () => {
+  it('lastOfMonthTest', () => {
+    expect(lastOfMonth('2026-11-24')).toBe('2026-11-30')
+  })
+
+  /** Months of 31, 30, 29 and 28 days, and the end of the year. */
+  it('lastOfMonthOfEveryLengthTest', () => {
+    expect(lastOfMonth('2026-01-01')).toBe('2026-01-31')
+    expect(lastOfMonth('2026-04-30')).toBe('2026-04-30')
+    expect(lastOfMonth('2028-02-01')).toBe('2028-02-29')
+    expect(lastOfMonth('2027-02-15')).toBe('2027-02-28')
+    expect(lastOfMonth('2026-12-01')).toBe('2026-12-31')
   })
 })

@@ -27,6 +27,7 @@ const WEBSITE: Project = {
 const SUMMARY: TimeSummary = {
   entries: 12,
   totalMinutes: 2550,
+  billableMinutes: 750,
   openEntries: 3,
   openMinutes: 750,
   inDraftMinutes: 0,

@@ -8,6 +8,7 @@ import {
   timeSummaryFigures,
   timeSummaryKey,
   timeSummaryUrl,
+  type TimeSummaryFigure,
   type TimesOf,
 } from '../lib/timetracking'
 import type { TimeSummary } from '../lib/types'
@@ -30,9 +31,19 @@ export function TimeSummaryFacts({ tenantId, of }: { tenantId: number; of: Times
   if (summary.isPending) return <LoadingBlock label="Stunden werden gezählt" />
   if (summary.isError) return <ErrorNotice error={summary.error} />
 
+  return <TimeFigureFacts figures={timeSummaryFigures(summary.data)} />
+}
+
+/**
+ * Tiles of minutes in hours of the clock, with the count of entries where a tile carries one.
+ * The registers «Zeiten» and the evaluation draw theirs alike.
+ *
+ * @param figures the tiles, in the order they stand
+ */
+export function TimeFigureFacts({ figures }: { figures: readonly TimeSummaryFigure[] }) {
   return (
     <FactList
-      facts={timeSummaryFigures(summary.data).map((figure) => ({
+      facts={figures.map((figure) => ({
         label: figure.label,
         value: (
           <span className="flex flex-wrap items-baseline gap-x-2">

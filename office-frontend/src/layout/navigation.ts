@@ -1,5 +1,6 @@
 import {
   Archive,
+  ChartColumn,
   Clock,
   FolderKanban,
   Repeat,
@@ -121,6 +122,7 @@ import {
   TIMETRACKING_SETTINGS_PATH,
 } from '../lib/timetracking'
 import { TIME_BILLING_PATH } from '../lib/timeBilling'
+import { TIME_EVALUATION_PATH } from '../lib/timeEvaluation'
 import { salesDocumentFor } from '../lib/salesDocument'
 import type { DocumentCategory } from '../lib/types'
 
@@ -447,7 +449,9 @@ export const NAV_GROUPS: NavGroup[] = [
       //
       // A folder since #127: «Meine Zeiten» on TIME_TRACK — everybody records their own time,
       // and it is what the folder head opens — and «Abrechnen» on TIME_BILL, the worklist the
-      // invoices from time start at (backend ADR-0163, frontend ADR-0085).
+      // invoices from time start at (backend ADR-0163, frontend ADR-0085). Between them since
+      // #128 «Auswertung» on TIME_READ: the times of everybody, which is reading and comes before
+      // billing (backend ADR-0164, frontend ADR-0086).
       {
         label: 'Zeiten',
         icon: Clock,
@@ -458,6 +462,13 @@ export const NAV_GROUPS: NavGroup[] = [
             icon: Clock,
             href: TIMETRACKING_PATH,
             permission: TIMETRACKING_RIGHTS.track,
+            module: TIMETRACKING_MODULE,
+          },
+          {
+            label: 'Auswertung',
+            icon: ChartColumn,
+            href: TIME_EVALUATION_PATH,
+            permission: TIMETRACKING_RIGHTS.read,
             module: TIMETRACKING_MODULE,
           },
           {

@@ -25,6 +25,7 @@ import {
   TIMETRACKING_MODULE,
   TIMETRACKING_PATH,
   TIMETRACKING_RIGHTS,
+  colleaguesKey,
   colleaguesUrl,
   continueEntryUrl,
   copyRequestOf,
@@ -47,7 +48,6 @@ import {
   timeEntryComplaints,
   timeEntryUrl,
   timeEntryWriteUrl,
-  timeLookupsKey,
   timeSheetKey,
   timeSheetUrl,
   timerKey,
@@ -137,7 +137,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
     enabled: owner === 'mine',
   })
   const colleagues = useQuery({
-    queryKey: [...timeLookupsKey(tenantId), 'colleagues'],
+    queryKey: colleaguesKey(tenantId),
     queryFn: () => api.get<TimeColleague[]>(colleaguesUrl(tenantId)),
     enabled: mayReadOthers,
   })

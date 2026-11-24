@@ -110,7 +110,20 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Ziel. Die Badges «im Entwurf» und «verrechnet RE-…» führen mit `INVOICE_READ` auf den Beleg,
   gesperrte Einträge haben statt Bearbeiten und Löschen ein Schloss mit `readOnlyReason`, «Vom
   Entwurf lösen» steht mit `TIME_BILL` je Eintrag, «Abrechnen» auf den Registern, und der
-  Abrechnungstakt steht in den Einstellungen der Zeiterfassung (ADR-0085, Backend ADR-0163)
+  Abrechnungstakt steht in den Einstellungen der Zeiterfassung (ADR-0085, Backend ADR-0163).
+  **Auswertung** (#128): im Ordner zwischen «Meine Zeiten» und «Abrechnen» (`/zeiten-auswertung`,
+  `TIME_READ`) die Zeiten aller Personen. **Der Filter steht in der Adresse**, mit deutschen
+  Parametern als Vertrag für weitergegebene Links — `von`, `bis`, `person`, `projekt`, `kunde`,
+  `leistung` (Id oder `ohne`), `zustand`, `suche`, `nach`; ohne Tage der laufende Monat, Seite und
+  Sortierung nicht, jede Änderung ersetzt den Verlaufseintrag. Filterleiste mit den Vorgaben «Diese
+  Woche», «Dieser Monat», «Letzter Monat», «Dieses Jahr», Mitarbeitenden als Chips, Projekt, Kunde
+  und Leistung aus den Gruppen über den Zeitraum (nicht aus den Nachschlagewegen der Schnellzeile:
+  andere Rechte, ohne abgeschlossene Projekte), Zustand als Häkchen und Suche im Text. Sechs
+  Kacheln über den ganzen Filter, ein Umschalter «Einträge · nach Mitarbeitenden · … · nach Monat»
+  in der Adresse; eine Gruppe ist ein Link auf ihre Einträge (Id, `ohne` oder die Tage der Woche),
+  ohne selbst addierte Summenzeile. «Als CSV herunterladen» nimmt denselben Filter, eine `422` zeigt
+  den Satz des Backends; eine `400` am Zeitraum steht am Feld (ADR-0086, Backend ADR-0164).
+  ✅ umgesetzt
 
 ## Tech-Stack (nicht ohne Rückfrage ändern)
 

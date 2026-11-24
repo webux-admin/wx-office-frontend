@@ -17,8 +17,10 @@ import {
   billableDefaultUrl,
   billableLocked,
   billableTooltip,
+  colleaguesKey,
   colleaguesUrl,
   entryCountText,
+  entryCustomerText,
   entryProjectText,
   entryUserText,
   fetchSuggestedService,
@@ -470,6 +472,12 @@ describe('cache keys', () => {
   it('timeLookupsKeyTest', () => {
     expect(timeLookupsKey(1)).toEqual(['time-lookups', 1])
     expect(timeLookupsKey(1)[0]).not.toBe(timeEntriesKey(1)[0])
+  })
+
+  /** «Zeiten von …» and the evaluation share one answer, under the lookups and per tenant. */
+  it('colleaguesKeyTest', () => {
+    expect(colleaguesKey(1)).toEqual(['time-lookups', 1, 'colleagues'])
+    expect(colleaguesKey(2)).not.toEqual(colleaguesKey(1))
   })
 
   /** Saving terms refreshes the terms and the defaults of «verrechenbar» — and no entries. */
@@ -1893,6 +1901,7 @@ describe('recording on a project', () => {
 const SUMMARY: TimeSummary = {
   entries: 12,
   totalMinutes: 2550,
+  billableMinutes: 750,
   openEntries: 3,
   openMinutes: 750,
   inDraftMinutes: 0,
@@ -1936,6 +1945,7 @@ describe('the registers', () => {
     const empty: TimeSummary = {
       entries: 0,
       totalMinutes: 0,
+      billableMinutes: 0,
       openEntries: 0,
       openMinutes: 0,
       inDraftMinutes: 0,
@@ -1988,6 +1998,22 @@ describe('the registers', () => {
     expect(entryProjectText(entry({ projectNumber: null, projectName: null }))).toBe(
       'Projekt nicht mehr vorhanden',
     )
+  })
+
+  /** With a project and without one, the customer is the same. */
+  it('entryCustomerTextTest', () => {
+    expect(entryCustomerText(entry())).toBe('Muster AG')
+    expect(entryCustomerText(SUPPORT_HOUR)).toBe('Muster AG')
+  })
+
+  it('entryCustomerTextWithoutCustomerTest', () => {
+    expect(entryCustomerText(entry({ projectId: null, partnerId: null, customerName: null }))).toBe(
+      'intern',
+    )
+  })
+
+  it('entryCustomerTextOfACustomerThatIsGoneTest', () => {
+    expect(entryCustomerText(entry({ customerName: null }))).toBe('Kunde nicht mehr vorhanden')
   })
 })
 

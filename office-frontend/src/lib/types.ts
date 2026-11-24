@@ -5921,17 +5921,50 @@ export type ProjectTermsRequest = {
 }
 
 /**
- * The minutes on a project or for a customer by state (`TimeSummaryDto`). The four states add up
- * to `totalMinutes`: open, on a draft, invoiced, not billable (backend ADR-0163).
+ * The minutes on a project, for a customer or over a filter of the evaluation by state
+ * (`TimeSummaryDto`). The four states add up to `totalMinutes`: open, on a draft, invoiced, not
+ * billable (backend ADR-0163).
  */
 export type TimeSummary = {
   entries: number
   totalMinutes: number
+  /** Open, on a draft and invoiced together: the time to be billed, billed already or not. */
+  billableMinutes: number
   openEntries: number
   openMinutes: number
   inDraftMinutes: number
   billedMinutes: number
   notBillableMinutes: number
+}
+
+/**
+ * What the evaluation adds the minutes up by, as the path `/totals/by/{grouping}` spells it
+ * (`TimeGrouping`). A week runs by ISO 8601, Monday to Sunday, like the week bar.
+ */
+export type TimeGrouping = 'user' | 'project' | 'customer' | 'service' | 'week' | 'month'
+
+/**
+ * One row of the evaluation by group (`TimeGroupDto`).
+ *
+ * <p>A row of a person, project, customer or service carries `id`; a row without `id` is «ohne
+ * Projekt», «ohne Kunde» or «ohne Leistung» and stands last. A row of a week or a month carries
+ * `period`, `from` and `to`: the days of it inside the filter, ready to be the range of the
+ * next filter (backend ADR-0164).
+ */
+export type TimeGroup = {
+  /** The user, project, customer or service; absent for the row without one and for a period. */
+  id?: number | null
+  /** The number of the project or the service. */
+  number?: string | null
+  /** The name of the user, project, customer or service; absent without one or where it is gone. */
+  name?: string | null
+  /** `2026-W53` for a week, `2028-02` for a month. */
+  period?: string | null
+  /** The first day of the week or month inside the filter, `yyyy-mm-dd`. */
+  from?: string | null
+  /** The last day of the week or month inside the filter, `yyyy-mm-dd`. */
+  to?: string | null
+  totals: TimeSummary
 }
 
 /** One row of the table «Standardleistung je Benutzer» (`UserDefaultDto`). */

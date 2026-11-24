@@ -38,6 +38,7 @@ import {
   TIME_BILLING_PATH,
   TIME_BILLING_PROJECT_ROUTE,
 } from './lib/timeBilling'
+import { TIME_EVALUATION_PATH } from './lib/timeEvaluation'
 import { CUSTOMER_CREDIT_PATH } from './lib/customerCredit'
 import { PAYMENT_RECEIPT_PATH } from './lib/paymentReceipt'
 import {
@@ -100,6 +101,7 @@ const SubscriptionRunPage = lazy(() => import('./pages/SubscriptionRunPage').the
 const TimeEntryPage = lazy(() => import('./pages/TimeEntryPage').then((module) => ({ default: module.TimeEntryPage })))
 const TimeBillingWorklistPage = lazy(() => import('./pages/TimeBillingWorklistPage').then((module) => ({ default: module.TimeBillingWorklistPage })))
 const TimeBillingPage = lazy(() => import('./pages/TimeBillingPage').then((module) => ({ default: module.TimeBillingPage })))
+const TimeEvaluationPage = lazy(() => import('./pages/TimeEvaluationPage').then((module) => ({ default: module.TimeEvaluationPage })))
 const TimeTrackingSettingsPage = lazy(() => import('./pages/TimeTrackingSettingsPage').then((module) => ({ default: module.TimeTrackingSettingsPage })))
 const PaymentTermPage = lazy(() => import('./pages/PaymentTermPage').then((module) => ({ default: module.PaymentTermPage })))
 const PriceGroupPage = lazy(() => import('./pages/PriceGroupPage').then((module) => ({ default: module.PriceGroupPage })))
@@ -331,9 +333,11 @@ export default function App() {
                   <Route path={FISCAL_YEARS_PATH} element={<FiscalYearPage />} />
                   <Route path={ACCOUNTING_SETTINGS_PATH} element={<AccountingStatePage />} />
 
-                  {/* «Meine Zeiten» and «Abrechnen» sit in the folder «Zeiten» since #127, so
-                      the folder is their register strip. */}
+                  {/* «Meine Zeiten» and «Abrechnen» sit in the folder «Zeiten» since #127, and
+                      «Auswertung» between them since #128, so the folder is their register
+                      strip. */}
                   <Route path={TIMETRACKING_PATH} element={<TimeEntryPage />} />
+                  <Route path={TIME_EVALUATION_PATH} element={<TimeEvaluationPage />} />
                   <Route path={TIME_BILLING_PATH} element={<TimeBillingWorklistPage />} />
 
                   <Route path="/lagerorte" element={<StockLocationListPage />} />

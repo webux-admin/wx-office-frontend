@@ -15,6 +15,7 @@ import { PartnerTimes } from './PartnerTimes'
 const SUMMARY: TimeSummary = {
   entries: 3,
   totalMinutes: 420,
+  billableMinutes: 240,
   openEntries: 2,
   openMinutes: 240,
   inDraftMinutes: 0,

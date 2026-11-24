@@ -48,6 +48,7 @@ const STORED: Project = {
 const SUMMARY: TimeSummary = {
   entries: 5,
   totalMinutes: 750,
+  billableMinutes: 750,
   openEntries: 5,
   openMinutes: 750,
   inDraftMinutes: 0,

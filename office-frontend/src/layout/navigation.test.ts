@@ -54,6 +54,7 @@ import {
   TIMETRACKING_SETTINGS_PATH,
 } from '../lib/timetracking'
 import { TIME_BILLING_PATH } from '../lib/timeBilling'
+import { TIME_EVALUATION_PATH } from '../lib/timeEvaluation'
 
 /** Every screen the menu links to, across all groups. */
 function allEntries(): NavEntry[] {
@@ -182,7 +183,7 @@ describe('NAV_GROUPS', () => {
 
   /**
    * Since #127 «Zeiten» is a folder right after the projects: «Meine Zeiten» first, which the
-   * folder head opens, then «Abrechnen».
+   * folder head opens, then since #128 «Auswertung», then «Abrechnen».
    */
   it('navGroupsPutTheTimesBesideTheProjectsTest', () => {
     const sales = NAV_GROUPS.find((group) => group.title === 'Verkauf')
@@ -193,7 +194,42 @@ describe('NAV_GROUPS', () => {
 
     expect(times.label).toBe('Zeiten')
     expect(times.module).toBe('TIMETRACKING')
-    expect(times.children.map((child) => child.href)).toEqual([TIMETRACKING_PATH, TIME_BILLING_PATH])
+    expect(times.children.map((child) => child.href)).toEqual([
+      TIMETRACKING_PATH,
+      TIME_EVALUATION_PATH,
+      TIME_BILLING_PATH,
+    ])
+  })
+
+  /** The evaluation reads the times of everybody: TIME_READ, under the switch (backend ADR-0164). */
+  it('navGroupsCoverTheEvaluationTest', () => {
+    const evaluation = allEntries().filter((entry) => entry.href === TIME_EVALUATION_PATH)
+
+    expect(evaluation).toHaveLength(1)
+    expect(evaluation[0].label).toBe('Auswertung')
+    expect(evaluation[0].permission).toBe(TIMETRACKING_RIGHTS.read)
+    expect(evaluation[0].module).toBe('TIMETRACKING')
+  })
+
+  /** Whoever only reads the times sees the folder with «Auswertung» alone. */
+  it('visibleNavGroupsShowsTheEvaluationWithTheReadRightAloneTest', () => {
+    const visible = visibleNavGroups((permission) => permission === TIMETRACKING_RIGHTS.read, () => true)
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+    const hrefs = entries.map((entry) => entry.href)
+
+    expect(hrefs).toContain(TIME_EVALUATION_PATH)
+    expect(hrefs).not.toContain(TIMETRACKING_PATH)
+    expect(hrefs).not.toContain(TIME_BILLING_PATH)
+  })
+
+  /** TIME_TRACK records one's own time and reads no one else's. */
+  it('visibleNavGroupsHidesTheEvaluationWithTheTrackRightAloneTest', () => {
+    const visible = visibleNavGroups((permission) => permission === TIMETRACKING_RIGHTS.track, () => true)
+    const entries = visible.flatMap((group) => flattenNav(group.entries))
+    const hrefs = entries.map((entry) => entry.href)
+
+    expect(hrefs).toContain(TIMETRACKING_PATH)
+    expect(hrefs).not.toContain(TIME_EVALUATION_PATH)
   })
 
   /** The worklist goes with TIME_BILL, under the switch of the time tracking (backend ADR-0163). */
@@ -229,9 +265,10 @@ describe('NAV_GROUPS', () => {
     expect(entries.map((entry) => entry.href)).toContain(TIMETRACKING_PATH)
   })
 
-  /** The folder is the register strip of both screens, and the billing mask is no sibling. */
+  /** The folder is the register strip of the three screens, and the billing mask is no sibling. */
   it('folderForHoldsTheTimesTest', () => {
     expect(folderFor(TIMETRACKING_PATH, () => true, () => true)?.label).toBe('Zeiten')
+    expect(folderFor(TIME_EVALUATION_PATH, () => true, () => true)?.label).toBe('Zeiten')
     expect(folderFor(TIME_BILLING_PATH, () => true, () => true)?.label).toBe('Zeiten')
     expect(folderFor(`${TIME_BILLING_PATH}/kunde/11`, () => true, () => true)).toBeNull()
   })

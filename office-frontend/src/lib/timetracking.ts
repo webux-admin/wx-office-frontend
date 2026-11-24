@@ -291,6 +291,17 @@ export function timeLookupsKey(tenantId: number): readonly unknown[] {
 }
 
 /**
+ * One key for «Zeiten von …» and the filter «Mitarbeitende» of the evaluation, so both read the
+ * same answer.
+ *
+ * @param tenantId the tenant
+ * @returns key of everybody whose times can be looked at
+ */
+export function colleaguesKey(tenantId: number): readonly unknown[] {
+  return [...timeLookupsKey(tenantId), 'colleagues']
+}
+
+/**
  * Key of what the terms of the projects decide.
  *
  * <p>Apart from {@link timeEntriesKey}: an entry changes no terms. A change of the terms
@@ -1554,6 +1565,17 @@ export function entryUserText(entry: TimeEntry): string {
 export function entryProjectText(entry: TimeEntry): string {
   if (entry.projectId == null) return 'ohne Projekt'
   return [entry.projectNumber, entry.projectName].filter(Boolean).join(' ') || PROJECT_GONE
+}
+
+/**
+ * The customer of an entry, for the column «Kunde» of the evaluation.
+ *
+ * @param entry the entry
+ * @returns «Muster AG», «intern» without a customer, or that the customer is gone
+ */
+export function entryCustomerText(entry: TimeEntry): string {
+  if (entry.partnerId == null) return 'intern'
+  return entry.customerName ?? CUSTOMER_GONE
 }
 
 // --- the terms of a project ----------------------------------------------------------

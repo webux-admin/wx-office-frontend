@@ -117,6 +117,7 @@ function stubFetch(stored: Partner) {
       return json({
         entries: 2,
         totalMinutes: 150,
+        billableMinutes: 90,
         openEntries: 1,
         openMinutes: 90,
         inDraftMinutes: 0,

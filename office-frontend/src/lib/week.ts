@@ -157,6 +157,36 @@ export function isWeekend(isoDate: string): boolean {
   return weekdayIndex(isoDate) >= 5
 }
 
+/**
+ * A month as a row of the evaluation names it.
+ *
+ * @param isoMonth a month as the backend writes it, `yyyy-MM`
+ * @returns «Februar 2028»; the value itself where it is no month
+ */
+export function monthTitle(isoMonth: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(isoMonth)
+  const month = match === null ? undefined : MONTHS_LONG[Number(match[2]) - 1]
+  if (match === null || month === undefined) return isoMonth
+  return `${month} ${match[1]}`
+}
+
+/**
+ * @param isoDate a day, `yyyy-MM-dd`
+ * @returns the first day of its month
+ */
+export function firstOfMonth(isoDate: string): string {
+  return `${isoDate.slice(0, 7)}-01`
+}
+
+/**
+ * @param isoDate a day, `yyyy-MM-dd`
+ * @returns the last day of its month: the 29th of February in a leap year
+ */
+export function lastOfMonth(isoDate: string): string {
+  // 31 days on from the first always land in the next month, whatever the length of this one.
+  return addDays(firstOfMonth(addDays(firstOfMonth(isoDate), 31)), -1)
+}
+
 /** The day as midnight UTC, so adding days never meets a change of the clock. */
 function dateOf(isoDate: string): Date {
   const [year, month, day] = isoDate.split('-').map(Number)

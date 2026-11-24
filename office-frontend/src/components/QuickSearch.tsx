@@ -14,6 +14,7 @@ export function QuickSearchField({
   placeholder,
   label = 'Suchen',
   maxLength,
+  error,
   className = 'min-w-[240px] flex-1',
 }: {
   value: string
@@ -27,6 +28,8 @@ export function QuickSearchField({
    * pasted page of text travels to the server on every keystroke.
    */
   maxLength?: number
+  /** What the server refused about the term, for a list whose filter it checks. */
+  error?: string
   /** Width in the filter row; the default lets the field take the space that is left. */
   className?: string
 }) {
@@ -37,6 +40,7 @@ export function QuickSearchField({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
+      error={error}
       icon={<Search size={15} />}
       className={className}
     />
