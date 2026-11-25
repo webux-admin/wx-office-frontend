@@ -81,6 +81,7 @@ import {
   recentTargetsUrl,
   sameTarget,
   serviceLookupUrl,
+  projectIdOf,
   startedText,
   stoppedText,
   targetKey,
@@ -378,6 +379,28 @@ describe('addresses', () => {
       '/api/tenants/1/time-entries/lookups/services?search=konz',
     )
     expect(serviceLookupUrl(1, '')).toBe('/api/tenants/1/time-entries/lookups/services')
+  })
+
+  /** On a project the server decides with its rate which services can be billed (#136). */
+  it('serviceLookupUrlOnAProjectTest', () => {
+    expect(serviceLookupUrl(1, 'konz', 12)).toBe(
+      '/api/tenants/1/time-entries/lookups/services?search=konz&projectId=12',
+    )
+    expect(serviceLookupUrl(1, '', 12)).toBe(
+      '/api/tenants/1/time-entries/lookups/services?projectId=12',
+    )
+    expect(serviceLookupUrl(1, '', null)).toBe('/api/tenants/1/time-entries/lookups/services')
+  })
+
+  it('projectIdOfTest', () => {
+    expect(
+      projectIdOf({ kind: 'PROJECT', projectId: 12, projectNumber: 'P-00012', partnerId: 11 }),
+    ).toBe(12)
+  })
+
+  it('projectIdOfWithoutProjectTest', () => {
+    expect(projectIdOf({ kind: 'CUSTOMER', partnerId: 11, customerName: 'Muster AG' })).toBeNull()
+    expect(projectIdOf(null)).toBeNull()
   })
 
   it('colleaguesUrlTest', () => {

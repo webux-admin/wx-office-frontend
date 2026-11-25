@@ -214,12 +214,31 @@ export function targetLookupUrl(tenantId: number, search: string): string {
 }
 
 /**
+ * The services time can be recorded with: those that can be billed later. Without a project
+ * the server offers services in hours only; on a project with a rate of its own every active
+ * service (backend ADR-0166).
+ *
  * @param tenantId the tenant
  * @param search part of a name or number, empty for the first ones
- * @returns address of the active services
+ * @param projectId the project the time goes on, `null` for a customer, internal time or the
+ *   default service of a user
+ * @returns address of the services
  */
-export function serviceLookupUrl(tenantId: number, search: string): string {
-  return lookupUrl(tenantId, 'services', search)
+export function serviceLookupUrl(
+  tenantId: number,
+  search: string,
+  projectId: number | null = null,
+): string {
+  const query = listQuery({ search, projectId })
+  return `${timeEntriesUrl(tenantId)}/lookups/services${query === '' ? '' : `?${query}`}`
+}
+
+/**
+ * @param target what the time goes on
+ * @returns the project of it, `null` for a customer without project or for internal time
+ */
+export function projectIdOf(target: TimeTargetChoice | null): number | null {
+  return target?.kind === 'PROJECT' ? (target.projectId ?? null) : null
 }
 
 /**

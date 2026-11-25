@@ -9,6 +9,7 @@ import {
   defaultServiceKey,
   effectiveBillable,
   fetchSuggestedService,
+  projectIdOf,
   serviceLookupUrl,
   targetKey,
   targetLookupUrl,
@@ -113,7 +114,11 @@ export function TargetField<F extends AssignmentForm>({
   )
 }
 
-/** «Leistung»: a product of the type service, from `/lookups/services`. */
+/**
+ * «Leistung»: a product of the type service, from `/lookups/services` — only those its time can
+ * be billed with, which depends on the project (backend ADR-0166). Another project asks anew; a
+ * service already chosen stays, and the server says when saving if it no longer fits.
+ */
 export function ServiceField<F extends AssignmentForm>({
   tenantId,
   form,
@@ -123,6 +128,7 @@ export function ServiceField<F extends AssignmentForm>({
   return (
     <ServiceLookup
       tenantId={tenantId}
+      projectId={projectIdOf(form.target)}
       term={form.serviceTerm}
       onTerm={(term) => onChange((current) => withServiceTerm(current, term))}
       chosen={form.service !== null}
@@ -133,11 +139,16 @@ export function ServiceField<F extends AssignmentForm>({
 }
 
 /**
- * The search over the active services, on its own: for a form that is not a quick line, such as
- * the default service of a user. The same list and the same rows as «Leistung» in the quick line.
+ * The search over the services time can be billed with, on its own: for a form that is not a
+ * quick line, such as the default service of a user. The same list and the same rows as
+ * «Leistung» in the quick line.
+ *
+ * @param projectId the project the time goes on; without one only services in hours are
+ *   offered, on a project with a rate of its own every active service (backend ADR-0166)
  */
 export function ServiceLookup({
   tenantId,
+  projectId = null,
   term,
   onTerm,
   chosen,
@@ -147,6 +158,7 @@ export function ServiceLookup({
   inputRef,
 }: {
   tenantId: number
+  projectId?: number | null
   /** What stands in the field, held by the caller. */
   term: string
   onTerm: (term: string) => void
@@ -165,12 +177,18 @@ export function ServiceLookup({
       onTerm={onTerm}
       chosen={chosen}
       onChoose={onChoose}
-      queryKey={[...timeLookupsKey(tenantId), 'services']}
-      load={(search) => api.get<TimeServiceChoice[]>(serviceLookupUrl(tenantId, search))}
+      queryKey={[...timeLookupsKey(tenantId), 'services', projectId]}
+      load={(search) =>
+        api.get<TimeServiceChoice[]>(serviceLookupUrl(tenantId, search, projectId))
+      }
       keyOf={(service) => service.productId}
       renderHit={(service, search) => <ServiceHit service={service} term={search} />}
       listLabel="Leistungen"
-      emptyText="Es gibt noch keine aktive Leistung. Eine Leistung ist ein Produkt vom Typ Leistung."
+      emptyText={
+        projectId === null
+          ? 'Es gibt keine aktive Leistung in Stunden. Eine Leistung ist ein Produkt vom Typ Leistung.'
+          : 'Es gibt keine aktive Leistung in Stunden. Mit einem Projektsatz liesse sich hier jede Leistung abrechnen.'
+      }
       failureText="Die Leistungen konnten nicht gelesen werden."
       error={error}
       inputRef={inputRef}

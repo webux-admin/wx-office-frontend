@@ -575,6 +575,25 @@ describe('TimeEntryPage', () => {
     expect(text()).toContain('Gespeichert: 1 Std. 30 Min. am Mittwoch, 25. November.')
   })
 
+  /**
+   * On a project the list of services asks with the project: the server offers what can be
+   * billed there, by its rate (#136). Without one it asks for services in hours.
+   */
+  it('timeEntryPageAsksServicesForTheProjectTest', async () => {
+    await render()
+
+    await type(control('Leistung'), 'sup', 260)
+    const withoutProject = requests.filter((request) => request.url.includes('/lookups/services'))
+    await type(control('Projekt oder Kunde'), 'web', 260)
+    await press(control('Projekt oder Kunde'), 'Enter')
+    await type(control('Leistung'), 'kon', 260)
+
+    expect(withoutProject.at(-1)?.url).toBe(`${BASE}/lookups/services?search=sup`)
+    expect(requests.filter((request) => request.url.includes('/lookups/services')).at(-1)?.url).toBe(
+      `${BASE}/lookups/services?search=kon&projectId=12`,
+    )
+  })
+
   /** A range goes as its two times; a duration as minutes alone. */
   it('timeEntryPageRecordsARangeTest', async () => {
     await render()

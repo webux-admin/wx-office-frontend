@@ -99,7 +99,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   offenes hat noch nicht begonnen (Backend ADR-0165). Die Meldungen von Löschen und Archivieren
   stehen über den Registern. Am Kunden das Register «Zeiten» nach «Projekte», mit Projektspalte. Die **Standardleistung je Benutzer** steht
   unter Moduleinstellungen → Zeiterfassung → Einstellungen (`/zeiterfassung-einstellungen`,
-  `TIME_WRITE`), gewählt im Dialog mit der Schnellsuche der Leistungen (ADR-0084, Backend
+  `TIME_WRITE`), gewählt im Dialog mit der Schnellsuche der Leistungen; alle drei Stellen bieten nur
+  Leistungen an, die sich abrechnen lassen — in Stunden, auf einem Projekt mit Projektsatz jede —, und
+  die Leistungssuche nimmt dafür `projectId` (Backend ADR-0166) (ADR-0084, Backend
   ADR-0162). **Abrechnen** (#127): der Ordner «Zeiten» hält «Meine Zeiten» und «Abrechnen»
   (`/zeiten-abrechnen`, `TIME_BILL`, neben `/zeiten` und nicht darunter), den Arbeitsvorrat mit
   Stichtag je Kunde ohne Projekt und je Projekt. Die Maske `/zeiten-abrechnen/projekt/:id` oder
