@@ -273,6 +273,8 @@ export function TimerDialog({
         dirty={changed}
         onSubmit={submit}
         initialFocus={focusTarget}
+        // Wide enough for a project and its customer in the field and in the list (#134).
+        wide
         footer={
           held === null ? (
             <>
@@ -363,7 +365,13 @@ export function TimerDialog({
                   }
             }
           />
-          <ServiceField tenantId={tenantId} form={form} onChange={setForm} error={errors.service} />
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <ServiceField tenantId={tenantId} form={form} onChange={setForm} error={errors.service} />
+            {/* Without a label of its own the box starts where the input beside it does. */}
+            <div className="flex h-control items-center sm:mt-6">
+              <BillableField form={form} onChange={setForm} rule={rule} projectsOn={projectsOn} />
+            </div>
+          </div>
           <TextField
             label="Text"
             value={form.description}
@@ -373,7 +381,6 @@ export function TimerDialog({
             autoComplete="off"
             error={errors.description}
           />
-          <BillableField form={form} onChange={setForm} rule={rule} projectsOn={projectsOn} />
 
           {running && (
             <div className="grid gap-4 sm:grid-cols-2">

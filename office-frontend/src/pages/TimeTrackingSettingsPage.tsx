@@ -383,6 +383,8 @@ function DefaultServiceDialog({
       title={held === null ? 'Standardleistung' : `Standardleistung von ${held.userName}`}
       description="Nur eine aktive Leistung, ein Produkt vom Typ Leistung."
       dirty={term.trim() !== ''}
+      // Wide enough for the number and the whole name of a service in the list (#134).
+      wide
       onSubmit={submit}
       initialFocus={field}
       footer={

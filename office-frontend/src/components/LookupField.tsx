@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -9,6 +10,8 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
+import { createPortal } from 'react-dom'
+import { dropdownPlacement } from '../lib/dropdownPlacement'
 import { matchParts } from '../lib/highlight'
 import { nextIndex } from '../lib/keyboardList'
 import { Spinner } from './Spinner'
@@ -17,6 +20,15 @@ import { useDebouncedValue } from './useDebouncedValue'
 
 /** How long the field has to stand still before the search goes out. */
 const DEBOUNCE = 200
+
+/** The space between field and list, and between list and the edge of the screen, in rem. */
+const LIST_GAP_REM = 0.5
+
+/**
+ * How high the list wants to be, in rem: eight hits and half of the ninth, so it shows that it
+ * goes on before it scrolls, with the frame around (#134).
+ */
+const LIST_HEIGHT_REM = 17.5
 
 /**
  * A field that searches as it is typed into and takes one hit over: a combobox in the sense of
@@ -32,6 +44,10 @@ const DEBOUNCE = 200
  *
  * <p>Typing gives a chosen hit up — the caller decides what that means, through `onTerm`. A
  * chosen value is selected when the field takes the focus, so typing replaces it.
+ *
+ * <p><b>The list floats above the page</b>, under the field or above it where there is more room,
+ * and follows it when something scrolls. Inside the box that holds the field it would be cut off
+ * by a dialog, whose body scrolls, after a few rows (#134).
  */
 export function LookupField<T>({
   label,
@@ -126,6 +142,47 @@ export function LookupField<T>({
     list.current?.children[active]?.scrollIntoView?.({ block: 'nearest' })
   }, [showsList, active])
 
+  // Places the floating list at the field when it appears, and keeps it there for as long as it
+  // is open: the field moves with a scrolling dialog, with the dialog's own entrance and when
+  // chips above it arrive, and none of that is an event. Checked once a frame and written to the
+  // element only when the place changed: the place follows the field, not the state of this
+  // component.
+  const placeAtField = useCallback((popup: HTMLDivElement | null) => {
+    if (popup === null) return
+    let placed = ''
+    const place = () => {
+      // The framed box around the input, search symbol included, not the input beside it.
+      const field = box.current?.querySelector('input')?.parentElement
+      if (!field) return
+      const rem = remInPixels()
+      const placement = dropdownPlacement(
+        field.getBoundingClientRect(),
+        window.innerHeight,
+        LIST_HEIGHT_REM * rem,
+        LIST_GAP_REM * rem,
+      )
+      const key = JSON.stringify(placement)
+      if (key === placed) return
+      placed = key
+      popup.style.left = `${placement.left}px`
+      popup.style.width = `${placement.width}px`
+      popup.style.top = placement.top === undefined ? '' : `${placement.top}px`
+      popup.style.bottom = placement.bottom === undefined ? '' : `${placement.bottom}px`
+      popup.style.setProperty('--lookup-room', `${placement.room}px`)
+    }
+    place()
+    let frame = requestAnimationFrame(function follow() {
+      place()
+      frame = requestAnimationFrame(follow)
+    })
+    // A scroll is answered at once, before the frame is drawn, so the list never lags behind.
+    window.addEventListener('scroll', place, true)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [])
+
   const take = (hit: T) => {
     setOpen(false)
     setMarked(-1)
@@ -197,61 +254,77 @@ export function LookupField<T>({
         error={error}
       />
 
-      {open && !disabled && (
-        <div className="absolute z-20 mt-2 w-full min-w-[16rem] overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface shadow-card">
-          {/* Mounted for as long as the box is open, with changing text. A region that is
-              inserted together with its text is not a change a screen reader announces. */}
-          <p aria-live="polite" className="sr-only">
-            {hits.isPending || hits.isError
-              ? ''
-              : found.length === 0
-                ? 'Kein Treffer'
-                : `${found.length} Treffer`}
-          </p>
+      {open &&
+        !disabled &&
+        // Into the body, over every layer — a dialog is z-50 — like the bubble of a tooltip.
+        createPortal(
+          <div
+            ref={placeAtField}
+            data-lookup-list
+            className="fixed z-[60] flex max-h-[var(--lookup-room,17.5rem)] min-w-[16rem] flex-col overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface shadow-card"
+          >
+            {/* Mounted for as long as the box is open, with changing text. A region that is
+                inserted together with its text is not a change a screen reader announces. */}
+            <p aria-live="polite" className="sr-only">
+              {hits.isPending || hits.isError
+                ? ''
+                : found.length === 0
+                  ? 'Kein Treffer'
+                  : `${found.length} Treffer`}
+            </p>
 
-          {hits.isPending ? (
-            <p className="flex items-center gap-2 px-3 py-3 text-body text-text-secondary">
-              <Spinner size={14} label="Wird gesucht" />
-              Wird gesucht ...
-            </p>
-          ) : hits.isError ? (
-            <p role="alert" className="px-3 py-3 text-body text-danger">
-              {failureText}
-            </p>
-          ) : found.length === 0 ? (
-            <p className="px-3 py-3 text-body text-text-secondary">
-              {settled === '' ? emptyText : `Für «${settled}» gibt es keinen Treffer.`}
-            </p>
-          ) : (
-            <ul
-              ref={list}
-              role="listbox"
-              id={listId}
-              aria-label={listLabel}
-              className="max-h-[15rem] overflow-y-auto py-1"
-            >
-              {found.map((hit, index) => (
-                <li
-                  key={keyOf(hit)}
-                  id={optionId(index)}
-                  role="option"
-                  aria-selected={index === active}
-                  // Keeps the focus in the field, so the click is not swallowed by the blur.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => take(hit)}
-                  className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 ${
-                    index === active ? 'bg-sunken' : ''
-                  }`}
-                >
-                  {renderHit(hit, settled)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            {hits.isPending ? (
+              <p className="flex items-center gap-2 px-3 py-3 text-body text-text-secondary">
+                <Spinner size={14} label="Wird gesucht" />
+                Wird gesucht ...
+              </p>
+            ) : hits.isError ? (
+              <p role="alert" className="px-3 py-3 text-body text-danger">
+                {failureText}
+              </p>
+            ) : found.length === 0 ? (
+              <p className="px-3 py-3 text-body text-text-secondary">
+                {settled === '' ? emptyText : `Für «${settled}» gibt es keinen Treffer.`}
+              </p>
+            ) : (
+              <ul
+                ref={list}
+                role="listbox"
+                id={listId}
+                aria-label={listLabel}
+                // Eight hits and half of the ninth, so the list shows it goes on before it scrolls;
+                // less where the screen ends sooner.
+                className="max-h-[16.5rem] min-h-0 overflow-y-auto py-1"
+              >
+                {found.map((hit, index) => (
+                  <li
+                    key={keyOf(hit)}
+                    id={optionId(index)}
+                    role="option"
+                    aria-selected={index === active}
+                    // Keeps the focus in the field, so the click is not swallowed by the blur.
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => take(hit)}
+                    className={`flex cursor-pointer items-baseline gap-2 px-3 py-1.5 ${
+                      index === active ? 'bg-sunken' : ''
+                    }`}
+                  >
+                    {renderHit(hit, settled)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>,
+        document.body,
       )}
     </div>
   )
+}
+
+/** The size of one rem in pixels, which is what the viewport coordinates are measured in. */
+function remInPixels(): number {
+  const size = Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+  return Number.isFinite(size) ? size : 16
 }
 
 /** A text with the part the search term matched set off from the rest. */

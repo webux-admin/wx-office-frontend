@@ -233,7 +233,8 @@ function TargetHit({
       <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
         <MarkedText text={number ?? '–'} term={term} />
       </span>
-      <span className="truncate text-body text-text-primary">
+      {/* A name too long for the list stands whole in the tooltip. */}
+      <span className="truncate text-body text-text-primary" title={text}>
         <MarkedText text={text} term={term} />
       </span>
     </>
@@ -246,7 +247,7 @@ function ServiceHit({ service, term }: { service: TimeServiceChoice; term: strin
       <span className="w-[5.375rem] shrink-0 truncate font-mono text-small text-text-tertiary">
         <MarkedText text={service.productNumber ?? '–'} term={term} />
       </span>
-      <span className="truncate text-body text-text-primary">
+      <span className="truncate text-body text-text-primary" title={service.name}>
         <MarkedText text={service.name} term={term} />
       </span>
     </>

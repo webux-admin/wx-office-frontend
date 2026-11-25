@@ -125,7 +125,7 @@ async function press(key: string) {
 }
 
 const hits = () =>
-  [...container.querySelectorAll('[role="option"]')].map((option) => option.textContent)
+  [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent)
 
 describe('LookupField', () => {
   /** A word and Enter take its first hit, and the form does not hear that Enter. */
@@ -150,9 +150,26 @@ describe('LookupField', () => {
     expect(taken.map((fruit) => fruit.name)).toEqual(['Aprikose'])
   })
 
+  /**
+   * The list floats in the body, under the field, so a dialog that scrolls its body cannot cut it
+   * off after a few rows (#134).
+   */
+  it('lookupFieldFloatsAboveThePageTest', async () => {
+    await type('ap')
+
+    const list = document.querySelector('[data-lookup-list]') as HTMLElement
+
+    expect(list.parentElement).toBe(document.body)
+    expect(container.contains(list)).toBe(false)
+    expect(list.className).toContain('fixed')
+    // jsdom measures every box as zero: the list starts half a rem under a field at the top.
+    expect(list.style.top).toBe('8px')
+    expect(list.style.bottom).toBe('')
+  })
+
   it('lookupFieldWithAClickTest', async () => {
     await type('bi')
-    const option = container.querySelector('[role="option"]') as HTMLElement
+    const option = document.querySelector('[role="option"]') as HTMLElement
 
     await act(async () => {
       option.click()
@@ -193,7 +210,7 @@ describe('LookupField', () => {
   it('lookupFieldWithoutHitTest', async () => {
     await type('kiwi')
 
-    expect(container.textContent).toContain('Für «kiwi» gibt es keinen Treffer.')
+    expect(document.body.textContent).toContain('Für «kiwi» gibt es keinen Treffer.')
     await press('Enter')
     expect(taken).toEqual([])
     expect(enterReachedTheForm).toBe(1)
@@ -204,7 +221,7 @@ describe('LookupField', () => {
 
     await type('ap')
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
       'Das Obst konnte nicht gelesen werden.',
     )
     expect(hits()).toEqual([])
@@ -214,6 +231,6 @@ describe('LookupField', () => {
   it('lookupFieldMarksWhatMatchedTest', async () => {
     await type('rik')
 
-    expect([...container.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['rik'])
+    expect([...document.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['rik'])
   })
 })
