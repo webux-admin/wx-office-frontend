@@ -8,9 +8,23 @@ import { entryServiceText, entryTargetText, timeRangeText } from '../../lib/time
 import type { TimeEntry } from '../../lib/types'
 import { TimeEntryStateBadge } from '../../timetracking/TimeEntryStateBadge'
 
-/** The columns of a row from the width of a tablet on; below it the cells wrap. */
+/**
+ * The columns of a row from the width of a tablet on; below it the cells wrap.
+ *
+ * <p>Every column that does not share out the rest has a fixed width — the state too, wide enough
+ * for «verrechnet RE-2026-0042» on one line — and the actions beside it always take three slots.
+ * So every row leaves the same width to the three shared columns, and project, service and text
+ * start at the same place on every row, whatever state and actions a row has.
+ */
 const ROW_LAYOUT =
-  'flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-left md:grid md:grid-cols-[6.5rem_3.5rem_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.6fr)_auto] md:items-center'
+  'flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-left md:grid md:grid-cols-[6.5rem_3.5rem_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.6fr)_var(--spacing-column-xl)] md:items-center'
+
+/**
+ * The actions of a row: three slots of one icon button each, in a fixed order — continue or take
+ * off the draft, copy, then delete or the lock. A button a row does not offer leaves its slot
+ * empty, so the buttons after it stay where they are.
+ */
+const ACTION_SLOTS = 'grid shrink-0 grid-cols-[repeat(3,var(--spacing-icon-button))] gap-0.5'
 
 /**
  * The entries of one day, the way the week bar chose it.
@@ -135,8 +149,11 @@ function EntryRow({
       <span className="min-w-0 text-text-secondary max-md:empty:hidden md:truncate">
         {entry.description ?? ''}
       </span>
-      {/* Inside the row button no link can live; an entry that opens is never on an invoice. */}
-      <TimeEntryStateBadge entry={entry} linked={!changeable} origin={invoiceOrigin} />
+      {/* Inside the row button no link can live; an entry that opens is never on an invoice. The
+          wrapper takes the width of the column, so the badge keeps its own. */}
+      <span>
+        <TimeEntryStateBadge entry={entry} linked={!changeable} origin={invoiceOrigin} />
+      </span>
     </>
   )
   const locked = !entry.editable && Boolean(entry.readOnlyReason)
@@ -156,45 +173,56 @@ function EntryRow({
         ) : (
           <div className={`${ROW_LAYOUT} text-body`}>{cells}</div>
         )}
-        {(mayWrite || onRelease || locked) && (
-          <div className="flex shrink-0 items-center gap-0.5">
-            {onRelease && (
-              <IconButton label={`${short} vom Entwurf lösen`} onClick={() => onRelease(entry)}>
-                <Unlink size={15} aria-hidden />
-              </IconButton>
-            )}
-            {mayWrite && onContinue && entry.editable && (
-              <IconButton
-                label={`${short} fortsetzen`}
-                onClick={() => onContinue(entry)}
-                disabled={continuing}
-              >
-                <Play size={15} aria-hidden />
-              </IconButton>
-            )}
-            {mayWrite && (
-              <IconButton
-                label={`${short} auf heute kopieren`}
-                onClick={() => onCopy(entry)}
-                disabled={copying}
-              >
-                <CopyPlus size={15} aria-hidden />
-              </IconButton>
-            )}
-            {mayWrite && entry.editable && (
-              <IconButton label={`${short} löschen`} tone="danger" onClick={() => onDelete(entry)}>
-                <Trash2 size={15} aria-hidden />
-              </IconButton>
-            )}
-            {/* In place of change and delete: why the entry can only be read. */}
-            {locked && (
-              <span className="grid size-icon-button place-items-center">
-                <Tooltip icon="lock" label={`${short}: gesperrt`} text={entry.readOnlyReason} />
-              </span>
-            )}
-          </div>
-        )}
+        {/* Below a tablet the row wraps freely, and a bar without a single button only takes room. */}
+        <div
+          data-testid="entry-actions"
+          className={`${ACTION_SLOTS} ${mayWrite || onRelease || locked ? '' : 'max-md:hidden'}`}
+        >
+          {onRelease ? (
+            <IconButton label={`${short} vom Entwurf lösen`} onClick={() => onRelease(entry)}>
+              <Unlink size={15} aria-hidden />
+            </IconButton>
+          ) : mayWrite && onContinue && entry.editable ? (
+            <IconButton
+              label={`${short} fortsetzen`}
+              onClick={() => onContinue(entry)}
+              disabled={continuing}
+            >
+              <Play size={15} aria-hidden />
+            </IconButton>
+          ) : (
+            <EmptySlot />
+          )}
+          {mayWrite ? (
+            <IconButton
+              label={`${short} auf heute kopieren`}
+              onClick={() => onCopy(entry)}
+              disabled={copying}
+            >
+              <CopyPlus size={15} aria-hidden />
+            </IconButton>
+          ) : (
+            <EmptySlot />
+          )}
+          {mayWrite && entry.editable ? (
+            <IconButton label={`${short} löschen`} tone="danger" onClick={() => onDelete(entry)}>
+              <Trash2 size={15} aria-hidden />
+            </IconButton>
+          ) : locked ? (
+            // In place of change and delete: why the entry can only be read.
+            <span className="grid size-icon-button place-items-center">
+              <Tooltip icon="lock" label={`${short}: gesperrt`} text={entry.readOnlyReason} />
+            </span>
+          ) : (
+            <EmptySlot />
+          )}
+        </div>
       </div>
     </div>
   )
+}
+
+/** The place of a button a row does not offer, kept so the slots after it stay where they are. */
+function EmptySlot() {
+  return <span aria-hidden className="size-icon-button" />
 }

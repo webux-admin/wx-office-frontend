@@ -133,7 +133,7 @@ export function EvaluationEntries({
     {
       key: 'state',
       header: 'Zustand',
-      width: 'w-column-lg',
+      width: 'w-column-xl',
       render: (entry) => <TimeEntryStateBadge entry={entry} origin={origin} />,
     },
   ]

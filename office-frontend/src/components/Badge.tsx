@@ -11,17 +11,35 @@ const TONES: Record<BadgeTone, string> = {
   muted: 'border border-line text-text-tertiary',
 }
 
-/** A short status word next to a record, for example the state of a document. */
+/**
+ * The shape of a badge whose text may run onto a second line.
+ *
+ * <p>The radius is larger than half the height of one line, so the browser scales it down to a
+ * pill while the text fits; on two lines it becomes a box with calm corners instead of a stretched
+ * capsule. Breaking is only allowed below `sm`: wider, the column is wide enough for one line.
+ */
+const WRAPPING_SHAPE = 'justify-center rounded-[var(--radius-lg)] text-center sm:whitespace-nowrap'
+
+/**
+ * A short status word next to a record, for example the state of a document.
+ *
+ * @param wraps lets a longer text, such as a state with a document number, break in a narrow
+ *   window, centred and without a stretched pill
+ */
 export function Badge({
   tone = 'neutral',
+  wraps = false,
   children,
 }: {
   tone?: BadgeTone
+  wraps?: boolean
   children: ReactNode
 }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-caption font-medium ${TONES[tone]}`}
+      className={`inline-flex shrink-0 items-center gap-1 px-2 py-0.5 text-caption font-medium ${
+        wraps ? WRAPPING_SHAPE : 'rounded-[var(--radius-full)]'
+      } ${TONES[tone]}`}
     >
       {children}
     </span>
