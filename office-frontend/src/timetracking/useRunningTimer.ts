@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { api } from '../lib/api'
 import {
   minutesSince,
   msUntilNextMinute,
   timeEntriesKey,
   timerKey,
+  timerSweepDelay,
   timerTabTitle,
   timerUrl,
 } from '../lib/timetracking'
@@ -58,6 +59,47 @@ export function useMinutesRunning(startedAt: string | null): number | null {
     () => (startedAt === null ? -1 : minutesSince(startedAt, Date.now())),
   )
   return startedAt === null ? null : minutes
+}
+
+/**
+ * The delay of the line that runs around the stopwatch button once a minute, worked out once for
+ * a start and kept, so the browser animates on its own and nothing renders per second.
+ *
+ * <p>Worked out anew when the start changes — the start was moved back in the field — and when
+ * the tab comes back into view, where a throttled page may have drifted. The changed value is
+ * meant as the key of the line: a new key starts the animation afresh (#133).
+ *
+ * @param startedAt the start, an ISO instant; `null` while nothing runs
+ * @returns a CSS time such as «-25s», `null` while nothing runs
+ */
+export function useSweepDelay(startedAt: string | null): string | null {
+  const store = useMemo(() => (startedAt === null ? null : sweepStore(startedAt)), [startedAt])
+  return useSyncExternalStore(store?.subscribe ?? subscribeToNothing, store?.snapshot ?? noDelay)
+}
+
+const noDelay = () => null
+
+/**
+ * Holds the delay for one start: read from the clock the first time it is asked for, and
+ * forgotten when the tab comes back, so the next reading takes the clock again.
+ */
+function sweepStore(startedAt: string) {
+  let delay: string | null = null
+  return {
+    subscribe(onChange: () => void) {
+      const reread = () => {
+        if (document.visibilityState !== 'visible') return
+        delay = null
+        onChange()
+      }
+      document.addEventListener('visibilitychange', reread)
+      return () => document.removeEventListener('visibilitychange', reread)
+    },
+    snapshot() {
+      delay ??= timerSweepDelay(startedAt, Date.now())
+      return delay
+    },
+  }
 }
 
 /**

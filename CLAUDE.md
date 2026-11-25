@@ -77,7 +77,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   `TIME_WRITE` (ADR-0082, Backend ADR-0160). Die **Stoppuhr** steht als `TimerButton` im Kopf der
   Seitenleiste, eingeklappt als Symbol mit Tooltip, auf dem Telefon in der Leiste neben
   «Navigation» — nur mit Schalter und `TIME_TRACK`: «▶ Zeit starten» oder «■ 0:42 · P-00012
-  Website · Konzeption». Ein Klick öffnet ein Feld mit denselben Bausteinen wie die Schnellzeile
+  Website · Konzeption»; laufend geht ein Rand einmal in 60 Sekunden um den Knopf, voll, wenn die Minute
+  umspringt — reines CSS mit einem Delay aus `startedAt`, ohne Rendern je Sekunde und ohne Rand bei
+  `prefers-reduced-motion` (#133). Ein Klick öffnet ein Feld mit denselben Bausteinen wie die Schnellzeile
   (`src/timetracking/`: Ziel, Leistung, «verrechenbar», «Zuletzt»), «Start» ohne Uhr, sonst
   «Verwerfen» mit Rückfrage, «Speichern» über `PUT` (auch den Start rückwärts) und «Stopp», das
   zuerst speichert; der Fokus steht auf «Stopp». Die Zeit rechnet der Browser aus dem

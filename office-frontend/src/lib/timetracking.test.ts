@@ -75,6 +75,7 @@ import {
   minutesSince,
   msUntilNextMinute,
   nextEntryForm,
+  timerSweepDelay,
   recentTargetLabel,
   recentTargetsKey,
   recentTargetsUrl,
@@ -1382,6 +1383,41 @@ describe('msUntilNextMinute', () => {
 
   it('msUntilNextMinuteWithAnUnreadableStartTest', () => {
     expect(msUntilNextMinute('gestern', at(9, 15))).toBe(60_000)
+  })
+})
+
+describe('timerSweepDelay', () => {
+  /** The example of #133: started 10:00:15, now 10:03:40 — 25 seconds into the fourth minute. */
+  it('timerSweepDelayTest', () => {
+    const started = new Date(at(10, 0, 15)).toISOString()
+
+    expect(timerSweepDelay(started, at(10, 3, 40))).toBe('-25s')
+  })
+
+  it('timerSweepDelayOnAWholeMinuteTest', () => {
+    const started = new Date(at(10, 0)).toISOString()
+
+    expect(timerSweepDelay(started, at(10, 7))).toBe('0s')
+  })
+
+  it('timerSweepDelayRightAtTheStartTest', () => {
+    expect(timerSweepDelay(STARTED, at(9, 15, 20))).toBe('0s')
+  })
+
+  it('timerSweepDelayOneSecondBeforeTheTurnTest', () => {
+    expect(timerSweepDelay(STARTED, at(9, 16, 19))).toBe('-59s')
+  })
+
+  it('timerSweepDelayWithMillisecondsTest', () => {
+    expect(timerSweepDelay(STARTED, at(9, 15, 30) + 400)).toBe('-10.4s')
+  })
+
+  it('timerSweepDelayBeforeTheStartTest', () => {
+    expect(timerSweepDelay(STARTED, at(9, 15, 10))).toBe('0s')
+  })
+
+  it('timerSweepDelayWithAnUnreadableStartTest', () => {
+    expect(timerSweepDelay('gestern', at(9, 15))).toBe('0s')
   })
 })
 

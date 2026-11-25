@@ -17,6 +17,7 @@ import {
   useMinutesRunning,
   useReloadOnReturn,
   useRunningTimer,
+  useSweepDelay,
   useTimerTabTitle,
 } from './useRunningTimer'
 
@@ -55,7 +56,8 @@ const LOOKS: Record<TimerPlace, { shape: string; idle: string; running: string }
  *
  * <p>The time is counted on in the browser from the start; the stopwatch is read anew when the
  * tab comes back, so a stop on the phone arrives here. While it runs, the tab title starts with
- * the time.
+ * the time, and a line runs around the button once a minute, so the seconds can be seen going
+ * without a figure for them (#133).
  */
 export function TimerButton({ place }: { place: TimerPlace }) {
   const { can } = useAuth()
@@ -71,6 +73,7 @@ function Stopwatch({ tenantId, place }: { tenantId: number; place: TimerPlace })
   const timer = useRunningTimer(tenantId)
   const running = timer.data ?? null
   const minutes = useMinutesRunning(running?.startedAt ?? null)
+  const sweepDelay = useSweepDelay(running?.startedAt ?? null)
   useReloadOnReturn(tenantId)
   useTimerTabTitle(minutes)
 
@@ -141,8 +144,9 @@ function Stopwatch({ tenantId, place }: { tenantId: number; place: TimerPlace })
       aria-haspopup="dialog"
       aria-label={showsText ? undefined : `Stoppuhr läuft: ${timerText(running, minutes ?? 0)}`}
       title={`Stoppuhr läuft: ${timerText(running, minutes ?? 0)}`}
-      className={`${base} ${look.running}`}
+      className={`${base} ${look.running} relative`}
     >
+      {sweepDelay !== null && <SweepLine key={sweepDelay} delay={sweepDelay} />}
       <Square size={13} fill="currentColor" aria-hidden className="shrink-0" />
       {showsText && (
         <>
@@ -179,5 +183,22 @@ function Stopwatch({ tenantId, place }: { tenantId: number; place: TimerPlace })
         document.body,
       )}
     </>
+  )
+}
+
+/**
+ * The line that runs once a minute around the running button, full when the minute turns over.
+ *
+ * <p>Only decoration: the time stands in the label and the title. Drawn as a rectangle with the
+ * radius of the button and animated by the stylesheet alone (`.timer-sweep` in `index.css`),
+ * which leaves it out where the system asks for reduced motion.
+ *
+ * @param delay how far into its round the line starts, from {@link useSweepDelay}
+ */
+function SweepLine({ delay }: { delay: string }) {
+  return (
+    <svg aria-hidden className="timer-sweep" data-testid="timer-sweep">
+      <rect pathLength={100} style={{ animationDelay: delay }} />
+    </svg>
   )
 }

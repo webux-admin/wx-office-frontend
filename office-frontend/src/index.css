@@ -433,6 +433,48 @@
   }
 }
 
+/*
+ * The line around the running stopwatch button: one round a minute, full when the minute on the
+ * button turns over. The rectangle sits half a stroke inside the button and follows its radius;
+ * `pathLength` makes the round 100 long whatever the size of the button, so the dash offset
+ * counts in hundredths of a minute. The delay comes from the component, worked out once from the
+ * start; the browser animates the rest without a single render (#133).
+ */
+@layer components {
+  .timer-sweep {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  .timer-sweep rect {
+    x: 1px;
+    y: 1px;
+    width: calc(100% - 2px);
+    height: calc(100% - 2px);
+    rx: calc(var(--radius-md) - 1px);
+    fill: none;
+    stroke: var(--color-on-accent);
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: timer-sweep 60s linear infinite;
+  }
+}
+
+@keyframes timer-sweep {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Anyone who asks for less motion gets none, decorative movement included. */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -441,5 +483,10 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+
+  /* A line that stands still says nothing about seconds: there is none. */
+  .timer-sweep {
+    display: none;
   }
 }

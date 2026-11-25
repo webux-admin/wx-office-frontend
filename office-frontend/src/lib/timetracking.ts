@@ -933,6 +933,26 @@ export function msUntilNextMinute(startedAt: string, now: number): number {
 }
 
 /**
+ * Where the line around the running stopwatch button stands, as the delay of its animation.
+ *
+ * <p>The line takes a minute for one round and is full exactly when the minute on the button
+ * turns over — at the second of the start, like {@link msUntilNextMinute}. A negative delay
+ * starts the animation that far into its round; the browser then runs it on its own, with no
+ * rendering per second (#133).
+ *
+ * @param startedAt the start, an ISO instant
+ * @param now the moment, in milliseconds since the epoch
+ * @returns a CSS time such as «-25s» or «-25.4s»; «0s» on a whole minute since the start, before
+ *          the start — a browser clock behind the server's — and for a start that cannot be read
+ */
+export function timerSweepDelay(startedAt: string, now: number): string {
+  const start = Date.parse(startedAt)
+  if (Number.isNaN(start) || now <= start) return '0s'
+  const intoMinute = (now - start) % MINUTE_MILLISECONDS
+  return intoMinute === 0 ? '0s' : `-${intoMinute / 1000}s`
+}
+
+/**
  * What the running stopwatch says on its button: the time and what it runs on, the way a chip
  * «Zuletzt» names it.
  *

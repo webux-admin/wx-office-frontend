@@ -416,6 +416,55 @@ describe('TimerButton', () => {
     expect(document.title).toBe('▶ 0:42 · webux ERP')
   })
 
+  /**
+   * While it runs, a line goes round the button once a minute, 40 seconds in at ten o'clock for a
+   * start at 09:17:20 — decoration only, hidden from the screen reader (#133).
+   */
+  it('timerButtonDrawsTheSweepWhileRunningTest', async () => {
+    running = timer()
+
+    await render()
+
+    const sweep = face().querySelector('[data-testid="timer-sweep"]')
+    expect(sweep?.getAttribute('aria-hidden')).toBe('true')
+    expect(sweep?.querySelector('rect')?.getAttribute('pathLength')).toBe('100')
+    expect(sweep?.querySelector('rect')?.style.animationDelay).toBe('-40s')
+  })
+
+  /** At rest no seconds run, so no line does either. */
+  it('timerButtonDrawsNoSweepAtRestTest', async () => {
+    await render()
+
+    expect(face().querySelector('[data-testid="timer-sweep"]')).toBeNull()
+  })
+
+  /** Folded into the rail the symbol gets the same line. */
+  it('timerButtonDrawsTheSweepInTheRailTest', async () => {
+    running = timer({ startedAt: at(25, 9, 0).toISOString() })
+
+    await render('rail')
+
+    expect(face().querySelector('[data-testid="timer-sweep"] rect')?.getAttribute('style')).toContain(
+      'animation-delay: 0s',
+    )
+  })
+
+  /** A start moved on another device sets the line anew when the tab comes back. */
+  it('timerButtonSetsTheSweepAnewWhenTheStartMovesTest', async () => {
+    running = timer()
+    await render()
+    running = timer({ startedAt: at(25, 9, 30, 5).toISOString() })
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await settle()
+
+    expect(face().querySelector('[data-testid="timer-sweep"] rect')?.getAttribute('style')).toContain(
+      'animation-delay: -55s',
+    )
+  })
+
   /** No request goes out to count: the minute turns at the second of the start. */
   it('timerButtonCountsWithAFakeClockTest', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
