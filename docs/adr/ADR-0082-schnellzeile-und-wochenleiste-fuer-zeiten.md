@@ -1,6 +1,6 @@
 # ADR-0082 — Schnellzeile und Wochenleiste für Zeiten
 
-- **Status:** Angenommen
+- **Status:** Angenommen; Punkt 5 teilweise abgelöst durch ADR-0087 (Punkt im Zeitbereich, kein Hinweis unter der Dauer)
 - **Datum:** 2026-11-24
 - **Verhältnis:** Neu. Setzt Backend ADR-0160 (Issue webux-admin/wx-office#124, «Zeiterfassung
   (2/6)») um und folgt den Fehlern am Feld (ADR-0050), den Rückfragen bei ungespeicherten

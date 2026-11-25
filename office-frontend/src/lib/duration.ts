@@ -31,23 +31,33 @@ export type DurationReading =
   | { state: 'read'; duration: Duration }
   | { state: 'refused'; message: string }
 
-const UNKNOWN = 'Keine Dauer erkannt. Zum Beispiel 1:30, 1.5, 90m oder 9-10:30.'
+const UNKNOWN =
+  'Keine Dauer erkannt. Zum Beispiel 1:30, 1.5, 90m, 2h 15m, 9-10:30 oder 9.30-16.15.'
+
+/** What the duration field explains in its tooltip: every form it reads, and the one trap. */
+export const DURATION_FORMS =
+  '1:30, 1.5, 90m, 2h 15m, 9-10:30 oder 9.30-16.15. Eine Zahl ohne Einheit sind Stunden; im ' +
+  'Bereich trennt der Punkt Stunden und Minuten, 9.3 ist also 09:30.'
 const TOO_SHORT = 'Eine Dauer ist mindestens 1 Minute lang.'
 const TOO_LONG = 'Eine Dauer ist höchstens 24 Stunden lang.'
 const NOT_AFTER =
   'Bis muss nach Von liegen. Eine Zeit über Mitternacht wird als zwei Einträge erfasst.'
 
-/** A time of day in a range: hours alone, or hours and two digits of minutes. */
-const CLOCK = '(\\d{1,2})(?::(\\d{2}))?'
+/**
+ * A time of day in a range: hours alone, hours and two digits of minutes after a colon, or hours
+ * and up to two digits after a point or a comma, the way «9.30 Uhr» is written. The groups are the
+ * hours, the minutes after a colon and the digits after a point.
+ */
+const CLOCK = '(\\d{1,2})(?::(\\d{2})|[.,](\\d{0,2}))?'
 
-/** «9-10:30», «9:00 - 10:30», also with the dash a Mac keyboard types. */
+/** «9-10:30», «9:00 - 10:30», «9.3-16.15», also with the dash a Mac keyboard types. */
 const RANGE = new RegExp(`^${CLOCK}\\s*[-–—]\\s*${CLOCK}$`)
 
 /** «1:30» — hours and minutes. */
 const HOURS_AND_MINUTES = /^(\d{1,2}):(\d{2})$/
 
-/** «1.5», «1,5», «2» — hours, a decimal fraction allowed. */
-const DECIMAL_HOURS = /^(\d+(?:[.,]\d+)?)$/
+/** «1.5», «1,5», «2», «1.» — hours, a decimal fraction allowed, a point with nothing after it too. */
+const DECIMAL_HOURS = /^(\d+(?:[.,]\d*)?)$/
 
 /**
  * «2h», «1.5h», «2h 15m», «2h15», and the words the screen writes itself: «1 Std. 30 Min.». The
@@ -61,9 +71,13 @@ const MINUTES_ONLY = /^(\d+)\s*(?:m|min\.?)$/
 /**
  * Reads what was typed into a duration field.
  *
- * <p>A number without a unit is hours: «2» is two hours, «1.5» and «1,5» an hour and a half. A
- * fraction of an hour is rounded to the minute, because an entry is kept to the minute. A range
- * keeps its times of day; its end «0» or «24:00» is midnight at the end of the day.
+ * <p>A number without a unit is hours: «2» and «2.» are two hours, «1.5» and «1,5» an hour and a
+ * half. A fraction of an hour is rounded to the minute, because an entry is kept to the minute. A
+ * range keeps its times of day; its end «0» or «24:00» is midnight at the end of the day.
+ *
+ * <p><b>Inside a range the point is a time of day, not a fraction</b>, the way «9.30 Uhr» is
+ * written: «9.3-16.15» is 09:30 to 16:15, and a single digit after the point counts as tens of
+ * minutes, so «9.5-10» is 09:50 to 10:00 (frontend ADR-0087).
  *
  * @param input what stands in the field
  * @returns `empty` for a blank field, `read` with the minutes (and the range, where one was
@@ -149,8 +163,8 @@ export function clockTime(minutes: number): string {
  * as `00:00`. An end at or before the start is refused: a time over midnight is two entries.
  */
 function readRange(match: RegExpExecArray): DurationReading {
-  const start = minutesOfDay(match[1], match[2])
-  const end = minutesOfDay(match[3], match[4])
+  const start = minutesOfDay(match[1], minutesOf(match[2], match[3]))
+  const end = minutesOfDay(match[4], minutesOf(match[5], match[6]))
   if (start === null || end === null) return refused(UNKNOWN)
   const until = end === 0 ? MAX_DURATION_MINUTES : end
   const minutes = until - start
@@ -167,12 +181,27 @@ function readRange(match: RegExpExecArray): DurationReading {
  * @returns the minutes, 0 to 1440; `null` for something that is no time of day, like «25» or
  *          «9:75». 24 is allowed with no minutes only, as the end of the day
  */
-function minutesOfDay(hours: string, minutes: string | undefined): number | null {
+function minutesOfDay(hours: string, minute: number): number | null {
   const hour = Number(hours)
-  const minute = minutes === undefined ? 0 : Number(minutes)
   if (minute >= MINUTES_PER_HOUR) return null
   if (hour > 24 || (hour === 24 && minute > 0)) return null
   return hour * MINUTES_PER_HOUR + minute
+}
+
+/**
+ * The minutes of a time of day in a range, as typed after a colon or after a point.
+ *
+ * <p>After a colon two digits are the minutes. After a point they are the minutes of «9.30 Uhr»:
+ * two digits as they stand, one digit tens of minutes («9.3» is 09:30), none at all the full hour.
+ *
+ * @param afterColon the digits after a colon, if the time had one
+ * @param afterPoint the digits after a point or a comma, if the time had one
+ * @returns the minutes, 0 for a full hour; 60 or more where the digits are no minutes
+ */
+function minutesOf(afterColon: string | undefined, afterPoint: string | undefined): number {
+  if (afterColon !== undefined) return Number(afterColon)
+  if (afterPoint === undefined || afterPoint === '') return 0
+  return afterPoint.length === 1 ? Number(afterPoint) * 10 : Number(afterPoint)
 }
 
 /** Hours as typed, a comma or a point before the fraction, rounded to the minute. */

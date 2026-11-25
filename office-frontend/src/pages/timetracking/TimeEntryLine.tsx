@@ -1,7 +1,7 @@
 import type { Ref } from 'react'
 import { Button } from '../../components/Button'
 import { TextField } from '../../components/TextField'
-import { formatDuration, readDuration } from '../../lib/duration'
+import { DURATION_FORMS } from '../../lib/duration'
 import {
   TIME_ENTRY_DESCRIPTION_MAX_LENGTH,
   type TimeEntryForm,
@@ -66,14 +66,6 @@ export function TimeEntryLine({
   /** Lets the screen tell which line holds the focus. */
   formRef?: Ref<HTMLFormElement>
 }) {
-  const reading = readDuration(form.duration)
-  const durationHint =
-    reading.state === 'read'
-      ? `= ${formatDuration(reading.duration.minutes)}`
-      : reading.state === 'refused'
-        ? reading.message
-        : undefined
-
   return (
     <form
       ref={formRef}
@@ -108,9 +100,10 @@ export function TimeEntryLine({
         placeholder="1:30"
         autoComplete="off"
         required
-        hint={durationHint}
+        // No reading under the field while typing: the tooltip names the forms, and a duration
+        // that is none is told at the field when saving, like every other field (frontend ADR-0087).
         error={errors.duration}
-        tooltip="1:30, 1.5, 90m, 2h 15m oder 9-10:30. Eine Zahl ohne Einheit sind Stunden."
+        tooltip={DURATION_FORMS}
       />
 
       <TextField

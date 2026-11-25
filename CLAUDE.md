@@ -68,8 +68,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
   ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
   Feld, Projekt und Leistung bleiben stehen, der Fokus springt auf «Dauer». Die Dauer liest
-  `lib/duration.ts` (`1:30`, `1.5`, `90m`, `2h 15m`, `9-10:30`), ein Bereich geht als Von–Bis
-  hinaus, eine Dauer als Minuten. Chips «Zuletzt» und die Vorgabe der Leistung kommen vom
+  `lib/duration.ts` (`1:30`, `1.5`, `1.`, `90m`, `2h 15m`, `9-10:30`, `9.30-16.15` — im Bereich ist
+  der Punkt eine Uhrzeit, ADR-0087), ein Bereich geht als Von–Bis hinaus, eine Dauer als Minuten;
+  unter dem Feld steht kein Hinweis, nur das Tooltip. Chips «Zuletzt» und die Vorgabe der Leistung kommen vom
   Backend; die Liste des Tages öffnet einen Eintrag in derselben Zeile, kopiert auf heute ohne
   Von–Bis und löscht mit Rückfrage. «Zeiten von …» nur mit `TIME_READ`, schreibend nur mit
   `TIME_WRITE` (ADR-0082, Backend ADR-0160). Die **Stoppuhr** steht als `TimerButton` im Kopf der

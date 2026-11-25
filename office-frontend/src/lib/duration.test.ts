@@ -86,6 +86,65 @@ describe('readDuration', () => {
     })
   })
 
+  /** A point with nothing after it closes the hours, the way «1.» is typed in a hurry (#131). */
+  it('readDurationWithATrailingPointTest', () => {
+    expect(minutesOf(readDuration('1.'))).toBe(60)
+    expect(minutesOf(readDuration('1,'))).toBe(60)
+    expect(minutesOf(readDuration('8.'))).toBe(480)
+  })
+
+  /** At the bounds a trailing point reads as the plain number would. */
+  it('readDurationWithATrailingPointAtTheBoundsTest', () => {
+    expect(minutesOf(readDuration('0.'))).toContain('mindestens 1 Minute')
+    expect(minutesOf(readDuration('24.'))).toBe(MAX_DURATION_MINUTES)
+    expect(minutesOf(readDuration('25.'))).toContain('höchstens 24 Stunden')
+  })
+
+  /**
+   * The table of #131: inside a range the point is a time of day as in «9.30 Uhr», and one digit
+   * after it counts as tens of minutes.
+   */
+  it('readDurationWithPointsInARangeTest', () => {
+    const quarterPastFour = { minutes: 405, startTime: '09:30', endTime: '16:15' }
+
+    for (const input of ['9.3-16.15', '9.30-16.15', '9,30-16,15', '9.3 - 16.15', '9.30-16:15']) {
+      expect(readDuration(input), input).toEqual({ state: 'read', duration: quarterPastFour })
+    }
+    expect(readDuration('9.05-10')).toEqual({
+      state: 'read',
+      duration: { minutes: 55, startTime: '09:05', endTime: '10:00' },
+    })
+    expect(readDuration('9.5-10')).toEqual({
+      state: 'read',
+      duration: { minutes: 10, startTime: '09:50', endTime: '10:00' },
+    })
+  })
+
+  /** Outside a range the point stays a decimal fraction: 1.5 is an hour and a half, not 1:50. */
+  it('readDurationWithAPointOutsideARangeTest', () => {
+    expect(readDuration('1.5')).toEqual({ state: 'read', duration: { minutes: 90 } })
+  })
+
+  /** The edges of a point in a range: a bare point, midnight as the end, the same time twice. */
+  it('readDurationWithPointsInARangeAtTheEdgesTest', () => {
+    expect(readDuration('9.-10')).toEqual({
+      state: 'read',
+      duration: { minutes: 60, startTime: '09:00', endTime: '10:00' },
+    })
+    expect(readDuration('23.59-0')).toEqual({
+      state: 'read',
+      duration: { minutes: 1, startTime: '23:59', endTime: '00:00' },
+    })
+    expect(minutesOf(readDuration('9.3-9.3'))).toContain('Bis muss nach Von liegen')
+  })
+
+  /** Digits after the point that are no minutes make no time of day. */
+  it('readDurationRefusesPointsThatAreNoMinutesTest', () => {
+    for (const input of ['9.75-10', '9.60-10', '9.3-10.9.5', '9.300-10']) {
+      expect(minutesOf(readDuration(input)), input).toContain('Keine Dauer erkannt')
+    }
+  })
+
   /** The dash a Mac keyboard types between two times means the same as the hyphen. */
   it('readDurationWithEnDashTest', () => {
     expect(minutesOf(readDuration('9:00–10:30'))).toBe(90)
@@ -171,7 +230,7 @@ describe('readDuration', () => {
 
   /** Signs, separators that mean something else and units in the wrong order are refused. */
   it('readDurationRefusesOtherTextTest', () => {
-    for (const input of ['-1', '1.5-2', '8.30-10', '15m 2h', 'h', '1,5m', 'eins']) {
+    for (const input of ['-1', '1.5.2', '8..30-10', '15m 2h', 'h', '1,5m', 'eins', '.5-10']) {
       expect(minutesOf(readDuration(input)), input).toContain('Keine Dauer erkannt')
     }
   })

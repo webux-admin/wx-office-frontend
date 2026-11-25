@@ -517,7 +517,8 @@ describe('TimeEntryPage', () => {
     expect(control('Leistung').value).toBe('Konzeption')
 
     await type(control('Dauer'), '1:30')
-    expect(text()).toContain('= 1 Std. 30 Min.')
+    // No reading under the field while typing (#131): the tooltip names the forms.
+    expect(text()).not.toContain('1 Std. 30 Min.')
     await type(control('Text'), 'Wireframes')
     await press(control('Text'), 'Enter')
 
@@ -563,14 +564,30 @@ describe('TimeEntryPage', () => {
     })
   })
 
+  /** A range with points, the way «9.30 Uhr» is written, goes out as two times of day (#131). */
+  it('timeEntryPageRecordsARangeWithPointsTest', async () => {
+    await render()
+
+    await type(control('Dauer'), '9.3-16.15')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({
+      durationMinutes: null,
+      startTime: '09:30',
+      endTime: '16:15',
+    })
+  })
+
+  /** The refusal waits for the attempt to save, like every other complaint of the line (#131). */
   it('timeEntryPageRefusesAnUnreadableDurationTest', async () => {
     await render()
 
     await type(control('Dauer'), '23-1')
-    expect(text()).toContain('über Mitternacht')
+    expect(text()).not.toContain('über Mitternacht')
     await press(control('Dauer'), 'Enter')
 
     expect(writes()).toEqual([])
+    expect(text()).toContain('über Mitternacht')
     expect(control('Dauer').getAttribute('aria-invalid')).toBe('true')
   })
 
