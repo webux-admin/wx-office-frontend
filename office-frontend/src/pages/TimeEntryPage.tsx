@@ -28,7 +28,6 @@ import {
   colleaguesKey,
   colleaguesUrl,
   continueEntryUrl,
-  copyRequestOf,
   dayTotalText,
   defaultServiceKey,
   emptyTimeEntryForm,
@@ -46,6 +45,7 @@ import {
   startedText,
   timeEntriesKey,
   timeEntryComplaints,
+  timeEntryCopyUrl,
   timeEntryUrl,
   timeEntryWriteUrl,
   timeSheetKey,
@@ -313,9 +313,9 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
 
   const copy = useMutation({
     mutationFn: (entry: TimeEntry) =>
-      api.post<TimeEntry>(timeEntryWriteUrl(tenantId, owner), copyRequestOf(entry, today)),
+      api.post<TimeEntry>(timeEntryCopyUrl(tenantId, owner, entry.id)),
     onSuccess: (saved) => {
-      setStatus(`Auf heute kopiert: ${formatDuration(saved.durationMinutes)}, ${entryTargetText(saved)}.`)
+      setStatus(`Kopiert: ${formatDuration(saved.durationMinutes)}, ${entryTargetText(saved)}.`)
       refresh()
     },
   })

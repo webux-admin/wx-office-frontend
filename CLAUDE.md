@@ -72,8 +72,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   `lib/duration.ts` (`1:30`, `1.5`, `1.`, `90m`, `2h 15m`, `9-10:30`, `9.30-16.15` — im Bereich ist
   der Punkt eine Uhrzeit, ADR-0087), ein Bereich geht als Von–Bis hinaus, eine Dauer als Minuten;
   unter dem Feld steht kein Hinweis, nur das Tooltip. Chips «Zuletzt» und die Vorgabe der Leistung kommen vom
-  Backend; die Liste des Tages öffnet einen Eintrag in derselben Zeile, kopiert auf heute ohne
-  Von–Bis und löscht mit Rückfrage. «Zeiten von …» nur mit `TIME_READ`, schreibend nur mit
+  Backend; die Liste des Tages öffnet einen Eintrag in derselben Zeile, kopiert über den Server
+  auf denselben Tag direkt unter das Original, ohne Von–Bis (Backend ADR-0167), und löscht mit
+  Rückfrage. «Zeiten von …» nur mit `TIME_READ`, schreibend nur mit
   `TIME_WRITE` (ADR-0082, Backend ADR-0160). Die **Stoppuhr** steht als `TimerButton` im Kopf der
   Seitenleiste, eingeklappt als Symbol mit Tooltip, auf dem Telefon in der Leiste neben
   «Navigation» — nur mit Schalter und `TIME_TRACK`: «▶ Zeit starten» oder «■ 0:42 · P-00012

@@ -51,7 +51,6 @@ import {
   userDefaultsKey,
   userDefaultsUrl,
   continueEntryUrl,
-  copyRequestOf,
   dayTotalText,
   defaultServiceKey,
   defaultServiceUrl,
@@ -90,6 +89,7 @@ import {
   timeEntriesKey,
   timeEntryComplaints,
   timeEntryUrl,
+  timeEntryCopyUrl,
   timeEntryWriteUrl,
   timeLookupsKey,
   timeRangeText,
@@ -343,6 +343,16 @@ describe('addresses', () => {
   it('timeEntryUrlTest', () => {
     expect(timeEntryUrl(1, 'mine', 5)).toBe('/api/tenants/1/time-entries/mine/5')
     expect(timeEntryUrl(1, 42, 5)).toBe('/api/tenants/1/time-entries/5?userId=42')
+  })
+
+  /** The copy is made on the server, under the original (#137). */
+  it('timeEntryCopyUrlTest', () => {
+    expect(timeEntryCopyUrl(1, 'mine', 5)).toBe('/api/tenants/1/time-entries/mine/5/copy')
+  })
+
+  /** A colleague's entry is copied with TIME_WRITE, the colleague named like for a change. */
+  it('timeEntryCopyUrlOfAColleagueTest', () => {
+    expect(timeEntryCopyUrl(1, 42, 5)).toBe('/api/tenants/1/time-entries/5/copy?userId=42')
   })
 
   it('recentTargetsUrlTest', () => {
@@ -1235,44 +1245,6 @@ describe('toTimeEntryRequest', () => {
 
     expect(request.billable).toBe(false)
     expect(request.lockVersion).toBe(0)
-  })
-})
-
-describe('copyRequestOf', () => {
-  /** The copy keeps project, service, text and «verrechenbar», but drops the range. */
-  it('copyRequestOfTest', () => {
-    expect(copyRequestOf(entry(), '2026-11-27')).toEqual({
-      workDate: '2026-11-27',
-      durationMinutes: 150,
-      startTime: null,
-      endTime: null,
-      projectId: 12,
-      partnerId: null,
-      productId: 31,
-      description: 'Wireframes',
-      billable: true,
-    })
-  })
-
-  it('copyRequestOfACustomerTest', () => {
-    const request = copyRequestOf(SUPPORT_HOUR, '2026-11-27')
-
-    expect(request.projectId).toBeNull()
-    expect(request.partnerId).toBe(11)
-  })
-
-  it('copyRequestOfInternalTimeTest', () => {
-    expect(copyRequestOf(TRAINING, '2026-11-27')).toEqual({
-      workDate: '2026-11-27',
-      durationMinutes: 180,
-      startTime: null,
-      endTime: null,
-      projectId: null,
-      partnerId: null,
-      productId: null,
-      description: 'Weiterbildung',
-      billable: false,
-    })
   })
 })
 

@@ -279,6 +279,12 @@ function stubFetch() {
             .map((one) => ({ ...one, state: 'OPEN', editable: true, readOnlyReason: null, documentId: null })),
         )
       }
+      if (url.endsWith('/copy')) {
+        // The server copies without the range, onto the day of the original.
+        const id = Number(url.split('/').at(-2))
+        const original = [ARCHIVED, TUESDAY, WIREFRAMES, TICKET, TRAINING].find((one) => one.id === id)
+        return json({ ...original, id: 99, startTime: null, endTime: null, lockVersion: 0 }, 201)
+      }
       if (url.endsWith('/continue')) {
         return json({ timer: CONTINUED, started: true, stoppedEntries: [] }, 201)
       }
@@ -798,30 +804,38 @@ describe('TimeEntryPage', () => {
     expect(writes()).toEqual([])
   })
 
-  it('timeEntryPageCopiesToTodayTest', async () => {
+  /**
+   * «Kopieren» asks the server for the copy: it lands on the day of the entry, directly under it,
+   * and the list reads anew to show it there (#137).
+   */
+  it('timeEntryPageCopiesUnderTheOriginalTest', async () => {
     await render()
     await click(day('Dienstag'))
+    const readsBefore = requests.filter((request) => request.url.startsWith(`${BASE}/mine?`)).length
 
-    await click(button('8:10 intern auf heute kopieren'))
+    await click(button('8:10 intern kopieren'))
 
-    expect(writes()).toEqual([
-      {
-        method: 'POST',
-        url: `${BASE}/mine`,
-        body: {
-          workDate: '2026-11-25',
-          durationMinutes: 490,
-          startTime: null,
-          endTime: null,
-          projectId: null,
-          partnerId: null,
-          productId: null,
-          description: 'Workshop',
-          billable: false,
-        },
+    expect(writes()).toEqual([{ method: 'POST', url: `${BASE}/mine/8/copy`, body: {} }])
+    expect(text()).toContain('Kopiert: 8 Std. 10 Min., intern.')
+    expect(requests.filter((request) => request.url.startsWith(`${BASE}/mine?`)).length).toBeGreaterThan(
+      readsBefore,
+    )
+  })
+
+  /** A refused copy — on a project that is open again, say — shows the sentence of the server. */
+  it('timeEntryPageShowsARefusedCopyTest', async () => {
+    await render()
+    writeFailure = {
+      status: 400,
+      body: {
+        detail: 'P-00012 ist noch offen. Zeit gibt es nur auf aktiven Projekten. Das Projekt zuerst aktivieren.',
+        errors: [{ field: 'projectId', message: 'P-00012 ist noch offen.' }],
       },
-    ])
-    expect(text()).toContain('Auf heute kopiert:')
+    }
+
+    await click(button('2:30 P-00012 Website · Muster AG kopieren'))
+
+    expect(text()).toContain('P-00012 ist noch offen')
   })
 
   it('timeEntryPageDeletesAfterAskingTest', async () => {
@@ -891,7 +905,7 @@ describe('TimeEntryPage', () => {
     })
     await settle()
 
-    expect(row('Ticket 4711').querySelector('button[aria-label$="auf heute kopieren"]')).not.toBeNull()
+    expect(row('Ticket 4711').querySelector('button[aria-label$=" kopieren"]')).not.toBeNull()
     expect(row('Ticket 4711').querySelector('button[aria-label$="fortsetzen"]')).toBeNull()
   })
 

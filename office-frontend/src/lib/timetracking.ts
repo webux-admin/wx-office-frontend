@@ -145,6 +145,20 @@ export function timeEntryUrl(tenantId: number, owner: SheetOwner, entryId: numbe
 }
 
 /**
+ * «Kopieren»: the server writes the same work again on the day of the entry, directly under it,
+ * without its range (backend ADR-0167).
+ *
+ * @param tenantId the tenant
+ * @param owner whose entry it is
+ * @param entryId the entry to copy
+ * @returns address of the copy
+ */
+export function timeEntryCopyUrl(tenantId: number, owner: SheetOwner, entryId: number): string {
+  if (owner === 'mine') return `${timeEntriesUrl(tenantId)}/mine/${entryId}/copy`
+  return `${timeEntriesUrl(tenantId)}/${entryId}/copy?${listQuery({ userId: owner })}`
+}
+
+/**
  * @param tenantId the tenant
  * @returns address of the chips «Zuletzt»; they exist for one's own times only
  */
@@ -846,29 +860,6 @@ export function toTimeEntryRequest(
   }
   if (lockVersion === undefined) return request
   return { ...request, billable: changedBillable(form, rule), lockVersion }
-}
-
-/**
- * A copy of an entry on another day, for «Auf heute kopieren».
- *
- * <p>The minutes go along, the range does not: the copy would claim a time of day nobody typed.
- *
- * @param entry the entry to copy
- * @param workDate the day of the copy, `yyyy-MM-dd`
- * @returns the request body of the new entry
- */
-export function copyRequestOf(entry: TimeEntry, workDate: string): TimeEntryRequest {
-  return {
-    workDate,
-    durationMinutes: entry.durationMinutes,
-    startTime: null,
-    endTime: null,
-    projectId: entry.projectId ?? null,
-    partnerId: entry.projectId != null ? null : (entry.partnerId ?? null),
-    productId: entry.productId ?? null,
-    description: entry.description ?? null,
-    billable: entry.billable,
-  }
 }
 
 // --- the stopwatch -----------------------------------------------------------------

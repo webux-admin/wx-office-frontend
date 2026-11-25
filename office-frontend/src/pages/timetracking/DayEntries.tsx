@@ -30,8 +30,8 @@ const ACTION_SLOTS = 'grid shrink-0 grid-cols-[repeat(3,var(--spacing-icon-butto
  * The entries of one day, the way the week bar chose it.
  *
  * <p>A click on a row opens it in the same line form it was recorded in, right where it stands.
- * «Fortsetzen» starts the stopwatch on the same work, «Auf heute kopieren» writes the same work
- * again for today, «Löschen» asks first. An entry that can only be read — billed, or on a project
+ * «Fortsetzen» starts the stopwatch on the same work, «Kopieren» writes the same work again on the
+ * same day, directly under it (backend ADR-0167), «Löschen» asks first. An entry that can only be read — billed, or on a project
  * that can only be read — offers neither change nor delete; a lock says why, in the backend's
  * sentence (backend ADR-0160, ADR-0161, ADR-0163).
  *
@@ -195,7 +195,7 @@ function EntryRow({
           )}
           {mayWrite ? (
             <IconButton
-              label={`${short} auf heute kopieren`}
+              label={`${short} kopieren`}
               onClick={() => onCopy(entry)}
               disabled={copying}
             >
