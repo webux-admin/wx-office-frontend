@@ -470,10 +470,38 @@ describe('TimeEntryPage', () => {
   it('timeEntryPageKeepsTheFutureShutTest', async () => {
     await render()
 
-    expect(day('Donnerstag').disabled).toBe(true)
-    expect(day('Dienstag').disabled).toBe(false)
+    await click(day('Donnerstag'))
+
+    expect(day('Donnerstag').getAttribute('aria-disabled')).toBe('true')
+    expect(text()).toContain('Mittwoch, 25. November')
+    expect(day('Dienstag').getAttribute('aria-disabled')).toBeNull()
     expect(button('Nächste Woche').disabled).toBe(true)
     expect(button('Heute').disabled).toBe(true)
+  })
+
+  /** A day after today says why it cannot be chosen, not only by looking dimmed (#132). */
+  it('timeEntryPageSaysWhyAFutureDayIsShutTest', async () => {
+    await render()
+
+    const saturday = day('Samstag')
+
+    expect(saturday.title).toBe('Liegt in der Zukunft. Zeit wird erfasst, wenn sie geleistet ist.')
+    expect(saturday.getAttribute('aria-label')).toContain('Liegt in der Zukunft')
+    expect(day('Montag').title).toBe('')
+  })
+
+  /** A past Saturday is a day like any other: chosen, and the time goes to it (#132). */
+  it('timeEntryPageRecordsOnAPastSaturdayTest', async () => {
+    await render()
+    await click(button('Vorherige Woche'))
+
+    await click(day('Samstag'))
+    expect(day('Samstag').getAttribute('aria-disabled')).toBeNull()
+    expect(text()).toContain('Samstag, 21. November')
+    await type(control('Dauer'), '2')
+    await press(control('Dauer'), 'Enter')
+
+    expect(writes()[0].body).toMatchObject({ workDate: '2026-11-21', durationMinutes: 120 })
   })
 
   it('timeEntryPageGoesToTheWeekBeforeTest', async () => {

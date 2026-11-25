@@ -2,12 +2,17 @@ import { formatDuration, formatDurationShort } from '../../lib/duration'
 import { dayTotalText } from '../../lib/timetracking'
 import { dayTitle, shortDayLabel } from '../../lib/week'
 
+/** Why a day after today cannot be chosen, in the words of its tooltip. */
+export const FUTURE_DAY_REASON = 'Liegt in der Zukunft. Zeit wird erfasst, wenn sie geleistet ist.'
+
 /**
  * The seven days of a week with what was recorded on each, and the week total.
  *
  * <p>A click chooses the day the list below shows and a new entry goes to. A day after today
  * cannot be chosen: the backend takes no time for the future, and a day that can only lead to a
- * refusal is no choice (#122, decision 2).
+ * refusal is no choice (#122, decision 2). It says so, in its tooltip and to a screen reader, and
+ * stays reachable with the tab key to be read: a Saturday that only looks dimmed reads as a
+ * weekend that cannot be recorded (#132). Every day up to today, weekend or not, is chosen alike.
  *
  * <p>The figures are the backend's, day by day and for the week; nothing is added up here.
  *
@@ -39,21 +44,33 @@ export function WeekBar({
           const minutes = totals.get(day)
           const chosen = day === selected
           const isToday = day === today
+          const future = day > today
           return (
             <li key={day}>
+              {/* Not `disabled`: a disabled button shows no tooltip in every browser and cannot be
+                  reached to hear why. */}
               <button
                 type="button"
-                disabled={day > today}
+                aria-disabled={future || undefined}
                 aria-pressed={chosen}
                 aria-current={isToday ? 'date' : undefined}
                 aria-label={
-                  minutes === undefined
-                    ? dayTitle(day)
-                    : `${dayTitle(day)}: ${formatDuration(minutes)}`
+                  future
+                    ? `${dayTitle(day)}: ${FUTURE_DAY_REASON}`
+                    : minutes === undefined
+                      ? dayTitle(day)
+                      : `${dayTitle(day)}: ${formatDuration(minutes)}`
                 }
-                onClick={() => onSelect(day)}
-                className={`grid w-full gap-0.5 rounded-[var(--radius-md)] border px-1 py-2 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-3 sm:text-left ${
-                  chosen ? 'border-accent bg-accent/12' : 'border-transparent hover:bg-sunken'
+                title={future ? FUTURE_DAY_REASON : undefined}
+                onClick={() => {
+                  if (!future) onSelect(day)
+                }}
+                className={`grid w-full gap-0.5 rounded-[var(--radius-md)] border px-1 py-2 text-center transition-colors sm:px-3 sm:text-left ${
+                  future
+                    ? 'cursor-not-allowed border-dashed border-line opacity-60'
+                    : chosen
+                      ? 'border-accent bg-accent/12'
+                      : 'border-transparent hover:bg-sunken'
                 }`}
               >
                 <span
