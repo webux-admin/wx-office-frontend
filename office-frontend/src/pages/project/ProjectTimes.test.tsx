@@ -468,6 +468,13 @@ describe('ProjectTimes', () => {
     expect(text()).not.toContain('Zeit erfassen')
   })
 
+  /** An open project has not begun: time goes on it once it is active (backend ADR-0165). */
+  it('projectTimesOffersNoRecordingOnAnOpenProjectTest', async () => {
+    await render(['TIME_READ', 'TIME_TRACK'], { ...WEBSITE, status: 'OPEN' })
+
+    expect(text()).not.toContain('Zeit erfassen')
+  })
+
   it('projectTimesOffersNoRecordingWithoutTheTrackRightTest', async () => {
     await render(['TIME_READ'])
 

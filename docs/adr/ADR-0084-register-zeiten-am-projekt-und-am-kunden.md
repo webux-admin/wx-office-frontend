@@ -1,6 +1,6 @@
 # ADR-0084 — Register «Zeiten» am Projekt und am Kunden
 
-- **Status:** Angenommen
+- **Status:** Angenommen; «Zeit erfassen» steht seit Backend ADR-0165 nur noch auf aktiven Projekten
 - **Datum:** 2026-11-24
 - **Verhältnis:** Neu. Setzt Backend ADR-0162 (Issue webux-admin/wx-office#126, «Zeiterfassung
   (4/6) — Abrechnungsart, Stundensatz und Zeiten am Projekt») um. Baut auf der Schnellzeile

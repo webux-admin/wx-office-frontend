@@ -93,7 +93,7 @@ export function TargetField<F extends AssignmentForm>({
       listLabel={projectsOn ? 'Projekte und Kunden' : 'Kunden'}
       emptyText={
         projectsOn
-          ? 'Es gibt kein offenes oder aktives Projekt und keinen aktiven Kunden.'
+          ? 'Es gibt kein aktives Projekt und keinen aktiven Kunden.'
           : 'Es gibt noch keinen aktiven Kunden.'
       }
       failureText={
@@ -104,7 +104,7 @@ export function TargetField<F extends AssignmentForm>({
       placeholder="intern"
       tooltip={
         projectsOn
-          ? 'Leer lassen für interne Zeit. Mit Projekt gilt der Kunde des Projekts.'
+          ? 'Leer lassen für interne Zeit. Nur aktive Projekte; mit Projekt gilt der Kunde des Projekts.'
           : 'Leer lassen für interne Zeit.'
       }
       error={error}

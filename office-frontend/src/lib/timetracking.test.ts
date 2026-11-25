@@ -1920,8 +1920,12 @@ describe('recording on a project', () => {
   })
 
   it('takesNewTimeTest', () => {
-    expect(takesNewTime('OPEN')).toBe(true)
     expect(takesNewTime('ACTIVE')).toBe(true)
+  })
+
+  /** An open project has not begun: no new time before it is activated (backend ADR-0165). */
+  it('takesNewTimeOnAnOpenProjectTest', () => {
+    expect(takesNewTime('OPEN')).toBe(false)
   })
 
   /** Completed keeps its open times billable but takes no new ones; archived takes nothing. */

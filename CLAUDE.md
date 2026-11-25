@@ -95,9 +95,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Abrechnung — Abrechnungsart und Projektsatz, geändert in einem Dialog mit `TIME_WRITE` an einem
   nicht archivierten Projekt, `lockVersion` nur, wenn vorhanden, der Hinweis auf die offenen
   Einträge davor und danach — und die Liste aller Personen; «Zeit erfassen» öffnet «Meine Zeiten»
-  mit dem Projekt im Router-State (`recordOn`), nur mit `TIME_TRACK` auf offenen und aktiven
-  Projekten. Die Meldungen von Löschen und Archivieren stehen über den Registern. Am Kunden das
-  Register «Zeiten» nach «Projekte», mit Projektspalte. Die **Standardleistung je Benutzer** steht
+  mit dem Projekt im Router-State (`recordOn`), nur mit `TIME_TRACK` auf aktiven Projekten — ein
+  offenes hat noch nicht begonnen (Backend ADR-0165). Die Meldungen von Löschen und Archivieren
+  stehen über den Registern. Am Kunden das Register «Zeiten» nach «Projekte», mit Projektspalte. Die **Standardleistung je Benutzer** steht
   unter Moduleinstellungen → Zeiterfassung → Einstellungen (`/zeiterfassung-einstellungen`,
   `TIME_WRITE`), gewählt im Dialog mit der Schnellsuche der Leistungen (ADR-0084, Backend
   ADR-0162). **Abrechnen** (#127): der Ordner «Zeiten» hält «Meine Zeiten» und «Abrechnen»

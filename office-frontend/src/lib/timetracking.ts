@@ -1458,11 +1458,11 @@ export function projectTargetOf(project: Project): TimeTargetChoice {
 
 /**
  * @param status where the project stands
- * @returns true while it takes new time: open and active. A completed one keeps its open times
- *          billable but takes no new ones (backend ADR-0160)
+ * @returns true while it takes new time: active only. An open one has not begun, a completed one
+ *          keeps its open times billable; neither takes new ones (backend ADR-0160, ADR-0165)
  */
 export function takesNewTime(status: ProjectStatus): boolean {
-  return status === 'OPEN' || status === 'ACTIVE'
+  return status === 'ACTIVE'
 }
 
 // --- the registers «Zeiten» ----------------------------------------------------------
