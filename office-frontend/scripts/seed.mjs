@@ -85,7 +85,13 @@ const TENANTS = [
     legalForm: 'GMBH',
     uid: 'CHE-116.281.710',
     commercialRegisterName: 'Webux GmbH',
-    vat: { vatLiable: true, vatMethod: 'EFFECTIVE', vatLiableFrom: '2020-01-01' },
+    // MWSTG Art. 39: a liable tenant needs its accounting basis; agreed is the ordinary case.
+    vat: {
+      vatLiable: true,
+      vatMethod: 'EFFECTIVE',
+      vatLiableFrom: '2020-01-01',
+      vatAccountingBasis: 'AGREED_CONSIDERATION',
+    },
     address: {
       street: 'Bahnhofstrasse',
       buildingNumber: '12',
@@ -117,7 +123,12 @@ const TENANTS = [
     name: 'Nordwind Handels AG',
     legalForm: 'AG',
     uid: 'CHE-200.512.347',
-    vat: { vatLiable: true, vatMethod: 'EFFECTIVE', vatLiableFrom: '2018-07-01' },
+    vat: {
+      vatLiable: true,
+      vatMethod: 'EFFECTIVE',
+      vatLiableFrom: '2018-07-01',
+      vatAccountingBasis: 'AGREED_CONSIDERATION',
+    },
     address: {
       street: 'Seestrasse',
       buildingNumber: '44',
