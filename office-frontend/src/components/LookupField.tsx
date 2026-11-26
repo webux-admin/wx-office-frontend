@@ -1,7 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import {
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -11,24 +10,16 @@ import {
   type Ref,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { dropdownPlacement } from '../lib/dropdownPlacement'
 import { matchParts } from '../lib/highlight'
 import { nextIndex } from '../lib/keyboardList'
 import { Spinner } from './Spinner'
 import { TextField } from './TextField'
 import { useDebouncedValue } from './useDebouncedValue'
+import { useFloatingList } from './useFloatingList'
 
 /** How long the field has to stand still before the search goes out. */
 const DEBOUNCE = 200
 
-/** The space between field and list, and between list and the edge of the screen, in rem. */
-const LIST_GAP_REM = 0.5
-
-/**
- * How high the list wants to be, in rem: eight hits and half of the ninth, so it shows that it
- * goes on before it scrolls, with the frame around (#134).
- */
-const LIST_HEIGHT_REM = 17.5
 
 /**
  * A field that searches as it is typed into and takes one hit over: a combobox in the sense of
@@ -142,46 +133,7 @@ export function LookupField<T>({
     list.current?.children[active]?.scrollIntoView?.({ block: 'nearest' })
   }, [showsList, active])
 
-  // Places the floating list at the field when it appears, and keeps it there for as long as it
-  // is open: the field moves with a scrolling dialog, with the dialog's own entrance and when
-  // chips above it arrive, and none of that is an event. Checked once a frame and written to the
-  // element only when the place changed: the place follows the field, not the state of this
-  // component.
-  const placeAtField = useCallback((popup: HTMLDivElement | null) => {
-    if (popup === null) return
-    let placed = ''
-    const place = () => {
-      // The framed box around the input, search symbol included, not the input beside it.
-      const field = box.current?.querySelector('input')?.parentElement
-      if (!field) return
-      const rem = remInPixels()
-      const placement = dropdownPlacement(
-        field.getBoundingClientRect(),
-        window.innerHeight,
-        LIST_HEIGHT_REM * rem,
-        LIST_GAP_REM * rem,
-      )
-      const key = JSON.stringify(placement)
-      if (key === placed) return
-      placed = key
-      popup.style.left = `${placement.left}px`
-      popup.style.width = `${placement.width}px`
-      popup.style.top = placement.top === undefined ? '' : `${placement.top}px`
-      popup.style.bottom = placement.bottom === undefined ? '' : `${placement.bottom}px`
-      popup.style.setProperty('--lookup-room', `${placement.room}px`)
-    }
-    place()
-    let frame = requestAnimationFrame(function follow() {
-      place()
-      frame = requestAnimationFrame(follow)
-    })
-    // A scroll is answered at once, before the frame is drawn, so the list never lags behind.
-    window.addEventListener('scroll', place, true)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('scroll', place, true)
-    }
-  }, [])
+  const placeAtField = useFloatingList(box)
 
   const take = (hit: T) => {
     setOpen(false)
@@ -321,11 +273,6 @@ export function LookupField<T>({
   )
 }
 
-/** The size of one rem in pixels, which is what the viewport coordinates are measured in. */
-function remInPixels(): number {
-  const size = Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-  return Number.isFinite(size) ? size : 16
-}
 
 /** A text with the part the search term matched set off from the rest. */
 export function MarkedText({ text, term }: { text: string; term: string }) {

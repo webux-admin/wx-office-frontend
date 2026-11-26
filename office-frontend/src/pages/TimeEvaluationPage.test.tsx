@@ -273,6 +273,31 @@ async function type(label: string, value: string) {
   await settle()
 }
 
+/** Opens a search field, types into it and takes the choice that reads exactly so. */
+async function choose(label: string, typed: string, choice: string) {
+  await act(async () => {
+    fieldOf(label).focus()
+  })
+  await type(label, typed)
+  const option = [...document.querySelectorAll('[role="option"]')].find(
+    (entry) => entry.textContent === choice,
+  )
+  if (!(option instanceof HTMLElement)) throw new Error(`no choice ${choice}`)
+  await click(option)
+}
+
+/** The choices a search field offers when it is opened. */
+async function choicesOf(label: string): Promise<string[]> {
+  await act(async () => {
+    fieldOf(label).focus()
+  })
+  const found = [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent ?? '')
+  await act(async () => {
+    fieldOf(label).blur()
+  })
+  return found
+}
+
 async function click(element: HTMLElement) {
   await act(async () => {
     element.click()
@@ -337,8 +362,11 @@ describe('TimeEvaluationPage', () => {
         + '&search=Konzept&unassigned=CUSTOMER',
     )
     expect(fieldOf('Von').value).toBe('2026-10-01')
-    expect(fieldOf('Projekt').value).toBe('12')
-    expect(fieldOf('Kunde').value).toBe('ohne')
+    // A search field shows the label of its choice; the address holds the value.
+    expect(fieldOf('Projekt').value).toBe('P-00012 Website')
+    expect(fieldOf('Kunde').value).toBe('ohne Kunde')
+    expect(button('P-00012 Website aus dem Filter nehmen')).toBeDefined()
+    expect(button('ohne Kunde aus dem Filter nehmen')).toBeDefined()
     expect(fieldOf('Suche im Text').value).toBe('Konzept')
     expect(button('Anna Muster aus dem Filter nehmen')).toBeDefined()
     expect((fieldOf('offen') as HTMLInputElement).checked).toBe(true)
@@ -359,10 +387,10 @@ describe('TimeEvaluationPage', () => {
     await click(fieldOf('verrechnet'))
     expect(searchOf().getAll('zustand')).toEqual(['BILLED'])
 
-    await type('Kunde', '11')
+    await choose('Kunde', 'muster', 'Muster AG')
     expect(searchOf().get('kunde')).toBe('11')
 
-    await type('Mitarbeitende', '7')
+    await choose('Mitarbeitende', 'beat', 'Beat Kellerdeaktiviert')
     expect(searchOf().getAll('person')).toEqual(['7'])
     expect(lastOf(`${BASE}/totals?`)).toBe(
       `${BASE}/totals?from=2026-10-01&to=2026-10-31&userId=7&partnerId=11&state=BILLED`,
@@ -381,14 +409,24 @@ describe('TimeEvaluationPage', () => {
     expect(text()).not.toContain('Filter zurücksetzen')
   })
 
+  /** Each active filter is taken out on its own; the others and the range stay (#138). */
+  it('timeEvaluationPageTakesOutOneActiveFilterTest', async () => {
+    await render('/zeiten-auswertung?von=2026-10-01&bis=2026-10-31&projekt=12&zustand=OPEN')
+
+    await click(button('offen aus dem Filter nehmen'))
+
+    expect(searchOf().getAll('zustand')).toEqual([])
+    expect(searchOf().get('projekt')).toBe('12')
+    expect(searchOf().get('von')).toBe('2026-10-01')
+  })
+
   /** The choices of a field are what has time in the range, «ohne …» last. */
   it('timeEvaluationPageOffersWhatHasTimeTest', async () => {
     await render()
 
-    const projects = [...(fieldOf('Projekt') as HTMLSelectElement).options].map((option) => option.text)
-    expect(projects).toEqual(['Alle Projekte', 'P-00012 Website', 'ohne Projekt'])
-    const people = [...(fieldOf('Mitarbeitende') as HTMLSelectElement).options].map((option) => option.text)
-    expect(people).toEqual(['Alle', 'Anna Muster', 'Beat Keller (deaktiviert)'])
+    expect(await choicesOf('Projekt')).toEqual(['Alle Projekte', 'P-00012 Website', 'ohne Projekt'])
+    expect(await choicesOf('Mitarbeitende')).toEqual(['Anna Muster', 'Beat Kellerdeaktiviert'])
+    expect(fieldOf('Mitarbeitende').getAttribute('placeholder')).toBe('Alle')
     expect(requested).toContain(`${BASE}/totals/by/project?from=2026-11-01&to=2026-11-30`)
   })
 

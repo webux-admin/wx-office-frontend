@@ -1,6 +1,7 @@
 import { Info, Lock } from 'lucide-react'
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { remInPixels } from '../lib/dropdownPlacement'
 
 type TooltipProps = {
   /** What the tooltip explains. A sentence that tells something, not the field name again. */
@@ -88,10 +89,4 @@ export function Tooltip({ text, label, icon = 'info', id }: TooltipProps) {
         )}
     </>
   )
-}
-
-/** The size of one rem in pixels, which is what the viewport coordinates are measured in. */
-function remInPixels(): number {
-  const size = Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-  return Number.isFinite(size) ? size : 16
 }

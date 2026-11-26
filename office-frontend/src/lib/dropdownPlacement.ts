@@ -50,3 +50,13 @@ export function dropdownPlacement(
   }
   return { ...across, bottom: viewportHeight - anchor.top + gap, room: roomAbove }
 }
+
+/**
+ * The size of one rem in pixels, which is what the viewport coordinates are measured in.
+ *
+ * @returns the font size of the root element; 16 where it cannot be read
+ */
+export function remInPixels(): number {
+  const size = Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+  return Number.isFinite(size) ? size : 16
+}
