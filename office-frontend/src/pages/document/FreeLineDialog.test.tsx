@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
+import { fillRichText, isRichText } from '../../components/richTextTesting'
 import { ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import type { DocumentLine } from '../../lib/types'
 import { FreeLineDialog } from './FreeLineDialog'
@@ -186,8 +187,12 @@ function click(element: HTMLElement) {
   })
 }
 
-/** Types into a field the way a browser does, textarea and input alike. */
+/** Types into a field the way a browser does: input, textarea and the box of the comment alike. */
 function type(control: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  if (isRichText(control)) {
+    act(() => fillRichText(control, value))
+    return
+  }
   const prototype =
     control instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
@@ -477,6 +482,6 @@ describe('FreeLineDialog', () => {
 
     // A line that is edited starts on what is stored, or the second text is written twice.
     expect(field('2. Bezeichnung').value).toBe('Anfahrt inbegriffen')
-    expect(field('Kommentar').value).toBe('Termin nach Absprache')
+    expect(field('Kommentar').textContent).toBe('Termin nach Absprache')
   })
 })

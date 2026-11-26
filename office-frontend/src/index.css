@@ -466,6 +466,20 @@
   }
 }
 
+/*
+ * The placeholder of the formatted text editor (frontend ADR-0091). It stands in front of the
+ * empty first line and takes no room, so the caret keeps its place and the text stays empty.
+ */
+@layer components {
+  .rich-text[data-empty='true'] > [data-placeholder]::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: var(--color-text-tertiary);
+  }
+}
+
 @keyframes timer-sweep {
   from {
     stroke-dashoffset: 100;

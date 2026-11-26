@@ -474,6 +474,34 @@ describe('LinesTable', () => {
     expect(text()).toContain('Material separat verrechnet')
   })
 
+  /** The comment and a comment line stand as set and printed: bold as bold, a list as a list. */
+  it('linesTableShowsTheCommentFormattedTest', async () => {
+    await draw(
+      order([
+        line({ lineNumber: 1, kind: 'COMMENT', description: 'Gilt **ab sofort**' }),
+        line({
+          lineNumber: 2,
+          description: 'Beratung vor Ort',
+          note: 'Termin nach *Absprache*\n- Material\n- Montage',
+          quantity: 1,
+          unit: 'PIECE',
+          unitPrice: 180,
+          vatRate: 8.1,
+          lineNet: 180,
+        }),
+      ]),
+    )
+
+    const body = container.querySelector('tbody') as HTMLTableSectionElement
+    expect(body.querySelector('strong')?.textContent).toBe('ab sofort')
+    expect(body.querySelector('em')?.textContent).toBe('Absprache')
+    expect([...body.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      'Material',
+      'Montage',
+    ])
+    expect(text()).not.toContain('**')
+  })
+
   it('linesTableWithoutASecondDescriptionTest', async () => {
     await draw(order(LINES))
 

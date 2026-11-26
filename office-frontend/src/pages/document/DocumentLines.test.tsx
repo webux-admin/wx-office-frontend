@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../../auth/authContext'
+import { fillRichText, isRichText } from '../../components/richTextTesting'
 import { ORDER_KIND } from '../../lib/salesDocument'
 import type { DocumentLine, SalesDocument, StockShortfall } from '../../lib/types'
 import { DocumentLines } from './DocumentLines'
@@ -369,6 +370,11 @@ function press(element: HTMLElement, key: string) {
 
 /** Types into a field the way a browser does: set the value, then fire the native event. */
 function type(control: HTMLInputElement | HTMLSelectElement, value: string) {
+  // The text of a comment line is a box with formatting since ADR-0091.
+  if (isRichText(control)) {
+    act(() => fillRichText(control, value))
+    return
+  }
   const prototype =
     control instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(control, value)

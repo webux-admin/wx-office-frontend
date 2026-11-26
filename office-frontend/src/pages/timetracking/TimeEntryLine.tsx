@@ -114,7 +114,9 @@ export function TimeEntryLine({
         placeholder="Was wurde gemacht?"
         maxLength={TIME_ENTRY_DESCRIPTION_MAX_LENGTH}
         error={errors.description}
-        tooltip="Fett, kursiv und Listen über die Leiste oder Strg+B und Strg+I. Enter speichert, Umschalt+Enter beginnt eine neue Zeile."
+        rows={2}
+        enterKey="form"
+        tooltip="Fett, kursiv und Listen über die Leiste oben, mit Strg+B und Strg+I oder «- » am Zeilenanfang. Enter speichert, Umschalt+Enter beginnt eine neue Zeile."
       />
 
       {/* The two cells without a label start where the inputs do. */}

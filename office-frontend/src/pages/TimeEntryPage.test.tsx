@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
+import { fillRichText, isRichText } from '../components/richTextTesting'
 import type {
   BillingMode,
   RunningTimer,
@@ -390,9 +391,12 @@ function control(label: string, scope: ParentNode = line()): HTMLInputElement {
 async function type(input: HTMLInputElement, value: string, wait = 0) {
   await act(async () => {
     input.focus()
-    // The text is a text area since #139; its value setter lives on its own prototype.
-    const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
+    // The text is a box with formatting since ADR-0091; the browser types into it, not into a value.
+    if (isRichText(input)) {
+      fillRichText(input, value)
+      return
+    }
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await settle(wait)
@@ -578,7 +582,7 @@ describe('TimeEntryPage', () => {
     expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
     expect(control('Leistung').value).toBe('Konzeption')
     expect(control('Dauer').value).toBe('')
-    expect(control('Text').value).toBe('')
+    expect(control('Text').textContent).toBe('')
     expect(document.activeElement).toBe(control('Dauer'))
     expect(text()).toContain('Gespeichert: 1 Std. 30 Min. am Mittwoch, 25. November.')
   })

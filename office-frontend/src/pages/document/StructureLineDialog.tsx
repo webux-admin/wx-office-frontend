@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
+import { RichTextField } from '../../components/RichTextField'
 import { TextField } from '../../components/TextField'
 import type { DocumentLine } from '../../lib/types'
 import { CodeSelect } from '../../masterdata/CodeSelect'
@@ -10,6 +11,7 @@ import {
   carriesText,
   structureKindOptions,
   structureLineProblem,
+  structureTextFor,
   type StructureLine,
   type StructureLineKind,
 } from './lineForm'
@@ -102,10 +104,25 @@ export function StructureLineDialog({
           label="Zeilenart"
           entries={options}
           value={kind}
-          onChange={(code) => setKind(code as StructureLineKind)}
+          onChange={(code) => {
+            const next = code as StructureLineKind
+            setText(structureTextFor(kind, next, text))
+            setKind(next)
+          }}
         />
 
-        {carriesText(kind) ? (
+        {kind === 'COMMENT' ? (
+          // A comment is a text of its own on the document and is printed as set (ADR-0091).
+          <RichTextField
+            label={TEXT.COMMENT.label}
+            value={text}
+            onChange={setText}
+            maxLength={500}
+            rows={3}
+            error={touched ? problem : undefined}
+            hint={TEXT.COMMENT.hint}
+          />
+        ) : carriesText(kind) ? (
           <TextField
             label={TEXT[kind].label}
             value={text}

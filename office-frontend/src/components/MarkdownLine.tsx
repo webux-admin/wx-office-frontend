@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
-import { LINE_SEPARATOR, liteLines, plainLine, type InlinePart } from '../lib/markdownLite'
+import { LINE_SEPARATOR, liteLines, plainLine } from '../lib/markdownLite'
+import { InlineParts } from './FormattedText'
 
 /**
  * A text with the small Markdown of a time entry, on one line: bold and italic as they were set,
@@ -19,17 +20,9 @@ export function MarkdownLine({ text, className }: { text: string | null | undefi
       {lines.map((line, index) => (
         <Fragment key={index}>
           {index > 0 && LINE_SEPARATOR}
-          {line.parts.map((part, at) => (
-            <Inline key={at} part={part} />
-          ))}
+          <InlineParts parts={line.parts} />
         </Fragment>
       ))}
     </span>
   )
-}
-
-function Inline({ part }: { part: InlinePart }) {
-  if (part.bold) return <strong className="font-semibold">{part.text}</strong>
-  if (part.italic) return <em>{part.text}</em>
-  return <>{part.text}</>
 }

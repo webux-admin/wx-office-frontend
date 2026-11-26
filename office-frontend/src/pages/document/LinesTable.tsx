@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useAuth } from '../../auth/useAuth'
+import { FormattedText } from '../../components/FormattedText'
 import { EmptyState } from '../../components/Notice'
 import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { formatAmount, formatPercent, formatQuantity } from '../../lib/format'
@@ -506,7 +507,7 @@ function LineCells({
   if (line.kind === 'COMMENT') {
     return (
       <td className={`${CELL} text-text-secondary`} colSpan={valueColumns}>
-        {line.description}
+        <FormattedText text={line.description} />
       </td>
     )
   }
@@ -551,7 +552,7 @@ function LineCells({
   return (
     <>
       {/* The three texts stand in the order they are printed in, so the mask says what the
-          document will say. `whitespace-pre-line` keeps the line breaks of the comment. */}
+          document will say: the comment with its lines, lists and marks, as printed. */}
       <td className={CELL}>
         <span className="block">
           {line.description}
@@ -568,11 +569,7 @@ function LineCells({
           <span role="alert" className="block text-small text-danger">{refusal}</span>
         )}
         {line.subtitle && <span className="block text-text-secondary">{line.subtitle}</span>}
-        {line.note && (
-          <span className="block whitespace-pre-line text-small text-text-secondary">
-            {line.note}
-          </span>
-        )}
+        <FormattedText text={line.note} className="text-small text-text-secondary" />
         {/* In the description cell and not in a column of its own: a column would have to be
             added to COLUMNS, to VALUE_COLUMNS and to the colSpan of every summary row, and it
             would stay empty on every document that follows no numbers. Shortened after three —

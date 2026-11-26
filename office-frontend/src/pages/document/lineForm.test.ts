@@ -22,6 +22,7 @@ import {
   signedLots,
   structureKindOptions,
   structureLineProblem,
+  structureTextFor,
   visibleProblems,
   withDiscountAmount,
   withDiscountPercent,
@@ -174,6 +175,30 @@ describe('structureLineProblem', () => {
 
   it('structureLineProblemForAPageBreakTest', () => {
     expect(structureLineProblem('PAGE_BREAK', '')).toBeUndefined()
+  })
+})
+
+describe('structureTextFor', () => {
+  /** A comment that becomes a subtotal leaves its caption the words, without marks. */
+  it('structureTextForTest', () => {
+    expect(structureTextFor('COMMENT', 'SUBTOTAL', '**Material** und *Montage*')).toBe(
+      'Material und Montage',
+    )
+  })
+
+  /** A caption that becomes a comment keeps every character as typed, a star included. */
+  it('structureTextForACaptionThatBecomesACommentTest', () => {
+    expect(structureTextFor('SUBTOTAL', 'COMMENT', 'Total *A* - 2. Etappe')).toBe(
+      'Total \\*A\\* - 2. Etappe',
+    )
+    expect(structureTextFor('SUBTOTAL', 'COMMENT', '- Punkt')).toBe('\\- Punkt')
+    expect(structureTextFor('PAGE_BREAK', 'COMMENT', '')).toBe('')
+  })
+
+  /** The same kind, or two kinds without formatting, keep the text untouched. */
+  it('structureTextForTheSameKindTest', () => {
+    expect(structureTextFor('COMMENT', 'COMMENT', '**fett**')).toBe('**fett**')
+    expect(structureTextFor('SUBTOTAL', 'PAGE_BREAK', 'Zwischentotal *A*')).toBe('Zwischentotal *A*')
   })
 })
 

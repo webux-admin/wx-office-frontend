@@ -27,6 +27,13 @@ type FieldProps = FieldExtras & {
   label: string
   /** Id of the control inside, so the label points at it. */
   htmlFor: string
+  /**
+   * Id of the label, for a control the label cannot point at with `for` — an editable box names
+   * it in `aria-labelledby` instead.
+   */
+  labelId?: string
+  /** What a click on the label does where the browser does nothing: focus such a control. */
+  onLabelClick?: () => void
   /** Id the control names in `aria-describedby` for the hint or the error under it. */
   hintId?: string
   /** Id the control names in `aria-describedby` for the tooltip text. */
@@ -53,6 +60,8 @@ type FieldProps = FieldExtras & {
 export function Field({
   label,
   htmlFor,
+  labelId,
+  onLabelClick,
   hintId,
   tooltipId,
   hint,
@@ -71,7 +80,12 @@ export function Field({
   return (
     <div className={className}>
       <div className="mb-1.5 flex items-center gap-1">
-        <label htmlFor={htmlFor} className="text-small font-medium text-text-secondary">
+        <label
+          id={labelId}
+          htmlFor={htmlFor}
+          onClick={onLabelClick}
+          className="text-small font-medium text-text-secondary"
+        >
           {label}
         </label>
         {/* Beside the label rather than in it: the accessible name stays the plain label, and

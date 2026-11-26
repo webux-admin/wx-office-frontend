@@ -1,8 +1,10 @@
 /**
- * The small piece of Markdown the text of a time entry may carry: **bold**, *italic*, lines that
- * start with «- » and lines that start with «1. ». Nothing else is read, and nothing becomes HTML:
- * the text stays text in the database, on the invoice and in the CSV, and the screen builds
- * React elements from the parts (frontend ADR-0090, backend ADR-0168).
+ * The small piece of Markdown a formatted text carries — the text of a time entry, the comment of
+ * a document line and a comment line: **bold**, *italic*, lines that start with «- » and lines
+ * that start with «1. ». A backslash keeps a character as typed (`\*`), so a star typed in the
+ * editor never turns into a marker. Nothing else is read, and nothing becomes HTML: the text stays
+ * text in the database, on the invoice and in the CSV, and the screen builds React elements from
+ * the parts (frontend ADR-0090 and ADR-0091, backend ADR-0168 and ADR-0170).
  */
 
 /** A stretch of a line, plain or set off. */
@@ -15,8 +17,6 @@ export type InlinePart = {
 /** One line of the text, with what kind of line it is. */
 export type LiteLine = {
   kind: 'text' | 'bullet' | 'number'
-  /** The number a numbered line was typed with, for «1.» to «99.». */
-  number?: number
   parts: InlinePart[]
 }
 
@@ -24,7 +24,10 @@ export type LiteLine = {
 export const LINE_SEPARATOR = ' · '
 
 const BULLET = /^-\s+(.*)$/
-const NUMBER = /^(\d{1,2})\.\s+(.*)$/
+const NUMBER = /^\d{1,2}\.\s+(.*)$/
+/** What a backslash may keep as typed: every ASCII punctuation mark, as in CommonMark. */
+const ESCAPABLE = /[!-/:-@[-`{-~]/
+const SPACE = /\s/
 
 /**
  * Reads the text line by line; empty lines are left out.
@@ -36,31 +39,141 @@ export function liteLines(text: string | null | undefined): LiteLine[] {
   if (!text) return []
   return text
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
     .map(lineOf)
+    .filter((line) => line.parts.length > 0)
 }
 
 /**
- * Splits a line into plain and set off stretches. A marker without its partner stays as it was
- * typed, so «2 ** 3» reads as typed.
+ * Reads the text line by line for the editor, the empty lines kept: a line the user has just
+ * started is still there when the text is read back.
+ *
+ * @param text the text as stored
+ * @returns its lines, one empty line for an empty text
+ */
+export function editorLines(text: string | null | undefined): LiteLine[] {
+  if (!text) return [{ kind: 'text', parts: [] }]
+  return text.split(/\r?\n/).map(lineOf)
+}
+
+/**
+ * Reads one line: its list marker, then its stretches. The number a numbered line was typed with
+ * says nothing; a list counts from 1 wherever it is shown.
+ *
+ * @param raw one line as stored
+ * @returns the line, without the blanks around it
+ */
+export function lineOf(raw: string): LiteLine {
+  const line = raw.trim()
+  const bullet = BULLET.exec(line)
+  if (bullet) return { kind: 'bullet', parts: inlineParts(bullet[1]) }
+  const number = NUMBER.exec(line)
+  if (number) return { kind: 'number', parts: inlineParts(number[1]) }
+  return { kind: 'text', parts: inlineParts(line) }
+}
+
+type Marker = {
+  kind: 'mark'
+  mark: 'bold' | 'italic'
+  raw: string
+  /** Followed by a character that is no blank. */
+  opens: boolean
+  /** Preceded by a character that is no blank. */
+  closes: boolean
+  paired: boolean
+}
+
+type Token = { kind: 'text'; text: string } | Marker
+
+/**
+ * Splits a line into plain and set off stretches. `**` sets bold and `*` italic, and both may be
+ * set at once. A marker opens only before a character and closes only after one, so «2 * 3»
+ * reads as typed, and a marker without its partner stays as it was typed.
  *
  * @param line one line, without its list marker
  * @returns the stretches in reading order, none for an empty line
  */
 export function inlineParts(line: string): InlinePart[] {
+  const tokens = tokensOf(line)
+  pair(tokens, 'bold')
+  pair(tokens, 'italic')
   const parts: InlinePart[] = []
-  // Bold first, so «**» is never taken as two italic markers.
-  const pattern = /\*\*(.+?)\*\*|\*(\S(?:.*?\S)?)\*/g
-  let read = 0
-  for (const match of line.matchAll(pattern)) {
-    if (match.index > read) parts.push(plain(line.slice(read, match.index)))
-    if (match[1] !== undefined) parts.push({ text: match[1], bold: true, italic: false })
-    else parts.push({ text: match[2], bold: false, italic: true })
-    read = match.index + match[0].length
+  let bold = false
+  let italic = false
+  for (const token of tokens) {
+    if (token.kind === 'mark' && token.paired) {
+      if (token.mark === 'bold') bold = !bold
+      else italic = !italic
+      continue
+    }
+    const text = token.kind === 'text' ? token.text : token.raw
+    const last = parts.at(-1)
+    if (last && last.bold === bold && last.italic === italic) last.text += text
+    else parts.push({ text, bold, italic })
   }
-  if (read < line.length) parts.push(plain(line.slice(read)))
   return parts
+}
+
+/** The characters of a line and its markers; `**` is read before `*`. */
+function tokensOf(line: string): Token[] {
+  const tokens: Token[] = []
+  let text = ''
+  const flush = () => {
+    if (text !== '') tokens.push({ kind: 'text', text })
+    text = ''
+  }
+  let at = 0
+  while (at < line.length) {
+    const char = line[at]
+    if (char === '\\' && at + 1 < line.length && ESCAPABLE.test(line[at + 1])) {
+      text += line[at + 1]
+      at += 2
+      continue
+    }
+    if (char !== '*') {
+      text += char
+      at += 1
+      continue
+    }
+    const raw = line.startsWith('**', at) ? '**' : '*'
+    const before = line[at - 1]
+    const after = line[at + raw.length]
+    flush()
+    tokens.push({
+      kind: 'mark',
+      mark: raw === '**' ? 'bold' : 'italic',
+      raw,
+      opens: after !== undefined && !SPACE.test(after),
+      closes: before !== undefined && !SPACE.test(before),
+      paired: false,
+    })
+    at += raw.length
+  }
+  flush()
+  return tokens
+}
+
+/**
+ * Pairs the markers of one kind from the left, around at least one character; a marker that finds
+ * no partner stays text, so «****» reads as typed.
+ */
+function pair(tokens: Token[], mark: 'bold' | 'italic') {
+  let open: Marker | null = null
+  let filled = false
+  for (const token of tokens) {
+    if (token.kind === 'text') {
+      filled = true
+      continue
+    }
+    if (token.mark !== mark) continue
+    if (open !== null && token.closes && filled) {
+      open.paired = true
+      token.paired = true
+      open = null
+    } else if (token.opens) {
+      open = token
+      filled = false
+    }
+  }
 }
 
 /**
@@ -76,119 +189,68 @@ export function plainLine(text: string | null | undefined): string {
     .join(LINE_SEPARATOR)
 }
 
-function lineOf(line: string): LiteLine {
-  const bullet = BULLET.exec(line)
-  if (bullet) return { kind: 'bullet', parts: inlineParts(bullet[1]) }
-  const number = NUMBER.exec(line)
-  if (number) return { kind: 'number', number: Number(number[1]), parts: inlineParts(number[2]) }
-  return { kind: 'text', parts: inlineParts(line) }
-}
-
-function plain(text: string): InlinePart {
-  return { text, bold: false, italic: false }
-}
-
 // --- writing ---------------------------------------------------------------------------
 
-/** What a text field holds after a step of the toolbar: the text and the selection in it. */
-export type Edited = {
-  value: string
-  selectionStart: number
-  selectionEnd: number
+/**
+ * Writes lines back into the stored form: a list marker per entry, a numbered list counted from 1,
+ * an empty line of any kind as an empty line. A plain line that would read as a list entry keeps
+ * its first characters with a backslash.
+ *
+ * @param lines the lines, as the editor holds them
+ * @returns the text to store
+ */
+export function writeLines(lines: LiteLine[]): string {
+  let counted = 0
+  return lines
+    .map((line) => {
+      const text = writeParts(line.parts)
+      if (line.kind !== 'number') counted = 0
+      if (text === '') return ''
+      if (line.kind === 'bullet') return `- ${text}`
+      if (line.kind === 'number') {
+        counted += 1
+        return `${counted}. ${text}`
+      }
+      return text.replace(/^-(\s)/, '\\-$1').replace(/^(\d{1,2})\.(\s)/, '$1\\.$2')
+    })
+    .join('\n')
 }
 
 /**
- * Sets the selection bold or italic, or takes the marker away where it is set already. Without a
- * selection the pair of markers goes in with the caret between them, ready to type.
+ * Writes the stretches of one line with their markers. A blank at the edge of a set off stretch
+ * stands outside it, because a marker next to a blank is no marker; a star or a backslash of the
+ * text keeps a backslash.
  *
- * @param value the text
- * @param start where the selection starts
- * @param end where it ends
- * @param marker `**` for bold, `*` for italic
- * @returns the text and the selection afterwards, still around the same words
+ * @param parts the stretches
+ * @returns the line as stored
  */
-export function toggleEmphasis(value: string, start: number, end: number, marker: string): Edited {
-  const before = value.slice(0, start)
-  const selected = value.slice(start, end)
-  const after = value.slice(end)
-  const wrapped = before.endsWith(marker) && after.startsWith(marker)
-    // «**» is bold, so a single «*» next to another one is no italic marker of its own.
-    && !(marker === '*' && before.endsWith('**') && after.startsWith('**'))
-  if (wrapped) {
+export function writeParts(parts: InlinePart[]): string {
+  const chars = parts.flatMap((part) =>
+    [...part.text].map((char) => ({ char, bold: part.bold, italic: part.italic })),
+  )
+  const marked = chars.map((entry, at) => {
+    if (!SPACE.test(entry.char)) return entry
+    const before = chars.slice(0, at).findLast((other) => !SPACE.test(other.char))
+    const after = chars.slice(at + 1).find((other) => !SPACE.test(other.char))
     return {
-      value: before.slice(0, -marker.length) + selected + after.slice(marker.length),
-      selectionStart: start - marker.length,
-      selectionEnd: end - marker.length,
+      char: entry.char,
+      bold: before?.bold === true && after?.bold === true,
+      italic: before?.italic === true && after?.italic === true,
     }
-  }
-  return {
-    value: before + marker + selected + marker + after,
-    selectionStart: start + marker.length,
-    selectionEnd: end + marker.length,
-  }
-}
-
-/**
- * Turns the lines of the selection into a list, or back into plain lines where every one of them
- * is such a list already. A numbered list counts from 1.
- *
- * @param value the text
- * @param start where the selection starts
- * @param end where it ends
- * @param kind a list with «- » or one with «1. »
- * @returns the text and the selection afterwards, around the same lines
- */
-export function toggleList(
-  value: string,
-  start: number,
-  end: number,
-  kind: 'bullet' | 'number',
-): Edited {
-  const from = value.lastIndexOf('\n', start - 1) + 1
-  const lineEnd = value.indexOf('\n', end)
-  const to = lineEnd < 0 ? value.length : lineEnd
-  const lines = value.slice(from, to).split('\n')
-  const marker = kind === 'bullet' ? BULLET : NUMBER
-  const listed = lines.every((line) => marker.test(line.trim()))
-  const changed = lines.map((line, index) => {
-    const text = line.trim()
-    if (listed) return kind === 'bullet' ? text.replace(/^-\s+/, '') : text.replace(/^\d{1,2}\.\s+/, '')
-    const bare = text.replace(/^-\s+/, '').replace(/^\d{1,2}\.\s+/, '')
-    return kind === 'bullet' ? `- ${bare}` : `${index + 1}. ${bare}`
   })
-  const block = changed.join('\n')
-  return {
-    value: value.slice(0, from) + block + value.slice(to),
-    selectionStart: from,
-    selectionEnd: from + block.length,
+  let written = ''
+  let bold = false
+  let italic = false
+  for (const entry of marked) {
+    if (bold && !entry.bold) written += '**'
+    if (italic && !entry.italic) written += '*'
+    if (!bold && entry.bold) written += '**'
+    if (!italic && entry.italic) written += '*'
+    bold = entry.bold
+    italic = entry.italic
+    written += entry.char === '*' || entry.char === '\\' ? `\\${entry.char}` : entry.char
   }
-}
-
-/**
- * A new line from the caret, the list going on: after «- Wireframes» the next line starts with
- * «- », after «2. Review» with «3. ». On an empty entry the list ends instead and its marker goes.
- *
- * @param value the text
- * @param caret where the caret stands
- * @returns the text and the caret afterwards
- */
-export function newLine(value: string, caret: number): Edited {
-  const from = value.lastIndexOf('\n', caret - 1) + 1
-  const line = value.slice(from, caret)
-  const bullet = /^-\s+(.*)$/.exec(line)
-  const number = /^(\d{1,2})\.\s+(.*)$/.exec(line)
-  const rest = bullet?.[1] ?? number?.[2]
-  if (rest !== undefined && rest.trim() === '') {
-    // An empty entry ends the list: the marker goes, no line is added.
-    const cut = value.slice(0, from) + value.slice(caret)
-    return { value: cut, selectionStart: from, selectionEnd: from }
-  }
-  const next = bullet ? '- ' : number ? `${Number(number[1]) + 1}. ` : ''
-  const inserted = `\n${next}`
-  const caretAfter = caret + inserted.length
-  return {
-    value: value.slice(0, caret) + inserted + value.slice(caret),
-    selectionStart: caretAfter,
-    selectionEnd: caretAfter,
-  }
+  if (italic) written += '*'
+  if (bold) written += '**'
+  return written
 }

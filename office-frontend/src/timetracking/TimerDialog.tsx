@@ -380,7 +380,8 @@ export function TimerDialog({
             placeholder="Was wird gemacht?"
             maxLength={TIME_ENTRY_DESCRIPTION_MAX_LENGTH}
             error={errors.description}
-            tooltip="Fett, kursiv und Listen über die Leiste oder Strg+B und Strg+I. Enter startet oder speichert, Umschalt+Enter beginnt eine neue Zeile."
+            enterKey="form"
+            tooltip="Fett, kursiv und Listen über die Leiste oben, mit Strg+B und Strg+I oder «- » am Zeilenanfang. Enter startet oder speichert, Umschalt+Enter beginnt eine neue Zeile."
           />
 
           {running && (

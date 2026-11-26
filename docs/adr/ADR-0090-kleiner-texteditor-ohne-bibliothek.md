@@ -1,6 +1,7 @@
 # ADR-0090 — Ein kleiner Texteditor ohne Bibliothek: Markdown-Teilmenge mit Leiste, Enter speichert
 
-- **Status:** Angenommen
+- **Status:** Angenommen, in Punkt 1 abgelöst durch [ADR-0091](ADR-0091-texteditor-zeigt-was-er-druckt.md)
+  (Editor ohne Zeichen, Leiste oben, mehrzeilig)
 - **Datum:** 2026-11-26
 - **Verhältnis:** Ergänzt ADR-0082 (Schnellzeile) und ADR-0083 (Stoppuhr). Backend ADR-0168 hält
   die Speicherform fest. Issue webux-admin/wx-office#139, «Zeiterfassung verbessern (10/12)».

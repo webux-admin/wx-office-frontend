@@ -30,7 +30,10 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Rechnung exakt schliesst; Satz und Leistungsdatum kopiert das Backend. «Gutschrift» ist keine
   Ausgleichsart mehr im Zahlungsdialog. Ein Guthaben aus einer Gutschrift wird mit einer
   negativen Zahlung zurückgezahlt, nicht einbehalten; ein gemischter Überschuss wird geteilt
-  (ADR-0079 bis ADR-0081, Backend ADR-0155 bis ADR-0157)
+  (ADR-0079 bis ADR-0081, Backend ADR-0155 bis ADR-0157). Der **Kommentar** einer freien Position
+  und die **Kommentarzeile** sind derselbe Editor wie der Text einer Zeit: formatiert statt Zeichen,
+  Leiste oben, Enter macht dort eine neue Zeile; die Positionstabelle zeigt beide so, wie sie
+  gedruckt werden (`FormattedText`, ADR-0091, Backend ADR-0170)
 - **project** — Projektliste und Projektmaske unter `/projekte`, hinter dem Modulschalter
   `PROJECT`. Kunde, Kontaktperson und Verantwortlicher kommen aus den Nachschlagewegen des
   Projektmoduls, nicht aus `/partners` und `/users` (Backend ADR-0130). Die Maske bietet nur
@@ -68,8 +71,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   warum — Samstag und Sonntag bis heute sind Tage wie alle anderen (#132). Darunter die
   **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
   ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
-  Feld, auch aus dem Text: er ist ein kleiner Editor (`RichTextField`, Markdown-Teilmenge mit Leiste,
-  Strg+B/I, Umschalt+Enter für die neue Zeile, ADR-0090) und steht in Listen auf einer Zeile
+  Feld, auch aus dem Text: er ist ein kleiner Editor, der formatiert zeigt statt Zeichen (`RichTextField`
+  auf `contentEditable`, Leiste oben, mehrzeilig, Strg+B/I, Umschalt+Enter für die neue Zeile,
+  gespeichert als Markdown-Teilmenge, ADR-0090 und ADR-0091) und steht in Listen auf einer Zeile
   (`MarkdownLine`); Projekt und Leistung bleiben stehen, der Fokus springt auf «Dauer». Die Dauer liest
   `lib/duration.ts` (`1:30`, `1.5`, `1.`, `90m`, `2h 15m`, `9-10:30`, `9.30-16.15` — im Bereich ist
   der Punkt eine Uhrzeit, ADR-0087), ein Bereich geht als Von–Bis hinaus, eine Dauer als Minuten;

@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
+import { fillRichText, isRichText } from '../components/richTextTesting'
 import { timeSheetKey } from '../lib/timetracking'
 import type {
   RunningTimer,
@@ -338,9 +339,12 @@ async function click(element: Element) {
 async function type(input: HTMLInputElement, value: string, wait = 0) {
   await act(async () => {
     input.focus()
-    // The text is a text area since #139; its value setter lives on its own prototype.
-    const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
+    // The text is a box with formatting since ADR-0091; the browser types into it, not into a value.
+    if (isRichText(input)) {
+      fillRichText(input, value)
+      return
+    }
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await settle(wait)
@@ -520,7 +524,7 @@ describe('TimerButton', () => {
     expect(dialog()?.textContent).toContain('Läuft seit 09:17')
     expect(control('Projekt oder Kunde').value).toBe('P-00012 Website · Muster AG')
     expect(control('Leistung').value).toBe('Konzeption')
-    expect(control('Text').value).toBe('Wireframes')
+    expect(control('Text').textContent).toBe('Wireframes')
     expect(control('Gestartet um').value).toBe('09:17')
     expect(document.activeElement).toBe(button('Stopp'))
     expect(button('Speichern').disabled).toBe(true)
@@ -731,7 +735,7 @@ describe('TimerButton', () => {
     expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain(
       'auf einem anderen Gerät geändert',
     )
-    expect(control('Text').value).toBe('Am Telefon geändert')
+    expect(control('Text').textContent).toBe('Am Telefon geändert')
   })
 
   /** Stopped on the phone in the meantime: the field turns into the start field and says why. */
@@ -764,7 +768,7 @@ describe('TimerButton', () => {
     await click(button('Start'))
 
     expect(dialog()?.textContent).toContain('Auf einem anderen Gerät wurde gleichzeitig eine Stoppuhr gestartet.')
-    expect(control('Text').value).toBe('Vom Telefon')
+    expect(control('Text').textContent).toBe('Vom Telefon')
     expect(button('Stopp')).toBeDefined()
   })
 

@@ -1,36 +1,66 @@
 import { describe, expect, it } from 'vitest'
 import {
+  editorLines,
   inlineParts,
   liteLines,
-  newLine,
+  lineOf,
   plainLine,
-  toggleEmphasis,
-  toggleList,
+  writeLines,
+  writeParts,
+  type InlinePart,
+  type LiteLine,
 } from './markdownLite'
+
+const plain = (text: string): InlinePart => ({ text, bold: false, italic: false })
+const bold = (text: string): InlinePart => ({ text, bold: true, italic: false })
+const italic = (text: string): InlinePart => ({ text, bold: false, italic: true })
+const both = (text: string): InlinePart => ({ text, bold: true, italic: true })
 
 describe('inlineParts', () => {
   it('inlinePartsTest', () => {
     expect(inlineParts('Konzept **abgenommen** und *versendet*')).toEqual([
-      { text: 'Konzept ', bold: false, italic: false },
-      { text: 'abgenommen', bold: true, italic: false },
-      { text: ' und ', bold: false, italic: false },
-      { text: 'versendet', bold: false, italic: true },
+      plain('Konzept '),
+      bold('abgenommen'),
+      plain(' und '),
+      italic('versendet'),
     ])
   })
 
-  /** A marker without its partner stays as it was typed. */
-  it('inlinePartsWithAnUnclosedMarkerTest', () => {
-    expect(inlineParts('**fett ohne Ende')).toEqual([
-      { text: '**fett ohne Ende', bold: false, italic: false },
+  /** Bold and italic at once, written either way round. */
+  it('inlinePartsWithBothMarksTest', () => {
+    expect(inlineParts('***beides***')).toEqual([both('beides')])
+    expect(inlineParts('**fett *beides* fett**')).toEqual([
+      bold('fett '),
+      both('beides'),
+      bold(' fett'),
     ])
-    expect(inlineParts('2 * 3 = 6')).toEqual([{ text: '2 * 3 = 6', bold: false, italic: false }])
+    expect(inlineParts('*a**b***')).toEqual([italic('a'), both('b')])
+  })
+
+  /** A backslash keeps a star, a backslash or a list marker as typed. */
+  it('inlinePartsWithEscapesTest', () => {
+    expect(inlineParts('2\\*3\\*4')).toEqual([plain('2*3*4')])
+    expect(inlineParts('C:\\\\Daten')).toEqual([plain('C:\\Daten')])
+    expect(inlineParts('**\\*wichtig**')).toEqual([bold('*wichtig')])
+    // A backslash before a letter is no escape and stays.
+    expect(inlineParts('a\\b')).toEqual([plain('a\\b')])
+    expect(inlineParts('Ende\\')).toEqual([plain('Ende\\')])
+  })
+
+  /** A marker without its partner, or next to a blank, stays as it was typed. */
+  it('inlinePartsWithAnUnclosedMarkerTest', () => {
+    expect(inlineParts('**fett ohne Ende')).toEqual([plain('**fett ohne Ende')])
+    expect(inlineParts('2 * 3 = 6')).toEqual([plain('2 * 3 = 6')])
+    expect(inlineParts('Preis * Menge * Faktor')).toEqual([plain('Preis * Menge * Faktor')])
+    expect(inlineParts('Fussnote*')).toEqual([plain('Fussnote*')])
+    expect(inlineParts('a****b')).toEqual([plain('a****b')])
   })
 
   /** Markup of a page is text like any other: it never becomes an element. */
   it('inlinePartsWithMarkupTest', () => {
     expect(inlineParts('<script>alert(1)</script> **<b>x</b>**')).toEqual([
-      { text: '<script>alert(1)</script> ', bold: false, italic: false },
-      { text: '<b>x</b>', bold: true, italic: false },
+      plain('<script>alert(1)</script> '),
+      bold('<b>x</b>'),
     ])
   })
 
@@ -39,25 +69,52 @@ describe('inlineParts', () => {
   })
 })
 
+describe('lineOf', () => {
+  it('lineOfTest', () => {
+    expect(lineOf('- **Review**')).toEqual({ kind: 'bullet', parts: [bold('Review')] })
+    expect(lineOf('12. Offerte')).toEqual({ kind: 'number', parts: [plain('Offerte')] })
+    expect(lineOf('  Workshop  ')).toEqual({ kind: 'text', parts: [plain('Workshop')] })
+  })
+
+  /** «-Wort», three digits and an escaped marker are no list. */
+  it('lineOfWithoutAListMarkerTest', () => {
+    expect(lineOf('-Wort').kind).toBe('text')
+    expect(lineOf('123. Etappe').kind).toBe('text')
+    expect(lineOf('\\- kein Punkt')).toEqual({ kind: 'text', parts: [plain('- kein Punkt')] })
+    expect(lineOf('2\\. Etappe')).toEqual({ kind: 'text', parts: [plain('2. Etappe')] })
+  })
+
+  it('lineOfAnEmptyLineTest', () => {
+    expect(lineOf('   ')).toEqual({ kind: 'text', parts: [] })
+  })
+})
+
 describe('liteLines', () => {
   /** Both lists, plain lines and empty lines between them. */
   it('liteLinesTest', () => {
-    const lines = liteLines('Workshop\n\n- Wireframes\n- **Review**\n1. Konzept\n2. Offerte')
+    const lines = liteLines('Workshop\n\n- Wireframes\n- **Review**\n1. Konzept\r\n2. Offerte')
 
     expect(lines.map((line) => line.kind)).toEqual(['text', 'bullet', 'bullet', 'number', 'number'])
-    expect(lines[2].parts).toEqual([{ text: 'Review', bold: true, italic: false }])
-    expect(lines[4].number).toBe(2)
-  })
-
-  /** «-Wort» without a blank and «*kursiv*» at the start are no list. */
-  it('liteLinesWithoutAListMarkerTest', () => {
-    expect(liteLines('-Wort\n*kursiv*').map((line) => line.kind)).toEqual(['text', 'text'])
+    expect(lines[2].parts).toEqual([bold('Review')])
   })
 
   it('liteLinesOfNothingTest', () => {
     expect(liteLines(null)).toEqual([])
     expect(liteLines('')).toEqual([])
     expect(liteLines('\n \n')).toEqual([])
+  })
+})
+
+describe('editorLines', () => {
+  /** The editor keeps empty lines: one the user has just started is still there. */
+  it('editorLinesTest', () => {
+    expect(editorLines('A\n\n- B').map((line) => line.kind)).toEqual(['text', 'text', 'bullet'])
+    expect(editorLines('A\n\n- B')[1].parts).toEqual([])
+  })
+
+  it('editorLinesOfNothingTest', () => {
+    expect(editorLines('')).toEqual([{ kind: 'text', parts: [] }])
+    expect(editorLines(undefined)).toEqual([{ kind: 'text', parts: [] }])
   })
 })
 
@@ -70,93 +127,102 @@ describe('plainLine', () => {
   })
 
   it('plainLineOfPlainTextTest', () => {
-    expect(plainLine('Ticket 4711')).toBe('Ticket 4711')
+    expect(plainLine('Ticket 4711, 2\\*3')).toBe('Ticket 4711, 2*3')
     expect(plainLine(undefined)).toBe('')
   })
 })
 
-describe('toggleEmphasis', () => {
-  it('toggleEmphasisTest', () => {
-    expect(toggleEmphasis('Konzept abgenommen', 8, 18, '**')).toEqual({
-      value: 'Konzept **abgenommen**',
-      selectionStart: 10,
-      selectionEnd: 20,
-    })
-  })
-
-  /** Set again, the marker goes. */
-  it('toggleEmphasisTwiceTest', () => {
-    expect(toggleEmphasis('Konzept **abgenommen**', 10, 20, '**').value).toBe('Konzept abgenommen')
-  })
-
-  /** Without a selection the pair goes in, the caret between. */
-  it('toggleEmphasisWithoutASelectionTest', () => {
-    expect(toggleEmphasis('', 0, 0, '*')).toEqual({ value: '**', selectionStart: 1, selectionEnd: 1 })
-  })
-
-  /** Inside bold, italic is added and not mistaken for a marker already there. */
-  it('toggleEmphasisItalicInsideBoldTest', () => {
-    expect(toggleEmphasis('**fett**', 2, 6, '*').value).toBe('***fett***')
-  })
-})
-
-describe('toggleList', () => {
-  it('toggleListTest', () => {
-    expect(toggleList('Wireframes\nReview', 0, 17, 'bullet').value).toBe('- Wireframes\n- Review')
-  })
-
-  it('toggleListNumberedTest', () => {
-    expect(toggleList('Konzept\nOfferte\nVersand', 3, 20, 'number').value).toBe(
-      '1. Konzept\n2. Offerte\n3. Versand',
+describe('writeParts', () => {
+  it('writePartsTest', () => {
+    expect(writeParts([plain('Konzept '), bold('abgenommen'), plain(' und '), italic('versendet')])).toBe(
+      'Konzept **abgenommen** und *versendet*',
     )
   })
 
-  /** Lines that all are such a list already become plain again. */
-  it('toggleListBackTest', () => {
-    expect(toggleList('- Wireframes\n- Review', 2, 5, 'bullet').value).toBe('Wireframes\n- Review')
-    expect(toggleList('- Wireframes\n- Review', 0, 21, 'bullet').value).toBe('Wireframes\nReview')
+  /** Bold and italic overlap: the markers open and close where each mark changes. */
+  it('writePartsWithBothMarksTest', () => {
+    expect(writeParts([both('beides')])).toBe('***beides***')
+    expect(writeParts([bold('a'), both('b')])).toBe('**a*b***')
+    expect(writeParts([italic('a'), bold('b')])).toBe('*a***b**')
   })
 
-  /** One kind of list turns into the other. */
-  it('toggleListFromBulletsToNumbersTest', () => {
-    expect(toggleList('- A\n- B', 0, 7, 'number').value).toBe('1. A\n2. B')
+  /** A blank at the edge of a set off stretch stands outside it; between two bold words in. */
+  it('writePartsWithBlanksAtTheEdgeTest', () => {
+    expect(writeParts([bold('fett '), plain('normal')])).toBe('**fett** normal')
+    expect(writeParts([plain('a'), italic(' b')])).toBe('a *b*')
+    expect(writeParts([bold('a'), plain(' '), bold('b')])).toBe('**a b**')
+    expect(writeParts([bold(' ')])).toBe(' ')
   })
 
-  /** Only the lines of the selection change; the caret on one line turns that one. */
-  it('toggleListOfOneLineTest', () => {
-    const edited = toggleList('Kopf\nWireframes\nFuss', 7, 7, 'bullet')
+  /** Stars and backslashes of the text keep a backslash. */
+  it('writePartsWithStarsTest', () => {
+    expect(writeParts([plain('2*3 \\ 4')])).toBe('2\\*3 \\\\ 4')
+    expect(writeParts([bold('*')])).toBe('**\\***')
+  })
 
-    expect(edited.value).toBe('Kopf\n- Wireframes\nFuss')
-    expect(edited.selectionStart).toBe(5)
-    expect(edited.selectionEnd).toBe(17)
+  it('writePartsOfNothingTest', () => {
+    expect(writeParts([])).toBe('')
+  })
+
+  /** What is written reads back as the same stretches. */
+  it('writePartsRoundTripTest', () => {
+    const cases: InlinePart[][] = [
+      [bold('a'), italic('b'), plain('c')],
+      [italic('a'), bold('b'), both('c'), plain('d*e')],
+      [plain('**kein**'), bold('\\')],
+      [both('x'), italic('y')],
+    ]
+    for (const parts of cases) {
+      expect(inlineParts(writeParts(parts))).toEqual(parts)
+    }
   })
 })
 
-describe('newLine', () => {
-  /** A bullet goes on with «- ». */
-  it('newLineTest', () => {
-    expect(newLine('- Wireframes', 12)).toEqual({
-      value: '- Wireframes\n- ',
-      selectionStart: 15,
-      selectionEnd: 15,
-    })
+describe('writeLines', () => {
+  it('writeLinesTest', () => {
+    const lines: LiteLine[] = [
+      { kind: 'text', parts: [plain('Workshop')] },
+      { kind: 'bullet', parts: [plain('Wireframes')] },
+      { kind: 'bullet', parts: [bold('Review')] },
+      { kind: 'number', parts: [plain('Konzept')] },
+      { kind: 'number', parts: [plain('Offerte')] },
+    ]
+
+    expect(writeLines(lines)).toBe('Workshop\n- Wireframes\n- **Review**\n1. Konzept\n2. Offerte')
   })
 
-  it('newLineInANumberedListTest', () => {
-    expect(newLine('1. Konzept\n2. Review', 20).value).toBe('1. Konzept\n2. Review\n3. ')
+  /** A numbered list counts from 1 again after any other line. */
+  it('writeLinesCountsEachListTest', () => {
+    const lines: LiteLine[] = [
+      { kind: 'number', parts: [plain('A')] },
+      { kind: 'text', parts: [plain('Zwischentext')] },
+      { kind: 'number', parts: [plain('B')] },
+      { kind: 'number', parts: [plain('C')] },
+    ]
+
+    expect(writeLines(lines)).toBe('1. A\nZwischentext\n1. B\n2. C')
   })
 
-  /** On an empty entry the list ends: the marker goes, no line is added. */
-  it('newLineOnAnEmptyEntryTest', () => {
-    expect(newLine('- Wireframes\n- ', 15)).toEqual({
-      value: '- Wireframes\n',
-      selectionStart: 13,
-      selectionEnd: 13,
-    })
+  /** A plain line that would read as a list keeps its marker as typed. */
+  it('writeLinesWithAListMarkerInPlainTextTest', () => {
+    const lines: LiteLine[] = [
+      { kind: 'text', parts: [plain('- kein Punkt')] },
+      { kind: 'text', parts: [plain('2. Etappe')] },
+      { kind: 'text', parts: [plain('-Wort')] },
+    ]
+
+    expect(writeLines(lines)).toBe('\\- kein Punkt\n2\\. Etappe\n-Wort')
+    expect(liteLines(writeLines(lines)).map((line) => line.kind)).toEqual(['text', 'text', 'text'])
   })
 
-  /** Outside a list it is a plain line break. */
-  it('newLineInPlainTextTest', () => {
-    expect(newLine('Workshop', 8).value).toBe('Workshop\n')
+  /** An empty line of any kind is an empty line. */
+  it('writeLinesWithEmptyLinesTest', () => {
+    expect(writeLines([{ kind: 'text', parts: [] }])).toBe('')
+    expect(
+      writeLines([
+        { kind: 'bullet', parts: [plain('A')] },
+        { kind: 'bullet', parts: [] },
+      ]),
+    ).toBe('- A\n')
   })
 })

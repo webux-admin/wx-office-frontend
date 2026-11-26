@@ -4,7 +4,7 @@ import { Button } from '../../components/Button'
 import { CheckboxField } from '../../components/CheckboxField'
 import { Dialog } from '../../components/Dialog'
 import { ErrorNotice } from '../../components/Notice'
-import { TextAreaField } from '../../components/TextAreaField'
+import { RichTextField } from '../../components/RichTextField'
 import { TextField } from '../../components/TextField'
 import { ACCOUNTING_MODULE, ACCOUNTING_RIGHTS } from '../../lib/accounting'
 import { parseDecimal } from '../../lib/format'
@@ -258,13 +258,13 @@ export function FreeLineDialog({
       {/* Belongs to the description and is printed under it, but stands here, after the VAT
           treatment: a box several lines high between "Bezeichnung" and "Menge" would push the
           figures — the fields every line needs — out of sight for a text few lines carry. */}
-      <TextAreaField
+      <RichTextField
         label="Kommentar"
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={setNote}
         maxLength={1000}
         rows={3}
-        tooltip="Wird unter der Bezeichnung gedruckt."
+        tooltip="Wird unter der Bezeichnung gedruckt, fett, kursiv und Listen wie hier gesetzt."
         className="mt-5"
       />
 

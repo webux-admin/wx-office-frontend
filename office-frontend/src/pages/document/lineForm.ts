@@ -7,6 +7,7 @@
  */
 import { formatAmount, formatDate, formatPercent, formatQuantity, parseDecimal } from '../../lib/format'
 import { booksStock, tracksLots } from '../../lib/inventory'
+import { plainLine, writeLines } from '../../lib/markdownLite'
 import type { SelectableEntry } from '../../lib/masterData'
 import type {
   DocumentLine,
@@ -379,6 +380,34 @@ export function structureLineProblem(
 ): string | undefined {
   if (kind === 'COMMENT' && text.trim() === '') return 'Eine Kommentarzeile braucht einen Text.'
   return undefined
+}
+
+/**
+ * The text a structure line keeps when its kind changes in the dialog. A comment is formatted
+ * text, a subtotal's caption plain: from a comment the caption takes the words without their
+ * marks, and a caption that becomes a comment keeps every character as typed (frontend ADR-0091).
+ *
+ * @param from the kind the text was typed for
+ * @param to the kind chosen now
+ * @param text the text as it stands
+ * @returns the text for the new kind
+ */
+export function structureTextFor(
+  from: StructureLineKind,
+  to: StructureLineKind,
+  text: string,
+): string {
+  if (from === to) return text
+  if (from === 'COMMENT') return plainLine(text)
+  if (to === 'COMMENT') {
+    return writeLines(
+      text.split(/\r?\n/).map((line) => ({
+        kind: 'text' as const,
+        parts: line === '' ? [] : [{ text: line, bold: false, italic: false }],
+      })),
+    )
+  }
+  return text
 }
 
 /**
