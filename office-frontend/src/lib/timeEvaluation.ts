@@ -47,7 +47,8 @@ export type Narrowing = number | 'NONE' | null
  * The question the evaluation asks, as it stands in the address.
  *
  * <p>A day is `''` while its field is empty or half typed; no request goes out then. Several
- * users or states mean any of them, none means all.
+ * users or states mean any of them, none means all — all users, and all states, which the address
+ * writes as `zustand=alle` because no `zustand` at all means the starting view (#144).
  */
 export type TimeEvaluationFilter = {
   from: string
@@ -88,6 +89,15 @@ const PARAM = {
 /** What stands in `projekt`, `kunde` or `leistung` for the entries without one. */
 const NONE_PARAM = 'ohne'
 
+/** What stands in `zustand` for every state, so a shared link to all of them stays one (#144). */
+const ALL_STATES_PARAM = 'alle'
+
+/**
+ * The states the evaluation opens with: what stands on no issued invoice yet. «Verrechnet» and
+ * «nicht verrechenbar» are done with (#144, frontend ADR-0094).
+ */
+export const DEFAULT_STATES: readonly TimeEntryState[] = ['OPEN', 'IN_DRAFT']
+
 /** The groupings, in the order the switch shows them. */
 const TIME_GROUPINGS: readonly TimeGrouping[] = [
   'user',
@@ -114,7 +124,8 @@ const VIEW_PARAMS: Record<TimeGrouping, string> = {
  * <p>Forgiving, because an address can be typed by hand or come from an older link: a value the
  * filter does not know is left out rather than sent, so a mistyped state or id never reaches the
  * server. Without `von` and without `bis` the range is this month. With projects switched off the
- * project is dropped, as the field is.
+ * project is dropped, as the field is. Without `zustand` the states are «offen» and «im Entwurf»;
+ * `zustand=alle` is every state, and a known state beside it wins.
  *
  * @param params the search part of the address
  * @param today the day it is, `yyyy-MM-dd`
@@ -128,7 +139,6 @@ export function evaluationFilterOf(
 ): TimeEvaluationFilter {
   const ranged = params.has(PARAM.from) || params.has(PARAM.to)
   const month = presetRange('THIS_MONTH', today)
-  const states = params.getAll(PARAM.state)
   return {
     from: ranged ? dayOf(params.get(PARAM.from)) : month.from,
     to: ranged ? dayOf(params.get(PARAM.to)) : month.to,
@@ -136,9 +146,19 @@ export function evaluationFilterOf(
     project: projectsOn ? narrowingOf(params.get(PARAM.project)) : null,
     customer: narrowingOf(params.get(PARAM.customer)),
     service: narrowingOf(params.get(PARAM.service)),
-    states: TIME_ENTRY_STATES.filter((state) => states.includes(state)),
+    states: statesOf(params.getAll(PARAM.state)),
     search: (params.get(PARAM.search) ?? '').slice(0, TIME_SEARCH_MAX_LENGTH),
   }
+}
+
+/**
+ * The states the address asks for: the known ones it names; every state for `alle` alone; the
+ * starting view for none, and for values it does not know.
+ */
+function statesOf(values: readonly string[]): readonly TimeEntryState[] {
+  const known = TIME_ENTRY_STATES.filter((state) => values.includes(state))
+  if (known.length > 0) return known
+  return values.includes(ALL_STATES_PARAM) ? [] : DEFAULT_STATES
 }
 
 /**
@@ -158,7 +178,8 @@ export function evaluationViewOf(params: URLSearchParams, projectsOn: boolean): 
  * Writes the question into the address.
  *
  * <p>Both days always go in, empty ones too: an address without them means «this month», and a
- * field somebody just emptied must not snap back to it.
+ * field somebody just emptied must not snap back to it. For the same reason no ticked state is
+ * written `zustand=alle`: an address without `zustand` is the starting view.
  *
  * @param filter the filter
  * @param view what is shown below the tiles
@@ -172,6 +193,7 @@ export function evaluationSearchOf(filter: TimeEvaluationFilter, view: TimeEvalu
   setNarrowing(params, PARAM.project, filter.project)
   setNarrowing(params, PARAM.customer, filter.customer)
   setNarrowing(params, PARAM.service, filter.service)
+  if (filter.states.length === 0) params.set(PARAM.state, ALL_STATES_PARAM)
   filter.states.forEach((state) => params.append(PARAM.state, state))
   if (filter.search !== '') params.set(PARAM.search, filter.search)
   if (view !== 'entries') params.set(PARAM.view, VIEW_PARAMS[view])
@@ -446,7 +468,8 @@ export function withState(
 
 /**
  * @param filter the filter
- * @returns whether anything besides the range narrows it, so «Filter zurücksetzen» has a task
+ * @returns whether anything besides the range narrows it — the states of the starting view as
+ *          well, which stand as chips so a smaller total has a visible reason (#144)
  */
 export function isNarrowed(filter: TimeEvaluationFilter): boolean {
   return (
@@ -460,10 +483,13 @@ export function isNarrowed(filter: TimeEvaluationFilter): boolean {
 }
 
 /**
+ * The filter the choices of «Projekt», «Kunde» and «Leistung» hang on: the same range and nothing
+ * else, every state, so the choices do not shrink with every other field.
+ *
  * @param filter the filter
  * @returns the same range and nothing else
  */
-export function withoutNarrowing(filter: TimeEvaluationFilter): TimeEvaluationFilter {
+export function rangeOnly(filter: TimeEvaluationFilter): TimeEvaluationFilter {
   return {
     from: filter.from,
     to: filter.to,
@@ -474,6 +500,32 @@ export function withoutNarrowing(filter: TimeEvaluationFilter): TimeEvaluationFi
     states: [],
     search: '',
   }
+}
+
+/**
+ * What «Filter zurücksetzen» leads back to: the same range, «offen» and «im Entwurf», nothing else.
+ *
+ * @param filter the filter
+ * @returns the starting view over the same range
+ */
+export function startingView(filter: TimeEvaluationFilter): TimeEvaluationFilter {
+  return { ...rangeOnly(filter), states: DEFAULT_STATES }
+}
+
+/**
+ * @param filter the filter
+ * @returns whether it is the starting view over its range, so «Filter zurücksetzen» has no task
+ */
+export function isAtStart(filter: TimeEvaluationFilter): boolean {
+  return (
+    !isNarrowedBesidesStates(filter)
+    && filter.states.length === DEFAULT_STATES.length
+    && DEFAULT_STATES.every((state) => filter.states.includes(state))
+  )
+}
+
+function isNarrowedBesidesStates(filter: TimeEvaluationFilter): boolean {
+  return isNarrowed({ ...filter, states: [] })
 }
 
 // --- the groups --------------------------------------------------------------------

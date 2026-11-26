@@ -12,6 +12,7 @@ import {
   evaluationFilterOf,
   evaluationGroupsKey,
   evaluationGroupsUrl,
+  DEFAULT_STATES,
   evaluationPath,
   evaluationQuery,
   evaluationSearchOf,
@@ -23,14 +24,16 @@ import {
   groupKey,
   groupLabel,
   hasWholeRange,
+  isAtStart,
   isNarrowed,
   narrowingOf,
   narrowingOptions,
   narrowingValue,
   presetOf,
   presetRange,
+  rangeOnly,
+  startingView,
   withState,
-  withoutNarrowing,
   type TimeEvaluationFilter,
 } from './timeEvaluation'
 import { timeEntriesKey } from './timetracking'
@@ -39,7 +42,7 @@ import type { TimeGroup, TimeSummary } from './types'
 /** A Tuesday in November 2026, the day every test runs on. */
 const TODAY = '2026-11-24'
 
-/** November 2026 and nothing else. */
+/** November 2026, every state, and nothing else. */
 const NOVEMBER: TimeEvaluationFilter = {
   from: '2026-11-01',
   to: '2026-11-30',
@@ -100,9 +103,30 @@ describe('the address', () => {
     })
   })
 
-  /** An address that names no day asks for this month. */
+  /** An address that names nothing is the starting view: this month, «offen» and «im Entwurf» (#144). */
   it('evaluationFilterOfWithoutAnythingTest', () => {
-    expect(evaluationFilterOf(params(''), TODAY, true)).toEqual(NOVEMBER)
+    expect(evaluationFilterOf(params(''), TODAY, true)).toEqual({
+      ...NOVEMBER,
+      states: ['OPEN', 'IN_DRAFT'],
+    })
+  })
+
+  /** `zustand=alle` is every state, which the request sends as no `state` at all. */
+  it('evaluationFilterOfAllStatesTest', () => {
+    expect(evaluationFilterOf(params('zustand=alle'), TODAY, true).states).toEqual([])
+  })
+
+  /** One state is that state; an `alle` beside it is not heard. */
+  it('evaluationFilterOfOneStateTest', () => {
+    expect(evaluationFilterOf(params('zustand=BILLED'), TODAY, true).states).toEqual(['BILLED'])
+    expect(evaluationFilterOf(params('zustand=alle&zustand=BILLED'), TODAY, true).states).toEqual([
+      'BILLED',
+    ])
+  })
+
+  /** Only states nobody knows: the starting view, forgiving like the rest of the address. */
+  it('evaluationFilterOfUnknownStateTest', () => {
+    expect(evaluationFilterOf(params('zustand=XYZ'), TODAY, true).states).toEqual(DEFAULT_STATES)
   })
 
   /** A day emptied by hand stays empty, even with the other one gone too. */
@@ -139,7 +163,7 @@ describe('the address', () => {
       true,
     )
 
-    expect(filter).toEqual({ ...NOVEMBER, from: '', to: '' })
+    expect(filter).toEqual({ ...NOVEMBER, from: '', to: '', states: ['OPEN', 'IN_DRAFT'] })
   })
 
   it('evaluationFilterOfWithALongSearchTest', () => {
@@ -176,10 +200,27 @@ describe('the address', () => {
 
   /** The days go in even empty; the entries need no `nach`; «ohne» stands for none. */
   it('evaluationSearchOfAtTheEdgesTest', () => {
-    expect(evaluationSearchOf({ ...NOVEMBER, from: '', to: '' }, 'entries')).toBe('von=&bis=')
-    expect(evaluationSearchOf({ ...NOVEMBER, customer: 'NONE', service: 'NONE' }, 'entries')).toBe(
-      'von=2026-11-01&bis=2026-11-30&kunde=ohne&leistung=ohne',
+    expect(evaluationSearchOf({ ...NOVEMBER, from: '', to: '', states: DEFAULT_STATES }, 'entries')).toBe(
+      'von=&bis=&zustand=OPEN&zustand=IN_DRAFT',
     )
+    expect(evaluationSearchOf({ ...NOVEMBER, customer: 'NONE', service: 'NONE' }, 'entries')).toBe(
+      'von=2026-11-01&bis=2026-11-30&kunde=ohne&leistung=ohne&zustand=alle',
+    )
+  })
+
+  /** No ticked state is every state, and says so: an address without `zustand` is the start. */
+  it('evaluationSearchOfWithoutStatesTest', () => {
+    expect(evaluationSearchOf(NOVEMBER, 'entries')).toBe('von=2026-11-01&bis=2026-11-30&zustand=alle')
+  })
+
+  /** The starting view, every state and one state each come back out of the address unchanged. */
+  it('evaluationSearchOfReadsTheStatesBackTest', () => {
+    for (const states of [DEFAULT_STATES, [], ['BILLED']] as const) {
+      const filter = { ...NOVEMBER, states }
+      expect(evaluationFilterOf(params(evaluationSearchOf(filter, 'entries')), TODAY, true)).toEqual(
+        filter,
+      )
+    }
   })
 
   /** What goes into the address comes back out of it unchanged. */
@@ -196,7 +237,7 @@ describe('the address', () => {
 
   it('evaluationPathTest', () => {
     expect(evaluationPath(NOVEMBER, 'user')).toBe(
-      `${TIME_EVALUATION_PATH}?von=2026-11-01&bis=2026-11-30&nach=person`,
+      `${TIME_EVALUATION_PATH}?von=2026-11-01&bis=2026-11-30&zustand=alle&nach=person`,
     )
     expect(TIME_EVALUATION_PATH).toBe('/zeiten-auswertung')
   })
@@ -390,9 +431,31 @@ describe('changing the filter', () => {
     expect(isNarrowed({ ...NOVEMBER, from: '2026-01-01', search: '  ' })).toBe(false)
   })
 
-  it('withoutNarrowingTest', () => {
-    expect(withoutNarrowing({ ...NARROW, customer: 'NONE' })).toEqual(NOVEMBER)
-    expect(withoutNarrowing(NOVEMBER)).toEqual(NOVEMBER)
+  /** The choices hang on the range alone: a ticked state does not change what they ask. */
+  it('rangeOnlyTest', () => {
+    expect(rangeOnly({ ...NARROW, customer: 'NONE' })).toEqual(NOVEMBER)
+    expect(rangeOnly({ ...NOVEMBER, states: DEFAULT_STATES })).toEqual(NOVEMBER)
+  })
+
+  /** «Filter zurücksetzen»: the same range, «offen» and «im Entwurf», nothing else. */
+  it('startingViewTest', () => {
+    expect(startingView({ ...NARROW, customer: 'NONE' })).toEqual({
+      ...NOVEMBER,
+      states: ['OPEN', 'IN_DRAFT'],
+    })
+  })
+
+  it('isAtStartTest', () => {
+    expect(isAtStart({ ...NOVEMBER, states: ['OPEN', 'IN_DRAFT'] })).toBe(true)
+    expect(isAtStart({ ...NOVEMBER, from: '2026-01-01', states: ['IN_DRAFT', 'OPEN'] })).toBe(true)
+  })
+
+  /** Every state, one state more or less, or anything else narrowed is no longer the start. */
+  it('isAtStartWhenNarrowedTest', () => {
+    expect(isAtStart(NOVEMBER)).toBe(false)
+    expect(isAtStart({ ...NOVEMBER, states: ['OPEN'] })).toBe(false)
+    expect(isAtStart({ ...NOVEMBER, states: ['OPEN', 'IN_DRAFT', 'BILLED'] })).toBe(false)
+    expect(isAtStart({ ...NOVEMBER, states: DEFAULT_STATES, search: 'Konzept' })).toBe(false)
   })
 })
 

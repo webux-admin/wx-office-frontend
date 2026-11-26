@@ -306,15 +306,23 @@ async function click(element: HTMLElement) {
 }
 
 describe('TimeEvaluationPage', () => {
-  /** Without a filter in the address the evaluation asks for this month. */
+  /** Without a filter in the address: this month, «offen» and «im Entwurf», shown as chips (#144). */
   it('timeEvaluationPageStartsOnThisMonthTest', async () => {
     await render()
 
     expect(container.querySelector('h1')?.textContent).toBe('Auswertung')
-    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-11-01&to=2026-11-30`)
-    expect(lastOf(`${BASE}?`)).toBe(
-      `${BASE}?from=2026-11-01&to=2026-11-30&page=0&size=50&sort=workDate%2Cdesc`,
+    expect(lastOf(`${BASE}/totals?`)).toBe(
+      `${BASE}/totals?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT`,
     )
+    expect(lastOf(`${BASE}?`)).toBe(
+      `${BASE}?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT&page=0&size=50&sort=workDate%2Cdesc`,
+    )
+    expect((fieldOf('offen') as HTMLInputElement).checked).toBe(true)
+    expect((fieldOf('im Entwurf') as HTMLInputElement).checked).toBe(true)
+    expect((fieldOf('verrechnet') as HTMLInputElement).checked).toBe(false)
+    expect(button('offen aus dem Filter nehmen')).toBeDefined()
+    expect(button('im Entwurf aus dem Filter nehmen')).toBeDefined()
+    expect(text()).not.toContain('Filter zurücksetzen')
     expect(fieldOf('Von').value).toBe('2026-11-01')
     expect(fieldOf('Bis').value).toBe('2026-11-30')
     expect(button('Dieser Monat').getAttribute('aria-pressed')).toBe('true')
@@ -382,10 +390,12 @@ describe('TimeEvaluationPage', () => {
     await click(button('Letzter Monat'))
     expect(searchOf().get('von')).toBe('2026-10-01')
     expect(searchOf().get('bis')).toBe('2026-10-31')
-    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-10-01&to=2026-10-31`)
+    expect(lastOf(`${BASE}/totals?`)).toBe(
+      `${BASE}/totals?from=2026-10-01&to=2026-10-31&state=OPEN&state=IN_DRAFT`,
+    )
 
     await click(fieldOf('verrechnet'))
-    expect(searchOf().getAll('zustand')).toEqual(['BILLED'])
+    expect(searchOf().getAll('zustand')).toEqual(['OPEN', 'IN_DRAFT', 'BILLED'])
 
     await choose('Kunde', 'muster', 'Muster AG')
     expect(searchOf().get('kunde')).toBe('11')
@@ -393,11 +403,12 @@ describe('TimeEvaluationPage', () => {
     await choose('Mitarbeitende', 'beat', 'Beat Kellerdeaktiviert')
     expect(searchOf().getAll('person')).toEqual(['7'])
     expect(lastOf(`${BASE}/totals?`)).toBe(
-      `${BASE}/totals?from=2026-10-01&to=2026-10-31&userId=7&partnerId=11&state=BILLED`,
+      `${BASE}/totals?from=2026-10-01&to=2026-10-31&userId=7&partnerId=11&state=OPEN&state=IN_DRAFT`
+        + '&state=BILLED',
     )
   })
 
-  /** A chosen person goes again with its chip, and «Filter zurücksetzen» keeps the range alone. */
+  /** A chosen person goes again with its chip, and «Filter zurücksetzen» leads back to the start. */
   it('timeEvaluationPageTakesTheFilterBackTest', async () => {
     await render('/zeiten-auswertung?von=2026-10-01&bis=2026-10-31&person=3&person=7&leistung=31')
 
@@ -405,8 +416,33 @@ describe('TimeEvaluationPage', () => {
     expect(searchOf().getAll('person')).toEqual(['3'])
 
     await click(button('Filter zurücksetzen'))
-    expect(address()).toBe('/zeiten-auswertung?von=2026-10-01&bis=2026-10-31')
+    expect(address()).toBe('/zeiten-auswertung?von=2026-10-01&bis=2026-10-31&zustand=OPEN&zustand=IN_DRAFT')
     expect(text()).not.toContain('Filter zurücksetzen')
+  })
+
+  /** Every state: no `state` in the request, `zustand=alle` in the address, kept when reloaded (#144). */
+  it('timeEvaluationPageShowsEveryStateTest', async () => {
+    await render()
+
+    await click(fieldOf('offen'))
+    await click(fieldOf('im Entwurf'))
+
+    expect(searchOf().getAll('zustand')).toEqual(['alle'])
+    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-11-01&to=2026-11-30`)
+    expect(text()).toContain('Alle Zustände')
+
+    await click(button('Filter zurücksetzen'))
+    expect(searchOf().getAll('zustand')).toEqual(['OPEN', 'IN_DRAFT'])
+    expect((fieldOf('offen') as HTMLInputElement).checked).toBe(true)
+  })
+
+  /** A link to every state opens on every state, the way it was shared (#144). */
+  it('timeEvaluationPageKeepsEveryStateFromTheAddressTest', async () => {
+    await render('/zeiten-auswertung?von=2026-11-01&bis=2026-11-30&zustand=alle')
+
+    expect((fieldOf('offen') as HTMLInputElement).checked).toBe(false)
+    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-11-01&to=2026-11-30`)
+    expect(searchOf().getAll('zustand')).toEqual(['alle'])
   })
 
   /** Each active filter is taken out on its own; the others and the range stay (#138). */
@@ -415,7 +451,7 @@ describe('TimeEvaluationPage', () => {
 
     await click(button('offen aus dem Filter nehmen'))
 
-    expect(searchOf().getAll('zustand')).toEqual([])
+    expect(searchOf().getAll('zustand')).toEqual(['alle'])
     expect(searchOf().get('projekt')).toBe('12')
     expect(searchOf().get('von')).toBe('2026-10-01')
   })
@@ -442,7 +478,9 @@ describe('TimeEvaluationPage', () => {
       await new Promise((resolve) => setTimeout(resolve, 350))
     })
     await settle()
-    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-11-01&to=2026-11-30&search=Wire`)
+    expect(lastOf(`${BASE}/totals?`)).toBe(
+      `${BASE}/totals?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT&search=Wire`,
+    )
   })
 
   /** Typing keeps its own letters; an address from elsewhere — the menu — empties the field. */
@@ -467,7 +505,7 @@ describe('TimeEvaluationPage', () => {
     await click(button('Person'))
 
     expect(lastOf(`${BASE}?`)).toBe(
-      `${BASE}?from=2026-11-01&to=2026-11-30&page=0&size=50&sort=userName%2Casc`,
+      `${BASE}?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT&page=0&size=50&sort=userName%2Casc`,
     )
     expect(address()).not.toContain('sort')
   })
@@ -489,7 +527,7 @@ describe('TimeEvaluationPage', () => {
     await click(button('nach Woche'))
     expect(searchOf().get('nach')).toBe('woche')
     expect(lastOf(`${BASE}/totals/by/week`)).toBe(
-      `${BASE}/totals/by/week?from=2026-11-01&to=2026-11-30`,
+      `${BASE}/totals/by/week?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT`,
     )
     expect(rows()[0].textContent).toContain('KW 48 · 2026')
     expect(rows()[0].textContent).toContain('23.11.2026–29.11.2026')
@@ -533,7 +571,7 @@ describe('TimeEvaluationPage', () => {
     await click(button('Als CSV herunterladen'))
 
     expect(lastOf(`${BASE}/export.csv`)).toBe(
-      `${BASE}/export.csv?from=2026-11-01&to=2026-11-30&partnerId=11`,
+      `${BASE}/export.csv?from=2026-11-01&to=2026-11-30&partnerId=11&state=OPEN&state=IN_DRAFT`,
     )
     expect(downloadFile).toHaveBeenCalledTimes(1)
     expect(downloadFile.mock.calls[0][0].fileName).toBe('zeiten-2026-11.csv')
@@ -595,7 +633,7 @@ describe('TimeEvaluationPage', () => {
     expect(requested.filter((url) => url.startsWith(`${BASE}?`) || url.startsWith(`${BASE}/totals`))).toEqual([])
     expect(text()).toContain('Kein Zeitraum')
     expect(button('Als CSV herunterladen').disabled).toBe(true)
-    expect(address()).toBe('/zeiten-auswertung?von=&bis=2026-11-30')
+    expect(address()).toBe('/zeiten-auswertung?von=&bis=2026-11-30&zustand=OPEN&zustand=IN_DRAFT')
   })
 
   it('timeEvaluationPageWithNothingInTheRangeTest', async () => {
@@ -604,7 +642,18 @@ describe('TimeEvaluationPage', () => {
 
     await render()
 
+    // The starting view narrows to «offen» and «im Entwurf», and the sentence says so (#144).
     expect(text()).toContain('Keine Zeiten')
+    expect(text()).toContain('Mit diesem Filter ist im Zeitraum keine Zeit erfasst.')
+  })
+
+  /** Every state and nothing else: the range alone has no time. */
+  it('timeEvaluationPageWithNothingInTheRangeAtAllTest', async () => {
+    totals = () => json(NOTHING)
+    entries = []
+
+    await render('/zeiten-auswertung?zustand=alle')
+
     expect(text()).toContain('Im Zeitraum ist keine Zeit erfasst.')
   })
 
@@ -644,6 +693,8 @@ describe('TimeEvaluationPage', () => {
     )
     expect(text()).not.toContain('Alle Projekte')
     expect(requested.some((url) => url.includes('/totals/by/project'))).toBe(false)
-    expect(lastOf(`${BASE}/totals?`)).toBe(`${BASE}/totals?from=2026-11-01&to=2026-11-30`)
+    expect(lastOf(`${BASE}/totals?`)).toBe(
+      `${BASE}/totals?from=2026-11-01&to=2026-11-30&state=OPEN&state=IN_DRAFT`,
+    )
   })
 })

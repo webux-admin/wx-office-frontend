@@ -18,14 +18,16 @@ import {
   evaluationGroupsKey,
   evaluationGroupsUrl,
   hasWholeRange,
+  isAtStart,
   isNarrowed,
   narrowingOf,
   narrowingOptions,
   narrowingValue,
   presetOf,
   presetRange,
+  rangeOnly,
+  startingView,
   withState,
-  withoutNarrowing,
   type Narrowing,
   type NarrowingOption,
   type TimeEvaluationFilter,
@@ -79,7 +81,7 @@ export function EvaluationFilters({
     queryFn: () => api.get<TimeColleague[]>(colleaguesUrl(tenantId)),
   })
   // The choices hang on the range alone, so they do not shrink with every other field.
-  const range = withoutNarrowing(filter)
+  const range = rangeOnly(filter)
   const projectGroups = useChoices(tenantId, 'project', range, projectsOn).data ?? []
   const customerGroups = useChoices(tenantId, 'customer', range, true).data ?? []
   const serviceGroups = useChoices(tenantId, 'service', range, true).data ?? []
@@ -240,27 +242,36 @@ export function EvaluationFilters({
         </FilterGroup>
       </div>
 
-      {isNarrowed(filter) && (
+      {/* The chips stand in the starting view as well: the sums hold for the whole filter, and a
+          missing «verrechnet» has to be seen to read a smaller total right (#144). */}
+      {(isNarrowed(filter) || !isAtStart(filter)) && (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-subtle pt-4">
           <span className="w-full text-overline text-text-tertiary sm:w-auto">Aktive Filter</span>
-          <ul aria-label="Aktive Filter" className="flex w-full flex-wrap gap-1.5 sm:w-auto sm:min-w-0 sm:flex-1">
-            {active.map((chip) => (
-              <li key={chip.key} className="min-w-0">
-                <button
-                  type="button"
-                  aria-label={`${chip.text} aus dem Filter nehmen`}
-                  onClick={chip.remove}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-line bg-sunken px-3 py-1 text-small text-text-primary transition-colors hover:border-text-tertiary"
-                >
-                  <span className="truncate">{chip.text}</span>
-                  <X size={12} aria-hidden className="shrink-0" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <Button variant="ghost" onClick={() => onChange(withoutNarrowing(filter))}>
-            Filter zurücksetzen
-          </Button>
+          {/* Every state and nothing else narrowed: no chip to take away, only the way back. */}
+          {active.length === 0 ? (
+            <span className="text-small text-text-secondary sm:min-w-0 sm:flex-1">Alle Zustände</span>
+          ) : (
+            <ul aria-label="Aktive Filter" className="flex w-full flex-wrap gap-1.5 sm:w-auto sm:min-w-0 sm:flex-1">
+              {active.map((chip) => (
+                <li key={chip.key} className="min-w-0">
+                  <button
+                    type="button"
+                    aria-label={`${chip.text} aus dem Filter nehmen`}
+                    onClick={chip.remove}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-line bg-sunken px-3 py-1 text-small text-text-primary transition-colors hover:border-text-tertiary"
+                  >
+                    <span className="truncate">{chip.text}</span>
+                    <X size={12} aria-hidden className="shrink-0" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!isAtStart(filter) && (
+            <Button variant="ghost" onClick={() => onChange(startingView(filter))}>
+              Filter zurücksetzen
+            </Button>
+          )}
         </div>
       )}
     </Panel>

@@ -133,11 +133,12 @@ Stand der Module (in dieser Reihenfolge gebaut):
   **Auswertung** (#128): im Ordner zwischen «Meine Zeiten» und «Abrechnen» (`/zeiten-auswertung`,
   `TIME_READ`) die Zeiten aller Personen. **Der Filter steht in der Adresse**, mit deutschen
   Parametern als Vertrag für weitergegebene Links — `von`, `bis`, `person`, `projekt`, `kunde`,
-  `leistung` (Id oder `ohne`), `zustand`, `suche`, `nach`; ohne Tage der laufende Monat, Seite und
+  `leistung` (Id oder `ohne`), `zustand`, `suche`, `nach`; ohne Tage der laufende Monat, ohne
+  `zustand` «offen» und «im Entwurf», alle Zustände als `zustand=alle` (ADR-0094), Seite und
   Sortierung nicht, jede Änderung ersetzt den Verlaufseintrag. Die Filtermaske hat drei
   Gruppen — Zeitraum mit den Vorgaben «Diese Woche», «Dieser Monat», «Letzter Monat», «Dieses Jahr»;
   Wer und worauf; Zustand und Text — und darunter die aktiven Filter als Chips, je einzeln
-  herausnehmbar, mit «Filter zurücksetzen». Mitarbeitende, Projekt, Kunde und Leistung sind
+  herausnehmbar, auch in der Startansicht, mit «Filter zurücksetzen» zurück zur Startansicht. Mitarbeitende, Projekt, Kunde und Leistung sind
   Suchfelder (`components/ChoiceField`, Quelle im Browser, ADR-0089); Projekt, Kunde und Leistung
   kommen aus den Gruppen über den Zeitraum (nicht aus den Nachschlagewegen der Schnellzeile:
   andere Rechte, ohne abgeschlossene Projekte), Zustand als Häkchen und Suche im Text. Sechs
