@@ -6166,18 +6166,34 @@ export type TimeBillingResult = {
   skipped: TimeSkippedEntry[]
 }
 
-/** The billing increment of a tenant (`BillingSettingsDto`). */
-export type TimeBillingSettings = {
+/** The settings of the time tracking of a tenant (`TimeTrackingSettingsDto`). */
+export type TimeTrackingSettings = {
   /** 1 for none, or 5, 6, 10, 15 or 30. */
   billingIncrementMinutes: number
-  /** Absent while it was never saved, like `changedBy`. */
+  /** Whether «Meine Zeiten» draws the day target. */
+  dayTargetShown: boolean
+  /** The day target, 60 to 720; kept while it is not shown. */
+  dayTargetMinutes: number
+  /** Absent while they were never saved, like `changedBy`. */
   changedAt?: string | null
   changedBy?: string | null
 }
 
-/** What changes the billing increment (`BillingSettingsRequest`). */
-export type TimeBillingSettingsRequest = {
+/**
+ * What changes the settings (`TimeTrackingSettingsRequest`): all three every time, the ones a
+ * panel does not change as it read them (#143).
+ */
+export type TimeTrackingSettingsRequest = {
   billingIncrementMinutes: number
+  dayTargetShown: boolean
+  dayTargetMinutes: number
+}
+
+/** The day target as the own week reads it (`DayTargetDto`, `GET /time-entries/mine/day-target`). */
+export type TimeDayTarget = {
+  shown: boolean
+  /** The target of a working day, 60 to 720. */
+  minutes: number
 }
 
 /** The entries to take off the invoice draft they stand on (`ReleaseRequest`). */

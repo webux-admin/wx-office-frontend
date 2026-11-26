@@ -1,5 +1,5 @@
 import { formatDuration } from '../../lib/duration'
-import { totalText } from '../../lib/timetracking'
+import { dayTargetShare, dayTargetText, drawsDayTarget, totalText } from '../../lib/timetracking'
 import { dayTitle, shortDayLabel } from '../../lib/week'
 
 /** Why a day after today cannot be chosen, in the words of its tooltip. */
@@ -21,8 +21,15 @@ const NOTHING_RECORDED = 'keine Zeit erfasst'
  * or a week without a minute reads «–» and tells a screen reader «keine Zeit erfasst»; a day after
  * today has no time anyway and keeps its reason (#142).
  *
+ * <p>With a day target, Monday to Friday up to today carry a thin bar under the total that fills
+ * with the time recorded, full at the target. It reminds, it does not judge: one colour, no figure,
+ * nothing over the target; tooltip and screen reader say «6:15 von 8:00 erfasst» (#143, backend
+ * ADR-0171, frontend ADR-0093).
+ *
  * @param totals the minutes per day as the backend sent them; empty while the week loads
  * @param weekTotal the minutes of the week, absent while it loads
+ * @param dayTarget the day target in minutes, only for the own week and where the tenant shows
+ *   it; absent, no day has a bar
  */
 export function WeekBar({
   days,
@@ -31,6 +38,7 @@ export function WeekBar({
   selected,
   today,
   onSelect,
+  dayTarget,
 }: {
   days: readonly string[]
   totals: ReadonlyMap<string, number>
@@ -38,6 +46,7 @@ export function WeekBar({
   selected: string
   today: string
   onSelect: (day: string) => void
+  dayTarget?: number
 }) {
   return (
     <nav
@@ -50,6 +59,10 @@ export function WeekBar({
           const chosen = day === selected
           const isToday = day === today
           const future = day > today
+          const target =
+            dayTarget !== undefined && minutes !== undefined && drawsDayTarget(day, today)
+              ? dayTarget
+              : undefined
           return (
             <li key={day}>
               {/* Not `disabled`: a disabled button shows no tooltip in every browser and cannot be
@@ -64,9 +77,17 @@ export function WeekBar({
                     ? `${dayTitle(day)}: ${FUTURE_DAY_REASON}`
                     : minutes === undefined
                       ? dayTitle(day)
-                      : `${dayTitle(day)}: ${minutes === 0 ? NOTHING_RECORDED : formatDuration(minutes)}`
+                      : target !== undefined
+                        ? `${dayTitle(day)}: ${dayTargetText(minutes, target)}`
+                        : `${dayTitle(day)}: ${minutes === 0 ? NOTHING_RECORDED : formatDuration(minutes)}`
                 }
-                title={future ? FUTURE_DAY_REASON : undefined}
+                title={
+                  future
+                    ? FUTURE_DAY_REASON
+                    : target !== undefined && minutes !== undefined
+                      ? dayTargetText(minutes, target)
+                      : undefined
+                }
                 onClick={() => {
                   if (!future) onSelect(day)
                 }}
@@ -88,6 +109,19 @@ export function WeekBar({
                 <span className="font-mono text-body tabular-nums text-text-primary">
                   {minutes === undefined ? '·' : totalText(minutes)}
                 </span>
+                {/* A day without a bar keeps the room of one, so every total stands at the same
+                    height. The bar says nothing a reader would miss: the label says it in words. */}
+                {dayTarget !== undefined && (
+                  <span aria-hidden className="mt-1 block h-1 overflow-hidden rounded-full bg-sunken">
+                    {target !== undefined && minutes !== undefined && (
+                      <span
+                        data-day-target
+                        className="block h-full rounded-full bg-accent"
+                        style={{ width: `${Math.round(dayTargetShare(minutes, target) * 100)}%` }}
+                      />
+                    )}
+                  </span>
+                )}
               </button>
             </li>
           )

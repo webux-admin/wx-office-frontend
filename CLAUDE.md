@@ -70,7 +70,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   Wochensumme, wie das Backend sie liefert; Tage nach heute sind nicht wählbar und sagen im Tooltip,
   warum — Samstag und Sonntag bis heute sind Tage wie alle anderen (#132). Ein Tag oder eine Woche
   ohne Zeit zeigt «–», nie «0:00», in Kachel, Wochensumme und Kopf der Tagesliste (`totalText`,
-  ADR-0092). Darunter die
+  ADR-0092). Hat der Mandant ein **Tagesziel** eingeschaltet, wächst in der eigenen Woche Montag bis
+  Freitag bis heute ein Balken unter der Summe — eine Farbe, keine Zahl, nie unter «Zeiten von …»;
+  gesetzt wird es in den Einstellungen der Zeiterfassung (ADR-0093, Backend ADR-0171). Darunter die
   **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
   ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
   Feld, auch aus dem Text: er ist ein kleiner Editor, der formatiert zeigt statt Zeichen (`RichTextField`

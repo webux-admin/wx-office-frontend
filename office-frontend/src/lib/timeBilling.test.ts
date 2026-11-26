@@ -705,11 +705,11 @@ describe('handing over', () => {
 
 describe('the increment and the release', () => {
   it('incrementSavedTextTest', () => {
-    expect(incrementSavedText({ billingIncrementMinutes: 15 })).toBe('Abrechnungstakt gespeichert: 15 Minuten.')
+    expect(incrementSavedText({ billingIncrementMinutes: 15, dayTargetShown: false, dayTargetMinutes: 480 })).toBe('Abrechnungstakt gespeichert: 15 Minuten.')
   })
 
   it('incrementSavedTextOfNoneTest', () => {
-    expect(incrementSavedText({ billingIncrementMinutes: 1 })).toBe('Abrechnungstakt gespeichert: kein Takt.')
+    expect(incrementSavedText({ billingIncrementMinutes: 1, dayTargetShown: false, dayTargetMinutes: 480 })).toBe('Abrechnungstakt gespeichert: kein Takt.')
   })
 
   it('releasedTextTest', () => {

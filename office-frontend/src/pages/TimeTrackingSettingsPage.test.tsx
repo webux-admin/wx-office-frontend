@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { TimeBillingSettings, TimeServiceChoice, TimeUserDefault } from '../lib/types'
+import type { TimeServiceChoice, TimeTrackingSettings, TimeUserDefault } from '../lib/types'
 import { TimeTrackingSettingsPage } from './TimeTrackingSettingsPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -67,8 +67,8 @@ let rows: TimeUserDefault[]
 let readFails: boolean
 /** What the next write answers instead of success, once. */
 let refusal: { status: number; body: unknown } | null
-/** The billing increment as the backend holds it. */
-let increment: TimeBillingSettings
+/** The settings as the backend holds them: increment and day target. */
+let increment: TimeTrackingSettings
 let incrementFails: boolean
 
 function json(body: unknown, status = 200) {
@@ -82,7 +82,13 @@ beforeEach(() => {
   rows = [ANNA, BEAT, CARLA]
   readFails = false
   refusal = null
-  increment = { billingIncrementMinutes: 15, changedAt: '2026-11-20T09:30:00Z', changedBy: 'admin' }
+  increment = {
+    billingIncrementMinutes: 15,
+    dayTargetShown: false,
+    dayTargetMinutes: 480,
+    changedAt: '2026-11-20T09:30:00Z',
+    changedBy: 'admin',
+  }
   incrementFails = false
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
@@ -97,7 +103,7 @@ beforeEach(() => {
         refusal = null
         return json(answer, status)
       }
-      increment = { billingIncrementMinutes: body.billingIncrementMinutes, changedAt: '2026-11-24T10:00:00Z', changedBy: 'anna' }
+      increment = { ...body, changedAt: '2026-11-24T10:00:00Z', changedBy: 'anna' }
       return json(increment)
     }
     if (method === 'PUT') {
@@ -357,6 +363,16 @@ describe('TimeTrackingSettingsPage', () => {
       (entry) => entry.textContent?.trim() === 'Speichern',
     )
 
+  /** The «Speichern» of the day target, in its own panel. */
+  const saveDayTarget = () => {
+    const panel = [...container.querySelectorAll('section')].find((entry) =>
+      entry.textContent?.includes('Stunden je Arbeitstag'),
+    )
+    return [...(panel?.querySelectorAll('button') ?? [])].find(
+      (entry) => entry.textContent?.trim() === 'Speichern',
+    )
+  }
+
   async function chooseIncrement(value: string) {
     await act(async () => {
       const select = incrementField()
@@ -391,7 +407,11 @@ describe('TimeTrackingSettingsPage', () => {
     await click(saveIncrement())
 
     expect(writes()).toEqual([
-      { method: 'PUT', url: SETTINGS_URL, body: { billingIncrementMinutes: 6 } },
+      {
+        method: 'PUT',
+        url: SETTINGS_URL,
+        body: { billingIncrementMinutes: 6, dayTargetShown: false, dayTargetMinutes: 480 },
+      },
     ])
     expect(incrementField().value).toBe('6')
     expect(text()).toContain('Abrechnungstakt gespeichert: 6 Minuten.')
@@ -405,14 +425,18 @@ describe('TimeTrackingSettingsPage', () => {
     await click(saveIncrement())
 
     expect(writes()).toEqual([
-      { method: 'PUT', url: SETTINGS_URL, body: { billingIncrementMinutes: 1 } },
+      {
+        method: 'PUT',
+        url: SETTINGS_URL,
+        body: { billingIncrementMinutes: 1, dayTargetShown: false, dayTargetMinutes: 480 },
+      },
     ])
     expect(text()).toContain('Abrechnungstakt gespeichert: kein Takt.')
   })
 
   /** An increment nobody saved yet is 1, and the page says no more about it. */
   it('timeTrackingSettingsPageWithAnIncrementNeverSavedTest', async () => {
-    increment = { billingIncrementMinutes: 1 }
+    increment = { billingIncrementMinutes: 1, dayTargetShown: false, dayTargetMinutes: 480 }
 
     await render()
 
@@ -435,6 +459,84 @@ describe('TimeTrackingSettingsPage', () => {
 
     expect(incrementField().getAttribute('aria-invalid')).toBe('true')
     expect(text()).toContain('Der Abrechnungstakt 7 gibt es nicht.')
+  })
+
+  /** The day target: off and 8:00 until set, and the sentence that it judges nobody. */
+  it('timeTrackingSettingsPageShowsTheDayTargetTest', async () => {
+    await render()
+
+    expect(control('Tagesziel in «Meine Zeiten» zeigen').checked).toBe(false)
+    expect(control('Stunden je Arbeitstag').value).toBe('8:00')
+    expect(text()).toContain('Kein Saldo, keine Überzeit, für andere nicht sichtbar.')
+    expect((saveDayTarget() as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  /** Switched on and set to 7.5 hours, saved with the increment as it was read. */
+  it('timeTrackingSettingsPageSavesTheDayTargetTest', async () => {
+    await render()
+
+    await click(control('Tagesziel in «Meine Zeiten» zeigen'))
+    await type(control('Stunden je Arbeitstag'), '7.5')
+    await click(saveDayTarget())
+
+    expect(writes()).toEqual([
+      {
+        method: 'PUT',
+        url: SETTINGS_URL,
+        body: { billingIncrementMinutes: 15, dayTargetShown: true, dayTargetMinutes: 450 },
+      },
+    ])
+    expect(control('Stunden je Arbeitstag').value).toBe('7:30')
+    expect(text()).toContain('Tagesziel gespeichert: 7:30, in «Meine Zeiten» gezeigt.')
+  })
+
+  /** Switched off, the target stays stored, so switching it on again needs no new entry. */
+  it('timeTrackingSettingsPageKeepsTheTargetWhenSwitchedOffTest', async () => {
+    increment = { ...increment, dayTargetShown: true, dayTargetMinutes: 450 }
+    await render()
+
+    await click(control('Tagesziel in «Meine Zeiten» zeigen'))
+    await click(saveDayTarget())
+
+    expect(writes()[0].body).toEqual({
+      billingIncrementMinutes: 15,
+      dayTargetShown: false,
+      dayTargetMinutes: 450,
+    })
+    expect(text()).toContain('Tagesziel ausgeschaltet; 7:30 bleibt hinterlegt.')
+  })
+
+  /** Whether it lies between 1:00 and 12:00 the server says, at the field. */
+  it('timeTrackingSettingsPageShowsARefusedDayTargetAtTheFieldTest', async () => {
+    await render()
+    refusal = {
+      status: 400,
+      body: {
+        detail: 'Das Tagesziel liegt zwischen 1:00 und 12:00.',
+        errors: [{ field: 'dayTargetMinutes', message: 'Das Tagesziel liegt zwischen 1:00 und 12:00.' }],
+      },
+    }
+
+    await type(control('Stunden je Arbeitstag'), '12:01')
+    await click(saveDayTarget())
+
+    expect(writes()[0].body).toMatchObject({ dayTargetMinutes: 721 })
+    expect(control('Stunden je Arbeitstag').getAttribute('aria-invalid')).toBe('true')
+    expect(text()).toContain('Das Tagesziel liegt zwischen 1:00 und 12:00.')
+  })
+
+  /** A range is no day target, and an empty field none either: nothing is sent. */
+  it('timeTrackingSettingsPageRefusesARangeAsDayTargetTest', async () => {
+    await render()
+
+    await type(control('Stunden je Arbeitstag'), '8-17')
+    await click(saveDayTarget())
+    expect(text()).toContain('Ein Tagesziel ist eine Dauer, kein Von–Bis.')
+
+    await type(control('Stunden je Arbeitstag'), '')
+    await click(saveDayTarget())
+    expect(text()).toContain('Das Tagesziel fehlt')
+    expect(writes()).toEqual([])
   })
 
   it('timeTrackingSettingsPageWhenTheIncrementCannotBeReadTest', async () => {

@@ -15,7 +15,7 @@ import type {
   TimeBillingRunPreviewLine,
   TimeBillingRunRequest,
   TimeBillingRunResult,
-  TimeBillingSettings,
+  TimeTrackingSettings,
   TimeEntry,
   TimeRateOrigin,
   TimeSkipReason,
@@ -622,7 +622,7 @@ export function billingHandoverOf(state: unknown): BillingHandover {
  * @param settings the increment as the backend stored it
  * @returns «Abrechnungstakt gespeichert: 15 Minuten.», «Abrechnungstakt gespeichert: kein Takt.»
  */
-export function incrementSavedText(settings: TimeBillingSettings): string {
+export function incrementSavedText(settings: TimeTrackingSettings): string {
   return `Abrechnungstakt gespeichert: ${billingIncrementLabel(settings.billingIncrementMinutes)}.`
 }
 

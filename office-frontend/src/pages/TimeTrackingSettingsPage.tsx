@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
+import { CheckboxField } from '../components/CheckboxField'
 import { DataTable, type Column } from '../components/DataTable'
 import { Dialog } from '../components/Dialog'
 import { DialogCancelButton } from '../components/DialogCancelButton'
@@ -10,9 +11,11 @@ import { EmptyState, ErrorNotice, LoadingBlock } from '../components/Notice'
 import { PageHeader } from '../components/PageHeader'
 import { Panel } from '../components/Panel'
 import { SelectField } from '../components/SelectField'
+import { TextField } from '../components/TextField'
 import { RequireTenant } from '../layout/RequireTenant'
 import { api } from '../lib/api'
 import { fieldErrorsOf, isToldByFields } from '../lib/fieldErrors'
+import { formatDurationShort } from '../lib/duration'
 import { formatDateTime } from '../lib/format'
 import {
   BILLING_INCREMENTS,
@@ -25,29 +28,33 @@ import {
 import {
   TIMETRACKING_MODULE,
   TIMETRACKING_RIGHTS,
+  dayTargetKey,
+  dayTargetSavedText,
+  readDayTarget,
   userDefaultState,
   userDefaultUrl,
   userDefaultsKey,
   userDefaultsUrl,
 } from '../lib/timetracking'
 import type {
-  TimeBillingSettings,
-  TimeBillingSettingsRequest,
   TimeServiceChoice,
+  TimeTrackingSettings,
+  TimeTrackingSettingsRequest,
   TimeUserDefault,
   TimeUserDefaultRequest,
 } from '../lib/types'
 import { ServiceLookup } from '../timetracking/AssignmentFields'
 
 /**
- * «Zeiterfassung» under the module settings: the billing increment and the default service of
- * every user.
+ * «Zeiterfassung» under the module settings: the billing increment, the day target and the
+ * default service of every user.
  *
  * <p>The increment rounds up each entry on the invoice only; the entry keeps the time as
  * measured (#122, Entscheid 10, backend ADR-0163). The default service is what the quick line
  * suggests on a project or customer where the user has taken nothing yet. «Beratung Senior» for
  * one person and «Beratung Junior» for another gives each their own rate through the price of the
- * service, without a third place for prices (backend ADR-0162).
+ * service, without a third place for prices (backend ADR-0162). The day target is a bar in the own
+ * week, off unless switched on, and a reminder, never a required working time (backend ADR-0171).
  *
  * <p>With `TIME_WRITE`: the table names every user of the tenant, and keeping the defaults and the
  * increment is part of keeping the times of others.
@@ -59,10 +66,11 @@ export function TimeTrackingSettingsPage() {
         <>
           <PageHeader
             title="Zeiterfassung"
-            subtitle="Was für die Zeiten aller Benutzer gilt: wie sie verrechnet werden und welche Leistung «Meine Zeiten» vorschlägt."
+            subtitle="Was für die Zeiten aller Benutzer gilt: wie sie verrechnet werden, ob «Meine Zeiten» ein Tagesziel zeigt und welche Leistung es vorschlägt."
           />
           <div className="grid gap-4 px-8 pb-12">
             <BillingIncrement tenantId={tenantId} />
+            <DayTargetSetting tenantId={tenantId} />
             <UserDefaults tenantId={tenantId} />
           </div>
         </>
@@ -81,7 +89,7 @@ function BillingIncrement({ tenantId }: { tenantId: number }) {
   const queryClient = useQueryClient()
   const settings = useQuery({
     queryKey: timeTrackingSettingsKey(tenantId),
-    queryFn: () => api.get<TimeBillingSettings>(timeTrackingSettingsUrl(tenantId)),
+    queryFn: () => api.get<TimeTrackingSettings>(timeTrackingSettingsUrl(tenantId)),
   })
   const stored = settings.data?.billingIncrementMinutes
   const [chosen, setChosen] = useState<number | null>(null)
@@ -94,8 +102,8 @@ function BillingIncrement({ tenantId }: { tenantId: number }) {
   const value = chosen ?? stored
 
   const save = useMutation({
-    mutationFn: (body: TimeBillingSettingsRequest) =>
-      api.put<TimeBillingSettings>(timeTrackingSettingsUrl(tenantId), body),
+    mutationFn: (body: TimeTrackingSettingsRequest) =>
+      api.put<TimeTrackingSettings>(timeTrackingSettingsUrl(tenantId), body),
     onSuccess: (saved) => {
       queryClient.setQueryData(timeTrackingSettingsKey(tenantId), saved)
       // The worklist and every preview count the rounded minutes anew.
@@ -143,7 +151,14 @@ function BillingIncrement({ tenantId }: { tenantId: number }) {
             <Button
               variant="secondary"
               onClick={() => {
-                if (value !== undefined) save.mutate({ billingIncrementMinutes: value })
+                // The day target goes along as it was read: one row, one way to write it.
+                if (value !== undefined) {
+                  save.mutate({
+                    billingIncrementMinutes: value,
+                    dayTargetShown: settings.data.dayTargetShown,
+                    dayTargetMinutes: settings.data.dayTargetMinutes,
+                  })
+                }
               }}
               busy={save.isPending}
               disabled={!changed}
@@ -167,6 +182,119 @@ function BillingIncrement({ tenantId }: { tenantId: number }) {
           </p>
         </div>
       )}
+    </Panel>
+  )
+}
+
+/**
+ * The day target: whether «Meine Zeiten» draws it, and how long a working day is, 1:00 to 12:00.
+ * Saved with the increment as it was read. Switched off, the target stays stored, so switching it
+ * on again needs no new entry. Whether it lies in range the server says, at the field.
+ */
+function DayTargetSetting({ tenantId }: { tenantId: number }) {
+  const queryClient = useQueryClient()
+  const settings = useQuery({
+    queryKey: timeTrackingSettingsKey(tenantId),
+    queryFn: () => api.get<TimeTrackingSettings>(timeTrackingSettingsUrl(tenantId)),
+  })
+  const stored = settings.data
+  const [draft, setDraft] = useState<{ shown: boolean; target: string } | null>(null)
+  const [readFrom, setReadFrom] = useState(stored)
+  if (stored !== readFrom) {
+    setReadFrom(stored)
+    setDraft(null)
+  }
+  const [problem, setProblem] = useState<string | undefined>(undefined)
+  const [status, setStatus] = useState<string | null>(null)
+
+  const save = useMutation({
+    mutationFn: (body: TimeTrackingSettingsRequest) =>
+      api.put<TimeTrackingSettings>(timeTrackingSettingsUrl(tenantId), body),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(timeTrackingSettingsKey(tenantId), saved)
+      // «Meine Zeiten» draws the bar anew.
+      void queryClient.invalidateQueries({ queryKey: dayTargetKey(tenantId) })
+      setStatus(dayTargetSavedText(saved))
+    },
+    onError: () =>
+      void queryClient.invalidateQueries({ queryKey: timeTrackingSettingsKey(tenantId) }),
+  })
+
+  if (settings.isPending) return <Panel title="Tagesziel"><LoadingBlock label="Tagesziel wird geladen" /></Panel>
+  if (settings.isError || stored === undefined) {
+    return (
+      <Panel title="Tagesziel">
+        <ErrorNotice error={settings.error} />
+      </Panel>
+    )
+  }
+
+  const shown = draft?.shown ?? stored.dayTargetShown
+  const target = draft?.target ?? formatDurationShort(stored.dayTargetMinutes)
+  const changed = draft !== null
+  const fieldErrors = fieldErrorsOf(save.error)
+  const edit = (next: { shown: boolean; target: string }) => {
+    save.reset()
+    setProblem(undefined)
+    setStatus(null)
+    setDraft(next)
+  }
+
+  return (
+    <Panel
+      title="Tagesziel"
+      description="Eine Erinnerung in der eigenen Woche. Kein Saldo, keine Überzeit, für andere nicht sichtbar."
+    >
+      <div className="grid gap-3">
+        {save.error !== null && !isToldByFields(save.error, ['dayTargetMinutes', 'dayTargetShown']) && (
+          <ErrorNotice error={save.error} />
+        )}
+        <CheckboxField
+          label="Tagesziel in «Meine Zeiten» zeigen"
+          checked={shown}
+          onChange={(event) => edit({ shown: event.target.checked, target })}
+          tooltip="Montag bis Freitag, bis und mit heute, wächst unter der Tagessumme ein Balken mit der erfassten Zeit. Er bewertet nichts und zählt keine Überzeit."
+        />
+        <div className="flex flex-wrap items-end gap-3">
+          <TextField
+            label="Stunden je Arbeitstag"
+            value={target}
+            onChange={(event) => edit({ shown, target: event.target.value })}
+            placeholder="8:00"
+            autoComplete="off"
+            error={problem ?? fieldErrors.dayTargetMinutes ?? fieldErrors.dayTargetShown}
+            tooltip="Eine Dauer wie im Feld «Dauer», 1:00 bis 12:00. Ausgeschaltet bleibt sie hinterlegt."
+            className="sm:w-column-xl"
+          />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const read = readDayTarget(target)
+              if ('message' in read) {
+                setProblem(read.message)
+                return
+              }
+              save.mutate({
+                billingIncrementMinutes: stored.billingIncrementMinutes,
+                dayTargetShown: shown,
+                dayTargetMinutes: read.minutes,
+              })
+            }}
+            busy={save.isPending}
+            disabled={!changed}
+          >
+            Speichern
+          </Button>
+        </div>
+        <p role="status" aria-live="polite" className="text-small text-text-secondary">
+          {status !== null && (
+            <span className="inline-flex items-center gap-1.5">
+              <Check size={13} className="text-accent-text" aria-hidden />
+              {status}
+            </span>
+          )}
+        </p>
+      </div>
     </Panel>
   )
 }

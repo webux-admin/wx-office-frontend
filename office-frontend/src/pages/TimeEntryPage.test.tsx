@@ -11,6 +11,7 @@ import type {
   RunningTimer,
   TimeBillableDefault,
   TimeColleague,
+  TimeDayTarget,
   TimeEntry,
   TimeRecentTarget,
   TimeServiceChoice,
@@ -236,6 +237,8 @@ let sheetFails: boolean
 let websiteMode: BillingMode
 /** Entries on invoices a test adds to Wednesday. */
 let billedEntries: TimeEntry[]
+/** The day target of the tenant, as `/mine/day-target` answers. */
+let dayTarget: TimeDayTarget
 
 /** The answer of `lookups/default-billable` for the project «Website». */
 function websiteDefault(): TimeBillableDefault {
@@ -271,6 +274,7 @@ function stubFetch() {
   sheetFails = false
   websiteMode = 'BY_EFFORT'
   billedEntries = []
+  dayTarget = { shown: false, minutes: 480 }
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
@@ -311,6 +315,7 @@ function stubFetch() {
       )
     }
     if (url.startsWith(`${BASE}/mine/recent`)) return json(RECENT)
+    if (url.startsWith(`${BASE}/mine/day-target`)) return json(dayTarget)
     if (url.startsWith(`${BASE}/mine/default-service`)) {
       return query.get('projectId') === '12'
         ? json(CONCEPT)
@@ -433,6 +438,12 @@ function button(label: string): HTMLButtonElement {
   return last
 }
 
+/** How wide the bar of the day target of a day is, `null` where the day draws none. */
+function bar(title: string): string | null {
+  const drawn = day(title).querySelector<HTMLElement>('[data-day-target]')
+  return drawn === null ? null : drawn.style.width
+}
+
 function day(title: string): HTMLButtonElement {
   const found = [...container.querySelectorAll('nav[aria-label="Tage der Woche"] button')].find(
     (entry) => entry.getAttribute('aria-label')?.startsWith(title),
@@ -550,6 +561,63 @@ describe('TimeEntryPage', () => {
     expect(day('Samstag').textContent).toBe('Sa 21.–')
     expect(container.querySelector('nav[aria-label="Tage der Woche"]')?.textContent).toContain('Woche–')
     expect(text()).not.toContain('0:00')
+  })
+
+  /** With a day target, Monday to Friday up to today carry a bar that fills with the time (#143). */
+  it('timeEntryPageDrawsTheDayTargetTest', async () => {
+    dayTarget = { shown: true, minutes: 500 }
+    await render()
+
+    expect(bar('Mittwoch')).toBe('78%')
+    expect(day('Mittwoch').getAttribute('aria-label')).toBe('Mittwoch, 25. November: 6:30 von 8:20 erfasst')
+    expect(day('Mittwoch').title).toBe('6:30 von 8:20 erfasst')
+    expect(bar('Montag')).toBe('93%')
+    expect(requests.some((request) => request.url === `${BASE}/mine/day-target`)).toBe(true)
+  })
+
+  /** Above the target the bar is full and says nothing more: no «+0:10», no figure (#143). */
+  it('timeEntryPageDrawsAFullBarAboveTheTargetTest', async () => {
+    dayTarget = { shown: true, minutes: 480 }
+    await render()
+
+    expect(bar('Dienstag')).toBe('100%')
+    expect(day('Dienstag').getAttribute('aria-label')).toBe('Dienstag, 24. November: 8:10 von 8:00 erfasst')
+    expect(day('Dienstag').title).not.toContain('+')
+    expect(day('Dienstag').textContent).toBe('Di 24.8:10')
+  })
+
+  /** A Saturday and a day after today draw no bar, and neither does a target switched off. */
+  it('timeEntryPageDrawsNoBarOnWeekendsAndAheadTest', async () => {
+    dayTarget = { shown: true, minutes: 480 }
+    await render()
+
+    expect(bar('Donnerstag')).toBeNull()
+    expect(bar('Samstag')).toBeNull()
+    expect(day('Donnerstag').getAttribute('aria-label')).toContain('Liegt in der Zukunft')
+  })
+
+  /** A target switched off draws no bar at all; the days read as before (#143). */
+  it('timeEntryPageDrawsNoBarWhileTheTargetIsOffTest', async () => {
+    await render()
+
+    expect(container.querySelector('[data-day-target]')).toBeNull()
+    expect(day('Mittwoch').getAttribute('aria-label')).toBe('Mittwoch, 25. November: 6 Std. 30 Min.')
+  })
+
+  /** «Zeiten von …» shows no bar: a reminder for oneself never measures somebody else (#143). */
+  it('timeEntryPageDrawsNoBarForAColleagueTest', async () => {
+    dayTarget = { shown: true, minutes: 480 }
+    await render(['TIME_TRACK', 'TIME_READ'])
+    expect(container.querySelector('[data-day-target]')).not.toBeNull()
+
+    const owner = control('Zeiten von', container)
+    await act(async () => {
+      owner.value = '42'
+      owner.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+
+    expect(container.querySelector('[data-day-target]')).toBeNull()
   })
 
   /** A day after today keeps its reason, not «keine Zeit erfasst» (#132). */

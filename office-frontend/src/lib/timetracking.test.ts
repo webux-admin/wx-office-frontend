@@ -51,6 +51,12 @@ import {
   userDefaultsKey,
   userDefaultsUrl,
   continueEntryUrl,
+  dayTargetKey,
+  dayTargetSavedText,
+  dayTargetShare,
+  dayTargetText,
+  dayTargetUrl,
+  drawsDayTarget,
   defaultServiceKey,
   defaultServiceUrl,
   durationFieldOf,
@@ -75,6 +81,7 @@ import {
   nextEntryForm,
   timerSweepDelay,
   recentTargetLabel,
+  readDayTarget,
   recentTargetsKey,
   recentTargetsUrl,
   sameTarget,
@@ -699,6 +706,78 @@ describe('words', () => {
   /** A week runs past 24 hours, never cut at a day. */
   it('totalTextOfAWeekTest', () => {
     expect(totalText(2550)).toBe('42:30')
+  })
+})
+
+describe('the day target', () => {
+  it('dayTargetUrlTest', () => {
+    expect(dayTargetUrl(4)).toBe('/api/tenants/4/time-entries/mine/day-target')
+    expect(dayTargetKey(4)).toEqual(['time-day-target', 4])
+  })
+
+  /** Monday to Friday, up to and with today; today is Wednesday 25 November 2026. */
+  it('drawsDayTargetTest', () => {
+    expect(drawsDayTarget('2026-11-24', '2026-11-25')).toBe(true)
+    expect(drawsDayTarget('2026-11-25', '2026-11-25')).toBe(true)
+  })
+
+  it('drawsDayTargetOnAWeekendOrAheadTest', () => {
+    expect(drawsDayTarget('2026-11-21', '2026-11-25')).toBe(false)
+    expect(drawsDayTarget('2026-11-22', '2026-11-25')).toBe(false)
+    expect(drawsDayTarget('2026-11-26', '2026-11-25')).toBe(false)
+  })
+
+  /** 6:15 of 8:00 fills the bar to 78 %. */
+  it('dayTargetShareTest', () => {
+    expect(Math.round(dayTargetShare(375, 480) * 100)).toBe(78)
+  })
+
+  /** Nothing is an empty bar, the target and more a full one, never fuller. */
+  it('dayTargetShareAtTheEdgesTest', () => {
+    expect(dayTargetShare(0, 480)).toBe(0)
+    expect(dayTargetShare(480, 480)).toBe(1)
+    expect(dayTargetShare(540, 480)).toBe(1)
+    expect(dayTargetShare(60, 0)).toBe(0)
+  })
+
+  it('dayTargetTextTest', () => {
+    expect(dayTargetText(375, 480)).toBe('6:15 von 8:00 erfasst')
+  })
+
+  /** Above the target no «+1:00», and no time as «keine Zeit». */
+  it('dayTargetTextAtTheEdgesTest', () => {
+    expect(dayTargetText(540, 480)).toBe('9:00 von 8:00 erfasst')
+    expect(dayTargetText(0, 480)).toBe('keine Zeit von 8:00 erfasst')
+  })
+
+  /** Read like the duration field: «8:00», «7.5», «8h». */
+  it('readDayTargetTest', () => {
+    expect(readDayTarget('8:00')).toEqual({ minutes: 480 })
+    expect(readDayTarget('7.5')).toEqual({ minutes: 450 })
+    expect(readDayTarget('8h')).toEqual({ minutes: 480 })
+  })
+
+  /** A range, an empty field and words are refused; the range is the server's job no more. */
+  it('readDayTargetRefusedTest', () => {
+    expect(readDayTarget('8-17')).toEqual({
+      message: 'Ein Tagesziel ist eine Dauer, kein Von–Bis. Zum Beispiel 8:00.',
+    })
+    expect(readDayTarget('  ')).toEqual({ message: 'Das Tagesziel fehlt, zum Beispiel 8:00.' })
+    expect('message' in readDayTarget('acht')).toBe(true)
+  })
+
+  /** 12:01 is read; that it lies above twelve hours the server says at the field. */
+  it('readDayTargetAboveTwelveHoursTest', () => {
+    expect(readDayTarget('12:01')).toEqual({ minutes: 721 })
+  })
+
+  it('dayTargetSavedTextTest', () => {
+    expect(
+      dayTargetSavedText({ billingIncrementMinutes: 15, dayTargetShown: true, dayTargetMinutes: 450 }),
+    ).toBe('Tagesziel gespeichert: 7:30, in «Meine Zeiten» gezeigt.')
+    expect(
+      dayTargetSavedText({ billingIncrementMinutes: 15, dayTargetShown: false, dayTargetMinutes: 480 }),
+    ).toBe('Tagesziel ausgeschaltet; 8:00 bleibt hinterlegt.')
   })
 })
 

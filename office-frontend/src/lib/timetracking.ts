@@ -4,7 +4,7 @@ import { formatDuration, formatDurationShort, readDuration, type Duration } from
 import { fieldErrorsOf, isToldByFields, type FieldErrors } from './fieldErrors'
 import { formatCount, formatDateTime, isCompleteIsoDate, parseDecimal, toIsoDate } from './format'
 import { PAGE_SIZE, listQuery } from './paging'
-import { addDays, dayTitle, mondayOf } from './week'
+import { addDays, dayTitle, isWeekend, mondayOf } from './week'
 import type {
   BillingMode,
   Project,
@@ -20,6 +20,7 @@ import type {
   TimeServiceChoice,
   TimeSummary,
   TimeTargetChoice,
+  TimeTrackingSettings,
   TimeUserDefault,
   TimerChangeRequest,
   TimerRequest,
@@ -462,6 +463,84 @@ export function timeRangeText(entry: TimeEntry): string {
 export function durationFieldOf(entry: TimeEntry): string {
   if (entry.startTime && entry.endTime) return `${entry.startTime}-${endOfRange(entry.endTime)}`
   return formatDurationShort(entry.durationMinutes)
+}
+
+/** Where the own week reads the day target (`TIME_TRACK`); «Zeiten von …» never asks (#143). */
+export function dayTargetUrl(tenantId: number): string {
+  return `${timeEntriesUrl(tenantId)}/mine/day-target`
+}
+
+/** The cache key of the day target, one per tenant. */
+export function dayTargetKey(tenantId: number): readonly unknown[] {
+  return ['time-day-target', tenantId]
+}
+
+/**
+ * Whether a day of the week bar draws the day target: Monday to Friday, up to and with today. A
+ * Saturday, a Sunday and a day after today never do; holidays the application does not know
+ * (#143, backend ADR-0171).
+ *
+ * @param day the day, `yyyy-MM-dd`
+ * @param today today, `yyyy-MM-dd`
+ */
+export function drawsDayTarget(day: string, today: string): boolean {
+  return !isWeekend(day) && day <= today
+}
+
+/**
+ * How full the bar of a day is: its share of the target, full at the target and never more. Only
+ * the width of the bar says it; no figure does.
+ *
+ * @param minutes the time recorded on the day
+ * @param target the day target, 60 or more
+ * @returns 0 to 1
+ */
+export function dayTargetShare(minutes: number, target: number): number {
+  if (target <= 0 || minutes <= 0) return 0
+  return Math.min(minutes / target, 1)
+}
+
+/**
+ * What the tooltip and a screen reader say of a day with a bar. Above the target it says the
+ * same, without «+1:00»: a reminder counts no overtime.
+ *
+ * @param minutes the time recorded on the day
+ * @param target the day target
+ * @returns «6:15 von 8:00 erfasst», «9:00 von 8:00 erfasst», «keine Zeit von 8:00 erfasst»
+ */
+export function dayTargetText(minutes: number, target: number): string {
+  const recorded = minutes === 0 ? 'keine Zeit' : formatDurationShort(minutes)
+  return `${recorded} von ${formatDurationShort(target)} erfasst`
+}
+
+/**
+ * Reads the day target as typed in the settings, the way the duration field reads a duration;
+ * a range is refused. Whether it lies between 1:00 and 12:00 the server says, at the field.
+ *
+ * @param input what the field holds, such as «8:00», «7.5» or «8h»
+ * @returns the minutes, or the sentence for the field
+ */
+export function readDayTarget(input: string): { minutes: number } | { message: string } {
+  const reading = readDuration(input)
+  if (reading.state === 'empty') return { message: 'Das Tagesziel fehlt, zum Beispiel 8:00.' }
+  if (reading.state === 'refused') return { message: reading.message }
+  if (reading.duration.startTime !== undefined) {
+    return { message: 'Ein Tagesziel ist eine Dauer, kein Von–Bis. Zum Beispiel 8:00.' }
+  }
+  return { minutes: reading.duration.minutes }
+}
+
+/**
+ * The line after the day target was saved.
+ *
+ * @param settings the settings as the backend stored them
+ * @returns «Tagesziel gespeichert: 8:00, in «Meine Zeiten» gezeigt.» or that it is off
+ */
+export function dayTargetSavedText(settings: TimeTrackingSettings): string {
+  const target = formatDurationShort(settings.dayTargetMinutes)
+  return settings.dayTargetShown
+    ? `Tagesziel gespeichert: ${target}, in «Meine Zeiten» gezeigt.`
+    : `Tagesziel ausgeschaltet; ${target} bleibt hinterlegt.`
 }
 
 /**

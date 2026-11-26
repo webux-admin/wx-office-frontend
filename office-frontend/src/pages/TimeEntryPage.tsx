@@ -28,6 +28,8 @@ import {
   colleaguesKey,
   colleaguesUrl,
   continueEntryUrl,
+  dayTargetKey,
+  dayTargetUrl,
   defaultServiceKey,
   emptyTimeEntryForm,
   entryTargetText,
@@ -62,6 +64,7 @@ import {
 } from '../lib/timetracking'
 import type {
   TimeColleague,
+  TimeDayTarget,
   TimeEntry,
   TimeEntryRequest,
   TimeRecentTarget,
@@ -128,6 +131,14 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
   const sheet = useQuery({
     queryKey: timeSheetKey(tenantId, owner, monday, sunday),
     queryFn: () => api.get<TimeSheet>(timeSheetUrl(tenantId, owner, monday, sunday)),
+  })
+
+  // Only the own week draws the day target; «Zeiten von …» never asks for it (#143). While it
+  // loads or fails there is no bar, and the week works as ever.
+  const dayTarget = useQuery({
+    queryKey: dayTargetKey(tenantId),
+    queryFn: () => api.get<TimeDayTarget>(dayTargetUrl(tenantId)),
+    enabled: owner === 'mine',
   })
   // The chips and the suggested service are the signed in user's; the backend has them under
   // /mine only, so the week of a colleague goes without them.
@@ -429,6 +440,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
           selected={day}
           today={today}
           onSelect={chooseDay}
+          dayTarget={owner === 'mine' && dayTarget.data?.shown ? dayTarget.data.minutes : undefined}
         />
 
         {mayWrite ? (
