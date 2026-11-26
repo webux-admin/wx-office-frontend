@@ -1,9 +1,12 @@
-import { formatDuration, formatDurationShort } from '../../lib/duration'
-import { dayTotalText } from '../../lib/timetracking'
+import { formatDuration } from '../../lib/duration'
+import { totalText } from '../../lib/timetracking'
 import { dayTitle, shortDayLabel } from '../../lib/week'
 
 /** Why a day after today cannot be chosen, in the words of its tooltip. */
 export const FUTURE_DAY_REASON = 'Liegt in der Zukunft. Zeit wird erfasst, wenn sie geleistet ist.'
+
+/** What a screen reader hears for a day up to today that shows «–». */
+const NOTHING_RECORDED = 'keine Zeit erfasst'
 
 /**
  * The seven days of a week with what was recorded on each, and the week total.
@@ -14,7 +17,9 @@ export const FUTURE_DAY_REASON = 'Liegt in der Zukunft. Zeit wird erfasst, wenn 
  * stays reachable with the tab key to be read: a Saturday that only looks dimmed reads as a
  * weekend that cannot be recorded (#132). Every day up to today, weekend or not, is chosen alike.
  *
- * <p>The figures are the backend's, day by day and for the week; nothing is added up here.
+ * <p>The figures are the backend's, day by day and for the week; nothing is added up here. A day
+ * or a week without a minute reads «–» and tells a screen reader «keine Zeit erfasst»; a day after
+ * today has no time anyway and keeps its reason (#142).
  *
  * @param totals the minutes per day as the backend sent them; empty while the week loads
  * @param weekTotal the minutes of the week, absent while it loads
@@ -59,7 +64,7 @@ export function WeekBar({
                     ? `${dayTitle(day)}: ${FUTURE_DAY_REASON}`
                     : minutes === undefined
                       ? dayTitle(day)
-                      : `${dayTitle(day)}: ${formatDuration(minutes)}`
+                      : `${dayTitle(day)}: ${minutes === 0 ? NOTHING_RECORDED : formatDuration(minutes)}`
                 }
                 title={future ? FUTURE_DAY_REASON : undefined}
                 onClick={() => {
@@ -81,7 +86,7 @@ export function WeekBar({
                   {shortDayLabel(day)}
                 </span>
                 <span className="font-mono text-body tabular-nums text-text-primary">
-                  {minutes === undefined ? '·' : dayTotalText(day, minutes)}
+                  {minutes === undefined ? '·' : totalText(minutes)}
                 </span>
               </button>
             </li>
@@ -90,7 +95,7 @@ export function WeekBar({
         <li className="col-span-7 flex items-baseline justify-between gap-2 border-t border-line-subtle px-1 pt-2 sm:col-span-1 sm:grid sm:content-center sm:justify-start sm:gap-0.5 sm:border-l sm:border-t-0 sm:px-3 sm:pt-0">
           <span className="text-small text-text-secondary">Woche</span>
           <span className="font-mono text-body font-semibold tabular-nums">
-            {weekTotal === undefined ? '·' : formatDurationShort(weekTotal)}
+            {weekTotal === undefined ? '·' : totalText(weekTotal)}
           </span>
         </li>
       </ul>

@@ -28,7 +28,6 @@ import {
   colleaguesKey,
   colleaguesUrl,
   continueEntryUrl,
-  dayTotalText,
   defaultServiceKey,
   emptyTimeEntryForm,
   entryTargetText,
@@ -53,6 +52,7 @@ import {
   timerKey,
   toTimeEntryForm,
   toTimeEntryRequest,
+  totalText,
   weekStep,
   withRecentTarget,
   withSuggestedService,
@@ -492,7 +492,7 @@ function TimeSheetScreen({ tenantId }: { tenantId: number }) {
           clipped={false}
           action={
             <span className="font-mono text-control font-semibold tabular-nums">
-              {sheet.data === undefined ? '' : dayTotalText(day, totals.get(day) ?? 0)}
+              {sheet.data === undefined ? '' : totalText(totals.get(day) ?? 0)}
             </span>
           }
         >

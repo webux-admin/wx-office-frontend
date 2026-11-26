@@ -1,6 +1,6 @@
 # ADR-0082 — Schnellzeile und Wochenleiste für Zeiten
 
-- **Status:** Angenommen; Punkt 5 teilweise abgelöst durch ADR-0087 (Punkt im Zeitbereich, kein Hinweis unter der Dauer); «Auf heute kopieren» in Punkt 10 abgelöst durch «Kopieren» unter das Original (Backend ADR-0167)
+- **Status:** Angenommen; Punkt 5 teilweise abgelöst durch ADR-0087 (Punkt im Zeitbereich, kein Hinweis unter der Dauer); «Auf heute kopieren» in Punkt 10 abgelöst durch «Kopieren» unter das Original (Backend ADR-0167); in Punkt 2 «0:00» für einen leeren Werktag abgelöst durch ADR-0092 («–» für jeden Tag ohne Zeit)
 - **Datum:** 2026-11-24
 - **Verhältnis:** Neu. Setzt Backend ADR-0160 (Issue webux-admin/wx-office#124, «Zeiterfassung
   (2/6)») um und folgt den Fehlern am Feld (ADR-0050), den Rückfragen bei ungespeicherten

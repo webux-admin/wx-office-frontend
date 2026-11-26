@@ -133,9 +133,16 @@ const INVOICED = entry({
   documentNumber: 'RE-2026-0042',
 })
 
-/** The week of the sketch in #124: Monday to Wednesday worked, 22:25 in all. */
-function week(entries: TimeEntry[], userId = 1, userName = 'Anna Muster'): TimeSheet {
-  const days = ['23', '24', '25', '26', '27', '28', '29'].map((day) => `2026-11-${day}`)
+/**
+ * The week of the sketch in #124: Monday to Wednesday worked, 22:25 in all. Another week starts at
+ * its own Monday, every day of it sent as the backend sends it, with 0 where nothing was recorded.
+ */
+function week(entries: TimeEntry[], userId = 1, userName = 'Anna Muster', monday = '2026-11-23'): TimeSheet {
+  const days = [0, 1, 2, 3, 4, 5, 6].map((offset) => {
+    const date = new Date(`${monday}T00:00:00Z`)
+    date.setUTCDate(date.getUTCDate() + offset)
+    return date.toISOString().slice(0, 10)
+  })
   const totals = days.map((date) => ({
     date,
     totalMinutes: entries
@@ -297,7 +304,8 @@ function stubFetch() {
     }
     if (url.startsWith(`${BASE}/mine?`) || url.startsWith(`${BASE}/sheet?`)) {
       if (sheetFails) return json({ detail: 'Das Backend meldet einen Fehler.' }, 500)
-      if (query.get('from') !== '2026-11-23') return json(week([]))
+      const monday = query.get('from') ?? '2026-11-23'
+      if (monday !== '2026-11-23') return json(week([], 1, 'Anna Muster', monday))
       return url.includes('/sheet?') ? json(week([TICKET], 42, 'Beat Keller')) : json(
         week([ARCHIVED, TUESDAY, WIREFRAMES, TICKET, TRAINING, ...billedEntries]),
       )
@@ -459,7 +467,7 @@ describe('TimeEntryPage', () => {
     expect(day('Montag').textContent).toBe('Mo 23.7:45')
     expect(day('Mittwoch').getAttribute('aria-label')).toBe('Mittwoch, 25. November: 6 Std. 30 Min.')
     expect(day('Mittwoch').getAttribute('aria-pressed')).toBe('true')
-    expect(day('Donnerstag').textContent).toBe('Do 26.0:00')
+    expect(day('Donnerstag').textContent).toBe('Do 26.–')
     expect(day('Samstag').textContent).toBe('Sa 28.–')
     expect(container.querySelector('nav[aria-label="Tage der Woche"]')?.textContent).toContain(
       'Woche22:25',
@@ -529,6 +537,28 @@ describe('TimeEntryPage', () => {
 
     await click(button('Heute'))
     expect(text()).toContain('KW 48 · 23.–29. Nov. 2026')
+  })
+
+  /** A day and a week without time read «–», a weekday like a weekend, and say so (#142). */
+  it('timeEntryPageShowsNoTimeAsADashTest', async () => {
+    await render()
+
+    await click(button('Vorherige Woche'))
+
+    expect(day('Dienstag').textContent).toBe('Di 17.–')
+    expect(day('Dienstag').getAttribute('aria-label')).toBe('Dienstag, 17. November: keine Zeit erfasst')
+    expect(day('Samstag').textContent).toBe('Sa 21.–')
+    expect(container.querySelector('nav[aria-label="Tage der Woche"]')?.textContent).toContain('Woche–')
+    expect(text()).not.toContain('0:00')
+  })
+
+  /** A day after today keeps its reason, not «keine Zeit erfasst» (#132). */
+  it('timeEntryPageKeepsTheReasonOfAFutureDayTest', async () => {
+    await render()
+
+    expect(day('Donnerstag').getAttribute('aria-label')).toBe(
+      'Donnerstag, 26. November: Liegt in der Zukunft. Zeit wird erfasst, wenn sie geleistet ist.',
+    )
   })
 
   it('timeEntryPageChoosesADayTest', async () => {

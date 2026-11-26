@@ -68,7 +68,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
 - **timetracking** — «Meine Zeiten» unter `/zeiten`, hinter dem Modulschalter `TIMETRACKING` und
   `TIME_TRACK`, im Menü im Ordner «Zeiten» nach «Projekte». Eine Wochenleiste nach ISO-Woche mit Tages- und
   Wochensumme, wie das Backend sie liefert; Tage nach heute sind nicht wählbar und sagen im Tooltip,
-  warum — Samstag und Sonntag bis heute sind Tage wie alle anderen (#132). Darunter die
+  warum — Samstag und Sonntag bis heute sind Tage wie alle anderen (#132). Ein Tag oder eine Woche
+  ohne Zeit zeigt «–», nie «0:00», in Kachel, Wochensumme und Kopf der Tagesliste (`totalText`,
+  ADR-0092). Darunter die
   **Schnellzeile**: Projekt oder Kunde (eine Suche über `/lookups/targets`, leer heisst intern,
   ohne Projektmodul «Kunde»), Leistung, Dauer, Text, «verrechenbar» — Enter speichert aus jedem
   Feld, auch aus dem Text: er ist ein kleiner Editor, der formatiert zeigt statt Zeichen (`RichTextField`

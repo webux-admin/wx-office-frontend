@@ -4,7 +4,7 @@ import { formatDuration, formatDurationShort, readDuration, type Duration } from
 import { fieldErrorsOf, isToldByFields, type FieldErrors } from './fieldErrors'
 import { formatCount, formatDateTime, isCompleteIsoDate, parseDecimal, toIsoDate } from './format'
 import { PAGE_SIZE, listQuery } from './paging'
-import { addDays, dayTitle, isWeekend, mondayOf } from './week'
+import { addDays, dayTitle, mondayOf } from './week'
 import type {
   BillingMode,
   Project,
@@ -465,18 +465,17 @@ export function durationFieldOf(entry: TimeEntry): string {
 }
 
 /**
- * The total of a day in the week bar.
+ * A total of time in the week bar and over the day list: a day, or the whole week.
  *
- * <p>An empty weekday reads «0:00» and stands out, an empty Saturday or Sunday reads «–»: a day
- * without a single hour is worth noticing on a Tuesday, not on a Sunday.
+ * <p>No minute reads «–», whatever the day — past, today or after today, weekday or weekend. A
+ * row of «0:00» teaches the eye to read past it; that an empty working day stands out is the
+ * day target's job, where a tenant switches it on (#142, frontend ADR-0092).
  *
- * @param day the day, `yyyy-MM-dd`
- * @param minutes its total as the backend sent it
- * @returns «7:45», «0:00», or «–» for an empty weekend day
+ * @param minutes the total as the backend sent it
+ * @returns «7:45», «42:30» for a week, or «–» for none
  */
-export function dayTotalText(day: string, minutes: number): string {
-  if (minutes === 0 && isWeekend(day)) return '–'
-  return formatDurationShort(minutes)
+export function totalText(minutes: number): string {
+  return minutes === 0 ? '–' : formatDurationShort(minutes)
 }
 
 /**

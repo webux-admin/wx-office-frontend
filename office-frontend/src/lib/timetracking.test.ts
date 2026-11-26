@@ -51,7 +51,6 @@ import {
   userDefaultsKey,
   userDefaultsUrl,
   continueEntryUrl,
-  dayTotalText,
   defaultServiceKey,
   defaultServiceUrl,
   durationFieldOf,
@@ -110,6 +109,7 @@ import {
   toTimerForm,
   toTimerRequest,
   toTimerStopRequest,
+  totalText,
   weekStep,
   withRecentTarget,
   withService,
@@ -682,19 +682,23 @@ describe('words', () => {
     })
   })
 
-  it('dayTotalTextTest', () => {
-    expect(dayTotalText('2026-11-25', 465)).toBe('7:45')
+  it('totalTextTest', () => {
+    expect(totalText(465)).toBe('7:45')
   })
 
-  /** An empty weekday stands out, an empty weekend day does not. */
-  it('dayTotalTextOfAnEmptyDayTest', () => {
-    expect(dayTotalText('2026-11-26', 0)).toBe('0:00')
-    expect(dayTotalText('2026-11-28', 0)).toBe('–')
-    expect(dayTotalText('2026-11-29', 0)).toBe('–')
+  /** No minute reads «–», weekday or weekend: the rule no longer asks which day it is (#142). */
+  it('totalTextOfNothingTest', () => {
+    expect(totalText(0)).toBe('–')
   })
 
-  it('dayTotalTextOfAWorkedSundayTest', () => {
-    expect(dayTotalText('2026-11-29', 90)).toBe('1:30')
+  /** One minute is time. */
+  it('totalTextOfOneMinuteTest', () => {
+    expect(totalText(1)).toBe('0:01')
+  })
+
+  /** A week runs past 24 hours, never cut at a day. */
+  it('totalTextOfAWeekTest', () => {
+    expect(totalText(2550)).toBe('42:30')
   })
 })
 
