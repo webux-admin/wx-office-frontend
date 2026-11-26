@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Check, Unlink } from 'lucide-react'
 import { DataTable, type Column } from '../components/DataTable'
 import { IconButton } from '../components/IconButton'
+import { MarkdownLine } from '../components/MarkdownLine'
 import { Tooltip } from '../components/Tooltip'
 import { formatDurationShort } from '../lib/duration'
 import { formatDate } from '../lib/format'
@@ -116,7 +117,7 @@ export function TimeEntryTable({
       header: 'Text',
       hideBelow: 'sm',
       render: (entry) => (
-        <span className="text-text-secondary">{entry.description ?? ''}</span>
+        <MarkdownLine text={entry.description} className="text-text-secondary" />
       ),
     },
     {

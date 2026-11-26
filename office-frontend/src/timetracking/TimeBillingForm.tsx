@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Badge } from '../components/Badge'
 import { DataTable, type Column } from '../components/DataTable'
 import { EmptyState, ErrorNotice, WarningNotice } from '../components/Notice'
+import { MarkdownLine } from '../components/MarkdownLine'
 import { Panel } from '../components/Panel'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SelectField } from '../components/SelectField'
@@ -196,7 +197,7 @@ function CandidateTable({ billing, of }: { billing: TimeBilling; of: TimesOf }) 
       header: 'Text',
       hideBelow: 'sm',
       render: (candidate) => (
-        <span className="text-text-secondary">{candidate.description ?? ''}</span>
+        <MarkdownLine text={candidate.description} className="text-text-secondary" />
       ),
     },
   ]

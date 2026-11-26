@@ -6,6 +6,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Dialog } from '../components/Dialog'
 import { DialogCancelButton } from '../components/DialogCancelButton'
 import { ErrorNotice, WarningNotice } from '../components/Notice'
+import { RichTextField } from '../components/RichTextField'
 import { TextField } from '../components/TextField'
 import { useFieldErrors } from '../components/useFieldErrors'
 import { ApiError, api } from '../lib/api'
@@ -372,14 +373,14 @@ export function TimerDialog({
               <BillableField form={form} onChange={setForm} rule={rule} projectsOn={projectsOn} />
             </div>
           </div>
-          <TextField
+          <RichTextField
             label="Text"
             value={form.description}
-            onChange={(event) => set('description', event.target.value)}
+            onChange={(description) => set('description', description)}
             placeholder="Was wird gemacht?"
             maxLength={TIME_ENTRY_DESCRIPTION_MAX_LENGTH}
-            autoComplete="off"
             error={errors.description}
+            tooltip="Fett, kursiv und Listen über die Leiste oder Strg+B und Strg+I. Enter startet oder speichert, Umschalt+Enter beginnt eine neue Zeile."
           />
 
           {running && (

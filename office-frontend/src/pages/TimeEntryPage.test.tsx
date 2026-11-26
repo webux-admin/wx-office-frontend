@@ -390,7 +390,9 @@ function control(label: string, scope: ParentNode = line()): HTMLInputElement {
 async function type(input: HTMLInputElement, value: string, wait = 0) {
   await act(async () => {
     input.focus()
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+    // The text is a text area since #139; its value setter lives on its own prototype.
+    const prototype = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await settle(wait)

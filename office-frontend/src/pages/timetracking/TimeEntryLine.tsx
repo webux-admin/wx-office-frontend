@@ -1,5 +1,6 @@
 import type { Ref } from 'react'
 import { Button } from '../../components/Button'
+import { RichTextField } from '../../components/RichTextField'
 import { TextField } from '../../components/TextField'
 import { DURATION_FORMS } from '../../lib/duration'
 import {
@@ -106,17 +107,14 @@ export function TimeEntryLine({
         tooltip={DURATION_FORMS}
       />
 
-      <TextField
+      <RichTextField
         label="Text"
         value={form.description}
-        onChange={(event) => {
-          const description = event.target.value
-          onChange((current) => ({ ...current, description }))
-        }}
+        onChange={(description) => onChange((current) => ({ ...current, description }))}
         placeholder="Was wurde gemacht?"
         maxLength={TIME_ENTRY_DESCRIPTION_MAX_LENGTH}
-        autoComplete="off"
         error={errors.description}
+        tooltip="Fett, kursiv und Listen über die Leiste oder Strg+B und Strg+I. Enter speichert, Umschalt+Enter beginnt eine neue Zeile."
       />
 
       {/* The two cells without a label start where the inputs do. */}

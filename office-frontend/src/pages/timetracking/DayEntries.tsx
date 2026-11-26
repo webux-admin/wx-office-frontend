@@ -1,6 +1,7 @@
 import { CopyPlus, Play, Trash2, Unlink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { IconButton } from '../../components/IconButton'
+import { MarkdownLine } from '../../components/MarkdownLine'
 import { Tooltip } from '../../components/Tooltip'
 import { formatDurationShort } from '../../lib/duration'
 import type { OriginState } from '../../lib/origin'
@@ -146,8 +147,9 @@ function EntryRow({
       </span>
       <span className="min-w-0 text-text-primary md:truncate">{entryTargetText(entry)}</span>
       <span className="min-w-0 text-text-secondary md:truncate">{entryServiceText(entry)}</span>
+      {/* One line however many the text has, so the grid of the day keeps its rows (#130). */}
       <span className="min-w-0 text-text-secondary max-md:empty:hidden md:truncate">
-        {entry.description ?? ''}
+        <MarkdownLine text={entry.description} />
       </span>
       {/* Inside the row button no link can live; an entry that opens is never on an invoice. The
           wrapper takes the width of the column, so the badge keeps its own. */}

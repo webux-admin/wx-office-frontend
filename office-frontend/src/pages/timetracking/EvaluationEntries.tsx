@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { DataTable, type Column } from '../../components/DataTable'
+import { MarkdownLine } from '../../components/MarkdownLine'
 import { api } from '../../lib/api'
 import { formatDurationShort } from '../../lib/duration'
 import { formatDate } from '../../lib/format'
@@ -128,7 +129,7 @@ export function EvaluationEntries({
       key: 'description',
       header: 'Text',
       hideBelow: 'sm',
-      render: (entry) => <span className="text-text-secondary">{entry.description ?? ''}</span>,
+      render: (entry) => <MarkdownLine text={entry.description} className="text-text-secondary" />,
     },
     {
       key: 'state',
