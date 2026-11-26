@@ -6184,3 +6184,61 @@ export type TimeBillingSettingsRequest = {
 export type TimeReleaseRequest = {
   entryIds: number[]
 }
+
+/** One row of the worklist a billing run is to bill (`BillingRunTargetDto`). */
+export type TimeBillingRunTarget = {
+  partnerId: number
+  /** Absent or `null` for the time of the customer without a project. */
+  projectId?: number | null
+}
+
+/** What a billing run sends, for its preview and for the run alike (`BillingRunRequest`). */
+export type TimeBillingRunRequest = {
+  until: string
+  targets: TimeBillingRunTarget[]
+}
+
+/** What a billing run would write for one row (`BillingRunPreviewLineDto`). */
+export type TimeBillingRunPreviewLine = {
+  partnerId: number
+  projectId?: number | null
+  customerName?: string | null
+  projectNumber?: string | null
+  projectName?: string | null
+  /** How many entries would go onto the new draft. */
+  entries: number
+  /** What they would come to without VAT, as quoted. */
+  totalNet: number
+  currency?: string | null
+  /** The open entries that would not go onto it, and why. */
+  skipped: TimeSkippedEntry[]
+  /** Why the row cannot be billed at all; absent where it can. */
+  refusal?: string | null
+}
+
+/** A draft a billing run wrote (`BillingRunResultDto.Created`). */
+export type TimeBillingRunCreated = {
+  partnerId: number
+  projectId?: number | null
+  documentId: number
+  lines: number
+  entries: number
+  /** How many open entries of the row did not go onto it. */
+  skipped: number
+  totalNet: number
+  currency: string
+}
+
+/** A row a billing run left alone or that broke (`BillingRunResultDto.Left`). */
+export type TimeBillingRunLeft = {
+  partnerId: number
+  projectId?: number | null
+  message: string
+}
+
+/** What a billing run did, in three lists (`BillingRunResultDto`). */
+export type TimeBillingRunResult = {
+  created: TimeBillingRunCreated[]
+  skipped: TimeBillingRunLeft[]
+  failed: TimeBillingRunLeft[]
+}

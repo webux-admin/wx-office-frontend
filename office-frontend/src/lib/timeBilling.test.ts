@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './api'
 import {
+  billingRunActionText,
+  billingRunPreviewUrl,
+  billingRunRequestOf,
+  billingRunResultText,
+  billingRunUrl,
+  worklistKeyOf,
   BILLING_GROUPINGS,
   BILLING_GROUPING_HINTS,
   BILLING_INCREMENTS,
@@ -715,5 +721,68 @@ describe('the increment and the release', () => {
       'Vom Entwurf gelöst: 3 Einträge, wieder offen.',
     )
     expect(releasedText([])).toBe('Vom Entwurf gelöst: 0 Einträge, wieder offen.')
+  })
+})
+
+describe('billing run (#140)', () => {
+  const website: TimeWorklistLine = {
+    partnerId: 11,
+    customerName: 'Muster AG',
+    projectId: 51,
+    projectNumber: 'P-00012',
+    projectName: 'Website',
+    openEntries: 3,
+    openMinutes: 580,
+    billedMinutes: 585,
+    estimatedAmount: 1560,
+    currency: 'CHF',
+    oldestWorkDate: '2026-11-03',
+  }
+  const alone: TimeWorklistLine = { ...website, projectId: null, projectNumber: null, projectName: null }
+  const holz: TimeWorklistLine = { ...website, partnerId: 12, projectId: 52 }
+
+  it('billingRunUrlTest', () => {
+    expect(billingRunPreviewUrl(1)).toBe('/api/tenants/1/time-tracking/billing/batch/preview')
+    expect(billingRunUrl(1)).toBe('/api/tenants/1/time-tracking/billing/batch')
+  })
+
+  it('worklistKeyOfTest', () => {
+    expect(worklistKeyOf(website)).toBe('11-51')
+    expect(worklistKeyOf(alone)).toBe('11-ohne')
+    expect(worklistKeyOf({ partnerId: 11 })).toBe('11-ohne')
+  })
+
+  /** The ticked rows in the order of the list, the time without project as `null`. */
+  it('billingRunRequestOfTest', () => {
+    expect(billingRunRequestOf([website, alone, holz], new Set(['12-52', '11-ohne']), '2026-11-30')).toEqual({
+      until: '2026-11-30',
+      targets: [
+        { partnerId: 11, projectId: null },
+        { partnerId: 12, projectId: 52 },
+      ],
+    })
+  })
+
+  it('billingRunRequestOfNothingTickedTest', () => {
+    expect(billingRunRequestOf([website], new Set(), '2026-11-30').targets).toEqual([])
+  })
+
+  /** A refused row writes no draft and is not counted. */
+  it('billingRunActionTextTest', () => {
+    const line = { partnerId: 11, entries: 3, totalNet: 10, skipped: [] }
+    expect(billingRunActionText([line, { ...line, refusal: 'nein' }])).toBe('1 Rechnungsentwurf erstellen')
+    expect(billingRunActionText([line, line])).toBe('2 Rechnungsentwürfe erstellen')
+    expect(billingRunActionText([])).toBe('0 Rechnungsentwürfe erstellen')
+  })
+
+  it('billingRunResultTextTest', () => {
+    const left = { partnerId: 11, message: 'x' }
+    const created = { partnerId: 11, documentId: 1, lines: 1, entries: 1, skipped: 0, totalNet: 1, currency: 'CHF' }
+    expect(billingRunResultText({ created: [created, created], skipped: [left], failed: [] })).toBe(
+      '2 Entwürfe erstellt, 1 übersprungen, 0 fehlgeschlagen.',
+    )
+    expect(billingRunResultText({ created: [created], skipped: [], failed: [left] })).toBe(
+      '1 Entwurf erstellt, 0 übersprungen, 1 fehlgeschlagen.',
+    )
   })
 })

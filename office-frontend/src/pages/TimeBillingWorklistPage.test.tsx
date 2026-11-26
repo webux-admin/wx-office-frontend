@@ -5,7 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthState } from '../auth/authContext'
-import type { TimeWorklistLine } from '../lib/types'
+import type {
+  TimeBillingRunPreviewLine,
+  TimeBillingRunResult,
+  TimeWorklistLine,
+} from '../lib/types'
 import { TimeBillingWorklistPage } from './TimeBillingWorklistPage'
 
 // React refuses to run act() without this flag; jsdom has no bundler that would set it.
@@ -42,6 +46,38 @@ const MUSTER_ALONE = line({
   oldestWorkDate: '2026-11-28',
 })
 
+/** The preview of a run over both rows: the project billable, the customer alone not. */
+const RUN_PREVIEW: TimeBillingRunPreviewLine[] = [
+  {
+    partnerId: 11,
+    projectId: 51,
+    customerName: 'Muster AG',
+    projectNumber: 'P-00012',
+    projectName: 'Website',
+    entries: 3,
+    totalNet: 1560,
+    currency: 'CHF',
+    skipped: [],
+    refusal: null,
+  },
+  {
+    partnerId: 11,
+    projectId: null,
+    entries: 0,
+    totalNet: 0,
+    skipped: [],
+    refusal: 'Keiner der gewählten Einträge lässt sich abrechnen.',
+  },
+]
+
+const RUN_RESULT: TimeBillingRunResult = {
+  created: [
+    { partnerId: 11, projectId: 51, documentId: 501, lines: 2, entries: 3, skipped: 0, totalNet: 1560, currency: 'CHF' },
+  ],
+  skipped: [{ partnerId: 11, projectId: null, message: 'Keiner der gewählten Einträge lässt sich abrechnen.' }],
+  failed: [],
+}
+
 function session(permissions: string[], modules = ['TIMETRACKING', 'PROJECT']): AuthState {
   return {
     user: {
@@ -69,6 +105,8 @@ let root: Root
 let requested: string[]
 let lines: TimeWorklistLine[]
 let fails: boolean
+/** Every write, with its address and body. */
+let writes: { url: string; body: unknown }[]
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -82,8 +120,15 @@ beforeEach(() => {
   requested = []
   lines = [WEBSITE, MUSTER_ALONE]
   fails = false
-  vi.stubGlobal('fetch', (url: string) => {
+  writes = []
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     requested.push(url)
+    if (init?.method === 'POST') {
+      const body: unknown = typeof init.body === 'string' ? JSON.parse(init.body) : null
+      writes.push({ url, body })
+      if (url.endsWith('/billing/batch/preview')) return json(RUN_PREVIEW)
+      if (url.endsWith('/billing/batch')) return json(RUN_RESULT)
+    }
     if (url.startsWith(WORKLIST_URL)) {
       return fails ? json({ detail: 'Das Backend meldet einen Fehler.' }, 500) : json(lines)
     }
@@ -265,4 +310,71 @@ describe('TimeBillingWorklistPage', () => {
     expect(text()).toContain('Modul nicht eingeschaltet')
     expect(requested).toEqual([])
   })
+
+  // --- the billing run (#140) -----------------------------------------------------------
+
+  /** With INVOICE_WRITE the rows can be ticked; the preview names what each would write. */
+  it('timeBillingWorklistPagePreviewsTheRunTest', async () => {
+    await render(['TIME_BILL', 'INVOICE_WRITE'])
+
+    await clickOn(checkboxes()[0])
+    await clickOn(buttonNamed('Gewählte abrechnen (2)'))
+
+    expect(writes).toEqual([
+      {
+        url: '/api/tenants/1/time-tracking/billing/batch/preview',
+        body: { until: '2026-11-30', targets: [{ partnerId: 11, projectId: 51 }, { partnerId: 11, projectId: null }] },
+      },
+    ])
+    expect(document.body.textContent).toContain('Wird übersprungen: Keiner der gewählten Einträge')
+    expect(buttonNamed('1 Rechnungsentwurf erstellen').disabled).toBe(false)
+  })
+
+  /** The run writes, and the three lists say what came of every row. */
+  it('timeBillingWorklistPageRunsTest', async () => {
+    await render(['TIME_BILL', 'INVOICE_WRITE'])
+    await clickOn(checkboxes()[0])
+    await clickOn(buttonNamed('Gewählte abrechnen (2)'))
+
+    await clickOn(buttonNamed('1 Rechnungsentwurf erstellen'))
+
+    expect(writes.at(-1)?.url).toBe('/api/tenants/1/time-tracking/billing/batch')
+    expect(document.body.textContent).toContain('1 Entwurf erstellt, 1 übersprungen, 0 fehlgeschlagen.')
+    const draft = [...document.querySelectorAll('a')].find((link) => link.textContent === 'Entwurf öffnen')
+    expect(draft?.getAttribute('href')).toBe('/rechnungen/501')
+    expect(document.body.textContent).toContain('Muster AG · ohne Projekt: Keiner der gewählten Einträge')
+  })
+
+  /** Without INVOICE_WRITE nothing can be ticked: the run writes invoices. */
+  it('timeBillingWorklistPageOffersNoRunWithoutTheInvoiceRightTest', async () => {
+    await render(['TIME_BILL'])
+
+    expect(checkboxes()).toHaveLength(0)
+    expect(text()).not.toContain('Gewählte abrechnen')
+  })
+
+  /** Nothing ticked, nothing to run. */
+  it('timeBillingWorklistPageRunsNothingUntickedTest', async () => {
+    await render(['TIME_BILL', 'INVOICE_WRITE'])
+
+    expect(buttonNamed('Gewählte abrechnen').disabled).toBe(true)
+  })
 })
+
+const checkboxes = () =>
+  [...container.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+
+function buttonNamed(name: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll('button')].find(
+    (entry) => entry.textContent?.trim() === name,
+  )
+  if (found === undefined) throw new Error(`no button ${name}`)
+  return found
+}
+
+async function clickOn(element: HTMLElement) {
+  await act(async () => {
+    element.click()
+  })
+  await settle()
+}

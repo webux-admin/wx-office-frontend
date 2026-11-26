@@ -12,6 +12,9 @@ import type {
   TimeBillingLine,
   TimeBillingPreview,
   TimeBillingRequest,
+  TimeBillingRunPreviewLine,
+  TimeBillingRunRequest,
+  TimeBillingRunResult,
   TimeBillingSettings,
   TimeEntry,
   TimeRateOrigin,
@@ -634,4 +637,76 @@ export function incrementSavedText(settings: TimeBillingSettings): string {
 export function releasedText(entries: readonly TimeEntry[]): string {
   const count = entries.length === 1 ? '1 Eintrag' : `${entries.length} Einträge`
   return `Vom Entwurf gelöst: ${count}, wieder offen.`
+}
+
+// --- the billing run (#140) --------------------------------------------------------
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the preview of a billing run, a `POST` that writes nothing
+ */
+export function billingRunPreviewUrl(tenantId: number): string {
+  return `${timeTrackingUrl(tenantId)}/billing/batch/preview`
+}
+
+/**
+ * @param tenantId the tenant
+ * @returns address of the billing run, a new invoice draft per row (backend ADR-0169)
+ */
+export function billingRunUrl(tenantId: number): string {
+  return `${timeTrackingUrl(tenantId)}/billing/batch`
+}
+
+/**
+ * The key a row of the worklist is ticked by: its customer and its project, `ohne` for the time
+ * without one. A result of the run names its row the same way.
+ *
+ * @param row a row of the worklist, of the preview or of the result
+ * @returns for example `11-12` or `11-ohne`
+ */
+export function worklistKeyOf(row: { partnerId: number; projectId?: number | null }): string {
+  return `${row.partnerId}-${row.projectId ?? 'ohne'}`
+}
+
+/**
+ * What a billing run sends for the ticked rows of the worklist, in the order of the list.
+ *
+ * @param lines the rows of the worklist
+ * @param ticked the keys of the ticked rows
+ * @param until the day, `yyyy-mm-dd`
+ * @returns the request of the preview and of the run
+ */
+export function billingRunRequestOf(
+  lines: readonly TimeWorklistLine[],
+  ticked: ReadonlySet<string | number>,
+  until: string,
+): TimeBillingRunRequest {
+  return {
+    until,
+    targets: lines
+      .filter((line) => ticked.has(worklistKeyOf(line)))
+      .map((line) => ({ partnerId: line.partnerId, projectId: line.projectId ?? null })),
+  }
+}
+
+/**
+ * What the button under the preview says: how many drafts the run would write.
+ *
+ * @param lines the preview
+ * @returns «3 Rechnungsentwürfe erstellen», «1 Rechnungsentwurf erstellen»
+ */
+export function billingRunActionText(lines: readonly TimeBillingRunPreviewLine[]): string {
+  const count = lines.filter((line) => line.refusal == null).length
+  return count === 1 ? '1 Rechnungsentwurf erstellen' : `${count} Rechnungsentwürfe erstellen`
+}
+
+/**
+ * The sentence over the result of a run.
+ *
+ * @param result what the run did
+ * @returns for example «2 Entwürfe erstellt, 1 übersprungen, 0 fehlgeschlagen.»
+ */
+export function billingRunResultText(result: TimeBillingRunResult): string {
+  const drafts = result.created.length === 1 ? '1 Entwurf' : `${result.created.length} Entwürfe`
+  return `${drafts} erstellt, ${result.skipped.length} übersprungen, ${result.failed.length} fehlgeschlagen.`
 }

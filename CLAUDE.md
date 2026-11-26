@@ -107,7 +107,9 @@ Stand der Module (in dieser Reihenfolge gebaut):
   die Leistungssuche nimmt dafür `projectId` (Backend ADR-0166) (ADR-0084, Backend
   ADR-0162). **Abrechnen** (#127): der Ordner «Zeiten» hält «Meine Zeiten» und «Abrechnen»
   (`/zeiten-abrechnen`, `TIME_BILL`, neben `/zeiten` und nicht darunter), den Arbeitsvorrat mit
-  Stichtag je Kunde ohne Projekt und je Projekt. Die Maske `/zeiten-abrechnen/projekt/:id` oder
+  Stichtag je Kunde ohne Projekt und je Projekt; mit `INVOICE_WRITE` lassen sich Zeilen ankreuzen und mit
+  «Gewählte abrechnen» in einem Lauf abrechnen — ein Dialog zeigt die Vorschau je Zeile und danach
+  die drei Listen erstellt, übersprungen, fehlgeschlagen (`BillingRunDialog`, Backend ADR-0169). Die Maske `/zeiten-abrechnen/projekt/:id` oder
   `…/kunde/:id` hat Stichtag, Gruppierung und Ziel («Neue Rechnung» oder ein Entwurf des Kunden,
   mit `INVOICE_READ`), die Einträge mit Häkchen und die Vorschau mit der Herkunft des Satzes als
   Badge, Übersprungenem mit Grund und «Total netto»; jede Änderung fragt die Vorschau neu, die

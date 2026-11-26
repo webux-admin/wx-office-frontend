@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { Button } from '../components/Button'
 import { DataTable, type Column } from '../components/DataTable'
 import { LinkButton } from '../components/LinkButton'
 import { EmptyState } from '../components/Notice'
@@ -17,14 +18,18 @@ import { PROJECT_MODULE, PROJECT_PATH, PROJECT_RIGHTS } from '../lib/project'
 import {
   TIME_BILLING_PATH,
   billingHandoverState,
+  billingRunRequestOf,
   billingWorklistKey,
   billingWorklistUrl,
   timeBillingPathOf,
   worklistCustomerText,
   worklistProjectText,
+  worklistKeyOf,
   worklistTargetOf,
 } from '../lib/timeBilling'
+import { INVOICE_KIND } from '../lib/salesDocument'
 import { TIMETRACKING_MODULE, TIMETRACKING_RIGHTS } from '../lib/timetracking'
+import { BillingRunDialog } from '../timetracking/BillingRunDialog'
 import type { TimeWorklistLine } from '../lib/types'
 
 /** The way back from a billing mask opened here. */
@@ -34,8 +39,9 @@ const ORIGIN = { from: TIME_BILLING_PATH, label: 'Zeiten abrechnen' }
  * «Abrechnen»: where open billable time lies up to a day, one row per customer without project
  * and one per project.
  *
- * <p>Each row leads into the mask of its project or customer; billing over every customer in one
- * run is not part of it (#127). The hours and the estimate are the backend's — the estimate takes
+ * <p>Each row leads into the mask of its project or customer. With `INVOICE_WRITE` beside
+ * `TIME_BILL`, rows can be ticked and billed in one run, a new draft for each, after a preview
+ * (#140, backend ADR-0169). The hours and the estimate are the backend's — the estimate takes
  * the rate of each service on the latest day of its entries, the mask then works it out exactly
  * (backend ADR-0163, frontend ADR-0085).
  */
@@ -53,6 +59,10 @@ function Worklist({ tenantId }: { tenantId: number }) {
   const projectsOn = runs(PROJECT_MODULE)
   const [until, setUntil] = useState(() => toIsoDate())
   const complete = isCompleteIsoDate(until)
+  const mayRun = can(TIMETRACKING_RIGHTS.bill) && can(INVOICE_KIND.rights.write)
+  const [ticked, setTicked] = useState<ReadonlySet<string | number>>(new Set())
+  // The rows the open run is about, held while it runs: the worklist reads anew afterwards.
+  const [running, setRunning] = useState<TimeWorklistLine[] | null>(null)
 
   const worklist = useQuery({
     queryKey: billingWorklistKey(tenantId, until),
@@ -60,6 +70,8 @@ function Worklist({ tenantId }: { tenantId: number }) {
     enabled: complete,
     placeholderData: keepPreviousData,
   })
+
+  const chosen = chosenLines(worklist.data ?? [], ticked)
 
   const columns: Column<TimeWorklistLine>[] = [
     {
@@ -179,11 +191,23 @@ function Worklist({ tenantId }: { tenantId: number }) {
           title="Arbeitsvorrat"
           description="Der geschätzte Betrag nimmt den Satz jeder Leistung am letzten Tag ihrer Einträge. Genau rechnet die Vorschau."
           padded={false}
+          action={
+            mayRun ? (
+              <Button onClick={() => setRunning(chosen)} disabled={!complete || chosen.length === 0}>
+                {chosen.length === 0 ? 'Gewählte abrechnen' : `Gewählte abrechnen (${chosen.length})`}
+              </Button>
+            ) : undefined
+          }
         >
           <DataTable
             columns={columns}
             rows={worklist.data ?? []}
-            keyOf={(line) => `${line.partnerId}-${line.projectId ?? 'ohne'}`}
+            keyOf={worklistKeyOf}
+            selected={mayRun ? ticked : undefined}
+            onSelectedChange={mayRun ? setTicked : undefined}
+            selectionLabel={(line) =>
+              `${worklistCustomerText(line)} ${worklistProjectText(line)} zum Abrechnen wählen`
+            }
             loading={worklist.isPending && complete}
             error={worklist.error}
             empty={
@@ -199,6 +223,28 @@ function Worklist({ tenantId }: { tenantId: number }) {
           />
         </Panel>
       </div>
+
+      {running !== null && (
+        <BillingRunDialog
+          tenantId={tenantId}
+          open
+          request={billingRunRequestOf(running, new Set(running.map(worklistKeyOf)), until)}
+          rows={running}
+          origin={{ origin: ORIGIN }}
+          onClose={() => {
+            setRunning(null)
+            setTicked(new Set())
+          }}
+        />
+      )}
     </>
   )
+}
+
+/** The ticked rows of the worklist, in its order; a tick of a row gone since counts for nothing. */
+function chosenLines(
+  lines: readonly TimeWorklistLine[],
+  ticked: ReadonlySet<string | number>,
+): TimeWorklistLine[] {
+  return lines.filter((line) => ticked.has(worklistKeyOf(line)))
 }
